@@ -5,6 +5,11 @@ from typing import Any, get_args, get_origin, get_type_hints
 
 from rest_framework import serializers
 
+from rest_framework_mcp.schema.spectacular_overrides import (
+    apply_field_override,
+    apply_serializer_overrides,
+)
+
 # Map DRF field types to JSON Schema fragments. Order matters: more specific
 # subclasses (BooleanField, IntegerField) must come before broader ones
 # (CharField) because we walk this list and use the first ``isinstance`` hit.
@@ -30,7 +35,17 @@ def field_to_schema(field: serializers.Field) -> dict[str, Any]:
 
     Recurses into nested serializers and list fields. Unknown field types
     fall back to ``{}`` (any), so an exotic field type never breaks discovery.
+
+    drf-spectacular's ``@extend_schema_field`` is honored as a final-pass
+    override — when the field instance / class carries a
+    ``_spectacular_annotation`` dict with a dict-shaped ``field`` value,
+    that schema replaces the auto-derived one.
     """
+    default: dict[str, Any] = _field_to_schema_default(field)
+    return apply_field_override(field, default)
+
+
+def _field_to_schema_default(field: serializers.Field) -> dict[str, Any]:
     if isinstance(field, serializers.ListField):
         child: serializers.Field | None = field.child
         item_schema: dict[str, Any] = field_to_schema(child) if child is not None else {}
@@ -58,6 +73,11 @@ def serializer_to_schema(serializer: serializers.Serializer) -> dict[str, Any]:
 
     Required fields (DRF ``required=True``) populate ``required``; everything
     else is optional. Field-level help text becomes ``description``.
+
+    Class-level drf-spectacular overrides (``@extend_schema_serializer``)
+    are layered on top — see
+    :func:`rest_framework_mcp.schema.spectacular_overrides.apply_serializer_overrides`
+    for what's honored.
     """
     properties: dict[str, Any] = {}
     required: list[str] = []
@@ -72,7 +92,7 @@ def serializer_to_schema(serializer: serializers.Serializer) -> dict[str, Any]:
     schema: dict[str, Any] = {"type": "object", "properties": properties}
     if required:
         schema["required"] = required
-    return schema
+    return apply_serializer_overrides(schema, type(serializer))
 
 
 def _python_type_to_schema(annotation: Any) -> dict[str, Any]:

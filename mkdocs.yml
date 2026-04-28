@@ -89,6 +89,7 @@ nav:
       - Add rate limiting: recipes/rate-limiting.md
       - Multi-worker SSE with Redis: recipes/redis-sse-broker.md
       - Resume SSE with Last-Event-ID: recipes/sse-replay-buffer.md
+      - Honor drf-spectacular annotations: recipes/drf-spectacular.md
   - Reference:
       - reference/index.md
       - MCPServer: reference/mcp-server.md

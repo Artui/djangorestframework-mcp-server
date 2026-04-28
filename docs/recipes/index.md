@@ -16,3 +16,6 @@ that solves a single concrete problem. Browse the list:
   broker for `RedisSSEBroker` so any ASGI worker can fan out push messages.
 - [Resume SSE with Last-Event-ID](sse-replay-buffer.md) — opt-in per-session
   replay buffer so reconnecting clients catch up on missed events.
+- [Honor `drf-spectacular` annotations](drf-spectacular.md) — feed
+  `@extend_schema_serializer` / `@extend_schema_field` metadata into the
+  MCP `inputSchema` automatically.
