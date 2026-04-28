@@ -1,0 +1,169 @@
+name: tests
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+concurrency:
+  group: tests-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  lint:
+    name: lint
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+        with:
+          enable-cache: true
+      - name: Install
+        run: uv sync --all-groups
+      - name: ruff check
+        run: uv run ruff check .
+      - name: ruff format check
+        run: uv run ruff format --check --diff .
+      - name: ty
+        run: uv run ty check rest_framework_mcp
+
+  docs:
+    name: docs build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+        with:
+          enable-cache: true
+      - name: Install with docs group
+        run: uv sync --all-groups
+      - name: mkdocs build --strict
+        # mkdocstrings imports the package, which transitively imports DRF;
+        # DRF reads ``settings.REST_FRAMEWORK`` at import time, so we point at
+        # the test settings module to keep the build hermetic.
+        run: DJANGO_SETTINGS_MODULE=tests.conftest_settings uv run mkdocs build --strict
+
+  test:
+    name: ${{ matrix.python-version }} / Django ${{ matrix.django-version }}
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.10", "3.11", "3.12", "3.13", "3.14"]
+        django-version: ["4.2", "5.0", "5.1", "5.2", "6.0"]
+        exclude:
+          # Django 4.2 supports Python 3.8–3.12
+          - python-version: "3.13"
+            django-version: "4.2"
+          - python-version: "3.14"
+            django-version: "4.2"
+          # Django 5.0 supports Python 3.10–3.12
+          - python-version: "3.13"
+            django-version: "5.0"
+          - python-version: "3.14"
+            django-version: "5.0"
+          # Django 5.1 supports Python 3.10–3.13
+          - python-version: "3.14"
+            django-version: "5.1"
+          # Django 6.0 requires Python 3.12+
+          - python-version: "3.10"
+            django-version: "6.0"
+          - python-version: "3.11"
+            django-version: "6.0"
+
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+        with:
+          enable-cache: true
+      - name: Install Python ${{ matrix.python-version }}
+        run: uv python install ${{ matrix.python-version }}
+      - name: Sync dev deps
+        run: uv sync --all-groups --python ${{ matrix.python-version }}
+      - name: Pin Django ${{ matrix.django-version }}
+        run: uv pip install --reinstall-package django "django~=${{ matrix.django-version }}.0"
+      - name: pytest
+        run: uv run --no-sync pytest
+
+  smoke-no-extras:
+    name: smoke (no optional extras)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+        with:
+          enable-cache: true
+      - name: Install base only (no [toon], no [oauth], no dev group)
+        run: |
+          uv venv --python 3.13 .venv-smoke
+          .venv-smoke/bin/python -m pip install --upgrade pip
+          .venv-smoke/bin/pip install -e .
+      - name: Confirm import + server build + TOON fallback
+        run: |
+          .venv-smoke/bin/python - <<'PY'
+          import warnings
+
+          import django
+          from django.conf import settings
+
+          settings.configure(
+              SECRET_KEY="x",
+              INSTALLED_APPS=[
+                  "django.contrib.contenttypes",
+                  "django.contrib.auth",
+                  "rest_framework",
+              ],
+              DATABASES={"default": {"ENGINE": "django.db.backends.sqlite3", "NAME": ":memory:"}},
+              REST_FRAMEWORK_MCP={
+                  "AUTH_BACKEND": "rest_framework_mcp.auth.backends.allow_any_backend.AllowAnyBackend",
+                  "SESSION_STORE": "rest_framework_mcp.transport.in_memory_session_store.InMemorySessionStore",
+                  "ALLOWED_ORIGINS": ["*"],
+                  "SERVER_INFO": {},
+              },
+          )
+          django.setup()
+
+          from rest_framework_mcp import MCPServer
+          from rest_framework_mcp.output.encode_toon import encode_toon
+          from rest_framework_services.types.service_spec import ServiceSpec
+
+          server = MCPServer(name="smoke")
+          server.register_tool(name="noop", spec=ServiceSpec(service=lambda: None))
+          assert server.tools.get("noop") is not None
+
+          with warnings.catch_warnings(record=True) as caught:
+              warnings.simplefilter("always")
+              encode_toon({"a": 1})
+              assert any("python-toon" in str(item.message) for item in caught), (
+                  "Expected TOON fallback warning when extra is missing"
+              )
+
+          # The OAuth backend module imports fine without oauth2_provider — the
+          # ImportError only fires if a request actually hits authenticate().
+          from rest_framework_mcp.auth.backends.django_oauth_toolkit_backend import (
+              DjangoOAuthToolkitBackend,
+          )
+          backend = DjangoOAuthToolkitBackend()
+          try:
+              import oauth2_provider  # noqa: F401
+              raise SystemExit("smoke environment unexpectedly has oauth2_provider installed")
+          except ImportError:
+              pass
+
+          # The Redis SSE broker module imports fine without ``redis`` — the
+          # ImportError only fires inside ``RedisSSEBroker.__init__``.
+          from rest_framework_mcp.transport.redis_sse_broker import RedisSSEBroker
+          try:
+              RedisSSEBroker(client=object())
+              raise SystemExit("RedisSSEBroker construction should fail without redis")
+          except ImportError:
+              pass
+
+          # The OTel tracing helper falls back to a no-op span when the API
+          # isn't installed — handlers stay branch-free.
+          from rest_framework_mcp._compat.tracing import span
+          with span("mcp.smoke") as s:
+              s.set_attribute("k", "v")
+
+          print("SMOKE OK")
+          PY

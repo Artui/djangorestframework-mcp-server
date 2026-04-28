@@ -1,0 +1,98 @@
+site_name: djangorestframework-mcp-server
+site_description: Expose djangorestframework-services services and selectors as a Model Context Protocol (MCP) server.
+site_url: https://artui.github.io/djangorestframework-mcp-server/
+repo_url: https://github.com/Artui/djangorestframework-mcp-server
+repo_name: Artui/djangorestframework-mcp-server
+edit_uri: edit/main/docs/
+
+theme:
+  name: material
+  palette:
+    - media: "(prefers-color-scheme: light)"
+      scheme: default
+      primary: indigo
+      accent: indigo
+      toggle:
+        icon: material/weather-sunny
+        name: Switch to dark mode
+    - media: "(prefers-color-scheme: dark)"
+      scheme: slate
+      primary: indigo
+      accent: indigo
+      toggle:
+        icon: material/weather-night
+        name: Switch to light mode
+  features:
+    - navigation.instant
+    - navigation.tracking
+    - navigation.sections
+    - navigation.expand
+    - navigation.indexes
+    - navigation.top
+    - search.highlight
+    - search.share
+    - search.suggest
+    - content.code.copy
+    - content.code.annotate
+    - content.action.edit
+    - toc.follow
+
+plugins:
+  - search
+  - mkdocstrings:
+      handlers:
+        python:
+          options:
+            docstring_style: google
+            show_root_heading: true
+            show_root_full_path: false
+            show_source: false
+            show_signature_annotations: true
+            separate_signature: true
+            line_length: 88
+            members_order: source
+            filters: ["!^_"]
+
+markdown_extensions:
+  - admonition
+  - attr_list
+  - md_in_html
+  - tables
+  - toc:
+      permalink: true
+  - pymdownx.details
+  - pymdownx.highlight:
+      anchor_linenums: true
+      line_spans: __span
+      pygments_lang_class: true
+  - pymdownx.inlinehilite
+  - pymdownx.snippets
+  - pymdownx.superfences
+  - pymdownx.tabbed:
+      alternate_style: true
+
+nav:
+  - Home: index.md
+  - Quickstart: quickstart.md
+  - Concepts: concepts.md
+  - Authentication: auth.md
+  - Async deployment: async.md
+  - Prompts: prompts.md
+  - Observability: observability.md
+  - Recipes:
+      - recipes/index.md
+      - Expose a service: recipes/expose-a-service.md
+      - Swap the session store: recipes/swap-session-store.md
+      - Ship TOON for large lists: recipes/toon-output.md
+      - Add a custom permission: recipes/custom-permission.md
+      - Async-native auth backend: recipes/async-auth-backend.md
+      - Add rate limiting: recipes/rate-limiting.md
+      - Multi-worker SSE with Redis: recipes/redis-sse-broker.md
+      - Resume SSE with Last-Event-ID: recipes/sse-replay-buffer.md
+  - Reference:
+      - reference/index.md
+      - MCPServer: reference/mcp-server.md
+      - Protocol types: reference/protocol.md
+      - Registries: reference/registries.md
+      - Auth: reference/auth.md
+      - Output: reference/output.md
