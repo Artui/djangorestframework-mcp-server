@@ -30,9 +30,12 @@ jobs:
       - name: Tag version matches package version
         # Compare the git tag (vX.Y.Z) against rest_framework_mcp.__version__.
         # Any mismatch is a sign someone tagged without bumping version.py.
+        # Parse version.py textually rather than importing — importing the
+        # package triggers DRF re-exports that need Django settings
+        # configured, which we'd rather not do for a one-shot version check.
         run: |
           tag="${GITHUB_REF#refs/tags/}"
-          pkg_version="$(uv run python -c 'from rest_framework_mcp.version import __version__; print(__version__)')"
+          pkg_version="$(awk -F'"' '/^__version__/ {print $2; exit}' rest_framework_mcp/version.py)"
           if [[ "$tag" != "v$pkg_version" ]]; then
             echo "Tag $tag does not match package version v$pkg_version"
             exit 1

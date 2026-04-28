@@ -96,8 +96,10 @@ jobs:
       - name: Install base only (no [toon], no [oauth], no dev group)
         run: |
           uv venv --python 3.13 .venv-smoke
-          .venv-smoke/bin/python -m pip install --upgrade pip
-          .venv-smoke/bin/pip install -e .
+          # ``uv venv`` doesn't include pip by default; use ``uv pip install``
+          # against the smoke env to do an editable install with no optional
+          # extras and no dev group.
+          uv pip install --python .venv-smoke/bin/python -e .
       - name: Confirm import + server build + TOON fallback
         run: |
           .venv-smoke/bin/python - <<'PY'
