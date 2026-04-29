@@ -130,7 +130,7 @@ jobs:
           from rest_framework_services.types.service_spec import ServiceSpec
 
           server = MCPServer(name="smoke")
-          server.register_tool(name="noop", spec=ServiceSpec(service=lambda: None))
+          server.register_service_tool(name="noop", spec=ServiceSpec(service=lambda: None))
           assert server.tools.get("noop") is not None
 
           with warnings.catch_warnings(record=True) as caught:
