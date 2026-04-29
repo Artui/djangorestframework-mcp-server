@@ -13,8 +13,6 @@ Expose [`djangorestframework-services`](https://github.com/arturveres/djangorest
 services and selectors as a [Model Context Protocol](https://modelcontextprotocol.io)
 (MCP) server, conforming to MCP **2025-11-25** (Streamable HTTP).
 
-> **Status: alpha.** API surfaces and wire details may shift before `0.1` is tagged.
-
 ## Idea
 
 Register `ServiceSpec` instances directly — no DRF router or viewset
