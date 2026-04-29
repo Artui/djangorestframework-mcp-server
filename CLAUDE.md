@@ -149,8 +149,37 @@ These steps need to happen once before the first tag push will succeed:
    source to "Deploy from a branch", branch `gh-pages`, folder `/`. The first
    tag push creates that branch.
 
-To cut a release: bump `__version__` in `rest_framework_mcp/version.py`,
-update `CHANGELOG.md`, commit, then `git tag vX.Y.Z && git push --tags`.
+### Cutting a release — use the Makefile, not hand-edits
+
+The version is tracked in **three** places that must stay in lockstep:
+
+- `rest_framework_mcp/version.py` (`__version__`)
+- `pyproject.toml` (`[tool.bumpversion].current_version`)
+- `CHANGELOG.md` (the `## [Unreleased]` heading splits into `## [Unreleased]
+  / ## [X.Y.Z] — DATE`, and the compare-link footer at the bottom of the
+  file gets a new row chained off the previous version)
+
+Always drive the bump through the configured tooling — do **not** edit
+those files by hand:
+
+```sh
+make release-bump VERSION=X.Y.Z   # uvx bump-my-version: rewrites all three places
+$EDITOR CHANGELOG.md              # fill in the new section's body
+make release-publish              # commits, tags vX.Y.Z, pushes branch + tag
+```
+
+`release-publish` stages `version.py`, `CHANGELOG.md`, and `pyproject.toml`
+together, refuses to run if the tag already exists, and pushes the current
+branch alongside the tag so the release workflow has the matching commit
+to run against. The push of the `vX.Y.Z` tag is what triggers
+`release.yml`.
+
+If the bumpversion config drifts (e.g. a previous release was hand-edited),
+fix it before bumping: set `current_version` in `pyproject.toml` to the
+*last actually released* version and back-fill any missing
+`[X.Y.Z]: …compare/v…` rows in the CHANGELOG footer. `bump-my-version`'s
+search-replace is exact-match; missing or stale strings make it fail or
+emit wrong compare links.
 
 ## Common pitfalls
 
