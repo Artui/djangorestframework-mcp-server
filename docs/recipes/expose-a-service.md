@@ -21,7 +21,7 @@ class CalculateTotalInput(serializers.Serializer):
 
 
 server = MCPServer(name="cart")
-server.register_tool(
+server.register_service_tool(
     name="cart.calculate_total",
     spec=ServiceSpec(service=calculate_total, input_serializer=CalculateTotalInput),
     description="Sum the `amount` field across a list of line items.",

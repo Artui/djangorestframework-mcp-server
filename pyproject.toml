@@ -53,6 +53,7 @@ oauth = ["django-oauth-toolkit>=2.3"]
 redis = ["redis>=5.0"]
 otel = ["opentelemetry-api>=1.27"]
 spectacular = ["drf-spectacular>=0.27"]
+filter = ["django-filter>=23"]
 
 [project.urls]
 Homepage = "https://github.com/Artui/djangorestframework-mcp-server"
@@ -84,6 +85,7 @@ dev = [
     "opentelemetry-api>=1.27",
     "opentelemetry-sdk>=1.27",
     "drf-spectacular>=0.27",
+    "django-filter>=23",
 ]
 docs = [
     "mkdocs>=1.6",

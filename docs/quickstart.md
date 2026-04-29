@@ -65,7 +65,7 @@ from invoices.services import create_invoice
 
 server = MCPServer(name="invoices")
 
-server.register_tool(
+server.register_service_tool(
     name="invoices.create",
     spec=ServiceSpec(
         service=create_invoice,
@@ -79,7 +79,7 @@ server.register_tool(
 You can also use the decorator form — both register the same `ToolBinding`:
 
 ```python
-@server.tool(
+@server.service_tool(
     name="invoices.create",
     input_serializer=InvoiceInputSerializer,
     output_serializer=InvoiceOutputSerializer,

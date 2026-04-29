@@ -119,7 +119,7 @@ def test_handle_tools_call_translates_service_error(jsonrpc, initialized_session
     def boom() -> None:
         raise ServiceError("nope")
 
-    server.register_tool(name="boom.raise", spec=ServiceSpec(service=boom))
+    server.register_service_tool(name="boom.raise", spec=ServiceSpec(service=boom))
     try:
         response = jsonrpc(
             "tools/call",

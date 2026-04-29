@@ -10,6 +10,7 @@ from rest_framework_services.types.selector_spec import SelectorSpec
 from rest_framework_services.types.service_spec import ServiceSpec
 
 from rest_framework_mcp.adapters.selector_to_resource import selector_to_resource
+from rest_framework_mcp.adapters.selector_to_tool import selector_spec_to_tool
 from rest_framework_mcp.adapters.service_to_tool import service_spec_to_tool
 from rest_framework_mcp.auth.auth_backend import MCPAuthBackend
 from rest_framework_mcp.auth.protected_resource_metadata import ProtectedResourceMetadataView
@@ -20,6 +21,7 @@ from rest_framework_mcp.registry.prompt_binding import PromptBinding
 from rest_framework_mcp.registry.prompt_registry import PromptRegistry
 from rest_framework_mcp.registry.resource_binding import ResourceBinding
 from rest_framework_mcp.registry.resource_registry import ResourceRegistry
+from rest_framework_mcp.registry.selector_tool_binding import SelectorToolBinding
 from rest_framework_mcp.registry.tool_binding import ToolBinding
 from rest_framework_mcp.registry.tool_registry import ToolRegistry
 from rest_framework_mcp.transport.async_streamable_http_view import AsyncStreamableHttpView
@@ -40,7 +42,7 @@ class MCPServer:
     Imperative::
 
         server = MCPServer(name="my-app")
-        server.register_tool(
+        server.register_service_tool(
             name="invoices.create",
             spec=ServiceSpec(service=create_invoice, input_serializer=InvoiceInput),
         )
@@ -52,7 +54,7 @@ class MCPServer:
 
     Declarative::
 
-        @server.tool(name="invoices.create", input_serializer=InvoiceInput)
+        @server.service_tool(name="invoices.create", input_serializer=InvoiceInput)
         def create_invoice(*, data): ...
 
         @server.resource(uri_template="invoices://{pk}", output_serializer=InvoiceOutput)
@@ -99,7 +101,7 @@ class MCPServer:
 
     # ----- imperative registration -----
 
-    def register_tool(
+    def register_service_tool(
         self,
         *,
         name: str,
@@ -111,6 +113,21 @@ class MCPServer:
         rate_limits: list[Any] | None = None,
         annotations: dict[str, Any] | None = None,
     ) -> ToolBinding:
+        """Register a :class:`ServiceSpec` as an MCP **mutation** tool.
+
+        Mirrors :meth:`register_resource`'s spec-only contract — the unit
+        of registration is a ``ServiceSpec`` from
+        ``djangorestframework-services``. The dispatch pipeline runs
+        ``input_serializer → run_service(atomic) → output_selector? →
+        output_serializer``, so this is the right surface for
+        side-effecting operations (creates, updates, deletes, anything
+        that wants ``transaction.atomic()``).
+
+        For read-shaped operations (list/retrieve with optional filtering
+        / ordering / pagination) use :meth:`register_selector_tool`
+        instead — selectors return raw querysets and the tool layer owns
+        the post-fetch pipeline.
+        """
         binding = service_spec_to_tool(
             name=name,
             spec=spec,
@@ -120,6 +137,64 @@ class MCPServer:
             permissions=tuple(permissions or ()),
             rate_limits=tuple(rate_limits or ()),
             annotations=annotations,
+        )
+        self._tools.register(binding)
+        return binding
+
+    def register_selector_tool(
+        self,
+        *,
+        name: str,
+        spec: SelectorSpec,
+        description: str | None = None,
+        title: str | None = None,
+        input_serializer: type | None = None,
+        output_format: OutputFormat | str = OutputFormat.JSON,
+        permissions: list[Any] | None = None,
+        rate_limits: list[Any] | None = None,
+        annotations: dict[str, Any] | None = None,
+        filter_set: Any | None = None,
+        ordering_fields: list[str] | tuple[str, ...] | None = None,
+        paginate: bool = False,
+    ) -> SelectorToolBinding:
+        """Register a :class:`SelectorSpec` as an MCP **read** tool.
+
+        Read-shaped sibling of :meth:`register_service_tool`. The
+        selector returns a raw, unscoped queryset; the tool layer owns
+        the post-fetch pipeline:
+
+        .. code-block:: text
+
+            arguments → validate(merged inputSchema)
+                      → run_selector
+                      → FilterSet(data=...).qs    (if filter_set set)
+                      → order_by(...)             (if ordering_fields set)
+                      → paginate                  (if paginate=True)
+                      → output_serializer(many=True)
+                      → ToolResult
+
+        Each pipeline knob is optional. A selector tool with none of
+        ``filter_set`` / ``ordering_fields`` / ``paginate`` set behaves
+        like a plain RPC read against the selector — same effective
+        contract as a service tool minus the side effects.
+
+        ``filter_set`` requires the ``[filter]`` extra
+        (``django-filter``). The constructor surfaces a clear
+        ``ImportError`` if you set it without the package installed.
+        """
+        binding = selector_spec_to_tool(
+            name=name,
+            spec=spec,
+            description=description,
+            title=title,
+            input_serializer=input_serializer,
+            output_format=OutputFormat.coerce(output_format),
+            permissions=tuple(permissions or ()),
+            rate_limits=tuple(rate_limits or ()),
+            annotations=annotations,
+            filter_set=filter_set,
+            ordering_fields=tuple(ordering_fields or ()),
+            paginate=paginate,
         )
         self._tools.register(binding)
         return binding
@@ -140,7 +215,7 @@ class MCPServer:
     ) -> ResourceBinding:
         """Register a :class:`SelectorSpec` as an MCP resource.
 
-        The unit of registration is a spec, mirroring :meth:`register_tool`'s
+        The unit of registration is a spec, mirroring :meth:`register_service_tool`'s
         :class:`ServiceSpec` requirement. ``selector.selector`` is the
         callable dispatched at ``resources/read`` time;
         ``selector.output_serializer`` fills in when the caller didn't pass
@@ -201,7 +276,7 @@ class MCPServer:
 
     # ----- declarative (decorator) registration -----
 
-    def tool(
+    def service_tool(
         self,
         *,
         name: str,
@@ -218,12 +293,12 @@ class MCPServer:
         rate_limits: list[Any] | None = None,
         annotations: dict[str, Any] | None = None,
     ) -> Callable[[Callable[..., Any]], Callable[..., Any]]:
-        """Decorator form: register the wrapped callable as a tool.
+        """Decorator form of :meth:`register_service_tool`.
 
         If ``spec`` is supplied it is used verbatim; otherwise a
-        :class:`ServiceSpec` is constructed from the keyword arguments. The
-        original function is returned unchanged so it remains callable from
-        Python without going through the MCP transport.
+        :class:`ServiceSpec` is constructed from the keyword arguments.
+        The original function is returned unchanged so it remains
+        callable from Python without going through the MCP transport.
         """
 
         def wrap(fn: Callable[..., Any]) -> Callable[..., Any]:
@@ -235,7 +310,7 @@ class MCPServer:
                 atomic=atomic,
                 success_status=success_status,
             )
-            self.register_tool(
+            self.register_service_tool(
                 name=name,
                 spec=effective_spec,
                 description=description or fn.__doc__,
@@ -244,6 +319,55 @@ class MCPServer:
                 permissions=permissions,
                 rate_limits=rate_limits,
                 annotations=annotations,
+            )
+            return fn
+
+        return wrap
+
+    def selector_tool(
+        self,
+        *,
+        name: str,
+        spec: SelectorSpec | None = None,
+        input_serializer: type | None = None,
+        output_serializer: type[Serializer] | None = None,
+        description: str | None = None,
+        title: str | None = None,
+        output_format: OutputFormat | str = OutputFormat.JSON,
+        permissions: list[Any] | None = None,
+        rate_limits: list[Any] | None = None,
+        annotations: dict[str, Any] | None = None,
+        filter_set: Any | None = None,
+        ordering_fields: list[str] | tuple[str, ...] | None = None,
+        paginate: bool = False,
+    ) -> Callable[[Callable[..., Any]], Callable[..., Any]]:
+        """Decorator form of :meth:`register_selector_tool`.
+
+        If ``spec`` is supplied it is used verbatim; otherwise a
+        :class:`SelectorSpec` is constructed from the wrapped function
+        and the keyword arguments. The original function is returned
+        unchanged so it remains callable from Python without going
+        through the MCP transport.
+        """
+
+        def wrap(fn: Callable[..., Any]) -> Callable[..., Any]:
+            effective_spec: SelectorSpec = spec or SelectorSpec(
+                selector=fn,
+                output_serializer=output_serializer,
+            )
+            self.register_selector_tool(
+                name=name,
+                spec=effective_spec,
+                description=description or fn.__doc__,
+                title=title,
+                input_serializer=input_serializer,
+                output_format=output_format,
+                permissions=permissions,
+                rate_limits=rate_limits,
+                annotations=annotations,
+                filter_set=filter_set,
+                ordering_fields=ordering_fields,
+                paginate=paginate,
             )
             return fn
 

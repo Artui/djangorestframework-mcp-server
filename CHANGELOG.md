@@ -7,6 +7,52 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.2.0] — 2026-04-29
+
+Selector tools — the read-shaped sibling of `register_service_tool`.
+Pinned to `djangorestframework-services==0.6.0`.
+
+### Breaking changes
+
+- **`register_tool` → `register_service_tool`** and
+  **`@server.tool` → `@server.service_tool`**. The unqualified name was
+  ambiguous once `register_selector_tool` arrived — the rename gives
+  the two registration surfaces parallel naming. Pre-1.0, no
+  deprecation shim. Update call sites: rename method invocations and
+  decorator references; the rest of the kwargs stay the same.
+
+### Added
+
+- **`register_selector_tool`** (and `@server.selector_tool` decorator)
+  — read-shaped tool registration backed by a `SelectorSpec`. The
+  selector returns a raw queryset; the tool layer owns the
+  filter / order / paginate pipeline. Pipeline knobs are all opt-in:
+  - `filter_set=<django_filters.FilterSet>` — generates JSON Schema
+    properties from `FilterSet.base_filters` and applies the FilterSet
+    to the queryset at dispatch time. Supports `CharFilter`,
+    `BooleanFilter`, `NumberFilter`, `Date/DateTime/TimeFilter`,
+    `UUIDFilter`, `ChoiceFilter` (enum), `MultipleChoiceFilter`,
+    `BaseInFilter`, `BaseRangeFilter`, and `ModelChoiceFilter` —
+    unrecognised filter classes degrade to `{}` so a custom subclass
+    never breaks `tools/list`.
+  - `ordering_fields=[...]` — generates an `ordering` enum (asc + desc
+    variants) and applies `qs.order_by(...)` after filtering.
+  - `paginate=True` — adds `page` / `limit` arguments and wraps the
+    response with `{"items", "page", "totalPages", "hasNext"}`.
+- **`[filter]` optional extra** (`django-filter>=23`). Required only
+  when a binding declares `filter_set=`; importing the package without
+  it still works.
+- **`SelectorToolBinding`** — new binding dataclass; the shared
+  `ToolRegistry` accepts both `ToolBinding` (service tools) and
+  `SelectorToolBinding` (selector tools) and `tools/list` /
+  `tools/call` route by binding type.
+- **`build_selector_tool_input_schema`** + **`filterset_to_schema_properties`**
+  — exposed under `rest_framework_mcp.schema` for projects that want to
+  introspect the merged input schema outside of the registration flow.
+- **Recipe**: [Selector tool with FilterSet](docs/recipes/selector-tool-with-filterset.md)
+  walks a list-invoices example end-to-end (selector, FilterSet,
+  ordering, pagination, generated `inputSchema`).
+
 ## [0.1.0] — initial alpha
 
 First public release. Spec target: MCP **2025-11-25** (Streamable HTTP).

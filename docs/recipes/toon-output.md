@@ -14,7 +14,7 @@ Pick the format per binding:
 ```python
 from rest_framework_mcp import OutputFormat
 
-server.register_tool(
+server.register_service_tool(
     name="invoices.list",
     spec=ServiceSpec(service=list_invoices, output_serializer=InvoiceOutputSerializer),
     output_format=OutputFormat.AUTO,   # picks TOON when the payload is uniform

@@ -44,7 +44,7 @@ def with_tenant(view: MCPServiceView, request) -> dict:
     return {"tenant_id": request.user.tenant_id}
 
 
-server.register_tool(
+server.register_service_tool(
     name="invoices.create",
     spec=ServiceSpec(
         service=create_invoice,
@@ -65,7 +65,7 @@ transports.
 
 `register_resource(selector=...)` requires a
 [`SelectorSpec`](https://github.com/arturveres/djangorestframework-services/blob/main/rest_framework_services/types/selector_spec.py),
-mirroring `register_tool(spec=ServiceSpec(...))`. The unit of registration
+mirroring `register_service_tool(spec=ServiceSpec(...))`. The unit of registration
 is a spec on both surfaces.
 
 - `.selector` is the callable that gets dispatched (must be set; specs with
@@ -88,7 +88,7 @@ server.register_resource(
 ```
 
 Bare callables are rejected with `TypeError` — this is intentional: keeping
-the imperative surface symmetric with `register_tool` makes the spec the
+the imperative surface symmetric with `register_service_tool` makes the spec the
 single point where output serializers and kwargs providers attach. Use the
 `@server.resource(uri_template=...)` decorator if you'd rather skip the
 boilerplate; it wraps the function in a `SelectorSpec` for you.
@@ -195,7 +195,7 @@ optional `structuredContent`:
 ```python
 from rest_framework_mcp import OutputFormat
 
-server.register_tool(
+server.register_service_tool(
     name="invoices.list",
     spec=ServiceSpec(service=list_invoices, output_serializer=InvoiceOutputSerializer),
     output_format=OutputFormat.AUTO,   # JSON, TOON, or AUTO

@@ -1,10 +1,8 @@
 from __future__ import annotations
 
-import dataclasses
 from typing import Any
 
 from rest_framework import serializers as drf_serializers
-from rest_framework_dataclasses.serializers import DataclassSerializer
 from rest_framework_services._compat.run_service import run_service
 from rest_framework_services.exceptions.service_error import ServiceError
 from rest_framework_services.exceptions.service_validation_error import ServiceValidationError
@@ -15,48 +13,30 @@ from rest_framework_services.views.utils import resolve_callable_kwargs
 from rest_framework_mcp._compat.tracing import span
 from rest_framework_mcp.conf import get_setting
 from rest_framework_mcp.handlers.context import MCPCallContext
+from rest_framework_mcp.handlers.selector_tool_dispatch import dispatch_selector_tool
 from rest_framework_mcp.handlers.utils import (
     build_internal_drf_request,
     check_permissions,
     consume_rate_limits,
+    validate_input_against_serializer,
     validation_error_data,
 )
 from rest_framework_mcp.output.format import OutputFormat
 from rest_framework_mcp.output.tool_result import build_tool_result
 from rest_framework_mcp.protocol.json_rpc_error import JsonRpcError
 from rest_framework_mcp.protocol.json_rpc_error_code import JsonRpcErrorCode
+from rest_framework_mcp.registry.selector_tool_binding import SelectorToolBinding
 from rest_framework_mcp.server.mcp_service_view import MCPServiceView
 
 
 def _validate_input(arguments: dict[str, Any], spec: ServiceSpec) -> Any:
-    """Validate ``arguments`` against ``spec.input_serializer``.
+    """Thin wrapper that validates against ``spec.input_serializer``.
 
-    Mirrors what ``rest_framework_services.views.mutation.utils.validate_input``
-    does, but without requiring a DRF ``Request`` — we already have a dict.
-    Returns either:
-      - the dataclass instance produced by a ``DataclassSerializer``,
-      - the validated dict for a plain ``Serializer``,
-      - ``None`` if no ``input_serializer`` is declared.
-
-    Raises :class:`drf_serializers.ValidationError` on invalid input.
+    The actual logic lives in
+    :func:`rest_framework_mcp.handlers.utils.validate_input_against_serializer`
+    so selector-tool dispatch can share it without a circular import.
     """
-    if spec.input_serializer is None:
-        return None
-    target: type = spec.input_serializer
-    if dataclasses.is_dataclass(target) and not isinstance(target, type):  # pragma: no cover
-        raise TypeError("input_serializer must be a class")
-    if isinstance(target, type) and dataclasses.is_dataclass(target):
-        # Bare dataclass: wrap in DataclassSerializer transparently.
-        wrapper_cls: type[drf_serializers.Serializer] = type(
-            f"{target.__name__}Serializer",
-            (DataclassSerializer,),
-            {"Meta": type("Meta", (), {"dataclass": target})},
-        )
-        serializer = wrapper_cls(data=arguments)
-    else:
-        serializer = target(data=arguments)
-    serializer.is_valid(raise_exception=True)
-    return serializer.validated_data
+    return validate_input_against_serializer(arguments, spec.input_serializer)
 
 
 def _render_output(result: Any, spec: ServiceSpec) -> Any:
@@ -106,6 +86,13 @@ def handle_tools_call(
         "mcp.tools.call",
         attributes=_span_attrs(binding.name, context),
     ) as otel_span:
+        # Selector tools (read-shaped) own the post-fetch pipeline
+        # (filter / order / paginate) and route through a different
+        # dispatch helper. Service tools fall through to the existing
+        # mutation-shaped path below.
+        if isinstance(binding, SelectorToolBinding):
+            return dispatch_selector_tool(binding, params, arguments_raw, context, otel_span)
+
         allowed, required_scopes = check_permissions(
             binding.permissions, context.http_request, context.token
         )

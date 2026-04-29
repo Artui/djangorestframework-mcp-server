@@ -18,7 +18,7 @@ from rest_framework_services.types.service_spec import ServiceSpec
 
 server = MCPServer(name="my-app")
 
-server.register_tool(
+server.register_service_tool(
     name="invoices.create",
     spec=ServiceSpec(service=create_invoice, ...),
     rate_limits=[
@@ -63,7 +63,7 @@ def per_org_key(request, token) -> str:
     return f"org:{token.user.organization_id}"
 
 
-server.register_tool(
+server.register_service_tool(
     ...,
     rate_limits=[
         FixedWindowRateLimit(
@@ -95,7 +95,7 @@ from rest_framework_mcp.auth.rate_limits import (
     TokenBucketRateLimit,
 )
 
-server.register_tool(
+server.register_service_tool(
     name="invoices.create",
     spec=...,
     rate_limits=[
@@ -135,7 +135,7 @@ class LeakyBucketRateLimit:
 Pass it to a binding the same way:
 
 ```python
-server.register_tool(..., rate_limits=[LeakyBucketRateLimit(capacity=60, leak_per_second=1)])
+server.register_service_tool(..., rate_limits=[LeakyBucketRateLimit(capacity=60, leak_per_second=1)])
 ```
 
 ## Tips

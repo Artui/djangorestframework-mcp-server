@@ -16,7 +16,7 @@ def build_server() -> MCPServer:
     """
     server = MCPServer(name="testapp")
 
-    server.register_tool(
+    server.register_service_tool(
         name="invoices.create",
         spec=ServiceSpec(
             service=create_invoice,

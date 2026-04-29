@@ -1,11 +1,14 @@
 from __future__ import annotations
 
+import dataclasses
 import json
 from typing import Any, cast
 
 from django.http import HttpRequest
+from rest_framework import serializers as drf_serializers
 from rest_framework.parsers import JSONParser
 from rest_framework.request import Request
+from rest_framework_dataclasses.serializers import DataclassSerializer
 
 from rest_framework_mcp.auth.permissions.mcp_permission import MCPPermission
 from rest_framework_mcp.auth.rate_limits.mcp_rate_limit import MCPRateLimit
@@ -89,6 +92,39 @@ def consume_rate_limits(
     return None
 
 
+def validate_input_against_serializer(
+    arguments: dict[str, Any], input_serializer: type | None
+) -> Any:
+    """Validate ``arguments`` against ``input_serializer`` (DRF or bare dataclass).
+
+    Returns:
+      - the dataclass instance produced by a ``DataclassSerializer`` (when
+        ``input_serializer`` is a bare ``@dataclass`` — auto-wrapped),
+      - the ``validated_data`` dict for a plain DRF ``Serializer``,
+      - ``None`` when ``input_serializer`` is ``None``.
+
+    Raises :class:`drf_serializers.ValidationError` on invalid input. Lifted
+    out of the ``handle_tools_call`` module so service-tool and selector-
+    tool dispatch can share it without a circular import.
+    """
+    if input_serializer is None:
+        return None
+    target: type = input_serializer
+    if dataclasses.is_dataclass(target) and not isinstance(target, type):  # pragma: no cover
+        raise TypeError("input_serializer must be a class")
+    if isinstance(target, type) and dataclasses.is_dataclass(target):
+        wrapper_cls: type[drf_serializers.Serializer] = type(
+            f"{target.__name__}Serializer",
+            (DataclassSerializer,),
+            {"Meta": type("Meta", (), {"dataclass": target})},
+        )
+        serializer = wrapper_cls(data=arguments)
+    else:
+        serializer = target(data=arguments)
+    serializer.is_valid(raise_exception=True)
+    return serializer.validated_data
+
+
 def validation_error_data(detail: Any, value: Any) -> dict[str, Any]:
     """Build the ``data`` payload for a JSON-RPC validation error.
 
@@ -109,5 +145,6 @@ __all__ = [
     "build_internal_drf_request",
     "check_permissions",
     "consume_rate_limits",
+    "validate_input_against_serializer",
     "validation_error_data",
 ]

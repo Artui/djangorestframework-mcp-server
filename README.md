@@ -22,13 +22,14 @@ involvement. The unit of registration is the `ServiceSpec`, not a view.
 
 ```python
 from django.urls import include, path
+from rest_framework_services.types.selector_spec import SelectorSpec
 from rest_framework_services.types.service_spec import ServiceSpec
 
 from rest_framework_mcp import MCPServer
 
 server = MCPServer(name="my-app")
 
-server.register_tool(
+server.register_service_tool(
     name="invoices.create",
     spec=ServiceSpec(
         service=create_invoice,
@@ -40,14 +41,16 @@ server.register_tool(
 server.register_resource(
     name="invoice",
     uri_template="invoices://{pk}",
-    selector=get_invoice,
-    output_serializer=InvoiceOutputSerializer,
+    selector=SelectorSpec(
+        selector=get_invoice,
+        output_serializer=InvoiceOutputSerializer,
+    ),
 )
 
 urlpatterns = [path("mcp/", include(server.urls))]
 ```
 
-A decorator form is also supported (`@server.tool(...)` / `@server.resource(...)`).
+A decorator form is also supported (`@server.service_tool(...)` / `@server.resource(...)`).
 See the [quickstart](docs/quickstart.md) for the full end-to-end recipe.
 
 - **Services** (mutations) → MCP **tools**.

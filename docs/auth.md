@@ -100,7 +100,7 @@ Per-binding permissions are AND-combined. Two ship in v1:
 from rest_framework_mcp import MCPServer, ScopeRequired, DjangoPermRequired
 from rest_framework_services.types.service_spec import ServiceSpec
 
-server.register_tool(
+server.register_service_tool(
     name="invoices.refund",
     spec=ServiceSpec(service=refund_invoice),
     permissions=[

@@ -66,7 +66,9 @@ def _ctx(server: MCPServer) -> Any:
 
 def test_tools_call_emits_span(exporter: InMemorySpanExporter) -> None:
     server = _server()
-    server.register_tool(name="t.x", spec=ServiceSpec(service=lambda: {"ok": True}, atomic=False))
+    server.register_service_tool(
+        name="t.x", spec=ServiceSpec(service=lambda: {"ok": True}, atomic=False)
+    )
     handle_tools_call({"name": "t.x", "arguments": {}}, _ctx(server))
     spans = list(exporter.get_finished_spans())
     matching = [s for s in spans if s.name == "mcp.tools.call"]

@@ -22,7 +22,9 @@ def _build_server() -> MCPServer:
         name="t", auth_backend=AllowAnyBackend(), session_store=InMemorySessionStore()
     )
     for i in range(5):
-        server.register_tool(name=f"tool.{i}", spec=ServiceSpec(service=lambda: None, atomic=False))
+        server.register_service_tool(
+            name=f"tool.{i}", spec=ServiceSpec(service=lambda: None, atomic=False)
+        )
     for i in range(4):
         server.register_resource(
             name=f"r.{i}",

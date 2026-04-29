@@ -7,8 +7,10 @@ from rest_framework_mcp.handlers.pagination import paginate
 from rest_framework_mcp.protocol.json_rpc_error import JsonRpcError
 from rest_framework_mcp.protocol.json_rpc_error_code import JsonRpcErrorCode
 from rest_framework_mcp.protocol.tool import Tool
+from rest_framework_mcp.registry.selector_tool_binding import SelectorToolBinding
 from rest_framework_mcp.schema.input_schema import build_input_schema
 from rest_framework_mcp.schema.output_schema import build_output_schema
+from rest_framework_mcp.schema.selector_tool_schema import build_selector_tool_input_schema
 
 
 def handle_tools_list(
@@ -34,11 +36,18 @@ def handle_tools_list(
 
     tools: list[dict[str, Any]] = []
     for binding in page:
+        # Selector tools merge filter / ordering / pagination args into
+        # their inputSchema; service tools just expose the input
+        # serializer's schema verbatim.
+        if isinstance(binding, SelectorToolBinding):
+            input_schema = build_selector_tool_input_schema(binding)
+        else:
+            input_schema = build_input_schema(binding.spec.input_serializer)
         tool = Tool(
             name=binding.name,
             description=binding.description,
             title=binding.title,
-            input_schema=build_input_schema(binding.spec.input_serializer),
+            input_schema=input_schema,
             output_schema=build_output_schema(binding.spec.output_serializer),
             annotations=dict(binding.annotations) or None,
         )

@@ -79,6 +79,7 @@ nav:
   - Async deployment: async.md
   - Prompts: prompts.md
   - Observability: observability.md
+  - Performance: performance.md
   - Recipes:
       - recipes/index.md
       - Expose a service: recipes/expose-a-service.md
@@ -90,6 +91,8 @@ nav:
       - Multi-worker SSE with Redis: recipes/redis-sse-broker.md
       - Resume SSE with Last-Event-ID: recipes/sse-replay-buffer.md
       - Honor drf-spectacular annotations: recipes/drf-spectacular.md
+      - Selector tool with FilterSet: recipes/selector-tool-with-filterset.md
+      - Migrate from fastapi-mcp / hand-rolled: recipes/migrating.md
   - Reference:
       - reference/index.md
       - MCPServer: reference/mcp-server.md

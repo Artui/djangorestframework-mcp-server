@@ -30,7 +30,7 @@ class TenantMatches:
 Stack with `ScopeRequired` to keep both surfaces honest:
 
 ```python
-server.register_tool(
+server.register_service_tool(
     name="invoices.refund",
     spec=ServiceSpec(service=refund_invoice),
     permissions=[

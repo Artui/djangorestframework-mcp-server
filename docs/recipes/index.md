@@ -19,3 +19,8 @@ that solves a single concrete problem. Browse the list:
 - [Honor `drf-spectacular` annotations](drf-spectacular.md) — feed
   `@extend_schema_serializer` / `@extend_schema_field` metadata into the
   MCP `inputSchema` automatically.
+- [Selector tool with FilterSet](selector-tool-with-filterset.md) —
+  expose a list-shaped read tool with `django-filter`, ordering, and
+  pagination, generated `inputSchema` and all.
+- [Migrate from `fastapi-mcp` / hand-rolled MCP](migrating.md) — step
+  by step from a custom Django MCP view or a `fastapi-mcp` app.

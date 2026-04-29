@@ -26,7 +26,7 @@ def test_register_tool_imperative() -> None:
     def svc(*, data: dict) -> dict:
         return data
 
-    binding = server.register_tool(name="t", spec=ServiceSpec(service=svc))
+    binding = server.register_service_tool(name="t", spec=ServiceSpec(service=svc))
     assert server.tools.get("t") is binding
 
 
@@ -53,7 +53,7 @@ def test_register_resource_rejects_bare_callable() -> None:
 def test_tool_decorator_uses_function_doc_as_description() -> None:
     server = _make()
 
-    @server.tool(name="t.create")
+    @server.service_tool(name="t.create")
     def create(*, data: dict) -> dict:
         """Create something."""
         return data
@@ -67,7 +67,7 @@ def test_tool_decorator_with_explicit_spec() -> None:
     def svc(*, data: dict) -> dict:
         return data
 
-    @server.tool(name="t.x", spec=ServiceSpec(service=svc))
+    @server.service_tool(name="t.x", spec=ServiceSpec(service=svc))
     def placeholder(*, data: dict) -> dict:
         return {"ignored": True}
 
@@ -121,6 +121,6 @@ def test_default_loads_use_settings(settings) -> None:
 
 def test_register_tool_duplicate_raises() -> None:
     server = _make()
-    server.register_tool(name="dup", spec=ServiceSpec(service=lambda: None))
+    server.register_service_tool(name="dup", spec=ServiceSpec(service=lambda: None))
     with pytest.raises(ValueError, match="Duplicate"):
-        server.register_tool(name="dup", spec=ServiceSpec(service=lambda: None))
+        server.register_service_tool(name="dup", spec=ServiceSpec(service=lambda: None))

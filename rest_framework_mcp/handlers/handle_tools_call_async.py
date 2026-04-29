@@ -20,6 +20,7 @@ from rest_framework_mcp.handlers.handle_tools_call import (
     _span_attrs,
     _validate_input,
 )
+from rest_framework_mcp.handlers.selector_tool_dispatch import dispatch_selector_tool_async
 from rest_framework_mcp.handlers.utils import (
     build_internal_drf_request,
     check_permissions,
@@ -30,6 +31,7 @@ from rest_framework_mcp.output.format import OutputFormat
 from rest_framework_mcp.output.tool_result import build_tool_result
 from rest_framework_mcp.protocol.json_rpc_error import JsonRpcError
 from rest_framework_mcp.protocol.json_rpc_error_code import JsonRpcErrorCode
+from rest_framework_mcp.registry.selector_tool_binding import SelectorToolBinding
 from rest_framework_mcp.server.mcp_service_view import MCPServiceView
 
 
@@ -66,6 +68,14 @@ async def handle_tools_call_async(
         return JsonRpcError(JsonRpcErrorCode.INVALID_PARAMS, "'arguments' must be an object")
 
     with span("mcp.tools.call", attributes=_span_attrs(binding.name, context)) as otel_span:
+        # Read-shaped tools route through the selector-tool dispatch
+        # helper (filter / order / paginate). Mutation tools fall
+        # through to the existing service-tool path below.
+        if isinstance(binding, SelectorToolBinding):
+            return await dispatch_selector_tool_async(
+                binding, params, arguments_raw, context, otel_span
+            )
+
         allowed, required_scopes = await acall(
             check_permissions, binding.permissions, context.http_request, context.token
         )
