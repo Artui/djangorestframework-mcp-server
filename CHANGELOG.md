@@ -7,6 +7,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.2.3] — 2026-04-29
+
+### Fixed
+
+- `docs/index.md` was significantly out of sync with `README.md` —
+  the install matrix was stuck at the Phase 1 era (`[toon]` + `[oauth]`
+  only, missing `[redis]` / `[otel]` / `[filter]` / `[spectacular]`
+  and the `uv add` block), and "What ships in v1" predated prompts,
+  SSE, rate limits, and OpenTelemetry entirely. Aligned the
+  canonical-content sections (badges, install commands, feature list)
+  while keeping the two pages' framing differences — README is a
+  GitHub landing pitch with badges; `docs/index.md` is the docs-site
+  essay with the same badges plus the "What this is / When to use it"
+  structure.
+
+No code changes.
+
 ## [0.2.2] — 2026-04-29
 
 ### Fixed
@@ -198,7 +215,8 @@ Pinned to `djangorestframework-services==0.6.0`.
 - 100% line + branch coverage enforced by pytest (**451 tests** at
   release).
 
-[Unreleased]: https://github.com/Artui/djangorestframework-mcp-server/compare/v0.2.2...HEAD
+[Unreleased]: https://github.com/Artui/djangorestframework-mcp-server/compare/v0.2.3...HEAD
+[0.2.3]: https://github.com/Artui/djangorestframework-mcp-server/compare/v0.2.2...v0.2.3
 [0.2.2]: https://github.com/Artui/djangorestframework-mcp-server/compare/v0.2.1...v0.2.2
 [0.2.1]: https://github.com/Artui/djangorestframework-mcp-server/compare/v0.2.0...v0.2.1
 [0.2.0]: https://github.com/Artui/djangorestframework-mcp-server/compare/v0.1.0...v0.2.0
