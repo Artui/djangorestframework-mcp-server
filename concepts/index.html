@@ -1424,7 +1424,7 @@ you have these in your head.</p>
 <h2 id="servicespec-is-the-unit-of-registration"><code>ServiceSpec</code> is the unit of registration<a class="headerlink" href="#servicespec-is-the-unit-of-registration" title="Permanent link">&para;</a></h2>
 <p>The MCP server does <strong>not</strong> wrap, walk, or otherwise reach into DRF viewsets,
 routers, or views. Consumers register
-<a href="https://github.com/arturveres/djangorestframework-services/blob/main/rest_framework_services/types/service_spec.py"><code>ServiceSpec</code></a>
+<a href="https://github.com/Artui/djangorestframework-services/blob/main/rest_framework_services/types/service_spec.py"><code>ServiceSpec</code></a>
 instances directly. Same value object as the HTTP transport — same callable can
 serve both at once.</p>
 <div class="language-python highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="kn">from</span><span class="w"> </span><span class="nn">rest_framework_mcp</span><span class="w"> </span><span class="kn">import</span> <span class="n">ServiceSpec</span>  <span class="c1"># re-exported for ergonomics</span>
@@ -1471,7 +1471,7 @@ HTTP transport's <code>ServiceView</code>, so providers can be shared between
 transports.</p>
 <h3 id="selectorspec-for-resources"><code>SelectorSpec</code> for resources<a class="headerlink" href="#selectorspec-for-resources" title="Permanent link">&para;</a></h3>
 <p><code>register_resource(selector=...)</code> requires a
-<a href="https://github.com/arturveres/djangorestframework-services/blob/main/rest_framework_services/types/selector_spec.py"><code>SelectorSpec</code></a>,
+<a href="https://github.com/Artui/djangorestframework-services/blob/main/rest_framework_services/types/selector_spec.py"><code>SelectorSpec</code></a>,
 mirroring <code>register_service_tool(spec=ServiceSpec(...))</code>. The unit of registration
 is a spec on both surfaces.</p>
 <ul>
