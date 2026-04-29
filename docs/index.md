@@ -4,9 +4,6 @@ Expose [`djangorestframework-services`](https://github.com/Artui/djangorestframe
 services and selectors as a [Model Context Protocol](https://modelcontextprotocol.io)
 (MCP) server, conforming to MCP **2025-11-25** (Streamable HTTP).
 
-!!! warning "Alpha"
-    API surfaces and wire details may shift before `0.1` is tagged.
-
 ## What this is
 
 `djangorestframework-services` lets a Django project expose **services** (mutations,
