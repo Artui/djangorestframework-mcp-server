@@ -70,7 +70,7 @@ release-publish:
 		echo "Tag v$$version already exists on origin."; exit 1; \
 	fi; \
 	if ! git diff-index --quiet HEAD --; then \
-		git add rest_framework_mcp/version.py CHANGELOG.md && \
+		git add rest_framework_mcp/version.py CHANGELOG.md pyproject.toml && \
 		git commit -m "Release $$version"; \
 	fi && \
 	git tag -a "v$$version" -m "$$version" && \
