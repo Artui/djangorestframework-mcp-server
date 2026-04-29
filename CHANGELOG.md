@@ -7,6 +7,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.2.2] — 2026-04-29
+
+### Fixed
+
+- `docs/index.md` carried a duplicate `!!! warning "Alpha"` admonition
+  that the README banner-removal in 183b9c7 didn't catch, so the docs
+  site still warned visitors about a 0.1 that shipped a week ago.
+  Removed and re-released so the tag-triggered `gh-pages` deploy picks
+  up the change.
+- Release tooling: rolled this tag through `make release-bump` rather
+  than hand-edits, after fixing the `pyproject.toml` `current_version`
+  drift and back-filling the `CHANGELOG.md` compare-link footer that
+  the previous two manual releases hadn't updated.
+
+No code changes.
+
 ## [0.2.1] — 2026-04-29
 
 ### Fixed
@@ -182,7 +198,8 @@ Pinned to `djangorestframework-services==0.6.0`.
 - 100% line + branch coverage enforced by pytest (**451 tests** at
   release).
 
-[Unreleased]: https://github.com/Artui/djangorestframework-mcp-server/compare/v0.2.1...HEAD
+[Unreleased]: https://github.com/Artui/djangorestframework-mcp-server/compare/v0.2.2...HEAD
+[0.2.2]: https://github.com/Artui/djangorestframework-mcp-server/compare/v0.2.1...v0.2.2
 [0.2.1]: https://github.com/Artui/djangorestframework-mcp-server/compare/v0.2.0...v0.2.1
 [0.2.0]: https://github.com/Artui/djangorestframework-mcp-server/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/Artui/djangorestframework-mcp-server/releases/tag/v0.1.0
