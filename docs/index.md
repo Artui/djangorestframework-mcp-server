@@ -31,24 +31,63 @@ Reach for this package when:
 
 Skip it when you don't need the MCP wire format — call your services directly.
 
-## What ships in v1
+## What ships
 
-- `tools/list`, `tools/call`, `resources/list`, `resources/templates/list`,
-  `resources/read`.
-- Pluggable auth: `DjangoOAuthToolkitBackend` (default when DOT is installed)
-  and `AllowAnyBackend` (development only).
-- Output formats: JSON (default) and TOON (token-oriented; optional extra with
-  safe JSON fallback).
-- Origin allowlist + protocol-version validation + session lifecycle per the
-  2025-11-25 transport rules.
+- **Tools** — `tools/list`, `tools/call` for `register_service_tool`
+  (mutations) and `register_selector_tool` (reads, with optional
+  `FilterSet` + ordering + pagination).
+- **Resources** — `resources/list`, `resources/templates/list`,
+  `resources/read` against `SelectorSpec`-backed callables; RFC 6570
+  templated URIs.
+- **Prompts** — `prompts/list`, `prompts/get` against render callables
+  returning strings, `PromptMessage`s, or async coroutines.
+- **Pluggable auth** — `DjangoOAuthToolkitBackend` (default when
+  `oauth2_provider` is installed) and `AllowAnyBackend` (dev only).
+  Per-binding `MCPPermission` classes (`ScopeRequired`,
+  `DjangoPermRequired`) plus your own.
+- **RFC 8707 audience binding** when `RESOURCE_URL` is configured;
+  **RFC 9728 PRM** served from the configured backend.
+- **Per-binding rate limits** — `MCPRateLimit` Protocol with
+  `FixedWindowRateLimit`, `SlidingWindowRateLimit`, and
+  `TokenBucketRateLimit` implementations shipped.
+- **Output formats** — JSON (default) and TOON (token-oriented;
+  optional extra with safe JSON fallback).
+- **Async POST/DELETE + GET-side SSE push** — sync `urls` for WSGI,
+  `async_urls` for ASGI; `MCPServer.notify(session_id, payload)`
+  pushes JSON-RPC frames on the session's SSE stream. Per-worker
+  `InMemorySSEBroker` or cross-worker `RedisSSEBroker` (behind
+  `[redis]`); `Last-Event-ID` resume via
+  `InMemorySSEReplayBuffer` / `RedisSSEReplayBuffer`.
+- **OpenTelemetry instrumentation** — `mcp.tools.call`,
+  `mcp.resources.read`, `mcp.prompts.get` spans (no-op without the
+  `[otel]` extra installed).
+- **Origin allowlist + protocol-version validation + session
+  lifecycle** per the 2025-11-25 transport rules.
 
 ## Install
 
 ```bash
-pip install djangorestframework-mcp-server                       # JSON only
-pip install "djangorestframework-mcp-server[toon]"               # +TOON encoder
-pip install "djangorestframework-mcp-server[oauth]"              # +django-oauth-toolkit backend
-pip install "djangorestframework-mcp-server[toon,oauth]"         # all optional extras
+pip install djangorestframework-mcp-server                              # JSON only
+pip install "djangorestframework-mcp-server[toon]"                      # +TOON encoder
+pip install "djangorestframework-mcp-server[oauth]"                     # +django-oauth-toolkit backend
+pip install "djangorestframework-mcp-server[redis]"                     # +Redis SSE broker for multi-worker ASGI
+pip install "djangorestframework-mcp-server[otel]"                      # +OpenTelemetry instrumentation
+pip install "djangorestframework-mcp-server[filter]"                    # +django-filter for selector-tool FilterSets
+pip install "djangorestframework-mcp-server[spectacular]"               # +drf-spectacular schema overrides
+pip install "djangorestframework-mcp-server[toon,oauth,redis,otel,filter,spectacular]"  # everything
+```
+
+…or with `uv`:
+
+```bash
+uv add djangorestframework-mcp-server                                   # JSON only
+uv add "djangorestframework-mcp-server[toon]"                           # +TOON encoder
+uv add "djangorestframework-mcp-server[oauth]"                          # +django-oauth-toolkit backend
+uv add "djangorestframework-mcp-server[redis]"                          # +Redis SSE broker for multi-worker ASGI
+uv add "djangorestframework-mcp-server[otel]"                           # +OpenTelemetry instrumentation
+uv add "djangorestframework-mcp-server[filter]"                         # +django-filter for selector-tool FilterSets
+uv add "djangorestframework-mcp-server[spectacular]"                    # +drf-spectacular schema overrides
+uv add "djangorestframework-mcp-server[toon,oauth,redis,otel,filter,spectacular]"  # everything
 ```
 
 Optional extras degrade gracefully:
@@ -57,6 +96,12 @@ Optional extras degrade gracefully:
 - The OAuth backend module imports cleanly without `oauth2_provider`; the
   `ImportError` only fires if you actually configure the backend and a request
   reaches `authenticate()`.
+- `RedisSSEBroker` / `RedisSSEReplayBuffer` raise a clear `ImportError` from
+  `__init__` if `redis` isn't installed.
+- The OTel tracing helper yields a no-op span when `opentelemetry-api` isn't
+  importable, so handlers stay branch-free.
+- `filter_set=` on a selector tool raises a clear `ImportError` only if you
+  declare it without `django-filter` installed.
 
 ## Where to next
 
