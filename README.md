@@ -80,7 +80,22 @@ pip install "djangorestframework-mcp-server[toon]"                      # +TOON 
 pip install "djangorestframework-mcp-server[oauth]"                     # +django-oauth-toolkit backend
 pip install "djangorestframework-mcp-server[redis]"                     # +Redis SSE broker for multi-worker ASGI
 pip install "djangorestframework-mcp-server[otel]"                      # +OpenTelemetry instrumentation
-pip install "djangorestframework-mcp-server[toon,oauth,redis,otel]"     # all optional extras
+pip install "djangorestframework-mcp-server[filter]"                    # +django-filter for selector-tool FilterSets
+pip install "djangorestframework-mcp-server[spectacular]"               # +drf-spectacular schema overrides
+pip install "djangorestframework-mcp-server[toon,oauth,redis,otel,filter,spectacular]"  # everything
+```
+
+…or with `uv`:
+
+```bash
+uv add djangorestframework-mcp-server                                   # JSON only
+uv add "djangorestframework-mcp-server[toon]"                           # +TOON encoder
+uv add "djangorestframework-mcp-server[oauth]"                          # +django-oauth-toolkit backend
+uv add "djangorestframework-mcp-server[redis]"                          # +Redis SSE broker for multi-worker ASGI
+uv add "djangorestframework-mcp-server[otel]"                           # +OpenTelemetry instrumentation
+uv add "djangorestframework-mcp-server[filter]"                         # +django-filter for selector-tool FilterSets
+uv add "djangorestframework-mcp-server[spectacular]"                    # +drf-spectacular schema overrides
+uv add "djangorestframework-mcp-server[toon,oauth,redis,otel,filter,spectacular]"  # everything
 ```
 
 Optional extras degrade gracefully: TOON falls back to JSON with a runtime
