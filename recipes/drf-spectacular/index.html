@@ -10,13 +10,13 @@
       
       
       
-        <link rel="canonical" href="https://artui.github.io/djangorestframework-mcp-server/recipes/async-auth-backend/">
+        <link rel="canonical" href="https://artui.github.io/djangorestframework-mcp-server/recipes/drf-spectacular/">
       
       
-        <link rel="prev" href="../custom-permission/">
+        <link rel="prev" href="../sse-replay-buffer/">
       
       
-        <link rel="next" href="../rate-limiting/">
+        <link rel="next" href="../selector-tool-with-filterset/">
       
       
         
@@ -27,7 +27,7 @@
     
     
       
-        <title>Async-native auth backend - djangorestframework-mcp-server</title>
+        <title>Honor drf-spectacular annotations - djangorestframework-mcp-server</title>
       
     
     
@@ -80,7 +80,7 @@
     <div data-md-component="skip">
       
         
-        <a href="#write-an-async-native-auth-backend" class="md-skip">
+        <a href="#honor-drf-spectacular-annotations-on-inputschema" class="md-skip">
           Skip to content
         </a>
       
@@ -116,7 +116,7 @@
         <div class="md-header__topic" data-md-component="header-topic">
           <span class="md-ellipsis">
             
-              Async-native auth backend
+              Honor drf-spectacular annotations
             
           </span>
         </div>
@@ -685,37 +685,10 @@
                 
   
   
-    
   
   
-  
-    <li class="md-nav__item md-nav__item--active">
-      
-      <input class="md-nav__toggle md-toggle" type="checkbox" id="__toc">
-      
-      
-        
-      
-      
-        <label class="md-nav__link md-nav__link--active" for="__toc">
-          
-  
-  
-  <span class="md-ellipsis">
-    
-  
-    Async-native auth backend
-  
-
-    
-  </span>
-  
-  
-
-          <span class="md-nav__icon md-icon"></span>
-        </label>
-      
-      <a href="./" class="md-nav__link md-nav__link--active">
+    <li class="md-nav__item">
+      <a href="../async-auth-backend/" class="md-nav__link">
         
   
   
@@ -731,48 +704,6 @@
   
 
       </a>
-      
-        
-
-<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
-  
-  
-  
-    
-  
-  
-    <label class="md-nav__title" for="__toc">
-      <span class="md-nav__icon md-icon"></span>
-      Table of contents
-    </label>
-    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
-      
-        <li class="md-nav__item">
-  <a href="#what-about-the-sync-transport" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        What about the sync transport?
-      
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#cleanup" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Cleanup
-      
-    </span>
-  </a>
-  
-</li>
-      
-    </ul>
-  
-</nav>
-      
     </li>
   
 
@@ -866,10 +797,37 @@
                 
   
   
+    
   
   
-    <li class="md-nav__item">
-      <a href="../drf-spectacular/" class="md-nav__link">
+  
+    <li class="md-nav__item md-nav__item--active">
+      
+      <input class="md-nav__toggle md-toggle" type="checkbox" id="__toc">
+      
+      
+        
+      
+      
+        <label class="md-nav__link md-nav__link--active" for="__toc">
+          
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Honor drf-spectacular annotations
+  
+
+    
+  </span>
+  
+  
+
+          <span class="md-nav__icon md-icon"></span>
+        </label>
+      
+      <a href="./" class="md-nav__link md-nav__link--active">
         
   
   
@@ -885,6 +843,98 @@
   
 
       </a>
+      
+        
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#install" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Install
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#whats-honored" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        What's honored
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="What&#39;s honored">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#extend_schema_serializer-class-level" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        @extend_schema_serializer (class-level)
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#extend_schema_field-field-level" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        @extend_schema_field (field-level)
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#whats-not-honored" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        What's not honored
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#verifying-the-integration" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Verifying the integration
+      
+    </span>
+  </a>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+      
     </li>
   
 
@@ -1206,10 +1256,10 @@
     <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
       
         <li class="md-nav__item">
-  <a href="#what-about-the-sync-transport" class="md-nav__link">
+  <a href="#install" class="md-nav__link">
     <span class="md-ellipsis">
       
-        What about the sync transport?
+        Install
       
     </span>
   </a>
@@ -1217,10 +1267,60 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#cleanup" class="md-nav__link">
+  <a href="#whats-honored" class="md-nav__link">
     <span class="md-ellipsis">
       
-        Cleanup
+        What's honored
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="What&#39;s honored">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#extend_schema_serializer-class-level" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        @extend_schema_serializer (class-level)
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#extend_schema_field-field-level" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        @extend_schema_field (field-level)
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#whats-not-honored" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        What's not honored
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#verifying-the-integration" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Verifying the integration
       
     </span>
   </a>
@@ -1244,7 +1344,7 @@
 
 
   
-    <a href="https://github.com/Artui/djangorestframework-mcp-server/edit/main/docs/recipes/async-auth-backend.md" title="Edit this page" class="md-content__button md-icon" rel="edit">
+    <a href="https://github.com/Artui/djangorestframework-mcp-server/edit/main/docs/recipes/drf-spectacular.md" title="Edit this page" class="md-content__button md-icon" rel="edit">
       
       <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M10 20H6V4h7v5h5v3.1l2-2V8l-6-6H6c-1.1 0-2 .9-2 2v16c0 1.1.9 2 2 2h4zm10.2-7c.1 0 .3.1.4.2l1.3 1.3c.2.2.2.6 0 .8l-1 1-2.1-2.1 1-1c.1-.1.2-.2.4-.2m0 3.9L14.1 23H12v-2.1l6.1-6.1z"/></svg>
     </a>
@@ -1252,94 +1352,119 @@
   
 
 
-<h1 id="write-an-async-native-auth-backend">Write an async-native auth backend<a class="headerlink" href="#write-an-async-native-auth-backend" title="Permanent link">&para;</a></h1>
-<p>When your authentication path is itself I/O-bound — calling out to an IDP,
-querying a remote token introspection endpoint, fetching JWKs over HTTP —
-you want the validation to happen on the event loop, not in a thread.
-Declare the backend's methods <code>async def</code> and the dispatcher awaits them
-directly.</p>
-<div class="language-python highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="kn">import</span><span class="w"> </span><span class="nn">httpx</span>
-</span><span id="__span-0-2"><a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a><span class="kn">from</span><span class="w"> </span><span class="nn">django.http</span><span class="w"> </span><span class="kn">import</span> <span class="n">HttpRequest</span>
-</span><span id="__span-0-3"><a id="__codelineno-0-3" name="__codelineno-0-3" href="#__codelineno-0-3"></a>
-</span><span id="__span-0-4"><a id="__codelineno-0-4" name="__codelineno-0-4" href="#__codelineno-0-4"></a><span class="kn">from</span><span class="w"> </span><span class="nn">rest_framework_mcp</span><span class="w"> </span><span class="kn">import</span> <span class="n">MCPAuthBackend</span><span class="p">,</span> <span class="n">TokenInfo</span>
-</span><span id="__span-0-5"><a id="__codelineno-0-5" name="__codelineno-0-5" href="#__codelineno-0-5"></a>
-</span><span id="__span-0-6"><a id="__codelineno-0-6" name="__codelineno-0-6" href="#__codelineno-0-6"></a>
-</span><span id="__span-0-7"><a id="__codelineno-0-7" name="__codelineno-0-7" href="#__codelineno-0-7"></a><span class="k">class</span><span class="w"> </span><span class="nc">IntrospectingAuthBackend</span><span class="p">:</span>
-</span><span id="__span-0-8"><a id="__codelineno-0-8" name="__codelineno-0-8" href="#__codelineno-0-8"></a><span class="w">    </span><span class="sd">&quot;&quot;&quot;RFC 7662 token introspection against a remote IDP.&quot;&quot;&quot;</span>
-</span><span id="__span-0-9"><a id="__codelineno-0-9" name="__codelineno-0-9" href="#__codelineno-0-9"></a>
-</span><span id="__span-0-10"><a id="__codelineno-0-10" name="__codelineno-0-10" href="#__codelineno-0-10"></a>    <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="o">*</span><span class="p">,</span> <span class="n">introspection_url</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">client_id</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">client_secret</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
-</span><span id="__span-0-11"><a id="__codelineno-0-11" name="__codelineno-0-11" href="#__codelineno-0-11"></a>        <span class="bp">self</span><span class="o">.</span><span class="n">_url</span> <span class="o">=</span> <span class="n">introspection_url</span>
-</span><span id="__span-0-12"><a id="__codelineno-0-12" name="__codelineno-0-12" href="#__codelineno-0-12"></a>        <span class="bp">self</span><span class="o">.</span><span class="n">_auth</span> <span class="o">=</span> <span class="n">httpx</span><span class="o">.</span><span class="n">BasicAuth</span><span class="p">(</span><span class="n">client_id</span><span class="p">,</span> <span class="n">client_secret</span><span class="p">)</span>
-</span><span id="__span-0-13"><a id="__codelineno-0-13" name="__codelineno-0-13" href="#__codelineno-0-13"></a>        <span class="c1"># Reuse the connection pool across requests — one client per backend</span>
-</span><span id="__span-0-14"><a id="__codelineno-0-14" name="__codelineno-0-14" href="#__codelineno-0-14"></a>        <span class="c1"># instance, lifetime tied to the MCPServer.</span>
-</span><span id="__span-0-15"><a id="__codelineno-0-15" name="__codelineno-0-15" href="#__codelineno-0-15"></a>        <span class="bp">self</span><span class="o">.</span><span class="n">_client</span> <span class="o">=</span> <span class="n">httpx</span><span class="o">.</span><span class="n">AsyncClient</span><span class="p">(</span><span class="n">timeout</span><span class="o">=</span><span class="mf">2.0</span><span class="p">)</span>
-</span><span id="__span-0-16"><a id="__codelineno-0-16" name="__codelineno-0-16" href="#__codelineno-0-16"></a>
-</span><span id="__span-0-17"><a id="__codelineno-0-17" name="__codelineno-0-17" href="#__codelineno-0-17"></a>    <span class="k">async</span> <span class="k">def</span><span class="w"> </span><span class="nf">authenticate</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">request</span><span class="p">:</span> <span class="n">HttpRequest</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">TokenInfo</span> <span class="o">|</span> <span class="kc">None</span><span class="p">:</span>
-</span><span id="__span-0-18"><a id="__codelineno-0-18" name="__codelineno-0-18" href="#__codelineno-0-18"></a>        <span class="n">header</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="n">request</span><span class="o">.</span><span class="n">META</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;HTTP_AUTHORIZATION&quot;</span><span class="p">,</span> <span class="s2">&quot;&quot;</span><span class="p">)</span>
-</span><span id="__span-0-19"><a id="__codelineno-0-19" name="__codelineno-0-19" href="#__codelineno-0-19"></a>        <span class="k">if</span> <span class="ow">not</span> <span class="n">header</span><span class="o">.</span><span class="n">lower</span><span class="p">()</span><span class="o">.</span><span class="n">startswith</span><span class="p">(</span><span class="s2">&quot;bearer &quot;</span><span class="p">):</span>
-</span><span id="__span-0-20"><a id="__codelineno-0-20" name="__codelineno-0-20" href="#__codelineno-0-20"></a>            <span class="k">return</span> <span class="kc">None</span>
-</span><span id="__span-0-21"><a id="__codelineno-0-21" name="__codelineno-0-21" href="#__codelineno-0-21"></a>        <span class="n">token</span> <span class="o">=</span> <span class="n">header</span><span class="o">.</span><span class="n">split</span><span class="p">(</span><span class="s2">&quot; &quot;</span><span class="p">,</span> <span class="mi">1</span><span class="p">)[</span><span class="mi">1</span><span class="p">]</span><span class="o">.</span><span class="n">strip</span><span class="p">()</span>
-</span><span id="__span-0-22"><a id="__codelineno-0-22" name="__codelineno-0-22" href="#__codelineno-0-22"></a>        <span class="k">if</span> <span class="ow">not</span> <span class="n">token</span><span class="p">:</span>
-</span><span id="__span-0-23"><a id="__codelineno-0-23" name="__codelineno-0-23" href="#__codelineno-0-23"></a>            <span class="k">return</span> <span class="kc">None</span>
-</span><span id="__span-0-24"><a id="__codelineno-0-24" name="__codelineno-0-24" href="#__codelineno-0-24"></a>
-</span><span id="__span-0-25"><a id="__codelineno-0-25" name="__codelineno-0-25" href="#__codelineno-0-25"></a>        <span class="n">response</span> <span class="o">=</span> <span class="k">await</span> <span class="bp">self</span><span class="o">.</span><span class="n">_client</span><span class="o">.</span><span class="n">post</span><span class="p">(</span>
-</span><span id="__span-0-26"><a id="__codelineno-0-26" name="__codelineno-0-26" href="#__codelineno-0-26"></a>            <span class="bp">self</span><span class="o">.</span><span class="n">_url</span><span class="p">,</span> <span class="n">data</span><span class="o">=</span><span class="p">{</span><span class="s2">&quot;token&quot;</span><span class="p">:</span> <span class="n">token</span><span class="p">},</span> <span class="n">auth</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">_auth</span>
-</span><span id="__span-0-27"><a id="__codelineno-0-27" name="__codelineno-0-27" href="#__codelineno-0-27"></a>        <span class="p">)</span>
-</span><span id="__span-0-28"><a id="__codelineno-0-28" name="__codelineno-0-28" href="#__codelineno-0-28"></a>        <span class="k">if</span> <span class="n">response</span><span class="o">.</span><span class="n">status_code</span> <span class="o">!=</span> <span class="mi">200</span><span class="p">:</span>
-</span><span id="__span-0-29"><a id="__codelineno-0-29" name="__codelineno-0-29" href="#__codelineno-0-29"></a>            <span class="k">return</span> <span class="kc">None</span>
-</span><span id="__span-0-30"><a id="__codelineno-0-30" name="__codelineno-0-30" href="#__codelineno-0-30"></a>        <span class="n">claims</span> <span class="o">=</span> <span class="n">response</span><span class="o">.</span><span class="n">json</span><span class="p">()</span>
-</span><span id="__span-0-31"><a id="__codelineno-0-31" name="__codelineno-0-31" href="#__codelineno-0-31"></a>        <span class="k">if</span> <span class="ow">not</span> <span class="n">claims</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;active&quot;</span><span class="p">):</span>
-</span><span id="__span-0-32"><a id="__codelineno-0-32" name="__codelineno-0-32" href="#__codelineno-0-32"></a>            <span class="k">return</span> <span class="kc">None</span>
-</span><span id="__span-0-33"><a id="__codelineno-0-33" name="__codelineno-0-33" href="#__codelineno-0-33"></a>
-</span><span id="__span-0-34"><a id="__codelineno-0-34" name="__codelineno-0-34" href="#__codelineno-0-34"></a>        <span class="k">return</span> <span class="n">TokenInfo</span><span class="p">(</span>
-</span><span id="__span-0-35"><a id="__codelineno-0-35" name="__codelineno-0-35" href="#__codelineno-0-35"></a>            <span class="n">user</span><span class="o">=</span><span class="n">claims</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;sub&quot;</span><span class="p">),</span>
-</span><span id="__span-0-36"><a id="__codelineno-0-36" name="__codelineno-0-36" href="#__codelineno-0-36"></a>            <span class="n">scopes</span><span class="o">=</span><span class="nb">tuple</span><span class="p">(</span><span class="n">claims</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;scope&quot;</span><span class="p">,</span> <span class="s2">&quot;&quot;</span><span class="p">)</span><span class="o">.</span><span class="n">split</span><span class="p">()),</span>
-</span><span id="__span-0-37"><a id="__codelineno-0-37" name="__codelineno-0-37" href="#__codelineno-0-37"></a>            <span class="n">audience</span><span class="o">=</span><span class="n">claims</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;aud&quot;</span><span class="p">),</span>
-</span><span id="__span-0-38"><a id="__codelineno-0-38" name="__codelineno-0-38" href="#__codelineno-0-38"></a>            <span class="n">raw</span><span class="o">=</span><span class="n">claims</span><span class="p">,</span>
-</span><span id="__span-0-39"><a id="__codelineno-0-39" name="__codelineno-0-39" href="#__codelineno-0-39"></a>        <span class="p">)</span>
-</span><span id="__span-0-40"><a id="__codelineno-0-40" name="__codelineno-0-40" href="#__codelineno-0-40"></a>
-</span><span id="__span-0-41"><a id="__codelineno-0-41" name="__codelineno-0-41" href="#__codelineno-0-41"></a>    <span class="k">def</span><span class="w"> </span><span class="nf">protected_resource_metadata</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">dict</span><span class="p">:</span>
-</span><span id="__span-0-42"><a id="__codelineno-0-42" name="__codelineno-0-42" href="#__codelineno-0-42"></a>        <span class="k">return</span> <span class="p">{</span>
-</span><span id="__span-0-43"><a id="__codelineno-0-43" name="__codelineno-0-43" href="#__codelineno-0-43"></a>            <span class="s2">&quot;resource&quot;</span><span class="p">:</span> <span class="s2">&quot;https://example.com/mcp/&quot;</span><span class="p">,</span>
-</span><span id="__span-0-44"><a id="__codelineno-0-44" name="__codelineno-0-44" href="#__codelineno-0-44"></a>            <span class="s2">&quot;authorization_servers&quot;</span><span class="p">:</span> <span class="p">[</span><span class="s2">&quot;https://idp.example/&quot;</span><span class="p">],</span>
-</span><span id="__span-0-45"><a id="__codelineno-0-45" name="__codelineno-0-45" href="#__codelineno-0-45"></a>            <span class="s2">&quot;bearer_methods_supported&quot;</span><span class="p">:</span> <span class="p">[</span><span class="s2">&quot;header&quot;</span><span class="p">],</span>
-</span><span id="__span-0-46"><a id="__codelineno-0-46" name="__codelineno-0-46" href="#__codelineno-0-46"></a>        <span class="p">}</span>
-</span><span id="__span-0-47"><a id="__codelineno-0-47" name="__codelineno-0-47" href="#__codelineno-0-47"></a>
-</span><span id="__span-0-48"><a id="__codelineno-0-48" name="__codelineno-0-48" href="#__codelineno-0-48"></a>    <span class="k">def</span><span class="w"> </span><span class="nf">www_authenticate_challenge</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="o">*</span><span class="p">,</span> <span class="n">scopes</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">error</span><span class="o">=</span><span class="kc">None</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">str</span><span class="p">:</span>
-</span><span id="__span-0-49"><a id="__codelineno-0-49" name="__codelineno-0-49" href="#__codelineno-0-49"></a>        <span class="n">parts</span> <span class="o">=</span> <span class="p">[</span><span class="s1">&#39;Bearer realm=&quot;mcp&quot;&#39;</span><span class="p">]</span>
-</span><span id="__span-0-50"><a id="__codelineno-0-50" name="__codelineno-0-50" href="#__codelineno-0-50"></a>        <span class="k">if</span> <span class="n">error</span><span class="p">:</span>
-</span><span id="__span-0-51"><a id="__codelineno-0-51" name="__codelineno-0-51" href="#__codelineno-0-51"></a>            <span class="n">parts</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="sa">f</span><span class="s1">&#39;error=&quot;</span><span class="si">{</span><span class="n">error</span><span class="si">}</span><span class="s1">&quot;&#39;</span><span class="p">)</span>
-</span><span id="__span-0-52"><a id="__codelineno-0-52" name="__codelineno-0-52" href="#__codelineno-0-52"></a>        <span class="k">if</span> <span class="n">scopes</span><span class="p">:</span>
-</span><span id="__span-0-53"><a id="__codelineno-0-53" name="__codelineno-0-53" href="#__codelineno-0-53"></a>            <span class="n">parts</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="sa">f</span><span class="s1">&#39;scope=&quot;</span><span class="si">{</span><span class="s2">&quot; &quot;</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="n">scopes</span><span class="p">)</span><span class="si">}</span><span class="s1">&quot;&#39;</span><span class="p">)</span>
-</span><span id="__span-0-54"><a id="__codelineno-0-54" name="__codelineno-0-54" href="#__codelineno-0-54"></a>        <span class="k">return</span> <span class="s2">&quot;, &quot;</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="n">parts</span><span class="p">)</span>
+<h1 id="honor-drf-spectacular-annotations-on-inputschema">Honor <code>drf-spectacular</code> annotations on <code>inputSchema</code><a class="headerlink" href="#honor-drf-spectacular-annotations-on-inputschema" title="Permanent link">&para;</a></h1>
+<p>If your project already uses <a href="https://drf-spectacular.readthedocs.io/"><code>drf-spectacular</code></a>
+to generate OpenAPI for the HTTP transport, the same <code>@extend_schema_*</code>
+decorators feed the MCP <code>inputSchema</code> automatically — no separate
+annotation layer needed. The integration is <strong>opt-in via install</strong>:
+spectacular is detected by checking for <code>_spectacular_annotation</code> on the
+serializer class, so projects that don't have spectacular installed see
+zero overhead.</p>
+<h2 id="install">Install<a class="headerlink" href="#install" title="Permanent link">&para;</a></h2>
+<div class="language-bash highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a>pip<span class="w"> </span>install<span class="w"> </span><span class="s2">&quot;djangorestframework-mcp-server[spectacular]&quot;</span>
 </span></code></pre></div>
-<p>Wire it into the server:</p>
-<div class="language-python highlight"><pre><span></span><code><span id="__span-1-1"><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a><span class="kn">from</span><span class="w"> </span><span class="nn">rest_framework_mcp</span><span class="w"> </span><span class="kn">import</span> <span class="n">MCPServer</span>
-</span><span id="__span-1-2"><a id="__codelineno-1-2" name="__codelineno-1-2" href="#__codelineno-1-2"></a>
-</span><span id="__span-1-3"><a id="__codelineno-1-3" name="__codelineno-1-3" href="#__codelineno-1-3"></a><span class="n">server</span> <span class="o">=</span> <span class="n">MCPServer</span><span class="p">(</span>
-</span><span id="__span-1-4"><a id="__codelineno-1-4" name="__codelineno-1-4" href="#__codelineno-1-4"></a>    <span class="n">name</span><span class="o">=</span><span class="s2">&quot;my-app&quot;</span><span class="p">,</span>
-</span><span id="__span-1-5"><a id="__codelineno-1-5" name="__codelineno-1-5" href="#__codelineno-1-5"></a>    <span class="n">auth_backend</span><span class="o">=</span><span class="n">IntrospectingAuthBackend</span><span class="p">(</span>
-</span><span id="__span-1-6"><a id="__codelineno-1-6" name="__codelineno-1-6" href="#__codelineno-1-6"></a>        <span class="n">introspection_url</span><span class="o">=</span><span class="s2">&quot;https://idp.example/oauth/introspect/&quot;</span><span class="p">,</span>
-</span><span id="__span-1-7"><a id="__codelineno-1-7" name="__codelineno-1-7" href="#__codelineno-1-7"></a>        <span class="n">client_id</span><span class="o">=</span><span class="s2">&quot;my-resource-server&quot;</span><span class="p">,</span>
-</span><span id="__span-1-8"><a id="__codelineno-1-8" name="__codelineno-1-8" href="#__codelineno-1-8"></a>        <span class="n">client_secret</span><span class="o">=</span><span class="s2">&quot;…&quot;</span><span class="p">,</span>
-</span><span id="__span-1-9"><a id="__codelineno-1-9" name="__codelineno-1-9" href="#__codelineno-1-9"></a>    <span class="p">),</span>
-</span><span id="__span-1-10"><a id="__codelineno-1-10" name="__codelineno-1-10" href="#__codelineno-1-10"></a><span class="p">)</span>
+<p>This pulls in <code>drf-spectacular&gt;=0.27</code>. No app config change required —
+the MCP package only reads the metadata spectacular has already attached
+to your serializers.</p>
+<h2 id="whats-honored">What's honored<a class="headerlink" href="#whats-honored" title="Permanent link">&para;</a></h2>
+<h3 id="extend_schema_serializer-class-level"><code>@extend_schema_serializer</code> (class-level)<a class="headerlink" href="#extend_schema_serializer-class-level" title="Permanent link">&para;</a></h3>
+<table>
+<thead>
+<tr>
+<th>Decorator argument</th>
+<th>Effect on the MCP <code>inputSchema</code></th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>exclude_fields</code></td>
+<td>Drops the named properties and removes them from <code>required</code>.</td>
+</tr>
+<tr>
+<td><code>deprecate_fields</code></td>
+<td>Sets <code>"deprecated": true</code> on the named properties.</td>
+</tr>
+<tr>
+<td><code>examples</code></td>
+<td>Aggregates the <code>OpenApiExample.value</code> payloads into the JSON Schema <code>examples</code> array (placeholder examples without a <code>value=</code> are filtered out).</td>
+</tr>
+<tr>
+<td><code>component_name</code> / <code>extensions</code></td>
+<td>Ignored — MCP inlines the schema per-tool, no OpenAPI componentisation.</td>
+</tr>
+</tbody>
+</table>
+<div class="language-python highlight"><pre><span></span><code><span id="__span-1-1"><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a><span class="kn">from</span><span class="w"> </span><span class="nn">drf_spectacular.utils</span><span class="w"> </span><span class="kn">import</span> <span class="n">OpenApiExample</span><span class="p">,</span> <span class="n">extend_schema_serializer</span>
+</span><span id="__span-1-2"><a id="__codelineno-1-2" name="__codelineno-1-2" href="#__codelineno-1-2"></a><span class="kn">from</span><span class="w"> </span><span class="nn">rest_framework</span><span class="w"> </span><span class="kn">import</span> <span class="n">serializers</span>
+</span><span id="__span-1-3"><a id="__codelineno-1-3" name="__codelineno-1-3" href="#__codelineno-1-3"></a>
+</span><span id="__span-1-4"><a id="__codelineno-1-4" name="__codelineno-1-4" href="#__codelineno-1-4"></a>
+</span><span id="__span-1-5"><a id="__codelineno-1-5" name="__codelineno-1-5" href="#__codelineno-1-5"></a><span class="nd">@extend_schema_serializer</span><span class="p">(</span>
+</span><span id="__span-1-6"><a id="__codelineno-1-6" name="__codelineno-1-6" href="#__codelineno-1-6"></a>    <span class="n">exclude_fields</span><span class="o">=</span><span class="p">[</span><span class="s2">&quot;internal_id&quot;</span><span class="p">],</span>
+</span><span id="__span-1-7"><a id="__codelineno-1-7" name="__codelineno-1-7" href="#__codelineno-1-7"></a>    <span class="n">deprecate_fields</span><span class="o">=</span><span class="p">[</span><span class="s2">&quot;legacy&quot;</span><span class="p">],</span>
+</span><span id="__span-1-8"><a id="__codelineno-1-8" name="__codelineno-1-8" href="#__codelineno-1-8"></a>    <span class="n">examples</span><span class="o">=</span><span class="p">[</span>
+</span><span id="__span-1-9"><a id="__codelineno-1-9" name="__codelineno-1-9" href="#__codelineno-1-9"></a>        <span class="n">OpenApiExample</span><span class="p">(</span>
+</span><span id="__span-1-10"><a id="__codelineno-1-10" name="__codelineno-1-10" href="#__codelineno-1-10"></a>            <span class="s2">&quot;Typical invoice&quot;</span><span class="p">,</span>
+</span><span id="__span-1-11"><a id="__codelineno-1-11" name="__codelineno-1-11" href="#__codelineno-1-11"></a>            <span class="n">value</span><span class="o">=</span><span class="p">{</span><span class="s2">&quot;amount&quot;</span><span class="p">:</span> <span class="mi">4200</span><span class="p">,</span> <span class="s2">&quot;currency&quot;</span><span class="p">:</span> <span class="s2">&quot;USD&quot;</span><span class="p">},</span>
+</span><span id="__span-1-12"><a id="__codelineno-1-12" name="__codelineno-1-12" href="#__codelineno-1-12"></a>        <span class="p">),</span>
+</span><span id="__span-1-13"><a id="__codelineno-1-13" name="__codelineno-1-13" href="#__codelineno-1-13"></a>    <span class="p">],</span>
+</span><span id="__span-1-14"><a id="__codelineno-1-14" name="__codelineno-1-14" href="#__codelineno-1-14"></a><span class="p">)</span>
+</span><span id="__span-1-15"><a id="__codelineno-1-15" name="__codelineno-1-15" href="#__codelineno-1-15"></a><span class="k">class</span><span class="w"> </span><span class="nc">InvoiceInput</span><span class="p">(</span><span class="n">serializers</span><span class="o">.</span><span class="n">Serializer</span><span class="p">):</span>
+</span><span id="__span-1-16"><a id="__codelineno-1-16" name="__codelineno-1-16" href="#__codelineno-1-16"></a>    <span class="n">amount</span> <span class="o">=</span> <span class="n">serializers</span><span class="o">.</span><span class="n">IntegerField</span><span class="p">()</span>
+</span><span id="__span-1-17"><a id="__codelineno-1-17" name="__codelineno-1-17" href="#__codelineno-1-17"></a>    <span class="n">currency</span> <span class="o">=</span> <span class="n">serializers</span><span class="o">.</span><span class="n">ChoiceField</span><span class="p">(</span><span class="n">choices</span><span class="o">=</span><span class="p">[(</span><span class="s2">&quot;USD&quot;</span><span class="p">,</span> <span class="s2">&quot;USD&quot;</span><span class="p">),</span> <span class="p">(</span><span class="s2">&quot;EUR&quot;</span><span class="p">,</span> <span class="s2">&quot;EUR&quot;</span><span class="p">)])</span>
+</span><span id="__span-1-18"><a id="__codelineno-1-18" name="__codelineno-1-18" href="#__codelineno-1-18"></a>    <span class="n">legacy</span> <span class="o">=</span> <span class="n">serializers</span><span class="o">.</span><span class="n">CharField</span><span class="p">(</span><span class="n">required</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>
+</span><span id="__span-1-19"><a id="__codelineno-1-19" name="__codelineno-1-19" href="#__codelineno-1-19"></a>    <span class="n">internal_id</span> <span class="o">=</span> <span class="n">serializers</span><span class="o">.</span><span class="n">IntegerField</span><span class="p">(</span><span class="n">required</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>
 </span></code></pre></div>
-<p>Mount under <code>async_urls</code> so the backend's <code>authenticate</code> is awaited
-directly instead of being wrapped in <code>sync_to_async</code>:</p>
-<div class="language-python highlight"><pre><span></span><code><span id="__span-2-1"><a id="__codelineno-2-1" name="__codelineno-2-1" href="#__codelineno-2-1"></a><span class="n">urlpatterns</span> <span class="o">=</span> <span class="p">[</span><span class="n">path</span><span class="p">(</span><span class="s2">&quot;mcp/&quot;</span><span class="p">,</span> <span class="n">include</span><span class="p">(</span><span class="n">server</span><span class="o">.</span><span class="n">async_urls</span><span class="p">))]</span>
+<p>The MCP <code>inputSchema</code> for any tool taking <code>InvoiceInput</code> will:</p>
+<ul>
+<li>Omit <code>internal_id</code> entirely.</li>
+<li>Carry <code>"deprecated": true</code> on <code>legacy</code>.</li>
+<li>Surface <code>examples: [{"amount": 4200, "currency": "USD"}]</code>.</li>
+</ul>
+<h3 id="extend_schema_field-field-level"><code>@extend_schema_field</code> (field-level)<a class="headerlink" href="#extend_schema_field-field-level" title="Permanent link">&para;</a></h3>
+<p>When you decorate a custom <code>Field</code> subclass with <code>@extend_schema_field({...})</code>,
+the dict you pass replaces the auto-derived JSON Schema fragment for any
+field of that type:</p>
+<div class="language-python highlight"><pre><span></span><code><span id="__span-2-1"><a id="__codelineno-2-1" name="__codelineno-2-1" href="#__codelineno-2-1"></a><span class="kn">from</span><span class="w"> </span><span class="nn">drf_spectacular.utils</span><span class="w"> </span><span class="kn">import</span> <span class="n">extend_schema_field</span>
+</span><span id="__span-2-2"><a id="__codelineno-2-2" name="__codelineno-2-2" href="#__codelineno-2-2"></a><span class="kn">from</span><span class="w"> </span><span class="nn">rest_framework</span><span class="w"> </span><span class="kn">import</span> <span class="n">serializers</span>
+</span><span id="__span-2-3"><a id="__codelineno-2-3" name="__codelineno-2-3" href="#__codelineno-2-3"></a>
+</span><span id="__span-2-4"><a id="__codelineno-2-4" name="__codelineno-2-4" href="#__codelineno-2-4"></a>
+</span><span id="__span-2-5"><a id="__codelineno-2-5" name="__codelineno-2-5" href="#__codelineno-2-5"></a><span class="nd">@extend_schema_field</span><span class="p">({</span><span class="s2">&quot;type&quot;</span><span class="p">:</span> <span class="s2">&quot;string&quot;</span><span class="p">,</span> <span class="s2">&quot;format&quot;</span><span class="p">:</span> <span class="s2">&quot;iban&quot;</span><span class="p">,</span> <span class="s2">&quot;minLength&quot;</span><span class="p">:</span> <span class="mi">15</span><span class="p">})</span>
+</span><span id="__span-2-6"><a id="__codelineno-2-6" name="__codelineno-2-6" href="#__codelineno-2-6"></a><span class="k">class</span><span class="w"> </span><span class="nc">IBANField</span><span class="p">(</span><span class="n">serializers</span><span class="o">.</span><span class="n">CharField</span><span class="p">):</span>
+</span><span id="__span-2-7"><a id="__codelineno-2-7" name="__codelineno-2-7" href="#__codelineno-2-7"></a><span class="w">    </span><span class="sd">&quot;&quot;&quot;Custom field with a richer surface than plain ``CharField``.&quot;&quot;&quot;</span>
+</span><span id="__span-2-8"><a id="__codelineno-2-8" name="__codelineno-2-8" href="#__codelineno-2-8"></a>
+</span><span id="__span-2-9"><a id="__codelineno-2-9" name="__codelineno-2-9" href="#__codelineno-2-9"></a>
+</span><span id="__span-2-10"><a id="__codelineno-2-10" name="__codelineno-2-10" href="#__codelineno-2-10"></a><span class="k">class</span><span class="w"> </span><span class="nc">TransferInput</span><span class="p">(</span><span class="n">serializers</span><span class="o">.</span><span class="n">Serializer</span><span class="p">):</span>
+</span><span id="__span-2-11"><a id="__codelineno-2-11" name="__codelineno-2-11" href="#__codelineno-2-11"></a>    <span class="n">from_account</span> <span class="o">=</span> <span class="n">IBANField</span><span class="p">()</span>
+</span><span id="__span-2-12"><a id="__codelineno-2-12" name="__codelineno-2-12" href="#__codelineno-2-12"></a>    <span class="n">to_account</span> <span class="o">=</span> <span class="n">IBANField</span><span class="p">()</span>
+</span><span id="__span-2-13"><a id="__codelineno-2-13" name="__codelineno-2-13" href="#__codelineno-2-13"></a>    <span class="n">amount</span> <span class="o">=</span> <span class="n">serializers</span><span class="o">.</span><span class="n">IntegerField</span><span class="p">()</span>
 </span></code></pre></div>
-<h2 id="what-about-the-sync-transport">What about the sync transport?<a class="headerlink" href="#what-about-the-sync-transport" title="Permanent link">&para;</a></h2>
-<p>The same backend works under <code>server.urls</code> — the sync view detects the
-async method and bridges it via <code>async_to_sync</code>. The connection pool stays
-shared, but each request blocks one worker thread on the I/O. If you're
-deploying under WSGI, this is fine for low-throughput admin tools; for
-production scale, prefer ASGI + <code>async_urls</code>.</p>
-<h2 id="cleanup">Cleanup<a class="headerlink" href="#cleanup" title="Permanent link">&para;</a></h2>
-<p><code>httpx.AsyncClient</code> holds a connection pool. If your process is going to
-shut down cleanly (rare for Django), expose an <code>aclose()</code> from the backend
-and call it from your ASGI lifespan handler. For typical deployments the
-pool is freed when the process exits.</p>
+<p>The two <code>IBAN</code> properties land in <code>inputSchema</code> as
+<code>{"type": "string", "format": "iban", "minLength": 15}</code>.</p>
+<h3 id="whats-not-honored">What's <em>not</em> honored<a class="headerlink" href="#whats-not-honored" title="Permanent link">&para;</a></h3>
+<ul>
+<li><strong><code>@extend_schema_field</code> with a non-dict value</strong> (an <code>OpenApiTypes</code>
+  enum, a serializer class) — falls through to the auto-derived schema
+  rather than guessing how to translate spectacular-internal types to
+  JSON Schema. If you need the enum form, pass a dict instead.</li>
+<li><strong><code>@extend_schema_field</code> on a <code>SerializerMethodField</code>'s <code>get_*</code>
+  method</strong> — would require introspection of the parent serializer at
+  schema-build time. Not supported in v1.</li>
+<li><strong><code>@extend_schema</code> on a view</strong> — the MCP package doesn't dispatch
+  through DRF views, so view-level overrides have no place to attach.</li>
+</ul>
+<h2 id="verifying-the-integration">Verifying the integration<a class="headerlink" href="#verifying-the-integration" title="Permanent link">&para;</a></h2>
+<p>The MCP <code>tools/list</code> response carries the <code>inputSchema</code> directly. Hit it
+from your test suite:</p>
+<div class="language-python highlight"><pre><span></span><code><span id="__span-3-1"><a id="__codelineno-3-1" name="__codelineno-3-1" href="#__codelineno-3-1"></a><span class="n">response</span> <span class="o">=</span> <span class="n">client</span><span class="o">.</span><span class="n">post</span><span class="p">(</span>
+</span><span id="__span-3-2"><a id="__codelineno-3-2" name="__codelineno-3-2" href="#__codelineno-3-2"></a>    <span class="s2">&quot;/mcp/&quot;</span><span class="p">,</span>
+</span><span id="__span-3-3"><a id="__codelineno-3-3" name="__codelineno-3-3" href="#__codelineno-3-3"></a>    <span class="p">{</span><span class="s2">&quot;jsonrpc&quot;</span><span class="p">:</span> <span class="s2">&quot;2.0&quot;</span><span class="p">,</span> <span class="s2">&quot;id&quot;</span><span class="p">:</span> <span class="mi">1</span><span class="p">,</span> <span class="s2">&quot;method&quot;</span><span class="p">:</span> <span class="s2">&quot;tools/list&quot;</span><span class="p">,</span> <span class="s2">&quot;params&quot;</span><span class="p">:</span> <span class="p">{}},</span>
+</span><span id="__span-3-4"><a id="__codelineno-3-4" name="__codelineno-3-4" href="#__codelineno-3-4"></a><span class="p">)</span>
+</span><span id="__span-3-5"><a id="__codelineno-3-5" name="__codelineno-3-5" href="#__codelineno-3-5"></a><span class="n">schemas</span> <span class="o">=</span> <span class="p">{</span><span class="n">tool</span><span class="p">[</span><span class="s2">&quot;name&quot;</span><span class="p">]:</span> <span class="n">tool</span><span class="p">[</span><span class="s2">&quot;inputSchema&quot;</span><span class="p">]</span> <span class="k">for</span> <span class="n">tool</span> <span class="ow">in</span> <span class="n">response</span><span class="o">.</span><span class="n">json</span><span class="p">()[</span><span class="s2">&quot;result&quot;</span><span class="p">][</span><span class="s2">&quot;tools&quot;</span><span class="p">]}</span>
+</span><span id="__span-3-6"><a id="__codelineno-3-6" name="__codelineno-3-6" href="#__codelineno-3-6"></a><span class="k">assert</span> <span class="s2">&quot;internal_id&quot;</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">schemas</span><span class="p">[</span><span class="s2">&quot;create-invoice&quot;</span><span class="p">][</span><span class="s2">&quot;properties&quot;</span><span class="p">]</span>
+</span></code></pre></div>
+<p>Or invoke <code>build_input_schema</code> directly in a unit test — it's a thin
+public helper (<code>from rest_framework_mcp.schema.input_schema import
+build_input_schema</code>).</p>
 
 
 

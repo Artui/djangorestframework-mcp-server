@@ -10,25 +10,31 @@
       
       
       
+        <link rel="canonical" href="https://artui.github.io/djangorestframework-mcp-server/performance/">
       
+      
+        <link rel="prev" href="../observability/">
+      
+      
+        <link rel="next" href="../recipes/">
       
       
         
       
       
-      <link rel="icon" href="/djangorestframework-mcp-server/assets/images/favicon.png">
+      <link rel="icon" href="../assets/images/favicon.png">
       <meta name="generator" content="mkdocs-1.6.1, mkdocs-material-9.7.6">
     
     
       
-        <title>djangorestframework-mcp-server</title>
+        <title>Performance - djangorestframework-mcp-server</title>
       
     
     
-      <link rel="stylesheet" href="/djangorestframework-mcp-server/assets/stylesheets/main.484c7ddc.min.css">
+      <link rel="stylesheet" href="../assets/stylesheets/main.484c7ddc.min.css">
       
         
-        <link rel="stylesheet" href="/djangorestframework-mcp-server/assets/stylesheets/palette.ab4e12ef.min.css">
+        <link rel="stylesheet" href="../assets/stylesheets/palette.ab4e12ef.min.css">
       
       
 
@@ -47,9 +53,9 @@
       
     
     
-      <link rel="stylesheet" href="/djangorestframework-mcp-server/assets/_mkdocstrings.css">
+      <link rel="stylesheet" href="../assets/_mkdocstrings.css">
     
-    <script>__md_scope=new URL("/djangorestframework-mcp-server/",location),__md_hash=e=>[...e].reduce(((e,_)=>(e<<5)-e+_.charCodeAt(0)),0),__md_get=(e,_=localStorage,t=__md_scope)=>JSON.parse(_.getItem(t.pathname+"."+e)),__md_set=(e,_,t=localStorage,a=__md_scope)=>{try{t.setItem(a.pathname+"."+e,JSON.stringify(_))}catch(e){}}</script>
+    <script>__md_scope=new URL("..",location),__md_hash=e=>[...e].reduce(((e,_)=>(e<<5)-e+_.charCodeAt(0)),0),__md_get=(e,_=localStorage,t=__md_scope)=>JSON.parse(_.getItem(t.pathname+"."+e)),__md_set=(e,_,t=localStorage,a=__md_scope)=>{try{t.setItem(a.pathname+"."+e,JSON.stringify(_))}catch(e){}}</script>
     
       
 
@@ -73,6 +79,11 @@
     <label class="md-overlay" for="__drawer"></label>
     <div data-md-component="skip">
       
+        
+        <a href="#performance-baseline" class="md-skip">
+          Skip to content
+        </a>
+      
     </div>
     <div data-md-component="announce">
       
@@ -85,7 +96,7 @@
 
 <header class="md-header md-header--shadow" data-md-component="header">
   <nav class="md-header__inner md-grid" aria-label="Header">
-    <a href="/djangorestframework-mcp-server/." title="djangorestframework-mcp-server" class="md-header__button md-logo" aria-label="djangorestframework-mcp-server" data-md-component="logo">
+    <a href=".." title="djangorestframework-mcp-server" class="md-header__button md-logo" aria-label="djangorestframework-mcp-server" data-md-component="logo">
       
   
   <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3m0 3.54C9.64 9.35 6.5 8 3 8v11c3.5 0 6.64 1.35 9 3.54 2.36-2.19 5.5-3.54 9-3.54V8c-3.5 0-6.64 1.35-9 3.54"/></svg>
@@ -105,7 +116,7 @@
         <div class="md-header__topic" data-md-component="header-topic">
           <span class="md-ellipsis">
             
-              
+              Performance
             
           </span>
         </div>
@@ -228,7 +239,7 @@
 
 <nav class="md-nav md-nav--primary" aria-label="Navigation" data-md-level="0">
   <label class="md-nav__title" for="__drawer">
-    <a href="/djangorestframework-mcp-server/." title="djangorestframework-mcp-server" class="md-nav__button md-logo" aria-label="djangorestframework-mcp-server" data-md-component="logo">
+    <a href=".." title="djangorestframework-mcp-server" class="md-nav__button md-logo" aria-label="djangorestframework-mcp-server" data-md-component="logo">
       
   
   <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3m0 3.54C9.64 9.35 6.5 8 3 8v11c3.5 0 6.64 1.35 9 3.54 2.36-2.19 5.5-3.54 9-3.54V8c-3.5 0-6.64 1.35-9 3.54"/></svg>
@@ -258,7 +269,7 @@
   
   
     <li class="md-nav__item">
-      <a href="/djangorestframework-mcp-server/." class="md-nav__link">
+      <a href=".." class="md-nav__link">
         
   
   
@@ -285,7 +296,7 @@
   
   
     <li class="md-nav__item">
-      <a href="/djangorestframework-mcp-server/quickstart/" class="md-nav__link">
+      <a href="../quickstart/" class="md-nav__link">
         
   
   
@@ -312,7 +323,7 @@
   
   
     <li class="md-nav__item">
-      <a href="/djangorestframework-mcp-server/concepts/" class="md-nav__link">
+      <a href="../concepts/" class="md-nav__link">
         
   
   
@@ -339,7 +350,7 @@
   
   
     <li class="md-nav__item">
-      <a href="/djangorestframework-mcp-server/auth/" class="md-nav__link">
+      <a href="../auth/" class="md-nav__link">
         
   
   
@@ -366,7 +377,7 @@
   
   
     <li class="md-nav__item">
-      <a href="/djangorestframework-mcp-server/async/" class="md-nav__link">
+      <a href="../async/" class="md-nav__link">
         
   
   
@@ -393,7 +404,7 @@
   
   
     <li class="md-nav__item">
-      <a href="/djangorestframework-mcp-server/prompts/" class="md-nav__link">
+      <a href="../prompts/" class="md-nav__link">
         
   
   
@@ -420,7 +431,7 @@
   
   
     <li class="md-nav__item">
-      <a href="/djangorestframework-mcp-server/observability/" class="md-nav__link">
+      <a href="../observability/" class="md-nav__link">
         
   
   
@@ -444,10 +455,37 @@
       
   
   
+    
   
   
-    <li class="md-nav__item">
-      <a href="/djangorestframework-mcp-server/performance/" class="md-nav__link">
+  
+    <li class="md-nav__item md-nav__item--active">
+      
+      <input class="md-nav__toggle md-toggle" type="checkbox" id="__toc">
+      
+      
+        
+      
+      
+        <label class="md-nav__link md-nav__link--active" for="__toc">
+          
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Performance
+  
+
+    
+  </span>
+  
+  
+
+          <span class="md-nav__icon md-icon"></span>
+        </label>
+      
+      <a href="./" class="md-nav__link md-nav__link--active">
         
   
   
@@ -463,6 +501,81 @@
   
 
       </a>
+      
+        
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#layers" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Layers
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#a-run-on-this-machine" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        A run on this machine
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#what-to-take-away" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        What to take away
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#where-to-look-if-a-real-workload-is-slow" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Where to look if a real workload is slow
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#adding-profile-points" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Adding profile points
+      
+    </span>
+  </a>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+      
     </li>
   
 
@@ -521,7 +634,7 @@
         
           
           <div class="md-nav__link md-nav__container">
-            <a href="/djangorestframework-mcp-server/recipes/" class="md-nav__link ">
+            <a href="../recipes/" class="md-nav__link ">
               
   
   
@@ -565,7 +678,7 @@
   
   
     <li class="md-nav__item">
-      <a href="/djangorestframework-mcp-server/recipes/expose-a-service/" class="md-nav__link">
+      <a href="../recipes/expose-a-service/" class="md-nav__link">
         
   
   
@@ -593,7 +706,7 @@
   
   
     <li class="md-nav__item">
-      <a href="/djangorestframework-mcp-server/recipes/swap-session-store/" class="md-nav__link">
+      <a href="../recipes/swap-session-store/" class="md-nav__link">
         
   
   
@@ -621,7 +734,7 @@
   
   
     <li class="md-nav__item">
-      <a href="/djangorestframework-mcp-server/recipes/toon-output/" class="md-nav__link">
+      <a href="../recipes/toon-output/" class="md-nav__link">
         
   
   
@@ -649,7 +762,7 @@
   
   
     <li class="md-nav__item">
-      <a href="/djangorestframework-mcp-server/recipes/custom-permission/" class="md-nav__link">
+      <a href="../recipes/custom-permission/" class="md-nav__link">
         
   
   
@@ -677,7 +790,7 @@
   
   
     <li class="md-nav__item">
-      <a href="/djangorestframework-mcp-server/recipes/async-auth-backend/" class="md-nav__link">
+      <a href="../recipes/async-auth-backend/" class="md-nav__link">
         
   
   
@@ -705,7 +818,7 @@
   
   
     <li class="md-nav__item">
-      <a href="/djangorestframework-mcp-server/recipes/rate-limiting/" class="md-nav__link">
+      <a href="../recipes/rate-limiting/" class="md-nav__link">
         
   
   
@@ -733,7 +846,7 @@
   
   
     <li class="md-nav__item">
-      <a href="/djangorestframework-mcp-server/recipes/redis-sse-broker/" class="md-nav__link">
+      <a href="../recipes/redis-sse-broker/" class="md-nav__link">
         
   
   
@@ -761,7 +874,7 @@
   
   
     <li class="md-nav__item">
-      <a href="/djangorestframework-mcp-server/recipes/sse-replay-buffer/" class="md-nav__link">
+      <a href="../recipes/sse-replay-buffer/" class="md-nav__link">
         
   
   
@@ -789,7 +902,7 @@
   
   
     <li class="md-nav__item">
-      <a href="/djangorestframework-mcp-server/recipes/drf-spectacular/" class="md-nav__link">
+      <a href="../recipes/drf-spectacular/" class="md-nav__link">
         
   
   
@@ -817,7 +930,7 @@
   
   
     <li class="md-nav__item">
-      <a href="/djangorestframework-mcp-server/recipes/selector-tool-with-filterset/" class="md-nav__link">
+      <a href="../recipes/selector-tool-with-filterset/" class="md-nav__link">
         
   
   
@@ -845,7 +958,7 @@
   
   
     <li class="md-nav__item">
-      <a href="/djangorestframework-mcp-server/recipes/migrating/" class="md-nav__link">
+      <a href="../recipes/migrating/" class="md-nav__link">
         
   
   
@@ -915,7 +1028,7 @@
         
           
           <div class="md-nav__link md-nav__container">
-            <a href="/djangorestframework-mcp-server/reference/" class="md-nav__link ">
+            <a href="../reference/" class="md-nav__link ">
               
   
   
@@ -959,7 +1072,7 @@
   
   
     <li class="md-nav__item">
-      <a href="/djangorestframework-mcp-server/reference/mcp-server/" class="md-nav__link">
+      <a href="../reference/mcp-server/" class="md-nav__link">
         
   
   
@@ -987,7 +1100,7 @@
   
   
     <li class="md-nav__item">
-      <a href="/djangorestframework-mcp-server/reference/protocol/" class="md-nav__link">
+      <a href="../reference/protocol/" class="md-nav__link">
         
   
   
@@ -1015,7 +1128,7 @@
   
   
     <li class="md-nav__item">
-      <a href="/djangorestframework-mcp-server/reference/registries/" class="md-nav__link">
+      <a href="../reference/registries/" class="md-nav__link">
         
   
   
@@ -1043,7 +1156,7 @@
   
   
     <li class="md-nav__item">
-      <a href="/djangorestframework-mcp-server/reference/auth/" class="md-nav__link">
+      <a href="../reference/auth/" class="md-nav__link">
         
   
   
@@ -1071,7 +1184,7 @@
   
   
     <li class="md-nav__item">
-      <a href="/djangorestframework-mcp-server/reference/output/" class="md-nav__link">
+      <a href="../reference/output/" class="md-nav__link">
         
   
   
@@ -1116,6 +1229,71 @@
   
   
   
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#layers" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Layers
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#a-run-on-this-machine" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        A run on this machine
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#what-to-take-away" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        What to take away
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#where-to-look-if-a-real-workload-is-slow" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Where to look if a real workload is slow
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#adding-profile-points" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Adding profile points
+      
+    </span>
+  </a>
+  
+</li>
+      
+    </ul>
   
 </nav>
                   </div>
@@ -1128,8 +1306,126 @@
               
               <article class="md-content__inner md-typeset">
                 
-  <h1>404 - Not found</h1>
+                  
 
+
+  
+    <a href="https://github.com/Artui/djangorestframework-mcp-server/edit/main/docs/performance.md" title="Edit this page" class="md-content__button md-icon" rel="edit">
+      
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M10 20H6V4h7v5h5v3.1l2-2V8l-6-6H6c-1.1 0-2 .9-2 2v16c0 1.1.9 2 2 2h4zm10.2-7c.1 0 .3.1.4.2l1.3 1.3c.2.2.2.6 0 .8l-1 1-2.1-2.1 1-1c.1-.1.2-.2.4-.2m0 3.9L14.1 23H12v-2.1l6.1-6.1z"/></svg>
+    </a>
+  
+  
+
+
+<h1 id="performance-baseline">Performance baseline<a class="headerlink" href="#performance-baseline" title="Permanent link">&para;</a></h1>
+<p>Where the time goes on a <code>tools/call</code>. The numbers below are a single
+data point — what they're really for is locating overhead by layer, so
+you know where to look first if you ever need to optimise.</p>
+<h2 id="layers">Layers<a class="headerlink" href="#layers" title="Permanent link">&para;</a></h2>
+<p>A <code>tools/call</code> traverses three layers:</p>
+<div class="language-text highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a>HTTP request
+</span><span id="__span-0-2"><a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a>   │
+</span><span id="__span-0-3"><a id="__codelineno-0-3" name="__codelineno-0-3" href="#__codelineno-0-3"></a>   │ ① Transport — origin / protocol-version / session validation,
+</span><span id="__span-0-4"><a id="__codelineno-0-4" name="__codelineno-0-4" href="#__codelineno-0-4"></a>   │    JSON-RPC parsing, response serialization
+</span><span id="__span-0-5"><a id="__codelineno-0-5" name="__codelineno-0-5" href="#__codelineno-0-5"></a>   ▼
+</span><span id="__span-0-6"><a id="__codelineno-0-6" name="__codelineno-0-6" href="#__codelineno-0-6"></a>Dispatch
+</span><span id="__span-0-7"><a id="__codelineno-0-7" name="__codelineno-0-7" href="#__codelineno-0-7"></a>   │
+</span><span id="__span-0-8"><a id="__codelineno-0-8" name="__codelineno-0-8" href="#__codelineno-0-8"></a>   │ ② Handler — name lookup, permissions, rate limits, input validation,
+</span><span id="__span-0-9"><a id="__codelineno-0-9" name="__codelineno-0-9" href="#__codelineno-0-9"></a>   │    kwarg-pool resolution, output serializer, ToolResult shaping
+</span><span id="__span-0-10"><a id="__codelineno-0-10" name="__codelineno-0-10" href="#__codelineno-0-10"></a>   ▼
+</span><span id="__span-0-11"><a id="__codelineno-0-11" name="__codelineno-0-11" href="#__codelineno-0-11"></a>Service callable
+</span><span id="__span-0-12"><a id="__codelineno-0-12" name="__codelineno-0-12" href="#__codelineno-0-12"></a>       ③ — your code
+</span></code></pre></div>
+<p>The benchmark in <code>scripts/benchmark.py</code> runs the same trivial service
+(<code>def _service(*, data) -&gt; {"result": data["n"] * 2}</code>) through each
+layer and reports the per-call median.</p>
+<h2 id="a-run-on-this-machine">A run on this machine<a class="headerlink" href="#a-run-on-this-machine" title="Permanent link">&para;</a></h2>
+<p>Python 3.14, MacBook (Apple silicon), in-memory SQLite, fresh
+<code>InMemorySessionStore</code>, no auth backend overhead (<code>AllowAnyBackend</code>):</p>
+<table>
+<thead>
+<tr>
+<th>Path</th>
+<th>Median (µs)</th>
+<th>Overhead vs direct</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Direct callable</td>
+<td>~0.1</td>
+<td>1×</td>
+</tr>
+<tr>
+<td>Handler dispatch only</td>
+<td>~50</td>
+<td>~500×</td>
+</tr>
+<tr>
+<td>Full HTTP round-trip</td>
+<td>~170</td>
+<td>~1,800×</td>
+</tr>
+</tbody>
+</table>
+<p>Run it locally:</p>
+<div class="language-bash highlight"><pre><span></span><code><span id="__span-1-1"><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a>uv<span class="w"> </span>run<span class="w"> </span>python<span class="w"> </span>scripts/benchmark.py
+</span></code></pre></div>
+<h2 id="what-to-take-away">What to take away<a class="headerlink" href="#what-to-take-away" title="Permanent link">&para;</a></h2>
+<ul>
+<li><strong>Per-call overhead is in the tens of microseconds at the handler
+  layer and ~170 µs end-to-end</strong> for an in-process Django test client.
+  For typical MCP workloads — LLM agents calling tools at human speed
+  — this is several orders of magnitude below what matters. Spending
+  effort optimising the dispatch path is almost never worth it.</li>
+<li><strong>The dominant cost on real servers is the service callable</strong> — a
+  database round-trip, a remote API call, or LLM-shaped output
+  rendering. Optimise those.</li>
+<li><strong>The transport accounts for roughly a third of the total</strong> in this
+  micro-benchmark (~120 µs out of ~170 µs). Most of that is Django
+  request/response construction and JSON-RPC envelope parsing — the
+  same cost any Django view pays. Async dispatch (<code>server.async_urls</code>)
+  shifts I/O off the request thread but doesn't materially change
+  per-call CPU.</li>
+</ul>
+<h2 id="where-to-look-if-a-real-workload-is-slow">Where to look if a real workload is slow<a class="headerlink" href="#where-to-look-if-a-real-workload-is-slow" title="Permanent link">&para;</a></h2>
+<p>A few specific things that can show up at scale:</p>
+<ul>
+<li><strong>Auth backend</strong> — if every call hits an external introspection
+  endpoint, that's the bottleneck. Cache the introspection result in
+  Django's cache (per-token TTL) and reuse across requests.</li>
+<li><strong>Output serializer</strong> — <code>ModelSerializer(many=True)</code> on a list of
+  thousands is N+1-prone. Add <code>.select_related()</code> /
+  <code>.prefetch_related()</code> in the selector; use <code>output_format="toon"</code>
+  to reduce token count if the bottleneck is downstream LLM cost.</li>
+<li><strong><code>atomic=True</code> on a service that doesn't write</strong> — services
+  default to wrapping in <code>transaction.atomic()</code>. If a service is
+  read-shaped, set <code>atomic=False</code> on the spec, or — better — register
+  it as a <strong>selector tool</strong> so the read pipeline runs without the
+  transaction overhead.</li>
+<li><strong>SSE broker</strong> — <code>InMemorySSEBroker</code> pushes are sub-µs; Redis pub/sub
+  adds ~1 ms per <code>notify</code>. Acceptable for nearly all use cases; if you
+  do hit a hot path, batch notifications.</li>
+</ul>
+<h2 id="adding-profile-points">Adding profile points<a class="headerlink" href="#adding-profile-points" title="Permanent link">&para;</a></h2>
+<p>The package emits OpenTelemetry spans for <code>mcp.tools.call</code>,
+<code>mcp.resources.read</code>, and <code>mcp.prompts.get</code> when the <code>[otel]</code> extra is
+installed. See <a href="../observability/"><code>docs/observability.md</code></a> — that's
+the right tool for measuring real-world latency.</p>
+
+
+
+
+
+
+
+
+
+
+
+
+                
               </article>
             </div>
           
@@ -1172,10 +1468,10 @@
     
       
       
-      <script id="__config" type="application/json">{"annotate": null, "base": "/djangorestframework-mcp-server/", "features": ["navigation.instant", "navigation.tracking", "navigation.sections", "navigation.expand", "navigation.indexes", "navigation.top", "search.highlight", "search.share", "search.suggest", "content.code.copy", "content.code.annotate", "content.action.edit", "toc.follow"], "search": "/djangorestframework-mcp-server/assets/javascripts/workers/search.2c215733.min.js", "tags": null, "translations": {"clipboard.copied": "Copied to clipboard", "clipboard.copy": "Copy to clipboard", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.placeholder": "Type to start searching", "search.result.term.missing": "Missing", "select.version": "Select version"}, "version": null}</script>
+      <script id="__config" type="application/json">{"annotate": null, "base": "..", "features": ["navigation.instant", "navigation.tracking", "navigation.sections", "navigation.expand", "navigation.indexes", "navigation.top", "search.highlight", "search.share", "search.suggest", "content.code.copy", "content.code.annotate", "content.action.edit", "toc.follow"], "search": "../assets/javascripts/workers/search.2c215733.min.js", "tags": null, "translations": {"clipboard.copied": "Copied to clipboard", "clipboard.copy": "Copy to clipboard", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.placeholder": "Type to start searching", "search.result.term.missing": "Missing", "select.version": "Select version"}, "version": null}</script>
     
     
-      <script src="/djangorestframework-mcp-server/assets/javascripts/bundle.79ae519e.min.js"></script>
+      <script src="../assets/javascripts/bundle.79ae519e.min.js"></script>
       
     
   </body>
