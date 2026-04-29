@@ -9,7 +9,7 @@
 [![Ruff](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/astral-sh/ruff/main/assets/badge/v2.json)](https://github.com/astral-sh/ruff)
 [![License](https://img.shields.io/pypi/l/djangorestframework-mcp-server.svg)](LICENSE)
 
-Expose [`djangorestframework-services`](https://github.com/arturveres/djangorestframework-services)
+Expose [`djangorestframework-services`](https://github.com/Artui/djangorestframework-services)
 services and selectors as a [Model Context Protocol](https://modelcontextprotocol.io)
 (MCP) server, conforming to MCP **2025-11-25** (Streamable HTTP).
 

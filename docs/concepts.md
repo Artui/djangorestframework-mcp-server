@@ -7,7 +7,7 @@ you have these in your head.
 
 The MCP server does **not** wrap, walk, or otherwise reach into DRF viewsets,
 routers, or views. Consumers register
-[`ServiceSpec`](https://github.com/arturveres/djangorestframework-services/blob/main/rest_framework_services/types/service_spec.py)
+[`ServiceSpec`](https://github.com/Artui/djangorestframework-services/blob/main/rest_framework_services/types/service_spec.py)
 instances directly. Same value object as the HTTP transport — same callable can
 serve both at once.
 
@@ -64,7 +64,7 @@ transports.
 ### `SelectorSpec` for resources
 
 `register_resource(selector=...)` requires a
-[`SelectorSpec`](https://github.com/arturveres/djangorestframework-services/blob/main/rest_framework_services/types/selector_spec.py),
+[`SelectorSpec`](https://github.com/Artui/djangorestframework-services/blob/main/rest_framework_services/types/selector_spec.py),
 mirroring `register_service_tool(spec=ServiceSpec(...))`. The unit of registration
 is a spec on both surfaces.
 

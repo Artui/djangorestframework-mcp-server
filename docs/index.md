@@ -1,6 +1,6 @@
 # djangorestframework-mcp-server
 
-Expose [`djangorestframework-services`](https://github.com/arturveres/djangorestframework-services)
+Expose [`djangorestframework-services`](https://github.com/Artui/djangorestframework-services)
 services and selectors as a [Model Context Protocol](https://modelcontextprotocol.io)
 (MCP) server, conforming to MCP **2025-11-25** (Streamable HTTP).
 
