@@ -26,7 +26,10 @@ Rules are non-negotiable unless flagged as a heuristic.
    `type` statements.
 8. **Absolute imports only.** Imports are ordered stdlib → third-party → first-party
    (`rest_framework_mcp`). Within each block, alphabetical.
-9. **No relative imports** (`from .foo import bar` is forbidden).
+9. **NEVER use relative imports.** `from . import x`, `from .foo import bar`, and any
+   other dotted-relative form is forbidden everywhere in the package, including
+   `__init__.py`. Always write the full absolute path (`from rest_framework_mcp.foo
+   import bar`).
 
 ## No view-layer coupling
 
@@ -120,6 +123,14 @@ view-layer dependencies.
   composes transport, never the other way).
 - `rest_framework_mcp.exceptions` would be the framework-agnostic boundary if introduced
   later — do not import from `rest_framework` inside it.
+
+## Branching
+
+When working on a new feature or a version bump, **ALWAYS** switch to a new branch
+first (`git checkout -b feat/...` or `release/vX.Y.Z`) and push to that branch.
+Never commit feature work or version bumps directly to `main`, and never push to
+`main` from the local checkout — `main` only advances via merged PRs (or, for
+releases, the tagged commit produced on the release branch).
 
 ## Releases
 
