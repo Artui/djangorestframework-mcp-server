@@ -7,6 +7,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.2.4] — 2026-04-30
+
+### Changed
+
+- Bumped the `djangorestframework-services` floor from `==0.6.0` to
+  `==0.7.0` to pick up the new `implements(Protocol[...])` decorator
+  and the reordered `(input, extras, result)` generic parameters on
+  the strict service / selector Protocols. No code changes were
+  needed in this package — the MCP layer doesn't reach into those
+  generics directly. See the upstream
+  [0.7.0 changelog entry](https://github.com/Artui/djangorestframework-services/blob/main/CHANGELOG.md)
+  for details.
+
 ## [0.2.3] — 2026-04-29
 
 ### Fixed
@@ -215,7 +228,8 @@ Pinned to `djangorestframework-services==0.6.0`.
 - 100% line + branch coverage enforced by pytest (**451 tests** at
   release).
 
-[Unreleased]: https://github.com/Artui/djangorestframework-mcp-server/compare/v0.2.3...HEAD
+[Unreleased]: https://github.com/Artui/djangorestframework-mcp-server/compare/v0.2.4...HEAD
+[0.2.4]: https://github.com/Artui/djangorestframework-mcp-server/compare/v0.2.3...v0.2.4
 [0.2.3]: https://github.com/Artui/djangorestframework-mcp-server/compare/v0.2.2...v0.2.3
 [0.2.2]: https://github.com/Artui/djangorestframework-mcp-server/compare/v0.2.1...v0.2.2
 [0.2.1]: https://github.com/Artui/djangorestframework-mcp-server/compare/v0.2.0...v0.2.1
