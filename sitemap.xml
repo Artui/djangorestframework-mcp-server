@@ -2,106 +2,106 @@
 <urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
     <url>
          <loc>https://artui.github.io/djangorestframework-mcp-server/</loc>
-         <lastmod>2026-04-30</lastmod>
+         <lastmod>2026-05-01</lastmod>
     </url>
     <url>
          <loc>https://artui.github.io/djangorestframework-mcp-server/async/</loc>
-         <lastmod>2026-04-30</lastmod>
+         <lastmod>2026-05-01</lastmod>
     </url>
     <url>
          <loc>https://artui.github.io/djangorestframework-mcp-server/auth/</loc>
-         <lastmod>2026-04-30</lastmod>
+         <lastmod>2026-05-01</lastmod>
     </url>
     <url>
          <loc>https://artui.github.io/djangorestframework-mcp-server/concepts/</loc>
-         <lastmod>2026-04-30</lastmod>
+         <lastmod>2026-05-01</lastmod>
     </url>
     <url>
          <loc>https://artui.github.io/djangorestframework-mcp-server/observability/</loc>
-         <lastmod>2026-04-30</lastmod>
+         <lastmod>2026-05-01</lastmod>
     </url>
     <url>
          <loc>https://artui.github.io/djangorestframework-mcp-server/performance/</loc>
-         <lastmod>2026-04-30</lastmod>
+         <lastmod>2026-05-01</lastmod>
     </url>
     <url>
          <loc>https://artui.github.io/djangorestframework-mcp-server/prompts/</loc>
-         <lastmod>2026-04-30</lastmod>
+         <lastmod>2026-05-01</lastmod>
     </url>
     <url>
          <loc>https://artui.github.io/djangorestframework-mcp-server/quickstart/</loc>
-         <lastmod>2026-04-30</lastmod>
+         <lastmod>2026-05-01</lastmod>
     </url>
     <url>
          <loc>https://artui.github.io/djangorestframework-mcp-server/recipes/</loc>
-         <lastmod>2026-04-30</lastmod>
+         <lastmod>2026-05-01</lastmod>
     </url>
     <url>
          <loc>https://artui.github.io/djangorestframework-mcp-server/recipes/async-auth-backend/</loc>
-         <lastmod>2026-04-30</lastmod>
+         <lastmod>2026-05-01</lastmod>
     </url>
     <url>
          <loc>https://artui.github.io/djangorestframework-mcp-server/recipes/custom-permission/</loc>
-         <lastmod>2026-04-30</lastmod>
+         <lastmod>2026-05-01</lastmod>
     </url>
     <url>
          <loc>https://artui.github.io/djangorestframework-mcp-server/recipes/drf-spectacular/</loc>
-         <lastmod>2026-04-30</lastmod>
+         <lastmod>2026-05-01</lastmod>
     </url>
     <url>
          <loc>https://artui.github.io/djangorestframework-mcp-server/recipes/expose-a-service/</loc>
-         <lastmod>2026-04-30</lastmod>
+         <lastmod>2026-05-01</lastmod>
     </url>
     <url>
          <loc>https://artui.github.io/djangorestframework-mcp-server/recipes/migrating/</loc>
-         <lastmod>2026-04-30</lastmod>
+         <lastmod>2026-05-01</lastmod>
     </url>
     <url>
          <loc>https://artui.github.io/djangorestframework-mcp-server/recipes/rate-limiting/</loc>
-         <lastmod>2026-04-30</lastmod>
+         <lastmod>2026-05-01</lastmod>
     </url>
     <url>
          <loc>https://artui.github.io/djangorestframework-mcp-server/recipes/redis-sse-broker/</loc>
-         <lastmod>2026-04-30</lastmod>
+         <lastmod>2026-05-01</lastmod>
     </url>
     <url>
          <loc>https://artui.github.io/djangorestframework-mcp-server/recipes/selector-tool-with-filterset/</loc>
-         <lastmod>2026-04-30</lastmod>
+         <lastmod>2026-05-01</lastmod>
     </url>
     <url>
          <loc>https://artui.github.io/djangorestframework-mcp-server/recipes/sse-replay-buffer/</loc>
-         <lastmod>2026-04-30</lastmod>
+         <lastmod>2026-05-01</lastmod>
     </url>
     <url>
          <loc>https://artui.github.io/djangorestframework-mcp-server/recipes/swap-session-store/</loc>
-         <lastmod>2026-04-30</lastmod>
+         <lastmod>2026-05-01</lastmod>
     </url>
     <url>
          <loc>https://artui.github.io/djangorestframework-mcp-server/recipes/toon-output/</loc>
-         <lastmod>2026-04-30</lastmod>
+         <lastmod>2026-05-01</lastmod>
     </url>
     <url>
          <loc>https://artui.github.io/djangorestframework-mcp-server/reference/</loc>
-         <lastmod>2026-04-30</lastmod>
+         <lastmod>2026-05-01</lastmod>
     </url>
     <url>
          <loc>https://artui.github.io/djangorestframework-mcp-server/reference/auth/</loc>
-         <lastmod>2026-04-30</lastmod>
+         <lastmod>2026-05-01</lastmod>
     </url>
     <url>
          <loc>https://artui.github.io/djangorestframework-mcp-server/reference/mcp-server/</loc>
-         <lastmod>2026-04-30</lastmod>
+         <lastmod>2026-05-01</lastmod>
     </url>
     <url>
          <loc>https://artui.github.io/djangorestframework-mcp-server/reference/output/</loc>
-         <lastmod>2026-04-30</lastmod>
+         <lastmod>2026-05-01</lastmod>
     </url>
     <url>
          <loc>https://artui.github.io/djangorestframework-mcp-server/reference/protocol/</loc>
-         <lastmod>2026-04-30</lastmod>
+         <lastmod>2026-05-01</lastmod>
     </url>
     <url>
          <loc>https://artui.github.io/djangorestframework-mcp-server/reference/registries/</loc>
-         <lastmod>2026-04-30</lastmod>
+         <lastmod>2026-05-01</lastmod>
     </url>
 </urlset>
