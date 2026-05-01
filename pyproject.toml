@@ -136,7 +136,7 @@ root = ["./rest_framework_mcp"]
 # block under a new dated heading. Run via `uvx bump-my-version` (no
 # permanent dependency added to the project).
 [tool.bumpversion]
-current_version = "0.2.5"
+current_version = "0.2.6"
 allow_dirty = false
 commit = false
 tag = false

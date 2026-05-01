@@ -7,6 +7,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.2.6] — 2026-05-01
+
+### Changed
+
+- Bumped the `djangorestframework-services` pin from `==0.8.0` to
+  `==0.8.1` to pick up the typing fix that widened the `ExtraT` bound
+  on `ServiceSpec` and `SelectorSpec` from `dict[str, Any]` to
+  `Mapping[str, object]`, so user-defined `TypedDict` kwargs
+  type-check cleanly under `ty` and `mypy`. No code changes were
+  needed in this package. See the upstream
+  [0.8.1 changelog entry](https://github.com/Artui/djangorestframework-services/blob/main/CHANGELOG.md)
+  for details.
+
 ## [0.2.5] — 2026-05-01
 
 ### Changed
@@ -243,7 +256,8 @@ Pinned to `djangorestframework-services==0.6.0`.
 - 100% line + branch coverage enforced by pytest (**451 tests** at
   release).
 
-[Unreleased]: https://github.com/Artui/djangorestframework-mcp-server/compare/v0.2.5...HEAD
+[Unreleased]: https://github.com/Artui/djangorestframework-mcp-server/compare/v0.2.6...HEAD
+[0.2.6]: https://github.com/Artui/djangorestframework-mcp-server/compare/v0.2.5...v0.2.6
 [0.2.5]: https://github.com/Artui/djangorestframework-mcp-server/compare/v0.2.4...v0.2.5
 [0.2.4]: https://github.com/Artui/djangorestframework-mcp-server/compare/v0.2.3...v0.2.4
 [0.2.3]: https://github.com/Artui/djangorestframework-mcp-server/compare/v0.2.2...v0.2.3
