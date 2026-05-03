@@ -1456,6 +1456,9 @@ encoder issues a warning and falls back to JSON so a tool call never
 breaks just because the extra is absent. The warning fires every time —
 silencing it is the consumer's job (<code>warnings.filterwarnings</code> or
 installing the extra).</p>
+<p>The import goes through <code>importlib</code> so static analysers (<code>ty</code>) don't
+flag the optional module as unresolved on environments without the
+<code>[toon]</code> extra installed.</p>
 
 
     </div>
