@@ -15,6 +15,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   renamed to `toon.encode(...)`. With the `[toon]` extra installed,
   TOON encoding raised `AttributeError` instead of producing output;
   switched the call site (and its test fakes) to `toon.encode`.
+  Bumped the `[toon]` extra floor from `python-toon>=0.1` to
+  `python-toon>=0.1.3` so old `0.1.0` installs (which still expose
+  `dumps`) can't satisfy the extra and silently re-introduce the
+  break.
 
 ### Changed
 
