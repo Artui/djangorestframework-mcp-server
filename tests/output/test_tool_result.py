@@ -26,7 +26,7 @@ def test_build_tool_result_auto_picks_json_for_dict() -> None:
 def test_build_tool_result_auto_picks_toon_for_uniform_list(monkeypatch) -> None:
     class FakeToon:
         @staticmethod
-        def dumps(payload: object) -> str:
+        def encode(payload: object) -> str:
             return f"TOON:{payload!r}"
 
     monkeypatch.setitem(sys.modules, "toon", FakeToon())  # type: ignore[arg-type]
@@ -43,7 +43,7 @@ def test_build_tool_result_auto_falls_back_to_json_for_mixed_list() -> None:
 def test_build_tool_result_explicit_toon(monkeypatch) -> None:
     class FakeToon:
         @staticmethod
-        def dumps(payload: object) -> str:
+        def encode(payload: object) -> str:
             return f"TOON:{payload!r}"
 
     monkeypatch.setitem(sys.modules, "toon", FakeToon())  # type: ignore[arg-type]

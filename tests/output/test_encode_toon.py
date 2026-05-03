@@ -20,7 +20,7 @@ def test_encode_toon_falls_back_to_json_when_extra_missing(monkeypatch) -> None:
 def test_encode_toon_uses_toon_when_available(monkeypatch) -> None:
     class FakeToon:
         @staticmethod
-        def dumps(payload: object) -> str:
+        def encode(payload: object) -> str:
             return f"TOON:{payload!r}"
 
     monkeypatch.setitem(sys.modules, "toon", FakeToon())  # type: ignore[arg-type]

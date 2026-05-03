@@ -7,6 +7,39 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.2.7] — 2026-05-03
+
+### Fixed
+
+- `encode_toon` called `toon.dumps(...)`, which `python-toon 0.1.1`
+  renamed to `toon.encode(...)`. With the `[toon]` extra installed,
+  TOON encoding raised `AttributeError` instead of producing output;
+  switched the call site (and its test fakes) to `toon.encode`.
+  Bumped the `[toon]` extra floor from `python-toon>=0.1` to
+  `python-toon>=0.1.3` so old `0.1.0` installs (which still expose
+  `dumps`) can't satisfy the extra and silently re-introduce the
+  break.
+
+### Changed
+
+- Bumped the `djangorestframework-services` pin from `==0.8.1` to
+  `==0.9.0`. Upstream's only "breaking" change is typing-only — the
+  strict service / selector Protocols no longer hardcode `request` and
+  `user` in their fixed signatures; both are still placed in the
+  framework's kwargs pool and reach a service either through named
+  parameters or via `**extras: Unpack[HttpExtras[YourUser]]`. The MCP
+  layer already builds the kwargs pool with `request` and `user` and
+  dispatches via `resolve_callable_kwargs`, which filters by the
+  callable's declared signature — so user-defined services keep
+  receiving them with no behaviour change either way. 0.9.0 also adds
+  `HttpExtras[UserT]`, the HTTP-scope `call_service` /
+  `call_selector` helpers, the `@selector_action` GET-side companion
+  to `@service_action`, and a `specs/` scaffold in `startserviceapp`,
+  none of which are reachable from the MCP transport. No code changes
+  were needed in this package. See the upstream
+  [0.9.0 changelog entry](https://github.com/Artui/djangorestframework-services/blob/main/CHANGELOG.md)
+  for details.
+
 ## [0.2.6] — 2026-05-01
 
 ### Changed
@@ -256,7 +289,8 @@ Pinned to `djangorestframework-services==0.6.0`.
 - 100% line + branch coverage enforced by pytest (**451 tests** at
   release).
 
-[Unreleased]: https://github.com/Artui/djangorestframework-mcp-server/compare/v0.2.6...HEAD
+[Unreleased]: https://github.com/Artui/djangorestframework-mcp-server/compare/v0.2.7...HEAD
+[0.2.7]: https://github.com/Artui/djangorestframework-mcp-server/compare/v0.2.6...v0.2.7
 [0.2.6]: https://github.com/Artui/djangorestframework-mcp-server/compare/v0.2.5...v0.2.6
 [0.2.5]: https://github.com/Artui/djangorestframework-mcp-server/compare/v0.2.4...v0.2.5
 [0.2.4]: https://github.com/Artui/djangorestframework-mcp-server/compare/v0.2.3...v0.2.4
