@@ -16,7 +16,7 @@ def encode_toon(payload: Any) -> str:
     installing the extra).
     """
     try:
-        import toon  # ty: ignore[unresolved-import]
+        import toon
     except ImportError:
         warnings.warn(
             "python-toon is not installed; falling back to JSON. "
@@ -24,7 +24,7 @@ def encode_toon(payload: Any) -> str:
             stacklevel=2,
         )
         return encode_json(payload)
-    return toon.dumps(payload)
+    return toon.encode(payload)
 
 
 __all__ = ["encode_toon"]
