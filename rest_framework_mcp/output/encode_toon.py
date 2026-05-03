@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import importlib
 import warnings
 from typing import Any
 
@@ -14,9 +15,13 @@ def encode_toon(payload: Any) -> str:
     breaks just because the extra is absent. The warning fires every time —
     silencing it is the consumer's job (``warnings.filterwarnings`` or
     installing the extra).
+
+    The import goes through ``importlib`` so static analysers (``ty``) don't
+    flag the optional module as unresolved on environments without the
+    ``[toon]`` extra installed.
     """
     try:
-        import toon
+        toon = importlib.import_module("toon")
     except ImportError:
         warnings.warn(
             "python-toon is not installed; falling back to JSON. "
