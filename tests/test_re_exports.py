@@ -4,44 +4,16 @@ from __future__ import annotations
 
 
 def test_service_protocols_reexported() -> None:
-    from rest_framework_mcp import (
-        CreateService,
-        DeleteService,
-        StrictCreateService,
-        StrictDeleteService,
-        StrictUpdateService,
-        UpdateService,
-    )
+    from rest_framework_mcp import CreateService, DeleteService, UpdateService
 
-    for proto in (
-        CreateService,
-        UpdateService,
-        DeleteService,
-        StrictCreateService,
-        StrictUpdateService,
-        StrictDeleteService,
-    ):
+    for proto in (CreateService, UpdateService, DeleteService):
         assert proto.__module__.startswith("rest_framework_services.")
 
 
 def test_selector_protocols_reexported() -> None:
-    from rest_framework_mcp import (
-        ListSelector,
-        OutputSelector,
-        RetrieveSelector,
-        StrictListSelector,
-        StrictOutputSelector,
-        StrictRetrieveSelector,
-    )
+    from rest_framework_mcp import ListSelector, OutputSelector, RetrieveSelector
 
-    for proto in (
-        ListSelector,
-        RetrieveSelector,
-        OutputSelector,
-        StrictListSelector,
-        StrictRetrieveSelector,
-        StrictOutputSelector,
-    ):
+    for proto in (ListSelector, RetrieveSelector, OutputSelector):
         assert proto.__module__.startswith("rest_framework_services.")
 
 

@@ -7,6 +7,71 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- Bumped the `djangorestframework-services` pin from `==0.9.0` to
+  `==0.11.0`. Upstream merged the lenient and strict service / selector
+  Protocols into a single shape per kind: `StrictCreateService` /
+  `StrictUpdateService` / `StrictDeleteService` / `StrictListSelector` /
+  `StrictRetrieveSelector` / `StrictOutputSelector` (and the `NoKwargs`
+  empty `TypedDict`) were removed. This package re-exported all six
+  `Strict*` Protocols at the top level — they are dropped from
+  `rest_framework_mcp.__all__` and the public surface. Strict-typed
+  extras stay possible on user-defined services by annotating
+  `**extras: Unpack[YourKw]` directly on the function (no longer via a
+  Protocol type argument). Other 0.11.0 additions — `create_model` /
+  `update_model` / `delete_model` (plus async variants), generic
+  `ChangeResult[Model]` — are not reachable from the MCP transport, so
+  no further code changes were needed. 0.10.0 (serializer-context
+  propagation for service-backed views) is also irrelevant to this
+  package's dispatch path.
+
+  **Migration:** rename any
+  `from rest_framework_mcp import StrictCreateService` (etc.) to the
+  unified name (`CreateService` etc.) and drop the trailing `ExtraT`
+  type argument from each parameterised call site. The `@implements(...)`
+  decorator pattern keeps working unchanged once the names update.
+
+- Adopted the shared release-parity CI flow from
+  `djangorestframework-services`. `release.yml` is now triggered by every
+  merge to `main` and short-circuits to a no-op unless
+  `rest_framework_mcp/version.py` was bumped past the most recent
+  `vX.Y.Z` tag; the previous tag-trigger pipeline is gone. Bumped every
+  workflow action pin off the Node-20-deprecated set
+  (`actions/checkout@v5`, `astral-sh/setup-uv@v7`,
+  `actions/upload-artifact@v5`, `actions/download-artifact@v5`).
+  `tests.yml` now emits `coverage.xml` + `htmlcov/` per matrix cell and
+  a new `coverage-badge` job publishes `coverage.json` to `gh-pages` on
+  every push to `main`; the README's coverage shield reads it live
+  instead of the previous static `100%-brightgreen` placeholder. The
+  release flow itself is centralised in `scripts/release-publish.sh`
+  (byte-identical with the sister repo) and parameterised through
+  `make release-publish-prepare` / `release-publish-finalize`. No
+  runtime behaviour changes — pure CI / release-tooling parity.
+
+### Fixed
+
+- Doc / code drift surfaced by an end-to-end audit:
+  - README's "What ships in v1" section was missing prompts,
+    selector-tool FilterSet / ordering / pagination, per-binding rate
+    limits, async + SSE (with `RedisSSEBroker` and `SSEReplayBuffer`),
+    and OpenTelemetry spans. Rewrote in lockstep with `docs/index.md`
+    and dropped the "v1" qualifier.
+  - `docs/quickstart.md` claimed `AllowAnyBackend` was the default
+    auth backend; the default is `DjangoOAuthToolkitBackend`. Updated
+    the dev snippet to tell users to swap it in explicitly.
+  - `docs/concepts.md` and `docs/async.md` carried stale "Phase 6 /
+    Phase 7 / no-replay" roadmap statements that have since shipped
+    (`async_urls` + GET-side SSE, `RedisSSEBroker`,
+    `InMemorySSEReplayBuffer` / `RedisSSEReplayBuffer`). Rewrote to
+    describe the shipped state and link the recipes.
+  - `RedisSSEBroker` docstring still claimed `Last-Event-ID` resume
+    was "Phase 7c"; the `RedisSSEReplayBuffer` pairing is in tree.
+  - `docs/recipes/custom-permission.md` showed a permission example
+    reading `request.user.tenant_id` at registration time, where no
+    request exists. Updated to use a configured `settings` value and
+    explained that permission args are captured at registration time.
+
 ## [0.2.7] — 2026-05-03
 
 ### Fixed
