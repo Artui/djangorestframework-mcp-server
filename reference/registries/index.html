@@ -2775,8 +2775,10 @@ server = MCPServer(name=&quot;my-app&quot;, sse_broker=broker)
 <ul>
 <li>Same single-subscriber-per-session contract as the in-memory broker
   (re-subscribing replaces the old subscriber's queue).</li>
-<li>No message replay; <code>Last-Event-ID</code> resume is a separate feature
-  tracked in Phase 7c.</li>
+<li>Message replay is a separate, opt-in collaborator — pair this with
+  :class:<code>RedisSSEReplayBuffer</code> (passed as
+  <code>MCPServer(sse_replay_buffer=...)</code>) for cross-worker
+  <code>Last-Event-ID</code> resume.</li>
 <li>The Redis client's lifecycle is the consumer's responsibility — close
   it during ASGI lifespan shutdown.</li>
 </ul>

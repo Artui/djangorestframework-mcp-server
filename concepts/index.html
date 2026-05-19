@@ -1606,9 +1606,11 @@ appear in <code>resources/templates/list</code> so clients can fill them in.</p>
   Configure via <code>REST_FRAMEWORK_MCP["ALLOWED_ORIGINS"]</code>. Use <code>["*"]</code> only for
   dev.</li>
 </ul>
-<p><code>DELETE /mcp/</code> with a session id terminates that session immediately. <code>GET</code> is
-405 in v1 — server-initiated SSE is on the roadmap (see Phase 6 in the project
-plan).</p>
+<p><code>DELETE /mcp/</code> with a session id terminates that session immediately. <code>GET
+/mcp/</code> opens a server-initiated SSE stream — available on <code>async_urls</code> only
+(WSGI's <code>server.urls</code> returns 405 on GET because SSE requires the event
+loop). See <a href="../async/">Async deployment</a> for the wire details and
+<code>MCPServer.notify(...)</code> for pushing frames.</p>
 <h2 id="output-formats">Output formats<a class="headerlink" href="#output-formats" title="Permanent link">&para;</a></h2>
 <p>Per the MCP tools spec, a tool result has both a <code>content</code> block list and an
 optional <code>structuredContent</code>:</p>

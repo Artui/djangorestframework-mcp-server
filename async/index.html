@@ -493,10 +493,10 @@
 </li>
         
           <li class="md-nav__item">
-  <a href="#single-process-only-in-v1" class="md-nav__link">
+  <a href="#scaling-across-workers" class="md-nav__link">
     <span class="md-ellipsis">
       
-        Single-process only in v1
+        Scaling across workers
       
     </span>
   </a>
@@ -1323,10 +1323,10 @@
 </li>
         
           <li class="md-nav__item">
-  <a href="#single-process-only-in-v1" class="md-nav__link">
+  <a href="#scaling-across-workers" class="md-nav__link">
     <span class="md-ellipsis">
       
-        Single-process only in v1
+        Scaling across workers
       
     </span>
   </a>
@@ -1484,21 +1484,25 @@ required, <code>Mcp-Session-Id</code> required and validated against the session
 store. Origin allowlist applies. With no broker configured (e.g. a
 <code>MCPServer(sse_broker=None)</code>), GET returns 405 — spec-compliant when the
 server has nothing to push.</p>
-<h3 id="single-process-only-in-v1">Single-process only in v1<a class="headerlink" href="#single-process-only-in-v1" title="Permanent link">&para;</a></h3>
-<p>The shipped <code>SSEBroker</code> is in-process. A multi-worker deployment can:</p>
+<h3 id="scaling-across-workers">Scaling across workers<a class="headerlink" href="#scaling-across-workers" title="Permanent link">&para;</a></h3>
+<p>The default <code>InMemorySSEBroker</code> is single-process. A multi-worker deployment
+can:</p>
 <ul>
 <li><strong>Keep SSE on a single process</strong> by running one ASGI worker (or pinning
   SSE-enabled requests to one worker via session affinity). The simplest
   path and works for most apps.</li>
-<li><strong>Use a custom broker</strong> — implement <code>subscribe</code> / <code>unsubscribe</code> /
-  <code>publish</code> against Redis pub/sub, NATS, Kafka, etc., and pass it as
-  <code>MCPServer(sse_broker=...)</code>. A first-party Redis adapter is on the
-  Phase 7 list.</li>
+<li><strong>Use the first-party <code>RedisSSEBroker</code></strong> (behind the <code>[redis]</code> extra) —
+  pass it as <code>MCPServer(sse_broker=RedisSSEBroker(client))</code>. See
+  <a href="../recipes/redis-sse-broker/">Multi-worker SSE with Redis</a>.</li>
+<li><strong>Roll your own</strong> — implement <code>subscribe</code> / <code>unsubscribe</code> / <code>publish</code>
+  against NATS, Kafka, etc., and pass it as
+  <code>MCPServer(sse_broker=...)</code>.</li>
 </ul>
 <p>The single-subscriber rule applies per-session: re-subscribing replaces
-the previous queue. There is no message replay if a client disconnects and
-reconnects — clients that need durability should drive state through
-<code>tools/call</code> round-trips instead.</p>
+the previous queue. Message replay across reconnects is opt-in via an
+<code>SSEReplayBuffer</code> (<code>InMemorySSEReplayBuffer</code> or <code>RedisSSEReplayBuffer</code>)
+passed as <code>MCPServer(sse_replay_buffer=...)</code>; with no buffer configured,
+<code>Last-Event-ID</code> is silently ignored. See <a href="../recipes/sse-replay-buffer/">SSE replay buffer</a>.</p>
 <h2 id="when-sync-is-the-right-answer">When sync is the right answer<a class="headerlink" href="#when-sync-is-the-right-answer" title="Permanent link">&para;</a></h2>
 <p>If you don't have async-native services and aren't running ASGI today,
 <code>server.urls</code> is the simpler path. Switching to async without genuine async

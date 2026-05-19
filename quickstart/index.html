@@ -1461,9 +1461,13 @@ and watch the response. For automated checks, a single <code>curl</code> works t
 </span><span id="__span-8-28"><a id="__codelineno-8-28" name="__codelineno-8-28" href="#__codelineno-8-28"></a><span class="s1">    }</span>
 </span><span id="__span-8-29"><a id="__codelineno-8-29" name="__codelineno-8-29" href="#__codelineno-8-29"></a><span class="s1">  }&#39;</span>
 </span></code></pre></div>
-<p>For development, leave the default <code>AllowAnyBackend</code> in place. Before going to
-production, swap to <code>DjangoOAuthToolkitBackend</code> (or your own) and set an
-<code>ALLOWED_ORIGINS</code> allowlist — see <a href="../auth/">Authentication</a> for the recipe.</p>
+<p>The default auth backend is <code>DjangoOAuthToolkitBackend</code>, which requires the
+<code>[oauth]</code> extra and refuses unauthenticated requests. For local development,
+swap in <code>AllowAnyBackend</code> explicitly — either via
+<code>REST_FRAMEWORK_MCP["AUTH_BACKEND"]</code> or
+<code>MCPServer(auth_backend=AllowAnyBackend())</code>. Before going to production, leave
+the OAuth backend in place (or plug in your own) and set an <code>ALLOWED_ORIGINS</code>
+allowlist — see <a href="../auth/">Authentication</a> for the recipe.</p>
 
 
 
