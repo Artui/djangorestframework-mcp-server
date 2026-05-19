@@ -27,15 +27,20 @@ class TenantMatches:
         return []
 ```
 
-Stack with `ScopeRequired` to keep both surfaces honest:
+Stack with `ScopeRequired` to keep both surfaces honest. The `tenant_id` is
+captured at registration time — read it from settings or any other
+process-wide source, never from a `request` (no request exists during
+registration):
 
 ```python
+from django.conf import settings
+
 server.register_service_tool(
     name="invoices.refund",
     spec=ServiceSpec(service=refund_invoice),
     permissions=[
         ScopeRequired(["invoices:write"]),
-        TenantMatches(tenant_id=request.user.tenant_id),
+        TenantMatches(tenant_id=settings.ACTIVE_TENANT_ID),
     ],
 )
 ```

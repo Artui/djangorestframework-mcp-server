@@ -180,9 +180,11 @@ The MCP 2025-11-25 transport requires:
   Configure via `REST_FRAMEWORK_MCP["ALLOWED_ORIGINS"]`. Use `["*"]` only for
   dev.
 
-`DELETE /mcp/` with a session id terminates that session immediately. `GET` is
-405 in v1 — server-initiated SSE is on the roadmap (see Phase 6 in the project
-plan).
+`DELETE /mcp/` with a session id terminates that session immediately. `GET
+/mcp/` opens a server-initiated SSE stream — available on `async_urls` only
+(WSGI's `server.urls` returns 405 on GET because SSE requires the event
+loop). See [Async deployment](async.md) for the wire details and
+`MCPServer.notify(...)` for pushing frames.
 
 ## Output formats
 

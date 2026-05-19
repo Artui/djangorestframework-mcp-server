@@ -5,7 +5,7 @@
 [![Python versions](https://img.shields.io/pypi/pyversions/djangorestframework-mcp-server.svg)](https://pypi.org/project/djangorestframework-mcp-server/)
 [![Django versions](https://img.shields.io/pypi/djversions/djangorestframework-mcp-server.svg)](https://pypi.org/project/djangorestframework-mcp-server/)
 [![Docs](https://img.shields.io/badge/docs-artui.github.io-blue.svg)](https://artui.github.io/djangorestframework-mcp-server/)
-[![Coverage](https://img.shields.io/badge/coverage-100%25-brightgreen.svg)](https://github.com/Artui/djangorestframework-mcp-server/actions/workflows/tests.yml)
+[![Coverage](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/Artui/djangorestframework-mcp-server/gh-pages/coverage.json)](https://github.com/Artui/djangorestframework-mcp-server/actions/workflows/tests.yml)
 [![Ruff](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/astral-sh/ruff/main/assets/badge/v2.json)](https://github.com/astral-sh/ruff)
 [![License](https://img.shields.io/pypi/l/djangorestframework-mcp-server.svg)](LICENSE)
 
@@ -56,19 +56,37 @@ See the [quickstart](docs/quickstart.md) for the full end-to-end recipe.
 - A single `/mcp` endpoint speaks Streamable HTTP. The
   `/.well-known/oauth-protected-resource` endpoint comes mounted alongside.
 
-## What ships in v1
+## What ships
 
-- `tools/list`, `tools/call`, `resources/list`, `resources/templates/list`,
-  `resources/read`.
-- Pluggable auth: `DjangoOAuthToolkitBackend` (default when DOT is installed)
-  and `AllowAnyBackend` (dev only). Per-binding `MCPPermission` classes
+- **Tools** — `tools/list`, `tools/call` for `register_service_tool`
+  (mutations) and `register_selector_tool` (reads, with optional
+  `FilterSet` + ordering + pagination).
+- **Resources** — `resources/list`, `resources/templates/list`,
+  `resources/read` against `SelectorSpec`-backed callables; RFC 6570
+  templated URIs.
+- **Prompts** — `prompts/list`, `prompts/get` against render callables
+  returning strings, `PromptMessage`s, or async coroutines.
+- **Pluggable auth** — `DjangoOAuthToolkitBackend` (default) and
+  `AllowAnyBackend` (dev only). Per-binding `MCPPermission` classes
   (`ScopeRequired`, `DjangoPermRequired`) plus your own.
-- RFC 8707 audience binding when `RESOURCE_URL` is configured; RFC 9728 PRM
-  served from the configured backend.
-- Output formats: JSON (default) and TOON (token-oriented; optional extra
-  with safe JSON fallback).
-- Origin allowlist + protocol-version validation + session lifecycle per
-  the 2025-11-25 transport rules.
+- **RFC 8707 audience binding** when `RESOURCE_URL` is configured;
+  **RFC 9728 PRM** served from the configured backend.
+- **Per-binding rate limits** — `MCPRateLimit` Protocol with
+  `FixedWindowRateLimit`, `SlidingWindowRateLimit`, and
+  `TokenBucketRateLimit` implementations shipped.
+- **Output formats** — JSON (default) and TOON (token-oriented;
+  optional extra with safe JSON fallback).
+- **Async POST/DELETE + GET-side SSE push** — sync `urls` for WSGI,
+  `async_urls` for ASGI; `MCPServer.notify(session_id, payload)`
+  pushes JSON-RPC frames on the session's SSE stream. Per-worker
+  `InMemorySSEBroker` or cross-worker `RedisSSEBroker` (behind
+  `[redis]`); `Last-Event-ID` resume via
+  `InMemorySSEReplayBuffer` / `RedisSSEReplayBuffer`.
+- **OpenTelemetry instrumentation** — `mcp.tools.call`,
+  `mcp.resources.read`, `mcp.prompts.get` spans (no-op without the
+  `[otel]` extra installed).
+- **Origin allowlist + protocol-version validation + session
+  lifecycle** per the 2025-11-25 transport rules.
 
 ## Install
 
