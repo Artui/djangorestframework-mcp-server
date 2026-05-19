@@ -1,4 +1,4 @@
-.PHONY: help init test lint lint-fix format format-check type-check deps-bump docs-serve docs-build release-bump release-publish
+.PHONY: help init test lint lint-fix format format-check type-check deps-bump docs-serve docs-build release-bump release-publish release-publish-prepare release-publish-finalize
 
 help:
 	@echo "Available targets:"
@@ -13,7 +13,9 @@ help:
 	@echo "  docs-serve       Live-reload docs at http://localhost:8000 (needs mkdocs.yml)"
 	@echo "  docs-build       Build docs into ./site (strict — fails on broken links)"
 	@echo "  release-bump     Bump version files + CHANGELOG. Usage: make release-bump VERSION=X.Y.Z"
-	@echo "  release-publish  Commit, tag, and push the current version to trigger release.yml"
+	@echo "  release-publish  prepare → uv publish → finalize (workstation release)"
+	@echo "  release-publish-prepare   Run by release.yml on push to main (no-op unless bumped)"
+	@echo "  release-publish-finalize  Tag vX.Y.Z + create GitHub Release after PyPI publish"
 
 init:
 	uv sync --all-groups
@@ -56,24 +58,33 @@ release-bump:
 	@echo "Bumped to $(VERSION). Edit CHANGELOG.md to fill the new section,"
 	@echo "review with 'git diff', then run 'make release-publish'."
 
-# The version lives only in rest_framework_mcp/version.py (pyproject pulls it in
-# via [tool.hatch.version] dynamic) so the publish target reads from there.
+# Release pipeline. The version lives in rest_framework_mcp/version.py
+# (pyproject pulls it in via [tool.hatch.version] dynamic). The three targets
+# below wrap scripts/release-publish.sh, which is the single source of truth
+# for the flow and stays byte-identical across the services + mcp-server repos.
+#
+#   release-publish-prepare   — version short-circuit, pytest, uv build, extract
+#                               CHANGELOG section. Called by release.yml on every
+#                               push to main; no-ops unless the version was
+#                               bumped past the most recent vX.Y.Z tag.
+#   release-publish-finalize  — tag vX.Y.Z, push it, create the GitHub Release.
+#                               Called after PyPI publish succeeds in CI.
+#   release-publish           — prepare → uv publish → finalize. For end-to-end
+#                               workstation releases. Set DRY_RUN=1 to rehearse.
+RELEASE_PACKAGE_NAME := djangorestframework-mcp-server
+RELEASE_VERSION_FILES := rest_framework_mcp/version.py|^__version__[^=]*= *
+
 release-publish:
-	@version="$$(awk -F '"' '/^__version__: str = / { print $$2; exit }' rest_framework_mcp/version.py)"; \
-	if [ -z "$$version" ]; then \
-		echo "Could not extract version from rest_framework_mcp/version.py"; exit 1; \
-	fi; \
-	if git rev-parse "v$$version" >/dev/null 2>&1; then \
-		echo "Tag v$$version already exists locally."; exit 1; \
-	fi; \
-	if [ -n "$$(git ls-remote --tags origin "v$$version")" ]; then \
-		echo "Tag v$$version already exists on origin."; exit 1; \
-	fi; \
-	if ! git diff-index --quiet HEAD --; then \
-		git add rest_framework_mcp/version.py CHANGELOG.md pyproject.toml && \
-		git commit -m "Release $$version"; \
-	fi && \
-	git tag -a "v$$version" -m "$$version" && \
-	branch="$$(git rev-parse --abbrev-ref HEAD)" && \
-	git push origin "$$branch" "v$$version" && \
-	echo "Pushed Release $$version + tag v$$version. Watch: https://github.com/Artui/djangorestframework-mcp-server/actions"
+	@PACKAGE_NAME='$(RELEASE_PACKAGE_NAME)' \
+	VERSION_FILES="$$(printf '$(RELEASE_VERSION_FILES)')" \
+		bash scripts/release-publish.sh all
+
+release-publish-prepare:
+	@PACKAGE_NAME='$(RELEASE_PACKAGE_NAME)' \
+	VERSION_FILES="$$(printf '$(RELEASE_VERSION_FILES)')" \
+		bash scripts/release-publish.sh prepare
+
+release-publish-finalize:
+	@PACKAGE_NAME='$(RELEASE_PACKAGE_NAME)' \
+	VERSION_FILES="$$(printf '$(RELEASE_VERSION_FILES)')" \
+		bash scripts/release-publish.sh finalize

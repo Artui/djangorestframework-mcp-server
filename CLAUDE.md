@@ -134,21 +134,74 @@ releases, the tagged commit produced on the release branch).
 
 ## Releases
 
-The release pipeline is triggered by pushing a `vX.Y.Z` tag and runs three
-sequential jobs in `.github/workflows/release.yml`:
+The release pipeline is **merge-to-main triggered**, not tag-triggered.
+`.github/workflows/release.yml` runs on every push to `main` and calls
+`make release-publish-prepare`. The script in
+[`scripts/release-publish.sh`](scripts/release-publish.sh) is the single source
+of truth for the flow and behaves as follows:
 
-1. `build` — re-runs the full test suite at 100% coverage, then `uv build`.
-   It also asserts the git tag matches `rest_framework_mcp.__version__` so
-   you can never tag without bumping the source.
-2. `publish-pypi` — uploads via **OIDC trusted publishing**. There is no API
-   token in the repo; PyPI must have a Trusted Publisher configured for the
-   project pointing at this workflow.
-3. `publish-docs` — `mkdocs gh-deploy --force --clean` to the `gh-pages`
-   branch.
+1. Extract the version from `rest_framework_mcp/version.py` (the
+   single source of truth; `pyproject.toml` declares `dynamic = ["version"]`
+   and hatchling reads the value from `version.py` at build time).
+2. Check whether `vX.Y.Z` already exists locally or on origin. **If yes →
+   short-circuit:** emit `released=false` to `$GITHUB_OUTPUT` and exit 0.
+   That is what makes every-merge-to-main safe: non-bumping merges are no-ops.
+3. Run `uv run pytest` as a final gate.
+4. `uv build` into `dist/`.
+5. Extract the `## [X.Y.Z]` section from `CHANGELOG.md` into
+   `dist/release-notes.md`.
+6. Emit `released=true` so the downstream steps run.
+
+If `released=true`, the workflow then:
+
+- Publishes to PyPI via **OIDC trusted publishing**
+  (`pypa/gh-action-pypi-publish`, no token in repo).
+- Calls `make release-publish-finalize`, which tags `vX.Y.Z`, pushes the tag,
+  and runs `gh release create vX.Y.Z --notes-file dist/release-notes.md
+  dist/*.whl dist/*.tar.gz`.
+- `mkdocs gh-deploy --force --clean` to `gh-pages` (skipped if `mkdocs.yml`
+  is missing).
+
+The previous tag-trigger flow has been removed.
+
+### Cutting a release
+
+The bump itself is driven by
+[bump-my-version](https://github.com/callowayproject/bump-my-version) via `uvx`;
+configuration lives in `[tool.bumpversion]` in `pyproject.toml`.
+
+```bash
+# 1. On a release branch, make sure CHANGELOG.md has the entries you want
+#    to ship under ## [Unreleased]. Then bump:
+make release-bump VERSION=0.3.0
+# This rewrites rest_framework_mcp/version.py (the single source of
+# truth — pyproject.toml is dynamic and reads from it at build time),
+# promotes the [Unreleased] block under a dated [0.3.0] section, and
+# rewrites the link footer — all driven by the [[tool.bumpversion.files]]
+# entries in pyproject.toml.
+
+# 2. Review the diff, commit, open a PR, get it reviewed.
+git diff
+git commit -am "Release 0.3.0"
+git push -u origin release/0.3.0
+gh pr create
+
+# 3. Merge to main. release.yml fires on the merge commit, detects the
+#    bumped version, runs the full flow, and tags/publishes vX.Y.Z.
+```
+
+`release-bump` refuses to run on a dirty tree (bump-my-version's
+`allow_dirty = false`), so you don't fold unrelated changes into the
+release commit.
+
+For an end-to-end workstation release (e.g. publishing from a developer
+machine when CI is broken), `make release-publish` runs prepare → `uv publish`
+→ finalize in one shot. Set `DRY_RUN=1` to rehearse without uploading or
+pushing.
 
 ### One-time setup (manual, by the repo owner)
 
-These steps need to happen once before the first tag push will succeed:
+These steps need to happen once before the first release will succeed:
 
 1. **PyPI Trusted Publisher** — sign in to PyPI, open the project settings,
    add a "Pending" publisher pointing at `Artui/djangorestframework-mcp-server`,
@@ -158,32 +211,9 @@ These steps need to happen once before the first tag push will succeed:
    `Settings → Environments` (no secrets needed; OIDC handles auth).
 3. **GitHub Pages** — under `Settings → Pages`, set "Build and deployment"
    source to "Deploy from a branch", branch `gh-pages`, folder `/`. The first
-   tag push creates that branch.
-
-### Cutting a release — use the Makefile, not hand-edits
-
-The version is tracked in **three** places that must stay in lockstep:
-
-- `rest_framework_mcp/version.py` (`__version__`)
-- `pyproject.toml` (`[tool.bumpversion].current_version`)
-- `CHANGELOG.md` (the `## [Unreleased]` heading splits into `## [Unreleased]
-  / ## [X.Y.Z] — DATE`, and the compare-link footer at the bottom of the
-  file gets a new row chained off the previous version)
-
-Always drive the bump through the configured tooling — do **not** edit
-those files by hand:
-
-```sh
-make release-bump VERSION=X.Y.Z   # uvx bump-my-version: rewrites all three places
-$EDITOR CHANGELOG.md              # fill in the new section's body
-make release-publish              # commits, tags vX.Y.Z, pushes branch + tag
-```
-
-`release-publish` stages `version.py`, `CHANGELOG.md`, and `pyproject.toml`
-together, refuses to run if the tag already exists, and pushes the current
-branch alongside the tag so the release workflow has the matching commit
-to run against. The push of the `vX.Y.Z` tag is what triggers
-`release.yml`.
+   release to ship with a `mkdocs.yml` creates that branch; the
+   `coverage-badge` job in `tests.yml` is also fine creating it as an
+   orphan if docs haven't shipped yet.
 
 If the bumpversion config drifts (e.g. a previous release was hand-edited),
 fix it before bumping: set `current_version` in `pyproject.toml` to the

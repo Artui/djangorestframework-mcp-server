@@ -14,8 +14,8 @@ jobs:
     name: lint
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: astral-sh/setup-uv@v6
+      - uses: actions/checkout@v5
+      - uses: astral-sh/setup-uv@v7
         with:
           enable-cache: true
       - name: Install
@@ -31,8 +31,8 @@ jobs:
     name: docs build
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: astral-sh/setup-uv@v6
+      - uses: actions/checkout@v5
+      - uses: astral-sh/setup-uv@v7
         with:
           enable-cache: true
       - name: Install with docs group
@@ -72,8 +72,8 @@ jobs:
             django-version: "6.0"
 
     steps:
-      - uses: actions/checkout@v4
-      - uses: astral-sh/setup-uv@v6
+      - uses: actions/checkout@v5
+      - uses: astral-sh/setup-uv@v7
         with:
           enable-cache: true
       - name: Install Python ${{ matrix.python-version }}
@@ -83,14 +83,26 @@ jobs:
       - name: Pin Django ${{ matrix.django-version }}
         run: uv pip install --reinstall-package django "django~=${{ matrix.django-version }}.0"
       - name: pytest
-        run: uv run --no-sync pytest
+        run: |
+          uv run --no-sync pytest \
+            --cov-report=xml:coverage.xml \
+            --cov-report=html:htmlcov
+      - name: Upload coverage artifact
+        if: always()
+        uses: actions/upload-artifact@v5
+        with:
+          name: coverage-py${{ matrix.python-version }}-django${{ matrix.django-version }}
+          path: |
+            coverage.xml
+            htmlcov/
+          if-no-files-found: ignore
 
   smoke-no-extras:
     name: smoke (no optional extras)
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: astral-sh/setup-uv@v6
+      - uses: actions/checkout@v5
+      - uses: astral-sh/setup-uv@v7
         with:
           enable-cache: true
       - name: Install base only (no [toon], no [oauth], no dev group)
@@ -169,3 +181,78 @@ jobs:
 
           print("SMOKE OK")
           PY
+
+  coverage-badge:
+    name: coverage badge
+    needs: test
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v5
+      - name: Download canonical coverage artifact
+        uses: actions/download-artifact@v5
+        with:
+          name: coverage-py3.13-django5.2
+          path: coverage-artifact/
+      - name: Render coverage.json
+        run: |
+          python - <<'PY'
+          import json
+          import xml.etree.ElementTree as ET
+
+          tree = ET.parse("coverage-artifact/coverage.xml")
+          pct = round(float(tree.getroot().attrib["line-rate"]) * 100, 1)
+          if pct >= 95:
+              color = "brightgreen"
+          elif pct >= 85:
+              color = "green"
+          elif pct >= 70:
+              color = "yellow"
+          else:
+              color = "red"
+          payload = {
+              "schemaVersion": 1,
+              "label": "coverage",
+              "message": f"{pct}%",
+              "color": color,
+          }
+          with open("coverage.json", "w") as fh:
+              json.dump(payload, fh)
+              fh.write("\n")
+          print(json.dumps(payload))
+          PY
+      - name: Publish coverage.json to gh-pages
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+
+          tmp="$(mktemp -d)"
+          cp coverage.json "$tmp/coverage.json"
+
+          git fetch origin gh-pages --depth=1 2>/dev/null || true
+          if git rev-parse --verify origin/gh-pages >/dev/null 2>&1; then
+              git worktree add gh-pages origin/gh-pages
+              cp "$tmp/coverage.json" gh-pages/coverage.json
+              cd gh-pages
+              if [[ -n "$(git status --porcelain coverage.json)" ]]; then
+                  git add coverage.json
+                  git commit -m "coverage badge: update from ${GITHUB_SHA::7}"
+                  git push origin HEAD:gh-pages
+              else
+                  echo "coverage.json unchanged, skipping push"
+              fi
+          else
+              git worktree add --detach gh-pages
+              cd gh-pages
+              git checkout --orphan gh-pages
+              git rm -rf . >/dev/null 2>&1 || true
+              cp "$tmp/coverage.json" coverage.json
+              git add coverage.json
+              git commit -m "coverage badge: initial publish from ${GITHUB_SHA::7}"
+              git push origin gh-pages
+          fi
