@@ -151,6 +151,10 @@ curl http://localhost:8000/mcp/ \
   }'
 ```
 
-For development, leave the default `AllowAnyBackend` in place. Before going to
-production, swap to `DjangoOAuthToolkitBackend` (or your own) and set an
-`ALLOWED_ORIGINS` allowlist — see [Authentication](auth.md) for the recipe.
+The default auth backend is `DjangoOAuthToolkitBackend`, which requires the
+`[oauth]` extra and refuses unauthenticated requests. For local development,
+swap in `AllowAnyBackend` explicitly — either via
+`REST_FRAMEWORK_MCP["AUTH_BACKEND"]` or
+`MCPServer(auth_backend=AllowAnyBackend())`. Before going to production, leave
+the OAuth backend in place (or plug in your own) and set an `ALLOWED_ORIGINS`
+allowlist — see [Authentication](auth.md) for the recipe.

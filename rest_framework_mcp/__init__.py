@@ -5,14 +5,8 @@
 from rest_framework_services.selectors.list_selector import ListSelector
 from rest_framework_services.selectors.output_selector import OutputSelector
 from rest_framework_services.selectors.retrieve_selector import RetrieveSelector
-from rest_framework_services.selectors.strict_list_selector import StrictListSelector
-from rest_framework_services.selectors.strict_output_selector import StrictOutputSelector
-from rest_framework_services.selectors.strict_retrieve_selector import StrictRetrieveSelector
 from rest_framework_services.services.create_service import CreateService
 from rest_framework_services.services.delete_service import DeleteService
-from rest_framework_services.services.strict_create_service import StrictCreateService
-from rest_framework_services.services.strict_delete_service import StrictDeleteService
-from rest_framework_services.services.strict_update_service import StrictUpdateService
 from rest_framework_services.services.update_service import UpdateService
 from rest_framework_services.types.selector_spec import SelectorSpec
 from rest_framework_services.types.service_spec import ServiceSpec
@@ -67,12 +61,6 @@ __all__ = [
     "ServiceSpec",
     "ServiceView",
     "SessionStore",
-    "StrictCreateService",
-    "StrictDeleteService",
-    "StrictListSelector",
-    "StrictOutputSelector",
-    "StrictRetrieveSelector",
-    "StrictUpdateService",
     "TokenInfo",
     "ToolRegistry",
     "UpdateService",

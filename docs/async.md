@@ -120,22 +120,26 @@ store. Origin allowlist applies. With no broker configured (e.g. a
 `MCPServer(sse_broker=None)`), GET returns 405 — spec-compliant when the
 server has nothing to push.
 
-### Single-process only in v1
+### Scaling across workers
 
-The shipped `SSEBroker` is in-process. A multi-worker deployment can:
+The default `InMemorySSEBroker` is single-process. A multi-worker deployment
+can:
 
 - **Keep SSE on a single process** by running one ASGI worker (or pinning
   SSE-enabled requests to one worker via session affinity). The simplest
   path and works for most apps.
-- **Use a custom broker** — implement `subscribe` / `unsubscribe` /
-  `publish` against Redis pub/sub, NATS, Kafka, etc., and pass it as
-  `MCPServer(sse_broker=...)`. A first-party Redis adapter is on the
-  Phase 7 list.
+- **Use the first-party `RedisSSEBroker`** (behind the `[redis]` extra) —
+  pass it as `MCPServer(sse_broker=RedisSSEBroker(client))`. See
+  [Multi-worker SSE with Redis](recipes/redis-sse-broker.md).
+- **Roll your own** — implement `subscribe` / `unsubscribe` / `publish`
+  against NATS, Kafka, etc., and pass it as
+  `MCPServer(sse_broker=...)`.
 
 The single-subscriber rule applies per-session: re-subscribing replaces
-the previous queue. There is no message replay if a client disconnects and
-reconnects — clients that need durability should drive state through
-`tools/call` round-trips instead.
+the previous queue. Message replay across reconnects is opt-in via an
+`SSEReplayBuffer` (`InMemorySSEReplayBuffer` or `RedisSSEReplayBuffer`)
+passed as `MCPServer(sse_replay_buffer=...)`; with no buffer configured,
+`Last-Event-ID` is silently ignored. See [SSE replay buffer](recipes/sse-replay-buffer.md).
 
 ## When sync is the right answer
 

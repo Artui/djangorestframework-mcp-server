@@ -56,8 +56,10 @@ class RedisSSEBroker:
 
     - Same single-subscriber-per-session contract as the in-memory broker
       (re-subscribing replaces the old subscriber's queue).
-    - No message replay; ``Last-Event-ID`` resume is a separate feature
-      tracked in Phase 7c.
+    - Message replay is a separate, opt-in collaborator — pair this with
+      :class:`RedisSSEReplayBuffer` (passed as
+      ``MCPServer(sse_replay_buffer=...)``) for cross-worker
+      ``Last-Event-ID`` resume.
     - The Redis client's lifecycle is the consumer's responsibility — close
       it during ASGI lifespan shutdown.
     """
