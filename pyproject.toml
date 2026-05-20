@@ -38,7 +38,7 @@ classifiers = [
 dependencies = [
     "django>=4.2",
     "djangorestframework>=3.14",
-    "djangorestframework-services==0.11.0",
+    "djangorestframework-services==0.12.0",
     "djangorestframework-dataclasses>=1.3.1",
     # ``typing_extensions.Unpack`` is used at runtime by the strict service /
     # selector Protocols (PEP 692) we re-export from the sister package.
@@ -54,6 +54,10 @@ redis = ["redis>=5.0"]
 otel = ["opentelemetry-api>=1.27"]
 spectacular = ["drf-spectacular>=0.27"]
 filter = ["django-filter>=23"]
+# Pulls in djangorestframework-simplejwt for the SimpleJWTCookieAdapter
+# (rest_framework_mcp.contrib.oauth.adapters.simplejwt_cookie). The
+# adapter is opt-in: configure ``AUTH_USER_ADAPTER`` to enable it.
+jwt = ["djangorestframework-simplejwt>=5.3"]
 
 [project.urls]
 Homepage = "https://github.com/Artui/djangorestframework-mcp-server"
@@ -86,6 +90,7 @@ dev = [
     "opentelemetry-sdk>=1.27",
     "drf-spectacular>=0.27",
     "django-filter>=23",
+    "djangorestframework-simplejwt>=5.3",
 ]
 docs = [
     "mkdocs>=1.6",
@@ -136,7 +141,7 @@ root = ["./rest_framework_mcp"]
 # block under a new dated heading. Run via `uvx bump-my-version` (no
 # permanent dependency added to the project).
 [tool.bumpversion]
-current_version = "0.2.8"
+current_version = "0.3.0"
 allow_dirty = false
 commit = false
 tag = false

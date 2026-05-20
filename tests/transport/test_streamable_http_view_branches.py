@@ -5,11 +5,14 @@ import json
 from django.http import HttpRequest
 from django.test import Client, RequestFactory
 
-from rest_framework_mcp.auth.token_info import TokenInfo
+from rest_framework_mcp.auth.types.token_info import TokenInfo
 from rest_framework_mcp.registry.resource_registry import ResourceRegistry
 from rest_framework_mcp.registry.tool_registry import ToolRegistry
 from rest_framework_mcp.transport.in_memory_session_store import InMemorySessionStore
-from rest_framework_mcp.transport.streamable_http_view import StreamableHttpView
+from rest_framework_mcp.transport.streamable_http_viewset import (
+    STREAMABLE_HTTP_ACTION_MAP,
+    StreamableHttpViewSet,
+)
 
 
 class _DenyAllBackend:
@@ -46,7 +49,8 @@ def test_unauthenticated_response_uses_backend_challenge() -> None:
         content_type="application/json",
     )
 
-    view = StreamableHttpView.as_view(
+    view = StreamableHttpViewSet.as_view(
+        STREAMABLE_HTTP_ACTION_MAP,
         tools=ToolRegistry(),
         resources=ResourceRegistry(),
         auth_backend=_DenyAllBackend(),

@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from rest_framework_mcp.registry.selector_tool_binding import SelectorToolBinding
+from rest_framework_mcp.registry.types.selector_tool_binding import SelectorToolBinding
 from rest_framework_mcp.schema.filterset_schema import filterset_to_schema_properties
 from rest_framework_mcp.schema.input_schema import build_input_schema
 

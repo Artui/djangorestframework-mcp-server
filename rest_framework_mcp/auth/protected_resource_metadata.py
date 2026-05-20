@@ -1,35 +1,48 @@
 from __future__ import annotations
 
-from typing import Any
-
-from django.http import HttpRequest, JsonResponse
 from django.utils.decorators import method_decorator
-from django.views import View
 from django.views.decorators.cache import never_cache
+from rest_framework.permissions import AllowAny
+from rest_framework.renderers import JSONRenderer
+from rest_framework.request import Request
+from rest_framework.response import Response
+from rest_framework.viewsets import ViewSet
 
-from rest_framework_mcp.auth.auth_backend import MCPAuthBackend
+from rest_framework_mcp.auth.types.auth_backend import MCPAuthBackend
 
 
 @method_decorator(never_cache, name="dispatch")
-class ProtectedResourceMetadataView(View):
+class ProtectedResourceMetadataViewSet(ViewSet):
     """RFC 9728 OAuth 2.0 Protected Resource Metadata endpoint.
 
     Mounted at ``/.well-known/oauth-protected-resource`` by :class:`MCPServer`.
+    Single-action ViewSet — the canonical GET is wired as ``list`` via
+    ``ProtectedResourceMetadataViewSet.as_view({"get": "list"}, auth_backend=...)``
+    so the URL conf doesn't need a router.
+
     Delegates payload construction to the configured
-    :class:`MCPAuthBackend.protected_resource_metadata`. The backend is
-    instance-scoped — passed in via ``as_view`` — so multiple servers in one
-    process can advertise different metadata.
+    :meth:`MCPAuthBackend.protected_resource_metadata`, which returns a
+    :class:`ProtectedResourceMetadata` dataclass. The backend is
+    instance-scoped — passed in via ``as_view`` — so multiple servers in
+    one process can advertise different metadata.
+
+    DRF's default authentication / permission / throttling layers are
+    disabled (empty lists below): PRM is a public discovery endpoint by
+    design and the MCP transport owns its own auth pipeline through
+    :class:`MCPAuthBackend`. The renderer is pinned to JSON because the
+    payload shape is RFC-defined; content negotiation would be noise.
     """
 
-    http_method_names = ["get", "head", "options"]
+    authentication_classes: tuple = ()  # noqa: RUF012 — DRF class-level config
+    permission_classes = (AllowAny,)
+    renderer_classes = (JSONRenderer,)
 
     auth_backend: MCPAuthBackend | None = None
 
-    def get(self, request: HttpRequest) -> JsonResponse:
+    def list(self, request: Request) -> Response:  # noqa: ARG002 — DRF action signature
         if self.auth_backend is None:  # pragma: no cover - guarded by MCPServer
-            raise RuntimeError("ProtectedResourceMetadataView is missing an MCPAuthBackend")
-        metadata: dict[str, Any] = self.auth_backend.protected_resource_metadata()
-        return JsonResponse(metadata)
+            raise RuntimeError("ProtectedResourceMetadataViewSet is missing an MCPAuthBackend")
+        return Response(self.auth_backend.protected_resource_metadata().to_dict())
 
 
-__all__ = ["ProtectedResourceMetadataView"]
+__all__ = ["ProtectedResourceMetadataViewSet"]

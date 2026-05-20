@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import dataclasses
 import json
+from collections.abc import Mapping
 from typing import Any, cast
 
 from django.http import HttpRequest
@@ -10,10 +11,15 @@ from rest_framework.parsers import JSONParser
 from rest_framework.request import Request
 from rest_framework_dataclasses.serializers import DataclassSerializer
 
-from rest_framework_mcp.auth.permissions.mcp_permission import MCPPermission
-from rest_framework_mcp.auth.rate_limits.mcp_rate_limit import MCPRateLimit
-from rest_framework_mcp.auth.token_info import TokenInfo
+from rest_framework_mcp.auth.permissions.types.mcp_permission import MCPPermission
+from rest_framework_mcp.auth.rate_limits.types.mcp_rate_limit import MCPRateLimit
+from rest_framework_mcp.auth.types.token_info import TokenInfo
 from rest_framework_mcp.conf import get_setting
+from rest_framework_mcp.constants import (
+    RESERVED_POOL_SEEDS,
+    RESERVED_POST_FETCH_KEYS,
+    UnknownArguments,
+)
 
 
 def build_internal_drf_request(
@@ -93,7 +99,12 @@ def consume_rate_limits(
 
 
 def validate_input_against_serializer(
-    arguments: dict[str, Any], input_serializer: type | None
+    arguments: dict[str, Any],
+    input_serializer: type | None,
+    *,
+    context: Mapping[str, Any] | None = None,
+    unknown_arguments: UnknownArguments = UnknownArguments.REJECT,
+    additional_known_keys: frozenset[str] = frozenset(),
 ) -> Any:
     """Validate ``arguments`` against ``input_serializer`` (DRF or bare dataclass).
 
@@ -106,23 +117,74 @@ def validate_input_against_serializer(
     Raises :class:`drf_serializers.ValidationError` on invalid input. Lifted
     out of the ``handle_tools_call`` module so service-tool and selector-
     tool dispatch can share it without a circular import.
+
+    ``context`` is forwarded to the serializer's ``context=`` dict when
+    supplied — this is how sister-repo's ``spec.input_serializer_context``
+    flows in. ``None`` keeps the DRF default (empty context).
+
+    ``unknown_arguments`` (default :attr:`UnknownArguments.REJECT`) controls
+    what happens to ``arguments`` keys that aren't part of the binding's
+    declared field set. ``additional_known_keys`` lets the caller widen
+    the "known" set beyond the serializer's own fields — selector tools
+    pass in their filter / ordering / pagination keys here, so they're
+    not seen as "unknown".
+
+    Reserved transport-pool seeds (``request`` / ``user`` / ``data``) and
+    selector-tool post-fetch keys (``ordering`` / ``page`` / ``limit``)
+    are always exempted from the unknown-key check; the dispatch
+    pipeline handles them and they never legitimately reach validation
+    as user-typed args.
     """
     if input_serializer is None:
         return None
     target: type = input_serializer
     if dataclasses.is_dataclass(target) and not isinstance(target, type):  # pragma: no cover
         raise TypeError("input_serializer must be a class")
+    serializer_kwargs: dict[str, Any] = {"data": arguments}
+    if context is not None:
+        serializer_kwargs["context"] = dict(context)
     if isinstance(target, type) and dataclasses.is_dataclass(target):
         wrapper_cls: type[drf_serializers.Serializer] = type(
             f"{target.__name__}Serializer",
             (DataclassSerializer,),
             {"Meta": type("Meta", (), {"dataclass": target})},
         )
-        serializer = wrapper_cls(data=arguments)
+        serializer = wrapper_cls(**serializer_kwargs)
     else:
-        serializer = target(data=arguments)
+        serializer = target(**serializer_kwargs)
+
+    declared_fields: set[str] = set(serializer.fields.keys())
+    known: set[str] = (
+        declared_fields
+        | set(additional_known_keys)
+        | RESERVED_POOL_SEEDS
+        | RESERVED_POST_FETCH_KEYS
+    )
+    unknown_keys: set[str] = set(arguments.keys()) - known
+
+    if unknown_keys and unknown_arguments is UnknownArguments.REJECT:
+        offenders: str = ", ".join(sorted(unknown_keys))
+        raise drf_serializers.ValidationError(
+            {"non_field_errors": [f"Unknown argument(s): {offenders}"]}
+        )
+
     serializer.is_valid(raise_exception=True)
-    return serializer.validated_data
+    validated: Any = serializer.validated_data
+
+    # ``PASSTHROUGH``: merge truly-unknown user keys onto the validated
+    # dict. Only meaningful when ``validated`` is dict-shaped (plain
+    # ``Serializer`` output); ``DataclassSerializer`` returns a dataclass
+    # instance which isn't a merge target — those bindings get
+    # ``IGNORE``-equivalent behaviour even under ``PASSTHROUGH``.
+    # Reserved keys (pool seeds, post-fetch) are excluded from the merge
+    # so clients can't poison transport-controlled state.
+    if unknown_keys and unknown_arguments is UnknownArguments.PASSTHROUGH:
+        merge_keys: set[str] = unknown_keys - RESERVED_POOL_SEEDS - RESERVED_POST_FETCH_KEYS
+        if isinstance(validated, dict):
+            for key in merge_keys:
+                validated.setdefault(key, arguments[key])
+
+    return validated
 
 
 def validation_error_data(detail: Any, value: Any) -> dict[str, Any]:

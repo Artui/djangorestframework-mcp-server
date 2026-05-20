@@ -7,13 +7,13 @@ from rest_framework_services.types.service_spec import ServiceSpec
 
 from rest_framework_mcp import MCPServer
 from rest_framework_mcp.auth.backends.allow_any_backend import AllowAnyBackend
-from rest_framework_mcp.handlers.context import MCPCallContext
 from rest_framework_mcp.handlers.handle_resources_list import handle_resources_list
 from rest_framework_mcp.handlers.handle_resources_templates_list import (
     handle_resources_templates_list,
 )
 from rest_framework_mcp.handlers.handle_tools_list import handle_tools_list
-from rest_framework_mcp.protocol.json_rpc_error import JsonRpcError
+from rest_framework_mcp.handlers.types.context import MCPCallContext
+from rest_framework_mcp.protocol.types.json_rpc_error import JsonRpcError
 from rest_framework_mcp.transport.in_memory_session_store import InMemorySessionStore
 
 
@@ -43,7 +43,7 @@ def _build_server() -> MCPServer:
 def _ctx(server: MCPServer) -> MCPCallContext:
     from django.http import HttpRequest
 
-    from rest_framework_mcp.auth.token_info import TokenInfo
+    from rest_framework_mcp.auth.types.token_info import TokenInfo
 
     return MCPCallContext(
         http_request=HttpRequest(),

@@ -65,7 +65,7 @@ def test_prompts_list_and_get_round_trip(jsonrpc, initialized_session: str) -> N
         render=lambda *, who: f"Hello, {who}!",
         arguments=[
             __import__(
-                "rest_framework_mcp.protocol.prompt_argument",
+                "rest_framework_mcp.protocol.types.prompt_argument",
                 fromlist=["PromptArgument"],
             ).PromptArgument(name="who", required=True)
         ],

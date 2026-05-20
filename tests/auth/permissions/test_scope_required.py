@@ -3,7 +3,7 @@ from __future__ import annotations
 from django.http import HttpRequest
 
 from rest_framework_mcp.auth.permissions.scope_required import ScopeRequired
-from rest_framework_mcp.auth.token_info import TokenInfo
+from rest_framework_mcp.auth.types.token_info import TokenInfo
 
 
 def test_scope_required_allows_when_all_present() -> None:

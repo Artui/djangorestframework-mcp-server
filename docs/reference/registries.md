@@ -1,6 +1,6 @@
 # Registries
 
-Tool, resource, and prompt lookup, plus session storage.
+Tool, resource, and prompt lookup, plus session storage and SSE infrastructure.
 
 `ToolBinding` wraps a `ServiceSpec` (mutation tools);
 `SelectorToolBinding` wraps a `SelectorSpec` and carries the read-shaped
@@ -8,13 +8,30 @@ pipeline knobs (`filter_set`, `ordering_fields`, `paginate`). The shared
 `ToolRegistry` accepts either kind and is what `tools/list` and
 `tools/call` iterate.
 
-::: rest_framework_mcp.registry.tool_binding.ToolBinding
-::: rest_framework_mcp.registry.selector_tool_binding.SelectorToolBinding
+::: rest_framework_mcp.registry.types.tool_binding.ToolBinding
+::: rest_framework_mcp.registry.types.selector_tool_binding.SelectorToolBinding
 ::: rest_framework_mcp.registry.tool_registry.ToolRegistry
-::: rest_framework_mcp.registry.resource_binding.ResourceBinding
+::: rest_framework_mcp.registry.types.resource_binding.ResourceBinding
 ::: rest_framework_mcp.registry.resource_registry.ResourceRegistry
-::: rest_framework_mcp.registry.prompt_binding.PromptBinding
+::: rest_framework_mcp.registry.types.prompt_binding.PromptBinding
 ::: rest_framework_mcp.registry.prompt_registry.PromptRegistry
+
+## Bulk registration
+
+`register_tools(server, definitions, *, selector_defaults=None, service_defaults=None)`
+is an additive entry point for registering many tools in one call. Pass
+a list of `ToolDefinition.service(...)` / `ToolDefinition.selector(...)`
+instances plus per-kind `ServiceDefaults` / `SelectorDefaults` that fill
+in fields each definition leaves as `None`. Returns the resulting
+bindings in input order.
+
+::: rest_framework_mcp.registry.register_tools.register_tools
+::: rest_framework_mcp.registry.types.tool_definition.ToolDefinition
+::: rest_framework_mcp.registry.types.service_defaults.ServiceDefaults
+::: rest_framework_mcp.registry.types.selector_defaults.SelectorDefaults
+::: rest_framework_mcp.constants.ToolKind
+::: rest_framework_mcp.constants.UnknownArguments
+::: rest_framework_mcp.constants.ArgumentBinding
 
 ## Selector-tool schema
 
@@ -27,18 +44,18 @@ property generation outside of the registration flow.
 
 ## Session stores
 
-::: rest_framework_mcp.transport.session_store.SessionStore
+::: rest_framework_mcp.transport.types.session_store.SessionStore
 ::: rest_framework_mcp.transport.in_memory_session_store.InMemorySessionStore
 ::: rest_framework_mcp.transport.django_cache_session_store.DjangoCacheSessionStore
 
 ## Server-initiated push
 
-::: rest_framework_mcp.transport.sse_broker.SSEBroker
+::: rest_framework_mcp.transport.types.sse_broker.SSEBroker
 ::: rest_framework_mcp.transport.in_memory_sse_broker.InMemorySSEBroker
 ::: rest_framework_mcp.transport.redis_sse_broker.RedisSSEBroker
 
 ## SSE replay (resume)
 
-::: rest_framework_mcp.transport.sse_replay_buffer.SSEReplayBuffer
+::: rest_framework_mcp.transport.types.sse_replay_buffer.SSEReplayBuffer
 ::: rest_framework_mcp.transport.in_memory_sse_replay_buffer.InMemorySSEReplayBuffer
 ::: rest_framework_mcp.transport.redis_sse_replay_buffer.RedisSSEReplayBuffer

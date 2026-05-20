@@ -2,11 +2,13 @@ from __future__ import annotations
 
 from typing import Any
 
-from rest_framework_mcp.handlers.context import MCPCallContext
+from rest_framework_mcp.conf import get_setting
+from rest_framework_mcp.constants import JsonRpcErrorCode
+from rest_framework_mcp.handlers.is_binding_listable import is_binding_listable
 from rest_framework_mcp.handlers.pagination import paginate
-from rest_framework_mcp.protocol.json_rpc_error import JsonRpcError
-from rest_framework_mcp.protocol.json_rpc_error_code import JsonRpcErrorCode
-from rest_framework_mcp.protocol.prompt import Prompt
+from rest_framework_mcp.handlers.types.context import MCPCallContext
+from rest_framework_mcp.protocol.types.json_rpc_error import JsonRpcError
+from rest_framework_mcp.protocol.types.prompt import Prompt
 
 
 def handle_prompts_list(
@@ -21,8 +23,15 @@ def handle_prompts_list(
     cursor: Any = (params or {}).get("cursor")
     if cursor is not None and not isinstance(cursor, str):
         return JsonRpcError(JsonRpcErrorCode.INVALID_PARAMS, "'cursor' must be a string")
+
+    bindings = list(context.prompts.all())
+    if get_setting("FILTER_LISTINGS_BY_PERMISSIONS"):
+        bindings = [
+            b for b in bindings if is_binding_listable(b, context.http_request, context.token)
+        ]
+
     try:
-        page, next_cursor = paginate(context.prompts.all(), cursor)
+        page, next_cursor = paginate(bindings, cursor)
     except ValueError as exc:
         return JsonRpcError(JsonRpcErrorCode.INVALID_PARAMS, str(exc))
 

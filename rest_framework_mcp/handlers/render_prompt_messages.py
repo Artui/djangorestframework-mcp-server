@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from rest_framework_mcp.protocol.prompt_message import PromptMessage
+from rest_framework_mcp.protocol.types.prompt_message import PromptMessage
 
 
 def normalize_render_result(result: Any) -> list[PromptMessage]:

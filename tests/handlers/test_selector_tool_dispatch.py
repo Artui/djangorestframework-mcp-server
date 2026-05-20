@@ -19,11 +19,11 @@ from rest_framework_services.types.selector_spec import SelectorSpec
 
 from rest_framework_mcp import MCPServer
 from rest_framework_mcp.auth.backends.allow_any_backend import AllowAnyBackend
-from rest_framework_mcp.auth.token_info import TokenInfo
-from rest_framework_mcp.handlers.context import MCPCallContext
+from rest_framework_mcp.auth.types.token_info import TokenInfo
 from rest_framework_mcp.handlers.handle_tools_call import handle_tools_call
 from rest_framework_mcp.handlers.handle_tools_list import handle_tools_list
-from rest_framework_mcp.protocol.json_rpc_error import JsonRpcError
+from rest_framework_mcp.handlers.types.context import MCPCallContext
+from rest_framework_mcp.protocol.types.json_rpc_error import JsonRpcError
 from rest_framework_mcp.transport.in_memory_session_store import InMemorySessionStore
 from tests.testapp.models import Invoice
 from tests.testapp.serializers import InvoiceOutputSerializer
@@ -612,5 +612,27 @@ def test_selector_tool_inputschema_minimal_no_optional_pipeline_knobs() -> None:
     assert isinstance(out, dict)
     schema = out["tools"][0]["inputSchema"]
     # Only the empty input-serializer-derived shape; no filter / ordering /
-    # paginate properties added.
-    assert schema == {"type": "object", "properties": {}}
+    # paginate properties added. ``additionalProperties: false`` reflects
+    # the default ``UnknownArguments.REJECT`` policy.
+    assert schema == {
+        "type": "object",
+        "properties": {},
+        "additionalProperties": False,
+    }
+
+
+@pytest.mark.django_db
+def test_selector_tool_honors_include_structured_content_override() -> None:
+    """The per-binding override threads through the selector dispatch path."""
+    Invoice.objects.create(number="A", amount_cents=100, sent=True)
+    server = _server()
+    server.register_selector_tool(
+        name="invoices.list",
+        spec=SelectorSpec(selector=_list_invoices, output_serializer=InvoiceOutputSerializer),
+        include_structured_content=False,
+    )
+    out = handle_tools_call({"name": "invoices.list", "arguments": {}}, _ctx(server))
+    assert isinstance(out, dict)
+    assert "structuredContent" not in out
+    # The text payload still carries the full result.
+    assert "A" in out["content"][0]["text"]

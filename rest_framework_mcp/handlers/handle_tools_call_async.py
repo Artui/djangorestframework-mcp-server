@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from collections.abc import Mapping
 from typing import Any
 
 from rest_framework import serializers as drf_serializers
@@ -14,25 +15,28 @@ from rest_framework_mcp._compat.utils import (
     arun_service_sync_safe,
 )
 from rest_framework_mcp.conf import get_setting
-from rest_framework_mcp.handlers.context import MCPCallContext
+from rest_framework_mcp.constants import JsonRpcErrorCode, OutputFormat
+from rest_framework_mcp.handlers.build_call_pool import build_call_pool
 from rest_framework_mcp.handlers.handle_tools_call import (
     _render_output,
     _span_attrs,
     _validate_input,
 )
 from rest_framework_mcp.handlers.selector_tool_dispatch import dispatch_selector_tool_async
+from rest_framework_mcp.handlers.types.context import MCPCallContext
 from rest_framework_mcp.handlers.utils import (
     build_internal_drf_request,
     check_permissions,
     consume_rate_limits,
     validation_error_data,
 )
-from rest_framework_mcp.output.format import OutputFormat
+from rest_framework_mcp.output.resolve_include_structured_content import (
+    resolve_include_structured_content,
+)
 from rest_framework_mcp.output.tool_result import build_tool_result
-from rest_framework_mcp.protocol.json_rpc_error import JsonRpcError
-from rest_framework_mcp.protocol.json_rpc_error_code import JsonRpcErrorCode
-from rest_framework_mcp.registry.selector_tool_binding import SelectorToolBinding
-from rest_framework_mcp.server.mcp_service_view import MCPServiceView
+from rest_framework_mcp.protocol.types.json_rpc_error import JsonRpcError
+from rest_framework_mcp.registry.types.selector_tool_binding import SelectorToolBinding
+from rest_framework_mcp.server.types.mcp_service_view import MCPServiceView
 
 
 async def handle_tools_call_async(
@@ -100,8 +104,18 @@ async def handle_tools_call_async(
             context.http_request, user=context.token.user, data=arguments_raw
         )
 
+        input_context: Mapping[str, Any] | None = None
+        if binding.spec.input_serializer_context is not None:
+            input_context_view = MCPServiceView(request=drf_request, action=binding.name)
+            input_context = binding.spec.input_serializer_context(input_context_view, drf_request)
+
         try:
-            validated: Any = _validate_input(arguments_raw, binding.spec)
+            validated: Any = _validate_input(
+                arguments_raw,
+                binding.spec,
+                context=input_context,
+                unknown_arguments=binding.unknown_arguments,
+            )
         except drf_serializers.ValidationError as exc:
             return JsonRpcError(
                 JsonRpcErrorCode.INVALID_PARAMS,
@@ -109,16 +123,13 @@ async def handle_tools_call_async(
                 data=validation_error_data(exc.detail, arguments_raw),
             )
 
-        pool: dict[str, Any] = {
-            "request": drf_request,
-            "user": context.token.user,
-            "data": validated,
-        }
-        if binding.spec.kwargs is not None:
-            view = MCPServiceView(request=drf_request, action=binding.name)
-            # Provider is typed as a sync callable on ``ServiceSpec``; running it
-            # on the event loop is fine — providers are documented as cheap.
-            pool.update(binding.spec.kwargs(view, drf_request))
+        pool: dict[str, Any] = build_call_pool(
+            binding,
+            drf_request=drf_request,
+            user=context.token.user,
+            validated=validated,
+            arguments_raw=arguments_raw,
+        )
 
         try:
             kwargs: dict[str, Any] = resolve_callable_kwargs(binding.spec.service, pool)
@@ -151,11 +162,23 @@ async def handle_tools_call_async(
             )
             result = await arun_selector_sync_safe(binding.spec.output_selector, sel_kwargs)
 
-        payload: Any = _render_output(result, binding.spec)
+        output_context: Mapping[str, Any] | None = None
+        if binding.spec.output_serializer_context is not None:
+            output_context_view = MCPServiceView(request=drf_request, action=binding.name)
+            output_context = binding.spec.output_serializer_context(
+                output_context_view, drf_request
+            )
+        payload: Any = _render_output(result, binding.spec, context=output_context)
         output_format: OutputFormat = OutputFormat.coerce(
             params.get("outputFormat") or binding.output_format
         )
-        return build_tool_result(payload, output_format=output_format).to_dict()
+        return build_tool_result(
+            payload,
+            output_format=output_format,
+            include_structured_content=resolve_include_structured_content(
+                binding.include_structured_content
+            ),
+        ).to_dict()
 
 
 __all__ = ["handle_tools_call_async"]

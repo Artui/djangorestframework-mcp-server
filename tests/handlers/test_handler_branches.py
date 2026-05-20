@@ -7,17 +7,18 @@ from django.http import HttpRequest
 from rest_framework_services.exceptions.service_validation_error import ServiceValidationError
 from rest_framework_services.types.service_spec import ServiceSpec
 
-from rest_framework_mcp.auth.token_info import TokenInfo
-from rest_framework_mcp.handlers.context import MCPCallContext
+from rest_framework_mcp.auth.types.token_info import TokenInfo
 from rest_framework_mcp.handlers.handle_resources_read import handle_resources_read
 from rest_framework_mcp.handlers.handle_tools_call import handle_tools_call
+from rest_framework_mcp.handlers.handle_tools_list import handle_tools_list
+from rest_framework_mcp.handlers.types.context import MCPCallContext
 from rest_framework_mcp.handlers.utils import check_permissions
-from rest_framework_mcp.protocol.json_rpc_error import JsonRpcError
+from rest_framework_mcp.protocol.types.json_rpc_error import JsonRpcError
 from rest_framework_mcp.registry.prompt_registry import PromptRegistry
-from rest_framework_mcp.registry.resource_binding import ResourceBinding
 from rest_framework_mcp.registry.resource_registry import ResourceRegistry
-from rest_framework_mcp.registry.tool_binding import ToolBinding
 from rest_framework_mcp.registry.tool_registry import ToolRegistry
+from rest_framework_mcp.registry.types.resource_binding import ResourceBinding
+from rest_framework_mcp.registry.types.tool_binding import ToolBinding
 
 
 @dataclass
@@ -220,3 +221,188 @@ def test_check_permissions_empty_tuple() -> None:
     allowed, scopes = check_permissions((), HttpRequest(), TokenInfo(user=None))
     assert allowed is True
     assert scopes == []
+
+
+def test_tools_call_omits_structured_content_when_global_disabled(settings) -> None:
+    settings.REST_FRAMEWORK_MCP = {"INCLUDE_STRUCTURED_CONTENT": False}
+
+    def svc() -> dict[str, Any]:
+        return {"a": 1}
+
+    tools = ToolRegistry()
+    tools.register(
+        ToolBinding(name="t", description=None, spec=ServiceSpec(service=svc, atomic=False))
+    )
+    out = handle_tools_call({"name": "t", "arguments": {}}, _ctx(tools))
+    assert isinstance(out, dict)
+    assert "structuredContent" not in out
+    # The text rendering still carries the payload.
+    assert "a" in out["content"][0]["text"]
+
+
+def test_tools_call_per_binding_override_forces_off_when_global_on(settings) -> None:
+    settings.REST_FRAMEWORK_MCP = {"INCLUDE_STRUCTURED_CONTENT": True}
+
+    def svc() -> dict[str, Any]:
+        return {"a": 1}
+
+    tools = ToolRegistry()
+    tools.register(
+        ToolBinding(
+            name="t",
+            description=None,
+            spec=ServiceSpec(service=svc, atomic=False),
+            include_structured_content=False,
+        )
+    )
+    out = handle_tools_call({"name": "t", "arguments": {}}, _ctx(tools))
+    assert isinstance(out, dict)
+    assert "structuredContent" not in out
+
+
+def test_tools_call_per_binding_override_forces_on_when_global_off(settings) -> None:
+    settings.REST_FRAMEWORK_MCP = {"INCLUDE_STRUCTURED_CONTENT": False}
+
+    def svc() -> dict[str, Any]:
+        return {"a": 1}
+
+    tools = ToolRegistry()
+    tools.register(
+        ToolBinding(
+            name="t",
+            description=None,
+            spec=ServiceSpec(service=svc, atomic=False),
+            include_structured_content=True,
+        )
+    )
+    out = handle_tools_call({"name": "t", "arguments": {}}, _ctx(tools))
+    assert isinstance(out, dict)
+    assert out["structuredContent"] == {"a": 1}
+
+
+def test_tools_list_drops_output_schema_when_structured_content_disabled(settings) -> None:
+    """Spec: if outputSchema is declared, structuredContent MUST be returned.
+
+    So when we opt out of structuredContent, the outputSchema announcement
+    must drop too — otherwise we'd advertise a contract we then break.
+    """
+    from rest_framework import serializers as drf_serializers
+
+    class _Ser(drf_serializers.Serializer):
+        a = drf_serializers.IntegerField()
+
+    def svc() -> dict[str, Any]:
+        return {"a": 1}
+
+    tools = ToolRegistry()
+    tools.register(
+        ToolBinding(
+            name="t",
+            description=None,
+            spec=ServiceSpec(service=svc, output_serializer=_Ser, atomic=False),
+            include_structured_content=False,
+        )
+    )
+    out = handle_tools_list(None, _ctx(tools))
+    assert isinstance(out, dict)
+    tool = out["tools"][0]
+    assert "outputSchema" not in tool
+
+
+def test_tools_list_emits_output_schema_when_structured_content_enabled() -> None:
+    """The default path still ships outputSchema when an output_serializer exists."""
+    from rest_framework import serializers as drf_serializers
+
+    class _Ser(drf_serializers.Serializer):
+        a = drf_serializers.IntegerField()
+
+    def svc() -> dict[str, Any]:
+        return {"a": 1}
+
+    tools = ToolRegistry()
+    tools.register(
+        ToolBinding(
+            name="t",
+            description=None,
+            spec=ServiceSpec(service=svc, output_serializer=_Ser, atomic=False),
+        )
+    )
+    out = handle_tools_list(None, _ctx(tools))
+    assert isinstance(out, dict)
+    tool = out["tools"][0]
+    assert "outputSchema" in tool
+
+
+# ---------- argument_binding: native parameter binding (Phase 10a) ----------
+
+
+def test_service_tool_with_merge_binding_spreads_args_to_callable_params() -> None:
+    """``ArgumentBinding.MERGE`` lets a service declare individual params."""
+    from rest_framework_mcp.constants import ArgumentBinding
+
+    def svc(*, project_id: str, expand: bool = False) -> dict[str, Any]:
+        return {"pid": project_id, "expand": expand}
+
+    tools = ToolRegistry()
+    tools.register(
+        ToolBinding(
+            name="t",
+            description=None,
+            spec=ServiceSpec(service=svc, atomic=False),
+            argument_binding=ArgumentBinding.MERGE,
+        )
+    )
+    out = handle_tools_call(
+        {"name": "t", "arguments": {"project_id": "p1", "expand": True}}, _ctx(tools)
+    )
+    assert isinstance(out, dict)
+    assert out["structuredContent"] == {"pid": "p1", "expand": True}
+
+
+def test_service_tool_with_replace_binding_lets_client_override_provider() -> None:
+    from rest_framework_mcp.constants import ArgumentBinding
+
+    def provider(view: Any, request: Any) -> dict[str, Any]:  # noqa: ARG001
+        return {"page_size": 50}
+
+    def svc(*, page_size: int) -> dict[str, int]:
+        return {"got": page_size}
+
+    tools = ToolRegistry()
+    tools.register(
+        ToolBinding(
+            name="t",
+            description=None,
+            spec=ServiceSpec(service=svc, atomic=False, kwargs=provider),
+            argument_binding=ArgumentBinding.REPLACE,
+        )
+    )
+    out = handle_tools_call({"name": "t", "arguments": {"page_size": 200}}, _ctx(tools))
+    assert isinstance(out, dict)
+    assert out["structuredContent"] == {"got": 200}
+
+
+def test_service_tool_merge_pool_seeds_cannot_be_overridden_by_client() -> None:
+    """Reserved pool-seed keys (``user`` / ``request`` / ``data``) are stripped from spread."""
+    from rest_framework_mcp.constants import ArgumentBinding
+
+    received: dict[str, Any] = {}
+
+    def svc(*, user: Any, ok: int) -> dict[str, Any]:
+        received["user"] = user
+        received["ok"] = ok
+        return {}
+
+    tools = ToolRegistry()
+    tools.register(
+        ToolBinding(
+            name="t",
+            description=None,
+            spec=ServiceSpec(service=svc, atomic=False),
+            argument_binding=ArgumentBinding.MERGE,
+        )
+    )
+    handle_tools_call({"name": "t", "arguments": {"user": "evil", "ok": 1}}, _ctx(tools))
+    # User came from the transport (None in test), not from the client.
+    assert received["user"] is None
+    assert received["ok"] == 1

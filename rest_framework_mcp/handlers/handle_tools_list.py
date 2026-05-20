@@ -2,12 +2,17 @@ from __future__ import annotations
 
 from typing import Any
 
-from rest_framework_mcp.handlers.context import MCPCallContext
+from rest_framework_mcp.conf import get_setting
+from rest_framework_mcp.constants import JsonRpcErrorCode, UnknownArguments
+from rest_framework_mcp.handlers.is_binding_listable import is_binding_listable
 from rest_framework_mcp.handlers.pagination import paginate
-from rest_framework_mcp.protocol.json_rpc_error import JsonRpcError
-from rest_framework_mcp.protocol.json_rpc_error_code import JsonRpcErrorCode
-from rest_framework_mcp.protocol.tool import Tool
-from rest_framework_mcp.registry.selector_tool_binding import SelectorToolBinding
+from rest_framework_mcp.handlers.types.context import MCPCallContext
+from rest_framework_mcp.output.resolve_include_structured_content import (
+    resolve_include_structured_content,
+)
+from rest_framework_mcp.protocol.types.json_rpc_error import JsonRpcError
+from rest_framework_mcp.protocol.types.tool import Tool
+from rest_framework_mcp.registry.types.selector_tool_binding import SelectorToolBinding
 from rest_framework_mcp.schema.input_schema import build_input_schema
 from rest_framework_mcp.schema.output_schema import build_output_schema
 from rest_framework_mcp.schema.selector_tool_schema import build_selector_tool_input_schema
@@ -29,8 +34,18 @@ def handle_tools_list(
     cursor: Any = (params or {}).get("cursor")
     if cursor is not None and not isinstance(cursor, str):
         return JsonRpcError(JsonRpcErrorCode.INVALID_PARAMS, "'cursor' must be a string")
+
+    # Per-caller visibility filter (Phase 10g): when enabled, drop bindings
+    # the current token can't invoke before paginating, so ``nextCursor``
+    # reflects the visible slice rather than the full registry.
+    bindings = list(context.tools.all())
+    if get_setting("FILTER_LISTINGS_BY_PERMISSIONS"):
+        bindings = [
+            b for b in bindings if is_binding_listable(b, context.http_request, context.token)
+        ]
+
     try:
-        page, next_cursor = paginate(context.tools.all(), cursor)
+        page, next_cursor = paginate(bindings, cursor)
     except ValueError as exc:
         return JsonRpcError(JsonRpcErrorCode.INVALID_PARAMS, str(exc))
 
@@ -43,12 +58,31 @@ def handle_tools_list(
             input_schema = build_selector_tool_input_schema(binding)
         else:
             input_schema = build_input_schema(binding.spec.input_serializer)
+        # Stamp ``additionalProperties`` per the binding's unknown-argument
+        # policy. ``REJECT`` declares the schema as closed; ``PASSTHROUGH``
+        # and ``IGNORE`` keep it open. ``build_input_schema`` and
+        # ``build_selector_tool_input_schema`` always return a
+        # ``"type": "object"`` shape, so this stamps every emitted schema.
+        input_schema = dict(input_schema)
+        input_schema["additionalProperties"] = (
+            binding.unknown_arguments is not UnknownArguments.REJECT
+        )
+        # Per the MCP tools spec: if a tool declares ``outputSchema``, the
+        # server MUST return conforming ``structuredContent`` on every call.
+        # When the binding is configured to omit ``structuredContent`` we
+        # also drop ``outputSchema`` so the two stay in lockstep — otherwise
+        # we'd be advertising a contract we then refuse to honor.
+        emit_output_schema: bool = resolve_include_structured_content(
+            binding.include_structured_content
+        )
         tool = Tool(
             name=binding.name,
             description=binding.description,
             title=binding.title,
             input_schema=input_schema,
-            output_schema=build_output_schema(binding.spec.output_serializer),
+            output_schema=(
+                build_output_schema(binding.spec.output_serializer) if emit_output_schema else None
+            ),
             annotations=dict(binding.annotations) or None,
         )
         tools.append(tool.to_dict())

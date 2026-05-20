@@ -5,7 +5,7 @@ from typing import Any
 from django.http import HttpRequest
 
 from rest_framework_mcp.auth.permissions.django_perm_required import DjangoPermRequired
-from rest_framework_mcp.auth.token_info import TokenInfo
+from rest_framework_mcp.auth.types.token_info import TokenInfo
 
 
 class _AnonUser:

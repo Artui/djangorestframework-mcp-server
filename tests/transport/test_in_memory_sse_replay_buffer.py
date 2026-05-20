@@ -3,7 +3,7 @@ from __future__ import annotations
 import pytest
 
 from rest_framework_mcp.transport.in_memory_sse_replay_buffer import InMemorySSEReplayBuffer
-from rest_framework_mcp.transport.sse_replay_buffer import SSEReplayBuffer
+from rest_framework_mcp.transport.types.sse_replay_buffer import SSEReplayBuffer
 
 
 async def _drain(it) -> list[tuple[str, object]]:

@@ -107,6 +107,42 @@ def test_call_without_protocol_version_returns_400(client: Client) -> None:
     assert response.status_code == 400
 
 
+def test_call_without_protocol_version_accepted_when_disabled(
+    client: Client, initialized_session: str, settings
+) -> None:
+    """Setting REQUIRE_PROTOCOL_VERSION_HEADER=False lets header-omitting clients through."""
+    settings.REST_FRAMEWORK_MCP = {
+        **settings.REST_FRAMEWORK_MCP,
+        "REQUIRE_PROTOCOL_VERSION_HEADER": False,
+    }
+    response = client.post(
+        "/mcp/",
+        data=json.dumps({"jsonrpc": "2.0", "id": 1, "method": "tools/list"}),
+        content_type="application/json",
+        HTTP_MCP_SESSION_ID=initialized_session,
+    )
+    assert response.status_code == 200
+    assert "result" in response.json()
+
+
+def test_call_with_unsupported_version_still_rejected_when_disabled(
+    client: Client, initialized_session: str, settings
+) -> None:
+    """A present-but-unsupported version still 400s even with the relaxation on."""
+    settings.REST_FRAMEWORK_MCP = {
+        **settings.REST_FRAMEWORK_MCP,
+        "REQUIRE_PROTOCOL_VERSION_HEADER": False,
+    }
+    response = client.post(
+        "/mcp/",
+        data=json.dumps({"jsonrpc": "2.0", "id": 1, "method": "tools/list"}),
+        content_type="application/json",
+        HTTP_MCP_SESSION_ID=initialized_session,
+        HTTP_MCP_PROTOCOL_VERSION="9999-99-99",
+    )
+    assert response.status_code == 400
+
+
 def test_unknown_method_returns_method_not_found(jsonrpc, initialized_session: str) -> None:
     response = jsonrpc("not/a/real/method", {}, session_id=initialized_session)
     body = response.json()

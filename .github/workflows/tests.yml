@@ -179,6 +179,26 @@ jobs:
           with span("mcp.smoke") as s:
               s.set_attribute("k", "v")
 
+          # The OAuth contrib mount imports fine without ``oauth2_provider``;
+          # ``DynamicClientRegistrationViewSet`` only requires DOT when DCR is
+          # enabled and a request reaches the handler.
+          from rest_framework_mcp.contrib.oauth import (
+              AuthorizationServerMetadataViewSet,  # noqa: F401
+              DynamicClientRegistrationViewSet,  # noqa: F401
+              OpenIDDiscoveryViewSet,  # noqa: F401
+              build_oauth_urlpatterns,
+          )
+          patterns = build_oauth_urlpatterns(server=server, include_dcr=True)
+          assert any("oauth/register/" in str(p.pattern) for p in patterns)
+
+          # The SimpleJWT cookie adapter module imports fine without
+          # ``djangorestframework-simplejwt``; the ImportError only fires
+          # when an actual request reaches ``hydrate()`` with a cookie set.
+          from rest_framework_mcp.contrib.oauth.adapters.simplejwt_cookie import (
+              SimpleJWTCookieAdapter,
+          )
+          SimpleJWTCookieAdapter()  # constructor must not raise
+
           print("SMOKE OK")
           PY
 

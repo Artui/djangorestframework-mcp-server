@@ -7,7 +7,7 @@ from typing import Any
 from django.core.cache import cache
 from django.http import HttpRequest
 
-from rest_framework_mcp.auth.token_info import TokenInfo
+from rest_framework_mcp.auth.types.token_info import TokenInfo
 
 # Sentinel indicating the limiter should derive a per-token key. Custom
 # ``key`` callables can produce any string — common patterns are per-user,

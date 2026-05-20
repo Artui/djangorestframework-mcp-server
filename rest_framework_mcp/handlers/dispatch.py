@@ -3,7 +3,7 @@ from __future__ import annotations
 from collections.abc import Callable
 from typing import Any
 
-from rest_framework_mcp.handlers.context import MCPCallContext
+from rest_framework_mcp.constants import JsonRpcErrorCode
 from rest_framework_mcp.handlers.handle_initialize import handle_initialize
 from rest_framework_mcp.handlers.handle_ping import handle_ping
 from rest_framework_mcp.handlers.handle_prompts_get import handle_prompts_get
@@ -15,9 +15,9 @@ from rest_framework_mcp.handlers.handle_resources_templates_list import (
 )
 from rest_framework_mcp.handlers.handle_tools_call import handle_tools_call
 from rest_framework_mcp.handlers.handle_tools_list import handle_tools_list
-from rest_framework_mcp.protocol.initialize_result import InitializeResult
-from rest_framework_mcp.protocol.json_rpc_error import JsonRpcError
-from rest_framework_mcp.protocol.json_rpc_error_code import JsonRpcErrorCode
+from rest_framework_mcp.handlers.types.context import MCPCallContext
+from rest_framework_mcp.protocol.types.initialize_result import InitializeResult
+from rest_framework_mcp.protocol.types.json_rpc_error import JsonRpcError
 
 # Method dispatch table. The values return either:
 #   - a result payload (anything JSON-encodable),

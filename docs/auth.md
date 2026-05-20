@@ -5,11 +5,13 @@ that someone else issued. The library does not implement a token issuer (that's
 the job of an Authorization Server / IDP). It does ship two backends and the
 RFC 9728 metadata endpoint clients use to discover them.
 
-!!! tip "v1 scope"
-    The library does not implement Dynamic Client Registration (DCR) itself.
-    The two recipes below show how to make DCR or Client ID Metadata Documents
-    work with your existing Authorization Server — both spec-compliant and
-    sufficient for modern MCP clients.
+!!! tip "OAuth contrib mount"
+    The core `MCPServer.urls` exposes only the spec-mandated PRM endpoint.
+    For deployments that want the full discovery + DCR matrix without
+    fronting their own AS, `rest_framework_mcp.contrib.oauth.build_oauth_urlpatterns`
+    bundles RFC 8414 AS metadata, OIDC discovery, RFC 7591 Dynamic Client
+    Registration, and the alias paths different LLM hosts probe. See
+    [OAuth contrib mount](#oauth-contrib-mount) below.
 
 ## The pieces
 
@@ -131,6 +133,45 @@ class TenantMatches:
 `required_scopes()` is what gets surfaced in the `WWW-Authenticate` header on
 denial — return `[]` if there's nothing scope-shaped to advertise.
 
+### Reusing DRF `BasePermission` classes
+
+If a permission class already exists as a DRF `BasePermission` (e.g. one
+shared with your HTTP transport), wrap it with `DRFPermissionAdapter`
+rather than rewriting it for MCP:
+
+```python
+from rest_framework.permissions import DjangoModelPermissions
+from rest_framework_mcp import DRFPermissionAdapter
+
+server.register_service_tool(
+    name="invoices.create",
+    spec=ServiceSpec(service=create_invoice),
+    permissions=[DRFPermissionAdapter(DjangoModelPermissions)],
+)
+```
+
+`ServiceSpec` / `SelectorSpec` from sister-repo 0.12.0 also carry a
+`permission_classes` attribute. Any DRF permission classes declared on
+the spec are auto-wrapped and prepended to the per-binding `permissions`
+tuple — the same spec that backs your HTTP view governs the MCP binding
+without you restating the contract at the MCP call site.
+
+### Filtering listings by permissions
+
+By default `tools/list`, `resources/list`, `resources/templates/list`,
+and `prompts/list` return every registered binding regardless of whether
+the current caller could invoke it. Set
+`REST_FRAMEWORK_MCP["FILTER_LISTINGS_BY_PERMISSIONS"] = True` to drop
+bindings whose permissions deny the caller before paginating.
+
+This is **binding-level** gating — permissions are evaluated against a
+synthetic data-less request, so a permission whose decision depends on
+the call arguments will conservatively deny at list time. Mark such a
+binding with `always_listed=True` to keep it visible as a discovery aid;
+the permission still gates the actual invocation. Custom permissions can
+declare an `is_listable(token)` method to override the list-time check
+independently of `has_permission(request, token)`.
+
 ## Audience binding (RFC 8707)
 
 `DjangoOAuthToolkitBackend` enforces RFC 8707 audience binding when
@@ -163,6 +204,57 @@ binding happens at an upstream gateway.
     Token audiences are URLs, not patterns. Substring matches and prefix
     matches are unsafe (a token bound to `…/mcp` would otherwise satisfy a
     server expecting `…/mcp-admin`). The implementation enforces equality only.
+
+## OAuth contrib mount
+
+`rest_framework_mcp.contrib.oauth.build_oauth_urlpatterns(server, *,
+include_dcr=False, include_aliases=True, include_openid_discovery=True)`
+returns URL patterns ready to mount alongside your server. It exposes the
+full set of discovery endpoints LLM hosts probe so MCP clients (Claude
+Desktop, Inspector, the various MCP-aware editors) can walk the auth
+flow without you running a separate AS-facing service:
+
+| Endpoint | Source |
+| --- | --- |
+| `/.well-known/oauth-authorization-server` | RFC 8414 AS metadata |
+| `/.well-known/openid-configuration` | OIDC discovery (alias / minimal payload) |
+| `/oauth/register/` (and aliases) | RFC 7591 Dynamic Client Registration |
+| `/oauth/authorize/` | DOT's `AuthorizationView` (proxied so the user-adapter hook runs) |
+
+Aliases render the canonical payload — they are not HTTP redirects.
+
+```python title="urls.py"
+from django.urls import path
+
+from invoices.mcp import server
+from rest_framework_mcp.contrib.oauth import build_oauth_urlpatterns
+
+urlpatterns = [
+    *build_oauth_urlpatterns(server, include_dcr=True),
+    path("mcp/", server.urls),
+]
+```
+
+DCR is gated behind two settings — defaults are deliberately
+conservative so an accidental mount doesn't auto-register clients:
+
+```python
+REST_FRAMEWORK_MCP = {
+    "DCR_ENABLED": True,
+    "DCR_INITIAL_ACCESS_TOKEN": "share-this-with-trusted-clients",  # optional
+    # ... AUTH_BACKEND, SERVER_INFO, etc.
+}
+```
+
+When `DCR_ENABLED` is `False` the DCR endpoint returns `501 Not
+Implemented`. When `DCR_INITIAL_ACCESS_TOKEN` is set, POST requests must
+present it as a bearer — per RFC 7591 §3.
+
+The contrib mount also surfaces AS metadata, so `AllowAnyBackend`
+deployments (which have no AS) return `501 Not Implemented` on the AS
+metadata endpoints rather than serving a fake payload. Use
+`DjangoOAuthToolkitBackend` (or another backend that implements
+`authorization_server_metadata()`) in production.
 
 ## Recipe: bring-your-own AS via django-oauth-toolkit
 

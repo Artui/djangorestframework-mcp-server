@@ -8,7 +8,7 @@ from typing import Any
 from django.core.cache import cache
 from django.http import HttpRequest
 
-from rest_framework_mcp.auth.token_info import TokenInfo
+from rest_framework_mcp.auth.types.token_info import TokenInfo
 
 # Token-bucket key namespace. Distinct from the fixed/sliding-window prefixes
 # so operators can spot the scheme at a glance in cache keyspaces.

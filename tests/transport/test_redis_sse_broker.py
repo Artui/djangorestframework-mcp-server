@@ -118,7 +118,7 @@ async def test_custom_channel_prefix_isolates_brokers() -> None:
 
 async def test_redis_broker_satisfies_protocol() -> None:
     """``RedisSSEBroker`` is structurally a :class:`SSEBroker`."""
-    from rest_framework_mcp.transport.sse_broker import SSEBroker
+    from rest_framework_mcp.transport.types.sse_broker import SSEBroker
 
     client = _client()
     broker = RedisSSEBroker(client)

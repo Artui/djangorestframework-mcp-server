@@ -1,22 +1,24 @@
 from __future__ import annotations
 
+from collections.abc import Mapping
 from dataclasses import dataclass
 from typing import Any
 
 from django.http import HttpRequest
+from rest_framework import serializers as drf_serializers
 from rest_framework_services.exceptions.service_validation_error import ServiceValidationError
 from rest_framework_services.types.service_spec import ServiceSpec
 
-from rest_framework_mcp.auth.token_info import TokenInfo
-from rest_framework_mcp.handlers.context import MCPCallContext
+from rest_framework_mcp.auth.types.token_info import TokenInfo
 from rest_framework_mcp.handlers.handle_resources_read_async import handle_resources_read_async
 from rest_framework_mcp.handlers.handle_tools_call_async import handle_tools_call_async
-from rest_framework_mcp.protocol.json_rpc_error import JsonRpcError
+from rest_framework_mcp.handlers.types.context import MCPCallContext
+from rest_framework_mcp.protocol.types.json_rpc_error import JsonRpcError
 from rest_framework_mcp.registry.prompt_registry import PromptRegistry
-from rest_framework_mcp.registry.resource_binding import ResourceBinding
 from rest_framework_mcp.registry.resource_registry import ResourceRegistry
-from rest_framework_mcp.registry.tool_binding import ToolBinding
 from rest_framework_mcp.registry.tool_registry import ToolRegistry
+from rest_framework_mcp.registry.types.resource_binding import ResourceBinding
+from rest_framework_mcp.registry.types.tool_binding import ToolBinding
 
 
 @dataclass
@@ -227,8 +229,8 @@ async def test_async_resources_read_passes_through_when_no_serializer() -> None:
 async def test_async_dispatch_routes_prompts_get_to_async_handler() -> None:
     """``adispatch`` recognises ``prompts/get`` and routes to the async handler."""
     from rest_framework_mcp.handlers.async_dispatch import adispatch
-    from rest_framework_mcp.registry.prompt_binding import PromptBinding
     from rest_framework_mcp.registry.prompt_registry import PromptRegistry
+    from rest_framework_mcp.registry.types.prompt_binding import PromptBinding
 
     prompts = PromptRegistry()
     prompts.register(PromptBinding(name="p", description=None, render=lambda **_: "ok"))
@@ -256,3 +258,91 @@ async def test_async_resources_read_runs_async_selector_natively() -> None:
     out = await handle_resources_read_async({"uri": "r://9"}, _ctx(ToolRegistry(), resources))
     assert isinstance(out, dict)
     assert '"async": true' in out["contents"][0]["text"]
+
+
+async def test_async_tools_call_honors_include_structured_content_override() -> None:
+    """The per-binding override threads through the async dispatch path."""
+
+    def svc() -> dict[str, Any]:
+        return {"a": 1}
+
+    tools = ToolRegistry()
+    tools.register(
+        ToolBinding(
+            name="t",
+            description=None,
+            spec=ServiceSpec(service=svc, atomic=False),
+            include_structured_content=False,
+        )
+    )
+    out = await handle_tools_call_async({"name": "t", "arguments": {}}, _ctx(tools))
+    assert isinstance(out, dict)
+    assert "structuredContent" not in out
+
+
+# ---------- spec context plumbing (sister-repo 0.12+) ----------
+
+
+async def test_async_input_serializer_context_flows_into_validation() -> None:
+    received: dict[str, Any] = {}
+
+    class _CtxAwareInput(drf_serializers.Serializer):
+        x = drf_serializers.IntegerField()
+
+        def validate(self, attrs: dict[str, Any]) -> dict[str, Any]:
+            received.update(self.context)
+            return attrs
+
+    def svc(*, data: dict[str, Any]) -> dict[str, Any]:
+        return {"got": data["x"]}
+
+    def ctx_provider(view: Any, request: Any) -> Mapping[str, Any]:  # noqa: ARG001
+        return {"k": "v"}
+
+    tools = ToolRegistry()
+    tools.register(
+        ToolBinding(
+            name="t",
+            description=None,
+            spec=ServiceSpec(
+                service=svc,
+                input_serializer=_CtxAwareInput,
+                input_serializer_context=ctx_provider,
+                atomic=False,
+            ),
+        )
+    )
+    out = await handle_tools_call_async({"name": "t", "arguments": {"x": 1}}, _ctx(tools))
+    assert isinstance(out, dict)
+    assert received == {"k": "v"}
+
+
+async def test_async_output_serializer_context_flows_into_render() -> None:
+    class _Out(drf_serializers.Serializer):
+        tag = drf_serializers.SerializerMethodField()
+
+        def get_tag(self, _: Any) -> str:
+            return self.context["who"]
+
+    def svc() -> dict[str, str]:
+        return {}
+
+    def ctx_provider(view: Any, request: Any) -> Mapping[str, Any]:  # noqa: ARG001
+        return {"who": "async"}
+
+    tools = ToolRegistry()
+    tools.register(
+        ToolBinding(
+            name="t",
+            description=None,
+            spec=ServiceSpec(
+                service=svc,
+                output_serializer=_Out,
+                output_serializer_context=ctx_provider,
+                atomic=False,
+            ),
+        )
+    )
+    out = await handle_tools_call_async({"name": "t", "arguments": {}}, _ctx(tools))
+    assert isinstance(out, dict)
+    assert out["structuredContent"] == {"tag": "async"}
