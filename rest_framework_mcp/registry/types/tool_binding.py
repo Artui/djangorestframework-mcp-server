@@ -4,6 +4,7 @@ from collections.abc import Callable
 from dataclasses import dataclass, field
 from typing import Any, Generic, TypeVar
 
+from django.core.exceptions import ImproperlyConfigured
 from rest_framework_services.types.service_spec import ServiceSpec
 
 from rest_framework_mcp.constants import ArgumentBinding, OutputFormat, UnknownArguments
@@ -43,6 +44,14 @@ class ToolBinding(Generic[InputT, ResultT, ExtraT]):
     # to the ``INCLUDE_STRUCTURED_CONTENT`` setting; ``True`` / ``False``
     # force the behavior regardless of the global.
     include_structured_content: bool | None = None
+    # Tri-state override for whether this tool's ``tools/list`` entry
+    # carries an ``outputSchema``. ``None`` (the default) defers to the
+    # ``INCLUDE_OUTPUT_SCHEMA`` setting; ``True`` / ``False`` force the
+    # behavior regardless of the global. The MCP spec forbids advertising
+    # ``outputSchema`` while suppressing ``structuredContent``, so setting
+    # ``include_output_schema=True`` with ``include_structured_content=False``
+    # is rejected at construction time.
+    include_output_schema: bool | None = None
     # How MCP ``arguments`` flow into the kwarg pool. Defaults to
     # ``DATA_ONLY`` for service tools: mutation services typically take
     # a single ``input_serializer``-validated ``data`` payload, so
@@ -62,6 +71,15 @@ class ToolBinding(Generic[InputT, ResultT, ExtraT]):
     # back into the listing — useful as a discovery aid for admin tools
     # the caller can see but not invoke (``tools/call`` still 403s).
     always_listed: bool = False
+
+    def __post_init__(self) -> None:
+        if self.include_output_schema is True and self.include_structured_content is False:
+            raise ImproperlyConfigured(
+                f"Tool {self.name!r}: include_output_schema=True is incompatible "
+                "with include_structured_content=False. The MCP spec requires that "
+                "any tool advertising outputSchema also return conforming "
+                "structuredContent. Set one of them differently."
+            )
 
     @property
     def service(self) -> Callable[..., ResultT]:

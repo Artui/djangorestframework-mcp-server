@@ -314,26 +314,43 @@ If TOON is requested but the optional extra is missing, the encoder falls back
 to JSON with a `warnings.warn` — a tool call never fails because an optional
 extra is absent.
 
-### Omitting `structuredContent`
+### Omitting `structuredContent` and `outputSchema`
 
-`structuredContent` is optional per the spec. Some clients echo both
-`content[0]` and `structuredContent` back to the LLM (doubling token usage on
-every tool call) or have bugs parsing the field. Two opt-outs:
+`structuredContent` and `outputSchema` are independently toggleable. The MCP
+spec (2025-06-18, SEP-1624) imposes one asymmetric rule: a tool that
+advertises `outputSchema` **must** return conforming `structuredContent`. The
+reverse — emitting `structuredContent` without an `outputSchema` — is
+allowed.
 
-- Server-wide: set `REST_FRAMEWORK_MCP["INCLUDE_STRUCTURED_CONTENT"] = False`.
-- Per tool: pass `include_structured_content=False` to `register_service_tool`,
-  `register_selector_tool`, or their decorator forms. The per-tool kwarg is
-  tri-state — `None` (default) inherits the global, `True`/`False` force the
-  behavior regardless of the setting.
+Two server-wide settings, both default `True`:
 
-When omitted, the text payload in `content[0]` still carries the full result
-(JSON-encoded by default, or TOON when requested), so clients can still parse
-the data — they just have to re-parse instead of getting a pre-parsed dict.
+- `REST_FRAMEWORK_MCP["INCLUDE_STRUCTURED_CONTENT"]` — gates the
+  `structuredContent` field on `tools/call` results.
+- `REST_FRAMEWORK_MCP["INCLUDE_OUTPUT_SCHEMA"]` — gates the `outputSchema`
+  field on `tools/list` entries.
 
-The MCP tools spec requires that any tool declaring `outputSchema` always
-return conforming `structuredContent`. To keep that contract intact, when a
-binding opts out of `structuredContent` the corresponding `outputSchema` is
-also dropped from the tool's `tools/list` entry. The two move together.
+Per-tool overrides mirror them: `include_structured_content` and
+`include_output_schema` on `register_service_tool`, `register_selector_tool`,
+or their decorator forms. Each is tri-state — `None` (default) inherits the
+global, `True`/`False` force the behaviour regardless of the setting.
+
+Common patterns:
+
+- **Default**: both `True`. Tools advertise their schema and return matching
+  structured content. Spec-compliant and easiest for typed clients.
+- **Drop only `outputSchema`**: useful when the schema bloats `tools/list`
+  responses but you still want machine-parsable results. Set
+  `INCLUDE_OUTPUT_SCHEMA=False`; leave `INCLUDE_STRUCTURED_CONTENT=True`.
+- **Drop both**: useful when a downstream client echoes both fields back to
+  the LLM (doubling token usage) or chokes on `structuredContent`. Set both
+  to `False`. The text payload in `content[0]` still carries the full result
+  (JSON-encoded by default, or TOON when requested).
+
+The fourth combination — advertising `outputSchema` while suppressing
+`structuredContent` — violates the spec. It is rejected with
+`ImproperlyConfigured` at construction time (for explicit per-binding
+conflicts) or at request time (for setting-level conflicts), so the misconfig
+surfaces immediately rather than producing a non-compliant response.
 
 ## Auth model
 

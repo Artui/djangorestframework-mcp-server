@@ -16,9 +16,9 @@ class ServiceDefaults:
     matching :meth:`MCPServer.register_service_tool` call. A per-
     definition value always wins over the default.
 
-    Because ``include_structured_content`` is tri-state on the
-    registration method (``None`` = inherit global setting,
-    ``True``/``False`` = force), the same ``None``-as-sentinel
+    Because ``include_structured_content`` and ``include_output_schema``
+    are tri-state on the registration method (``None`` = inherit global
+    setting, ``True``/``False`` = force), the same ``None``-as-sentinel
     convention applies here: ``ServiceDefaults(include_structured_content=None)``
     is identical to "no override" — if you want to force every binding
     to inherit the global, leave it unset; if you want to force
@@ -32,6 +32,7 @@ class ServiceDefaults:
     rate_limits: Sequence[Any] | None = None
     annotations: dict[str, Any] | None = None
     include_structured_content: bool | None = None
+    include_output_schema: bool | None = None
     argument_binding: ArgumentBinding | None = None
     unknown_arguments: UnknownArguments | None = None
 

@@ -224,7 +224,13 @@ def test_check_permissions_empty_tuple() -> None:
 
 
 def test_tools_call_omits_structured_content_when_global_disabled(settings) -> None:
-    settings.REST_FRAMEWORK_MCP = {"INCLUDE_STRUCTURED_CONTENT": False}
+    # Disabling structuredContent also requires disabling outputSchema —
+    # advertising the schema while suppressing the content is a spec
+    # violation that ``resolve_structured_output`` rejects.
+    settings.REST_FRAMEWORK_MCP = {
+        "INCLUDE_STRUCTURED_CONTENT": False,
+        "INCLUDE_OUTPUT_SCHEMA": False,
+    }
 
     def svc() -> dict[str, Any]:
         return {"a": 1}
@@ -241,6 +247,8 @@ def test_tools_call_omits_structured_content_when_global_disabled(settings) -> N
 
 
 def test_tools_call_per_binding_override_forces_off_when_global_on(settings) -> None:
+    # Per-binding override must drop the schema in lockstep — otherwise
+    # the resolver raises at request time.
     settings.REST_FRAMEWORK_MCP = {"INCLUDE_STRUCTURED_CONTENT": True}
 
     def svc() -> dict[str, Any]:
@@ -253,6 +261,7 @@ def test_tools_call_per_binding_override_forces_off_when_global_on(settings) -> 
             description=None,
             spec=ServiceSpec(service=svc, atomic=False),
             include_structured_content=False,
+            include_output_schema=False,
         )
     )
     out = handle_tools_call({"name": "t", "arguments": {}}, _ctx(tools))
@@ -280,12 +289,8 @@ def test_tools_call_per_binding_override_forces_on_when_global_off(settings) -> 
     assert out["structuredContent"] == {"a": 1}
 
 
-def test_tools_list_drops_output_schema_when_structured_content_disabled(settings) -> None:
-    """Spec: if outputSchema is declared, structuredContent MUST be returned.
-
-    So when we opt out of structuredContent, the outputSchema announcement
-    must drop too — otherwise we'd advertise a contract we then break.
-    """
+def test_tools_list_drops_output_schema_when_explicitly_disabled() -> None:
+    """``include_output_schema=False`` suppresses the schema even with an output_serializer."""
     from rest_framework import serializers as drf_serializers
 
     class _Ser(drf_serializers.Serializer):
@@ -300,13 +305,43 @@ def test_tools_list_drops_output_schema_when_structured_content_disabled(setting
             name="t",
             description=None,
             spec=ServiceSpec(service=svc, output_serializer=_Ser, atomic=False),
-            include_structured_content=False,
+            include_output_schema=False,
         )
     )
     out = handle_tools_list(None, _ctx(tools))
     assert isinstance(out, dict)
     tool = out["tools"][0]
     assert "outputSchema" not in tool
+
+
+def test_tools_list_drops_output_schema_when_global_setting_disabled(settings) -> None:
+    """``INCLUDE_OUTPUT_SCHEMA=False`` server-wide suppresses the schema for all bindings."""
+    from rest_framework import serializers as drf_serializers
+
+    settings.REST_FRAMEWORK_MCP = {"INCLUDE_OUTPUT_SCHEMA": False}
+
+    class _Ser(drf_serializers.Serializer):
+        a = drf_serializers.IntegerField()
+
+    def svc() -> dict[str, Any]:
+        return {"a": 1}
+
+    tools = ToolRegistry()
+    tools.register(
+        ToolBinding(
+            name="t",
+            description=None,
+            spec=ServiceSpec(service=svc, output_serializer=_Ser, atomic=False),
+        )
+    )
+    out = handle_tools_list(None, _ctx(tools))
+    assert isinstance(out, dict)
+    tool = out["tools"][0]
+    assert "outputSchema" not in tool
+    # structuredContent is still emitted — that direction is spec-allowed.
+    call_out = handle_tools_call({"name": "t", "arguments": {}}, _ctx(tools))
+    assert isinstance(call_out, dict)
+    assert call_out["structuredContent"] == {"a": 1}
 
 
 def test_tools_list_emits_output_schema_when_structured_content_enabled() -> None:
