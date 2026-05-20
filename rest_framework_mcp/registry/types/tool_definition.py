@@ -49,6 +49,7 @@ class ToolDefinition:
     rate_limits: Sequence[Any] | None = None
     annotations: dict[str, Any] | None = None
     include_structured_content: bool | None = None
+    include_output_schema: bool | None = None
     argument_binding: ArgumentBinding | None = None
     unknown_arguments: UnknownArguments | None = None
     # Selector-only:
@@ -75,6 +76,7 @@ class ToolDefinition:
         rate_limits: Sequence[Any] | None = None,
         annotations: dict[str, Any] | None = None,
         include_structured_content: bool | None = None,
+        include_output_schema: bool | None = None,
         argument_binding: ArgumentBinding | None = None,
         unknown_arguments: UnknownArguments | None = None,
         always_listed: bool | None = None,
@@ -91,6 +93,7 @@ class ToolDefinition:
             rate_limits=rate_limits,
             annotations=annotations,
             include_structured_content=include_structured_content,
+            include_output_schema=include_output_schema,
             argument_binding=argument_binding,
             unknown_arguments=unknown_arguments,
             always_listed=always_listed,
@@ -113,6 +116,7 @@ class ToolDefinition:
         ordering_fields: Sequence[str] | None = None,
         paginate: bool | None = None,
         include_structured_content: bool | None = None,
+        include_output_schema: bool | None = None,
         argument_binding: ArgumentBinding | None = None,
         unknown_arguments: UnknownArguments | None = None,
         always_listed: bool | None = None,
@@ -133,6 +137,7 @@ class ToolDefinition:
             ordering_fields=ordering_fields,
             paginate=paginate,
             include_structured_content=include_structured_content,
+            include_output_schema=include_output_schema,
             argument_binding=argument_binding,
             unknown_arguments=unknown_arguments,
             always_listed=always_listed,

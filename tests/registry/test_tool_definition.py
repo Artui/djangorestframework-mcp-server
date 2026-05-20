@@ -55,6 +55,24 @@ def test_service_classmethod_forwards_all_kwargs() -> None:
     assert d.unknown_arguments is UnknownArguments.PASSTHROUGH
 
 
+def test_service_classmethod_forwards_include_output_schema() -> None:
+    d = ToolDefinition.service(
+        name="t",
+        spec=ServiceSpec(service=_svc, atomic=False),
+        include_output_schema=False,
+    )
+    assert d.include_output_schema is False
+
+
+def test_selector_classmethod_forwards_include_output_schema() -> None:
+    d = ToolDefinition.selector(
+        name="x",
+        spec=SelectorSpec(selector=_sel),
+        include_output_schema=True,
+    )
+    assert d.include_output_schema is True
+
+
 def test_selector_classmethod_forwards_all_selector_kwargs() -> None:
     d = ToolDefinition.selector(
         name="x",

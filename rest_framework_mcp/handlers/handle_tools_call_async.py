@@ -30,9 +30,7 @@ from rest_framework_mcp.handlers.utils import (
     consume_rate_limits,
     validation_error_data,
 )
-from rest_framework_mcp.output.resolve_include_structured_content import (
-    resolve_include_structured_content,
-)
+from rest_framework_mcp.output.resolve_structured_output import resolve_structured_output
 from rest_framework_mcp.output.tool_result import build_tool_result
 from rest_framework_mcp.protocol.types.json_rpc_error import JsonRpcError
 from rest_framework_mcp.registry.types.selector_tool_binding import SelectorToolBinding
@@ -172,12 +170,15 @@ async def handle_tools_call_async(
         output_format: OutputFormat = OutputFormat.coerce(
             params.get("outputFormat") or binding.output_format
         )
+        _emit_output_schema, emit_structured_content = resolve_structured_output(
+            include_output_schema_override=binding.include_output_schema,
+            include_structured_content_override=binding.include_structured_content,
+            binding_name=binding.name,
+        )
         return build_tool_result(
             payload,
             output_format=output_format,
-            include_structured_content=resolve_include_structured_content(
-                binding.include_structured_content
-            ),
+            include_structured_content=emit_structured_content,
         ).to_dict()
 
 

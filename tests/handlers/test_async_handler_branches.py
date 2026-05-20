@@ -273,6 +273,7 @@ async def test_async_tools_call_honors_include_structured_content_override() -> 
             description=None,
             spec=ServiceSpec(service=svc, atomic=False),
             include_structured_content=False,
+            include_output_schema=False,
         )
     )
     out = await handle_tools_call_async({"name": "t", "arguments": {}}, _ctx(tools))

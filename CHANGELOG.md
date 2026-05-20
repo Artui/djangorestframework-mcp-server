@@ -7,6 +7,31 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.4.0] — 2026-05-20
+
+### Changed
+
+- **Split `outputSchema` and `structuredContent` controls.** The single
+  `INCLUDE_STRUCTURED_CONTENT` setting (and per-binding
+  `include_structured_content` override) used to gate both the
+  `outputSchema` advertisement in `tools/list` and the `structuredContent`
+  field in `tools/call`. They are now independent: a new
+  `INCLUDE_OUTPUT_SCHEMA` setting (default `True`) and matching
+  per-binding `include_output_schema` override control the schema
+  announcement separately. The MCP spec invariant — advertising
+  `outputSchema` requires emitting conforming `structuredContent` — is
+  enforced explicitly: the spec-violating combination is rejected with
+  `ImproperlyConfigured` at construction time (explicit per-binding
+  conflicts) or at request time (setting-level conflicts).
+
+  **Migration**: if you previously set
+  `REST_FRAMEWORK_MCP["INCLUDE_STRUCTURED_CONTENT"] = False`, also set
+  `INCLUDE_OUTPUT_SCHEMA = False` (or accept the new
+  `ImproperlyConfigured` raised on requests against bindings with an
+  output serializer). If you set `include_structured_content=False` on a
+  binding, add `include_output_schema=False` to the same registration
+  call.
+
 ## [0.3.0] — 2026-05-20
 
 ### Changed
@@ -578,7 +603,8 @@ Pinned to `djangorestframework-services==0.6.0`.
 - 100% line + branch coverage enforced by pytest (**451 tests** at
   release).
 
-[Unreleased]: https://github.com/Artui/djangorestframework-mcp-server/compare/v0.3.0...HEAD
+[Unreleased]: https://github.com/Artui/djangorestframework-mcp-server/compare/v0.4.0...HEAD
+[0.4.0]: https://github.com/Artui/djangorestframework-mcp-server/compare/v0.3.0...v0.4.0
 [0.3.0]: https://github.com/Artui/djangorestframework-mcp-server/compare/v0.2.8...v0.3.0
 [0.2.8]: https://github.com/Artui/djangorestframework-mcp-server/compare/v0.2.7...v0.2.8
 [0.2.7]: https://github.com/Artui/djangorestframework-mcp-server/compare/v0.2.6...v0.2.7

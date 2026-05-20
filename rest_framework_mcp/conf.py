@@ -21,7 +21,26 @@ DEFAULTS: dict[str, Any] = {
     # echoes both fields back to the LLM and burns context, or chokes on the
     # field altogether. Individual tools can override either direction via
     # the ``include_structured_content`` kwarg on registration.
+    #
+    # ``INCLUDE_STRUCTURED_CONTENT`` and ``INCLUDE_OUTPUT_SCHEMA`` are
+    # independent settings, but the MCP spec forbids one combination:
+    # advertising ``outputSchema`` without emitting ``structuredContent``.
+    # If you turn ``INCLUDE_STRUCTURED_CONTENT`` off, also set
+    # ``INCLUDE_OUTPUT_SCHEMA`` to False (or set a per-binding
+    # ``include_output_schema=False``) — otherwise the resolver raises
+    # ``ImproperlyConfigured`` at request time.
     "INCLUDE_STRUCTURED_CONTENT": True,
+    # When True (default), tool descriptors in ``tools/list`` carry an
+    # ``outputSchema`` built from the binding's output serializer. Set to
+    # False to suppress the schema announcement server-wide while still
+    # allowing ``structuredContent`` to flow on the response (the spec
+    # allows that direction, see SEP-1624). Individual tools can override
+    # via the ``include_output_schema`` kwarg on registration.
+    #
+    # The reverse combo — ``outputSchema`` advertised but
+    # ``structuredContent`` suppressed — is a spec violation and is
+    # rejected with ``ImproperlyConfigured`` at request time.
+    "INCLUDE_OUTPUT_SCHEMA": True,
     "AUTH_BACKEND": (
         "rest_framework_mcp.auth.backends.django_oauth_toolkit_backend.DjangoOAuthToolkitBackend"
     ),

@@ -179,6 +179,7 @@ def test_register_tools_matches_imperative_field_for_field() -> None:
     assert bulk.argument_binding == imperative.argument_binding
     assert bulk.unknown_arguments == imperative.unknown_arguments
     assert bulk.include_structured_content == imperative.include_structured_content
+    assert bulk.include_output_schema == imperative.include_output_schema
 
 
 # ---------- No defaults supplied ----------

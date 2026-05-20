@@ -630,6 +630,7 @@ def test_selector_tool_honors_include_structured_content_override() -> None:
         name="invoices.list",
         spec=SelectorSpec(selector=_list_invoices, output_serializer=InvoiceOutputSerializer),
         include_structured_content=False,
+        include_output_schema=False,
     )
     out = handle_tools_call({"name": "invoices.list", "arguments": {}}, _ctx(server))
     assert isinstance(out, dict)

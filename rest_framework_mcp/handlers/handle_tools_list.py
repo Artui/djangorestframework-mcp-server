@@ -7,9 +7,7 @@ from rest_framework_mcp.constants import JsonRpcErrorCode, UnknownArguments
 from rest_framework_mcp.handlers.is_binding_listable import is_binding_listable
 from rest_framework_mcp.handlers.pagination import paginate
 from rest_framework_mcp.handlers.types.context import MCPCallContext
-from rest_framework_mcp.output.resolve_include_structured_content import (
-    resolve_include_structured_content,
-)
+from rest_framework_mcp.output.resolve_structured_output import resolve_structured_output
 from rest_framework_mcp.protocol.types.json_rpc_error import JsonRpcError
 from rest_framework_mcp.protocol.types.tool import Tool
 from rest_framework_mcp.registry.types.selector_tool_binding import SelectorToolBinding
@@ -67,13 +65,15 @@ def handle_tools_list(
         input_schema["additionalProperties"] = (
             binding.unknown_arguments is not UnknownArguments.REJECT
         )
-        # Per the MCP tools spec: if a tool declares ``outputSchema``, the
-        # server MUST return conforming ``structuredContent`` on every call.
-        # When the binding is configured to omit ``structuredContent`` we
-        # also drop ``outputSchema`` so the two stay in lockstep — otherwise
-        # we'd be advertising a contract we then refuse to honor.
-        emit_output_schema: bool = resolve_include_structured_content(
-            binding.include_structured_content
+        # ``outputSchema`` and ``structuredContent`` are independently
+        # toggleable, but the spec forbids one combination — advertising
+        # the schema while suppressing the content. ``resolve_structured_output``
+        # validates the asymmetric rule and raises ``ImproperlyConfigured``
+        # for the bad combo before we serialize anything.
+        emit_output_schema, _emit_structured_content = resolve_structured_output(
+            include_output_schema_override=binding.include_output_schema,
+            include_structured_content_override=binding.include_structured_content,
+            binding_name=binding.name,
         )
         tool = Tool(
             name=binding.name,

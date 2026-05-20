@@ -35,6 +35,7 @@ class SelectorDefaults:
     ordering_fields: Sequence[str] | None = None
     paginate: bool | None = None
     include_structured_content: bool | None = None
+    include_output_schema: bool | None = None
     argument_binding: ArgumentBinding | None = None
     unknown_arguments: UnknownArguments | None = None
 

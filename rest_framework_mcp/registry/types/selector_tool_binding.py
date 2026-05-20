@@ -4,6 +4,7 @@ from collections.abc import Callable
 from dataclasses import dataclass, field
 from typing import Any, Generic, TypeVar
 
+from django.core.exceptions import ImproperlyConfigured
 from rest_framework_services.types.selector_spec import SelectorSpec
 
 from rest_framework_mcp.constants import ArgumentBinding, OutputFormat, UnknownArguments
@@ -56,6 +57,14 @@ class SelectorToolBinding(Generic[ResultT, ExtraT]):
     # to the ``INCLUDE_STRUCTURED_CONTENT`` setting; ``True`` / ``False``
     # force the behavior regardless of the global.
     include_structured_content: bool | None = None
+    # Tri-state override for whether this tool's ``tools/list`` entry
+    # carries an ``outputSchema``. ``None`` (the default) defers to the
+    # ``INCLUDE_OUTPUT_SCHEMA`` setting; ``True`` / ``False`` force the
+    # behavior regardless of the global. The MCP spec forbids advertising
+    # ``outputSchema`` while suppressing ``structuredContent``, so the
+    # combination ``include_output_schema=True`` with
+    # ``include_structured_content=False`` is rejected at construction time.
+    include_output_schema: bool | None = None
     # ----- read-shaped pipeline knobs -----
     # ``filter_set`` is a django-filter ``FilterSet`` class (or ``None`` to
     # skip filtering). Typed as ``Any`` because ``django-filter`` is an
@@ -86,6 +95,15 @@ class SelectorToolBinding(Generic[ResultT, ExtraT]):
     # See ``ToolBinding.always_listed`` — same opt-back-in semantics for
     # selector tools when ``FILTER_LISTINGS_BY_PERMISSIONS`` is enabled.
     always_listed: bool = False
+
+    def __post_init__(self) -> None:
+        if self.include_output_schema is True and self.include_structured_content is False:
+            raise ImproperlyConfigured(
+                f"Selector tool {self.name!r}: include_output_schema=True is "
+                "incompatible with include_structured_content=False. The MCP spec "
+                "requires that any tool advertising outputSchema also return "
+                "conforming structuredContent. Set one of them differently."
+            )
 
     @property
     def selector(self) -> Callable[..., ResultT]:
