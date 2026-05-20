@@ -7,7 +7,7 @@ from typing import Any
 from django.core.cache import cache
 from django.http import HttpRequest
 
-from rest_framework_mcp.auth.token_info import TokenInfo
+from rest_framework_mcp.auth.types.token_info import TokenInfo
 
 # Sliding-window key namespace. Separate from ``FixedWindowRateLimit``'s prefix
 # so brokers/operators can spot which scheme produced a counter at a glance.

@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from rest_framework_mcp.handlers.context import MCPCallContext
+from rest_framework_mcp.handlers.types.context import MCPCallContext
 
 
 def handle_ping(params: dict[str, Any] | None, context: MCPCallContext) -> dict[str, Any]:

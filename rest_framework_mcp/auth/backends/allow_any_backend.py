@@ -5,7 +5,11 @@ from typing import Any
 from django.contrib.auth.models import AnonymousUser
 from django.http import HttpRequest
 
-from rest_framework_mcp.auth.token_info import TokenInfo
+from rest_framework_mcp.auth.types.authorization_server_metadata import (
+    AuthorizationServerMetadata,
+)
+from rest_framework_mcp.auth.types.protected_resource_metadata import ProtectedResourceMetadata
+from rest_framework_mcp.auth.types.token_info import TokenInfo
 
 
 class AllowAnyBackend:
@@ -19,13 +23,25 @@ class AllowAnyBackend:
         user: Any = getattr(request, "user", None) or AnonymousUser()
         return TokenInfo(user=user, scopes=(), audience=None, raw=None)
 
-    def protected_resource_metadata(self) -> dict[str, Any]:
-        return {
-            "resource": "(unset)",
-            "bearer_methods_supported": ["header"],
-            "scopes_supported": [],
-            "_warning": "AllowAnyBackend is for development only.",
-        }
+    def protected_resource_metadata(self) -> ProtectedResourceMetadata:
+        return ProtectedResourceMetadata(
+            resource="(unset)",
+            authorization_servers=[],
+            bearer_methods_supported=["header"],
+            scopes_supported=[],
+            warning="AllowAnyBackend is for development only.",
+        )
+
+    def authorization_server_metadata(self) -> AuthorizationServerMetadata:
+        # AllowAny doesn't host an authorization server. The
+        # ``rest_framework_mcp.contrib.oauth`` mount uses this signal to
+        # skip the AS-side endpoints, keeping the URL conf consistent with
+        # what the backend can actually serve.
+        raise NotImplementedError(
+            "AllowAnyBackend doesn't host an authorization server. "
+            "Configure a real auth backend (e.g. DjangoOAuthToolkitBackend) "
+            "before mounting build_oauth_urlpatterns()."
+        )
 
     def www_authenticate_challenge(
         self, *, scopes: list[str] | None = None, error: str | None = None

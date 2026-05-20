@@ -12,24 +12,30 @@ from rest_framework_services.types.service_spec import ServiceSpec
 from rest_framework_mcp.adapters.selector_to_resource import selector_to_resource
 from rest_framework_mcp.adapters.selector_to_tool import selector_spec_to_tool
 from rest_framework_mcp.adapters.service_to_tool import service_spec_to_tool
-from rest_framework_mcp.auth.auth_backend import MCPAuthBackend
-from rest_framework_mcp.auth.protected_resource_metadata import ProtectedResourceMetadataView
+from rest_framework_mcp.auth.protected_resource_metadata import ProtectedResourceMetadataViewSet
+from rest_framework_mcp.auth.types.auth_backend import MCPAuthBackend
 from rest_framework_mcp.conf import get_setting
-from rest_framework_mcp.output.format import OutputFormat
-from rest_framework_mcp.protocol.prompt_argument import PromptArgument
-from rest_framework_mcp.registry.prompt_binding import PromptBinding
+from rest_framework_mcp.constants import ArgumentBinding, OutputFormat, UnknownArguments
+from rest_framework_mcp.protocol.types.prompt_argument import PromptArgument
 from rest_framework_mcp.registry.prompt_registry import PromptRegistry
-from rest_framework_mcp.registry.resource_binding import ResourceBinding
 from rest_framework_mcp.registry.resource_registry import ResourceRegistry
-from rest_framework_mcp.registry.selector_tool_binding import SelectorToolBinding
-from rest_framework_mcp.registry.tool_binding import ToolBinding
 from rest_framework_mcp.registry.tool_registry import ToolRegistry
-from rest_framework_mcp.transport.async_streamable_http_view import AsyncStreamableHttpView
+from rest_framework_mcp.registry.types.prompt_binding import PromptBinding
+from rest_framework_mcp.registry.types.resource_binding import ResourceBinding
+from rest_framework_mcp.registry.types.selector_tool_binding import SelectorToolBinding
+from rest_framework_mcp.registry.types.tool_binding import ToolBinding
+from rest_framework_mcp.transport.async_streamable_http_viewset import (
+    ASYNC_STREAMABLE_HTTP_ACTION_MAP,
+    AsyncStreamableHttpViewSet,
+)
 from rest_framework_mcp.transport.in_memory_sse_broker import InMemorySSEBroker
-from rest_framework_mcp.transport.session_store import SessionStore
-from rest_framework_mcp.transport.sse_broker import SSEBroker
-from rest_framework_mcp.transport.sse_replay_buffer import SSEReplayBuffer
-from rest_framework_mcp.transport.streamable_http_view import StreamableHttpView
+from rest_framework_mcp.transport.streamable_http_viewset import (
+    STREAMABLE_HTTP_ACTION_MAP,
+    StreamableHttpViewSet,
+)
+from rest_framework_mcp.transport.types.session_store import SessionStore
+from rest_framework_mcp.transport.types.sse_broker import SSEBroker
+from rest_framework_mcp.transport.types.sse_replay_buffer import SSEReplayBuffer
 
 
 class MCPServer:
@@ -112,6 +118,10 @@ class MCPServer:
         permissions: list[Any] | None = None,
         rate_limits: list[Any] | None = None,
         annotations: dict[str, Any] | None = None,
+        include_structured_content: bool | None = None,
+        argument_binding: ArgumentBinding = ArgumentBinding.DATA_ONLY,
+        unknown_arguments: UnknownArguments = UnknownArguments.REJECT,
+        always_listed: bool = False,
     ) -> ToolBinding:
         """Register a :class:`ServiceSpec` as an MCP **mutation** tool.
 
@@ -137,6 +147,10 @@ class MCPServer:
             permissions=tuple(permissions or ()),
             rate_limits=tuple(rate_limits or ()),
             annotations=annotations,
+            include_structured_content=include_structured_content,
+            argument_binding=argument_binding,
+            unknown_arguments=unknown_arguments,
+            always_listed=always_listed,
         )
         self._tools.register(binding)
         return binding
@@ -156,6 +170,10 @@ class MCPServer:
         filter_set: Any | None = None,
         ordering_fields: list[str] | tuple[str, ...] | None = None,
         paginate: bool = False,
+        include_structured_content: bool | None = None,
+        argument_binding: ArgumentBinding = ArgumentBinding.MERGE,
+        unknown_arguments: UnknownArguments = UnknownArguments.REJECT,
+        always_listed: bool = False,
     ) -> SelectorToolBinding:
         """Register a :class:`SelectorSpec` as an MCP **read** tool.
 
@@ -195,6 +213,10 @@ class MCPServer:
             filter_set=filter_set,
             ordering_fields=tuple(ordering_fields or ()),
             paginate=paginate,
+            include_structured_content=include_structured_content,
+            argument_binding=argument_binding,
+            unknown_arguments=unknown_arguments,
+            always_listed=always_listed,
         )
         self._tools.register(binding)
         return binding
@@ -212,6 +234,7 @@ class MCPServer:
         permissions: list[Any] | None = None,
         rate_limits: list[Any] | None = None,
         annotations: dict[str, Any] | None = None,
+        always_listed: bool = False,
     ) -> ResourceBinding:
         """Register a :class:`SelectorSpec` as an MCP resource.
 
@@ -238,6 +261,7 @@ class MCPServer:
             permissions=tuple(permissions or ()),
             rate_limits=tuple(rate_limits or ()),
             annotations=annotations,
+            always_listed=always_listed,
         )
         self._resources.register(binding)
         return binding
@@ -253,6 +277,7 @@ class MCPServer:
         permissions: list[Any] | None = None,
         rate_limits: list[Any] | None = None,
         annotations: dict[str, Any] | None = None,
+        always_listed: bool = False,
     ) -> PromptBinding:
         """Register a render callable as an MCP prompt.
 
@@ -270,6 +295,7 @@ class MCPServer:
             permissions=tuple(permissions or ()),
             rate_limits=tuple(rate_limits or ()),
             annotations=annotations or {},
+            always_listed=always_listed,
         )
         self._prompts.register(binding)
         return binding
@@ -292,6 +318,10 @@ class MCPServer:
         permissions: list[Any] | None = None,
         rate_limits: list[Any] | None = None,
         annotations: dict[str, Any] | None = None,
+        include_structured_content: bool | None = None,
+        argument_binding: ArgumentBinding = ArgumentBinding.DATA_ONLY,
+        unknown_arguments: UnknownArguments = UnknownArguments.REJECT,
+        always_listed: bool = False,
     ) -> Callable[[Callable[..., Any]], Callable[..., Any]]:
         """Decorator form of :meth:`register_service_tool`.
 
@@ -319,6 +349,10 @@ class MCPServer:
                 permissions=permissions,
                 rate_limits=rate_limits,
                 annotations=annotations,
+                include_structured_content=include_structured_content,
+                argument_binding=argument_binding,
+                unknown_arguments=unknown_arguments,
+                always_listed=always_listed,
             )
             return fn
 
@@ -340,6 +374,10 @@ class MCPServer:
         filter_set: Any | None = None,
         ordering_fields: list[str] | tuple[str, ...] | None = None,
         paginate: bool = False,
+        include_structured_content: bool | None = None,
+        argument_binding: ArgumentBinding = ArgumentBinding.MERGE,
+        unknown_arguments: UnknownArguments = UnknownArguments.REJECT,
+        always_listed: bool = False,
     ) -> Callable[[Callable[..., Any]], Callable[..., Any]]:
         """Decorator form of :meth:`register_selector_tool`.
 
@@ -368,6 +406,10 @@ class MCPServer:
                 filter_set=filter_set,
                 ordering_fields=ordering_fields,
                 paginate=paginate,
+                include_structured_content=include_structured_content,
+                argument_binding=argument_binding,
+                unknown_arguments=unknown_arguments,
+                always_listed=always_listed,
             )
             return fn
 
@@ -386,6 +428,7 @@ class MCPServer:
         permissions: list[Any] | None = None,
         rate_limits: list[Any] | None = None,
         annotations: dict[str, Any] | None = None,
+        always_listed: bool = False,
     ) -> Callable[[Callable[..., Any]], Callable[..., Any]]:
         """Decorator form: register the wrapped callable as a resource.
 
@@ -411,6 +454,7 @@ class MCPServer:
                 permissions=permissions,
                 rate_limits=rate_limits,
                 annotations=annotations,
+                always_listed=always_listed,
             )
             return fn
 
@@ -426,6 +470,7 @@ class MCPServer:
         permissions: list[Any] | None = None,
         rate_limits: list[Any] | None = None,
         annotations: dict[str, Any] | None = None,
+        always_listed: bool = False,
     ) -> Callable[[Callable[..., Any]], Callable[..., Any]]:
         """Decorator form: register the wrapped callable as a prompt."""
 
@@ -439,6 +484,7 @@ class MCPServer:
                 permissions=permissions,
                 rate_limits=rate_limits,
                 annotations=annotations,
+                always_listed=always_listed,
             )
             return fn
 
@@ -520,7 +566,8 @@ class MCPServer:
         Use :attr:`async_urls` instead when running under ASGI to get
         non-blocking dispatch for the I/O-bound handlers.
         """
-        view = StreamableHttpView.as_view(
+        view = StreamableHttpViewSet.as_view(
+            STREAMABLE_HTTP_ACTION_MAP,  # ty: ignore[invalid-argument-type]
             tools=self._tools,
             resources=self._resources,
             prompts=self._prompts,
@@ -539,7 +586,8 @@ class MCPServer:
         :func:`asgiref.sync.sync_to_async` so a fully sync stack still works.
         Async-native backends are detected by signature and called directly.
         """
-        view = AsyncStreamableHttpView.as_view(
+        view = AsyncStreamableHttpViewSet.as_view(
+            ASYNC_STREAMABLE_HTTP_ACTION_MAP,
             tools=self._tools,
             resources=self._resources,
             prompts=self._prompts,
@@ -555,7 +603,9 @@ class MCPServer:
             path("", view, name="mcp-endpoint"),
             path(
                 ".well-known/oauth-protected-resource",
-                ProtectedResourceMetadataView.as_view(auth_backend=self._auth_backend),
+                ProtectedResourceMetadataViewSet.as_view(
+                    {"get": "list"}, auth_backend=self._auth_backend
+                ),
                 name="mcp-protected-resource-metadata",
             ),
         ]

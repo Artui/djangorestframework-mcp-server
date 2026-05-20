@@ -5,7 +5,11 @@ from typing import Any
 from django.http import HttpRequest
 
 from rest_framework_mcp.auth.audience import audience_matches
-from rest_framework_mcp.auth.token_info import TokenInfo
+from rest_framework_mcp.auth.types.authorization_server_metadata import (
+    AuthorizationServerMetadata,
+)
+from rest_framework_mcp.auth.types.protected_resource_metadata import ProtectedResourceMetadata
+from rest_framework_mcp.auth.types.token_info import TokenInfo
 from rest_framework_mcp.conf import get_setting
 
 
@@ -67,21 +71,47 @@ class DjangoOAuthToolkitBackend:
             raw=token,
         )
 
-    def protected_resource_metadata(self) -> dict[str, Any]:
+    def protected_resource_metadata(self) -> ProtectedResourceMetadata:
         server_info: dict[str, Any] = get_setting("SERVER_INFO")
         # Prefer the explicit RESOURCE_URL setting over SERVER_INFO["resource"]
         # — the former is also what audience enforcement reads from, so a
         # single configuration mistake can't produce inconsistent metadata.
         resource: str | None = get_setting("RESOURCE_URL") or server_info.get("resource") or None
-        payload: dict[str, Any] = {
-            "resource": resource or "",
-            "authorization_servers": server_info.get("authorization_servers", []),
-            "bearer_methods_supported": ["header"],
-            "scopes_supported": server_info.get("scopes_supported", []),
-        }
-        if "documentation" in server_info:
-            payload["resource_documentation"] = server_info["documentation"]
-        return payload
+        documentation: str | None = server_info.get("documentation")
+        return ProtectedResourceMetadata(
+            resource=resource or "",
+            authorization_servers=list(server_info.get("authorization_servers", [])),
+            bearer_methods_supported=["header"],
+            scopes_supported=list(server_info.get("scopes_supported", [])),
+            resource_documentation=documentation,
+        )
+
+    def authorization_server_metadata(self) -> AuthorizationServerMetadata:
+        """Return the RFC 8414 metadata payload for the DOT-hosted authorization server.
+
+        Pulls the issuer, endpoint URLs, supported grant / response types,
+        and scopes from :setting:`REST_FRAMEWORK_MCP['SERVER_INFO']`'s
+        ``authorization_servers`` key (first entry) plus the
+        ``contrib.oauth`` mount convention that endpoints live at
+        ``/oauth/authorize/``, ``/oauth/token/``, ``/oauth/register/``.
+
+        Missing values fall through as empty strings / lists so the wire
+        shape is always valid JSON; consumers are expected to populate
+        ``SERVER_INFO`` for production deployments.
+        """
+        server_info: dict[str, Any] = get_setting("SERVER_INFO")
+        as_list: list[str] = server_info.get("authorization_servers") or []
+        issuer: str = as_list[0] if as_list else ""
+        # ``base`` is the issuer with no trailing slash so we can build
+        # endpoint URLs by string concatenation without doubling slashes.
+        base: str = issuer.rstrip("/")
+        return AuthorizationServerMetadata(
+            issuer=issuer,
+            authorization_endpoint=f"{base}/oauth/authorize/" if base else "",
+            token_endpoint=f"{base}/oauth/token/" if base else "",
+            registration_endpoint=f"{base}/oauth/register/" if base else "",
+            scopes_supported=list(server_info.get("scopes_supported", [])),
+        )
 
     def www_authenticate_challenge(
         self, *, scopes: list[str] | None = None, error: str | None = None

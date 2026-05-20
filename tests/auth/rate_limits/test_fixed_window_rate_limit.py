@@ -5,7 +5,7 @@ from django.core.cache import cache
 from django.http import HttpRequest
 
 from rest_framework_mcp.auth.rate_limits.fixed_window_rate_limit import FixedWindowRateLimit
-from rest_framework_mcp.auth.token_info import TokenInfo
+from rest_framework_mcp.auth.types.token_info import TokenInfo
 
 
 @pytest.fixture(autouse=True)

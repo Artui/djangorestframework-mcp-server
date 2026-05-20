@@ -8,6 +8,11 @@ Rules are non-negotiable unless flagged as a heuristic.
 1. **One exported class or function per file.** File name = `snake_case` of the symbol.
    `MCPServer` → `mcp_server.py`; `resolve_callable_kwargs` → `resolve_callable_kwargs.py`,
    or live in a sibling `utils.py` if used by several files in the same package.
+   **Exception:** `rest_framework_mcp/constants.py` is the package's single home for
+   enums and constant-like module-level values (`OutputFormat`, `JsonRpcErrorCode`,
+   `ArgumentBinding`, `JSONRPC_VERSION`, reserved-key sets, etc.) and is the only
+   file allowed to export multiple symbols. New enums and shared constants go there,
+   not into their own leaf files.
 2. **Private helpers used in only one file** stay there with a leading `_`.
 3. **Non-exported helpers shared across files** go into a sibling `utils.py`. Classes
    are allowed in `utils.py` if they are internal infrastructure.
@@ -30,6 +35,37 @@ Rules are non-negotiable unless flagged as a heuristic.
    other dotted-relative form is forbidden everywhere in the package, including
    `__init__.py`. Always write the full absolute path (`from rest_framework_mcp.foo
    import bar`).
+10. **Types and functionality live in separate sub-packages.** When a directory
+    contains *both* type declarations (dataclasses, Protocols, frozen wire-shape
+    records) *and* functionality (callables, registries, dispatch helpers), the
+    types move into a `types/` sibling and are re-exported from the package's
+    `__init__.py` for ergonomic imports. Example: `registry/types/tool_binding.py`
+    holds the dataclass; `registry/tool_registry.py` holds the functional class.
+    `constants.py` remains the multi-export exception.
+
+## API style rules
+
+11. **Always dataclasses over `dict[str, Any]` for structured data.** Every
+    wire-shape payload, response envelope, configuration record, and binding
+    field is a frozen `@dataclass` with explicit field types. `dict[str, Any]`
+    survives only at genuine serialisation boundaries (e.g. `JsonResponse` body
+    construction, the JSON-RPC envelope's free-form `data` field, raw
+    `arguments` straight off the wire). Every `dict[str, Any]` that lives more
+    than a few lines deep should be converted to a dataclass, or explained at
+    the site with a one-line comment justifying why it isn't.
+12. **Always `DataclassSerializer` over plain `Serializer`.** DRF validation
+    runs against a dataclass; the validated output is a typed dataclass
+    instance, not a dict. Field-level validation lives in `__post_init__` or
+    `validate_<field>` on a `DataclassSerializer` subclass. Bare
+    `serializers.Serializer` subclasses are only allowed for *illustrative*
+    test fixtures (and even there, prefer dataclass + `DataclassSerializer`).
+13. **Never `django.views.View` or `rest_framework.views.APIView`. Always
+    `ViewSet`.** Single-purpose endpoints become a one-action ViewSet; the
+    JSON-RPC transport endpoint is a custom ViewSet routed through a single
+    URL. This forces every HTTP endpoint through DRF's router / permission /
+    renderer chain so cross-cutting concerns (auth, throttling, content
+    negotiation, schema introspection) land in one place. New endpoints MUST
+    be ViewSets; legacy `View` subclasses are migrated as they're touched.
 
 ## No view-layer coupling
 

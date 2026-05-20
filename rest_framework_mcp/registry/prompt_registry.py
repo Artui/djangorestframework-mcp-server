@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from rest_framework_mcp.registry.prompt_binding import PromptBinding
+from rest_framework_mcp.registry.types.prompt_binding import PromptBinding
 
 
 class PromptRegistry:

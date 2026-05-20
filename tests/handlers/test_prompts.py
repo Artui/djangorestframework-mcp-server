@@ -7,15 +7,15 @@ from django.http import HttpRequest
 
 from rest_framework_mcp import MCPServer
 from rest_framework_mcp.auth.backends.allow_any_backend import AllowAnyBackend
-from rest_framework_mcp.auth.token_info import TokenInfo
-from rest_framework_mcp.handlers.context import MCPCallContext
+from rest_framework_mcp.auth.types.token_info import TokenInfo
 from rest_framework_mcp.handlers.handle_prompts_get import handle_prompts_get
 from rest_framework_mcp.handlers.handle_prompts_get_async import handle_prompts_get_async
 from rest_framework_mcp.handlers.handle_prompts_list import handle_prompts_list
 from rest_framework_mcp.handlers.render_prompt_messages import normalize_render_result
-from rest_framework_mcp.protocol.json_rpc_error import JsonRpcError
-from rest_framework_mcp.protocol.prompt_argument import PromptArgument
-from rest_framework_mcp.protocol.prompt_message import PromptMessage
+from rest_framework_mcp.handlers.types.context import MCPCallContext
+from rest_framework_mcp.protocol.types.json_rpc_error import JsonRpcError
+from rest_framework_mcp.protocol.types.prompt_argument import PromptArgument
+from rest_framework_mcp.protocol.types.prompt_message import PromptMessage
 from rest_framework_mcp.transport.in_memory_session_store import InMemorySessionStore
 
 
@@ -287,13 +287,13 @@ def test_prompt_argument_full_to_dict() -> None:
 
 
 def test_prompt_minimal_to_dict() -> None:
-    from rest_framework_mcp.protocol.prompt import Prompt
+    from rest_framework_mcp.protocol.types.prompt import Prompt
 
     assert Prompt(name="p").to_dict() == {"name": "p"}
 
 
 def test_prompt_full_to_dict() -> None:
-    from rest_framework_mcp.protocol.prompt import Prompt
+    from rest_framework_mcp.protocol.types.prompt import Prompt
 
     p = Prompt(
         name="p",
@@ -310,7 +310,7 @@ def test_prompt_full_to_dict() -> None:
 
 
 def test_get_prompt_result_to_dict_minimal() -> None:
-    from rest_framework_mcp.protocol.get_prompt_result import GetPromptResult
+    from rest_framework_mcp.protocol.types.get_prompt_result import GetPromptResult
 
     out = GetPromptResult(messages=[PromptMessage.text("user", "hi")]).to_dict()
     assert "description" not in out
@@ -318,7 +318,7 @@ def test_get_prompt_result_to_dict_minimal() -> None:
 
 
 def test_get_prompt_result_to_dict_with_description() -> None:
-    from rest_framework_mcp.protocol.get_prompt_result import GetPromptResult
+    from rest_framework_mcp.protocol.types.get_prompt_result import GetPromptResult
 
     out = GetPromptResult(messages=[], description="d").to_dict()
     assert out["description"] == "d"

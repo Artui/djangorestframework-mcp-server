@@ -6,10 +6,13 @@ import pytest
 from django.http import HttpRequest
 from django.test import AsyncClient, RequestFactory, override_settings
 
-from rest_framework_mcp.auth.token_info import TokenInfo
+from rest_framework_mcp.auth.types.token_info import TokenInfo
 from rest_framework_mcp.registry.resource_registry import ResourceRegistry
 from rest_framework_mcp.registry.tool_registry import ToolRegistry
-from rest_framework_mcp.transport.async_streamable_http_view import AsyncStreamableHttpView
+from rest_framework_mcp.transport.async_streamable_http_viewset import (
+    ASYNC_STREAMABLE_HTTP_ACTION_MAP,
+    AsyncStreamableHttpViewSet,
+)
 from rest_framework_mcp.transport.in_memory_session_store import InMemorySessionStore
 
 
@@ -143,7 +146,8 @@ async def test_async_get_without_broker_returns_405() -> None:
     request = factory.get("/mcp/")
     from rest_framework_mcp.auth.backends.allow_any_backend import AllowAnyBackend
 
-    view = AsyncStreamableHttpView.as_view(
+    view = AsyncStreamableHttpViewSet.as_view(
+        ASYNC_STREAMABLE_HTTP_ACTION_MAP,
         tools=ToolRegistry(),
         resources=ResourceRegistry(),
         auth_backend=AllowAnyBackend(),
@@ -219,6 +223,43 @@ async def test_async_missing_protocol_version(async_urlconf) -> None:
         content_type="application/json",
     )
     assert response.status_code == 400
+
+
+async def test_async_post_missing_protocol_version_allowed_when_disabled(
+    async_urlconf, settings
+) -> None:
+    settings.REST_FRAMEWORK_MCP = {
+        **settings.REST_FRAMEWORK_MCP,
+        "REQUIRE_PROTOCOL_VERSION_HEADER": False,
+    }
+    client = AsyncClient()
+    sid = await _initialize(client)
+    response = await client.post(
+        "/mcp/",
+        data=json.dumps({"jsonrpc": "2.0", "id": 81, "method": "tools/list"}),
+        content_type="application/json",
+        headers={"Mcp-Session-Id": sid},
+    )
+    assert response.status_code == 200
+    assert "result" in response.json()
+
+
+async def test_async_get_missing_protocol_version_allowed_when_disabled(
+    async_urlconf, settings
+) -> None:
+    """The GET (SSE) path mirrors POST when the relaxation is enabled.
+
+    With the setting off, a header-less GET would 400 on the version check.
+    With it on, the request progresses past that check and 404s on the
+    missing session id instead — which is what we assert here.
+    """
+    settings.REST_FRAMEWORK_MCP = {
+        **settings.REST_FRAMEWORK_MCP,
+        "REQUIRE_PROTOCOL_VERSION_HEADER": False,
+    }
+    client = AsyncClient()
+    response = await client.get("/mcp/")
+    assert response.status_code == 404
 
 
 async def test_async_body_too_large(async_urlconf, settings) -> None:
@@ -309,7 +350,8 @@ async def test_async_unauthenticated_returns_401() -> None:
         ),
         content_type="application/json",
     )
-    view = AsyncStreamableHttpView.as_view(
+    view = AsyncStreamableHttpViewSet.as_view(
+        ASYNC_STREAMABLE_HTTP_ACTION_MAP,
         tools=ToolRegistry(),
         resources=ResourceRegistry(),
         auth_backend=_Deny(),
@@ -445,3 +487,39 @@ async def test_acall_invokes_sync_function_via_thread() -> None:
         return x * 2
 
     assert await acall(produce, 21) == 42
+
+
+async def test_async_dispatch_routes_exceptions_through_handle_exception() -> None:
+    """An exception inside an action surfaces via DRF's ``handle_exception``.
+
+    The async ``dispatch`` mirrors :meth:`APIView.dispatch`'s ``try/except``
+    so DRF's error handling (e.g. ``exception_handler`` setting) keeps
+    working. Trigger by giving the view a handler that raises.
+    """
+    from rest_framework.exceptions import APIException
+
+    from rest_framework_mcp.auth.backends.allow_any_backend import AllowAnyBackend
+    from rest_framework_mcp.transport.in_memory_session_store import InMemorySessionStore
+
+    class _RaisingViewSet(AsyncStreamableHttpViewSet):
+        async def handle_jsonrpc(self, request):  # noqa: ARG002
+            raise APIException("boom")
+
+    view = _RaisingViewSet.as_view(
+        ASYNC_STREAMABLE_HTTP_ACTION_MAP,
+        tools=ToolRegistry(),
+        resources=ResourceRegistry(),
+        auth_backend=AllowAnyBackend(),
+        session_store=InMemorySessionStore(),
+    )
+    factory = RequestFactory()
+    request = factory.post(
+        "/mcp/",
+        data="{}",
+        content_type="application/json",
+        headers={"Mcp-Protocol-Version": "2025-11-25"},
+    )
+    response = await view(request)
+    # DRF's default ``handle_exception`` maps ``APIException`` to its
+    # configured status (500 for the base class without ``status_code``).
+    assert response.status_code == 500

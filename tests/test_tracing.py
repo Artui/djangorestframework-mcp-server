@@ -50,8 +50,8 @@ def _server() -> MCPServer:
 def _ctx(server: MCPServer) -> Any:
     from django.http import HttpRequest
 
-    from rest_framework_mcp.auth.token_info import TokenInfo
-    from rest_framework_mcp.handlers.context import MCPCallContext
+    from rest_framework_mcp.auth.types.token_info import TokenInfo
+    from rest_framework_mcp.handlers.types.context import MCPCallContext
 
     return MCPCallContext(
         http_request=HttpRequest(),
@@ -147,8 +147,8 @@ def _tools_raising_service_error() -> Any:
     """A registry holding a tool whose service raises ``ServiceError``."""
     from rest_framework_services.exceptions.service_error import ServiceError
 
-    from rest_framework_mcp.registry.tool_binding import ToolBinding
     from rest_framework_mcp.registry.tool_registry import ToolRegistry
+    from rest_framework_mcp.registry.types.tool_binding import ToolBinding
 
     def boom() -> None:
         raise ServiceError("nope")
@@ -163,8 +163,8 @@ def _tools_raising_service_error() -> Any:
 def _ctx_with_tools(tools: Any) -> Any:
     from django.http import HttpRequest
 
-    from rest_framework_mcp.auth.token_info import TokenInfo
-    from rest_framework_mcp.handlers.context import MCPCallContext
+    from rest_framework_mcp.auth.types.token_info import TokenInfo
+    from rest_framework_mcp.handlers.types.context import MCPCallContext
     from rest_framework_mcp.registry.prompt_registry import PromptRegistry
     from rest_framework_mcp.registry.resource_registry import ResourceRegistry
 

@@ -6,18 +6,18 @@ from rest_framework_services.selectors.utils import run_selector
 from rest_framework_services.views.utils import resolve_callable_kwargs
 
 from rest_framework_mcp._compat.tracing import span
-from rest_framework_mcp.handlers.context import MCPCallContext
+from rest_framework_mcp.constants import JsonRpcErrorCode
 from rest_framework_mcp.handlers.handle_tools_call import _span_attrs
+from rest_framework_mcp.handlers.types.context import MCPCallContext
 from rest_framework_mcp.handlers.utils import (
     build_internal_drf_request,
     check_permissions,
     consume_rate_limits,
 )
 from rest_framework_mcp.output.encode_json import encode_json
-from rest_framework_mcp.protocol.json_rpc_error import JsonRpcError
-from rest_framework_mcp.protocol.json_rpc_error_code import JsonRpcErrorCode
-from rest_framework_mcp.protocol.resource_contents import ResourceContents
-from rest_framework_mcp.server.mcp_service_view import MCPServiceView
+from rest_framework_mcp.protocol.types.json_rpc_error import JsonRpcError
+from rest_framework_mcp.protocol.types.resource_contents import ResourceContents
+from rest_framework_mcp.server.types.mcp_service_view import MCPServiceView
 
 
 def handle_resources_read(

@@ -4,8 +4,9 @@ from typing import Any
 
 from rest_framework_services.types.selector_spec import SelectorSpec
 
-from rest_framework_mcp.output.format import OutputFormat
-from rest_framework_mcp.registry.selector_tool_binding import SelectorToolBinding
+from rest_framework_mcp.auth.permissions.wrap_spec_permissions import wrap_spec_permissions
+from rest_framework_mcp.constants import ArgumentBinding, OutputFormat, UnknownArguments
+from rest_framework_mcp.registry.types.selector_tool_binding import SelectorToolBinding
 
 
 def selector_spec_to_tool(
@@ -22,6 +23,10 @@ def selector_spec_to_tool(
     filter_set: Any | None = None,
     ordering_fields: tuple[str, ...] = (),
     paginate: bool = False,
+    include_structured_content: bool | None = None,
+    argument_binding: ArgumentBinding = ArgumentBinding.MERGE,
+    unknown_arguments: UnknownArguments = UnknownArguments.REJECT,
+    always_listed: bool = False,
 ) -> SelectorToolBinding:
     """Lift a ``SelectorSpec`` into a :class:`SelectorToolBinding`.
 
@@ -39,6 +44,8 @@ def selector_spec_to_tool(
             f"SelectorSpec for selector tool {name!r} has selector=None — MCP needs a "
             "concrete callable to dispatch to."
         )
+    spec_perms: tuple[Any, ...] = wrap_spec_permissions(spec.permission_classes, label=name)
+    effective_perms: tuple[Any, ...] = spec_perms + tuple(permissions)
     return SelectorToolBinding(
         name=name,
         description=description,
@@ -46,12 +53,16 @@ def selector_spec_to_tool(
         spec=spec,
         input_serializer=input_serializer,
         output_format=output_format,
-        permissions=permissions,
+        permissions=effective_perms,
         rate_limits=rate_limits,
         annotations=annotations or {},
         filter_set=filter_set,
         ordering_fields=ordering_fields,
         paginate=paginate,
+        include_structured_content=include_structured_content,
+        argument_binding=argument_binding,
+        unknown_arguments=unknown_arguments,
+        always_listed=always_listed,
     )
 
 

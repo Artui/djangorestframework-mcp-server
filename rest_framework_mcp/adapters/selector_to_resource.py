@@ -5,7 +5,8 @@ from typing import Any
 
 from rest_framework_services.types.selector_spec import SelectorSpec
 
-from rest_framework_mcp.registry.resource_binding import ResourceBinding
+from rest_framework_mcp.auth.permissions.wrap_spec_permissions import wrap_spec_permissions
+from rest_framework_mcp.registry.types.resource_binding import ResourceBinding
 
 
 def selector_to_resource(
@@ -20,6 +21,7 @@ def selector_to_resource(
     permissions: tuple[Any, ...] = (),
     rate_limits: tuple[Any, ...] = (),
     annotations: dict[str, Any] | None = None,
+    always_listed: bool = False,
 ) -> ResourceBinding:
     """Lift a :class:`SelectorSpec` into a :class:`ResourceBinding`.
 
@@ -53,6 +55,8 @@ def selector_to_resource(
         output_serializer = selector.output_serializer
     kwargs_provider = selector.kwargs
 
+    spec_perms: tuple[Any, ...] = wrap_spec_permissions(selector.permission_classes, label=name)
+    effective_perms: tuple[Any, ...] = spec_perms + tuple(permissions)
     return ResourceBinding(
         name=name,
         uri_template=uri_template,
@@ -61,10 +65,11 @@ def selector_to_resource(
         selector=resolved_callable,
         output_serializer=output_serializer,
         mime_type=mime_type,
-        permissions=permissions,
+        permissions=effective_perms,
         rate_limits=rate_limits,
         annotations=annotations or {},
         kwargs_provider=kwargs_provider,
+        always_listed=always_listed,
     )
 
 

@@ -9,7 +9,7 @@ from django.http import HttpRequest
 from rest_framework_mcp.auth.rate_limits.token_bucket_rate_limit import (
     TokenBucketRateLimit,
 )
-from rest_framework_mcp.auth.token_info import TokenInfo
+from rest_framework_mcp.auth.types.token_info import TokenInfo
 
 
 @pytest.fixture(autouse=True)
@@ -129,7 +129,7 @@ def test_invalid_refill_rejected() -> None:
 
 
 def test_satisfies_mcprate_limit_protocol() -> None:
-    from rest_framework_mcp.auth.rate_limits.mcp_rate_limit import MCPRateLimit
+    from rest_framework_mcp.auth.rate_limits.types.mcp_rate_limit import MCPRateLimit
 
     limiter = TokenBucketRateLimit(capacity=1, refill_per_second=1.0)
     assert isinstance(limiter, MCPRateLimit)

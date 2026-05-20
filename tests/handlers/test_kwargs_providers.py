@@ -16,18 +16,18 @@ from rest_framework.request import Request as DRFRequest
 from rest_framework_services.types.selector_spec import SelectorSpec
 from rest_framework_services.types.service_spec import ServiceSpec
 
-from rest_framework_mcp.auth.token_info import TokenInfo
-from rest_framework_mcp.handlers.context import MCPCallContext
+from rest_framework_mcp.auth.types.token_info import TokenInfo
 from rest_framework_mcp.handlers.handle_resources_read import handle_resources_read
 from rest_framework_mcp.handlers.handle_resources_read_async import handle_resources_read_async
 from rest_framework_mcp.handlers.handle_tools_call import handle_tools_call
 from rest_framework_mcp.handlers.handle_tools_call_async import handle_tools_call_async
+from rest_framework_mcp.handlers.types.context import MCPCallContext
 from rest_framework_mcp.registry.prompt_registry import PromptRegistry
 from rest_framework_mcp.registry.resource_registry import ResourceRegistry
-from rest_framework_mcp.registry.tool_binding import ToolBinding
 from rest_framework_mcp.registry.tool_registry import ToolRegistry
+from rest_framework_mcp.registry.types.tool_binding import ToolBinding
 from rest_framework_mcp.server.mcp_server import MCPServer
-from rest_framework_mcp.server.mcp_service_view import MCPServiceView
+from rest_framework_mcp.server.types.mcp_service_view import MCPServiceView
 
 
 def _ctx(*, tools=None, resources=None) -> MCPCallContext:
@@ -210,7 +210,7 @@ def test_selector_spec_caller_output_serializer_wins() -> None:
 
 def test_selector_spec_kwargs_provider_invoked_on_read() -> None:
     """``SelectorSpec.kwargs`` runs on every ``resources/read`` and merges into the pool."""
-    from rest_framework_mcp.registry.resource_binding import ResourceBinding
+    from rest_framework_mcp.registry.types.resource_binding import ResourceBinding
 
     seen: dict[str, Any] = {}
 
@@ -243,7 +243,7 @@ def test_selector_spec_kwargs_provider_invoked_on_read() -> None:
 
 
 async def test_async_selector_spec_kwargs_provider_invoked_on_read() -> None:
-    from rest_framework_mcp.registry.resource_binding import ResourceBinding
+    from rest_framework_mcp.registry.types.resource_binding import ResourceBinding
 
     def selector(*, pk: str, tenant_id: int) -> dict:
         return {"pk": pk, "tenant": tenant_id}

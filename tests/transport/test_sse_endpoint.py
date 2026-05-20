@@ -9,7 +9,10 @@ from django.test import AsyncClient, RequestFactory, override_settings
 from rest_framework_mcp.auth.backends.allow_any_backend import AllowAnyBackend
 from rest_framework_mcp.registry.resource_registry import ResourceRegistry
 from rest_framework_mcp.registry.tool_registry import ToolRegistry
-from rest_framework_mcp.transport.async_streamable_http_view import AsyncStreamableHttpView
+from rest_framework_mcp.transport.async_streamable_http_viewset import (
+    ASYNC_STREAMABLE_HTTP_ACTION_MAP,
+    AsyncStreamableHttpViewSet,
+)
 from rest_framework_mcp.transport.in_memory_session_store import InMemorySessionStore
 from rest_framework_mcp.transport.in_memory_sse_broker import InMemorySSEBroker
 
@@ -73,7 +76,8 @@ async def test_published_payload_reaches_open_stream() -> None:
     request = factory.get(
         "/mcp/", headers={"Mcp-Protocol-Version": "2025-11-25", "Mcp-Session-Id": sid}
     )
-    view = AsyncStreamableHttpView.as_view(
+    view = AsyncStreamableHttpViewSet.as_view(
+        ASYNC_STREAMABLE_HTTP_ACTION_MAP,
         tools=ToolRegistry(),
         resources=ResourceRegistry(),
         auth_backend=AllowAnyBackend(),
@@ -130,7 +134,8 @@ async def test_resume_replays_buffered_events_then_live() -> None:
             "Last-Event-Id": first,
         },
     )
-    view = AsyncStreamableHttpView.as_view(
+    view = AsyncStreamableHttpViewSet.as_view(
+        ASYNC_STREAMABLE_HTTP_ACTION_MAP,
         tools=ToolRegistry(),
         resources=ResourceRegistry(),
         auth_backend=AllowAnyBackend(),
@@ -164,7 +169,8 @@ async def test_delete_purges_replay_buffer() -> None:
 
     factory = RequestFactory()
     request = factory.delete("/mcp/", headers={"Mcp-Session-Id": sid})
-    view = AsyncStreamableHttpView.as_view(
+    view = AsyncStreamableHttpViewSet.as_view(
+        ASYNC_STREAMABLE_HTTP_ACTION_MAP,
         tools=ToolRegistry(),
         resources=ResourceRegistry(),
         auth_backend=AllowAnyBackend(),

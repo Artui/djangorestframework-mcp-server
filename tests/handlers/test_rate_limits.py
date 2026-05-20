@@ -5,22 +5,22 @@ from __future__ import annotations
 from django.http import HttpRequest
 from rest_framework_services.types.service_spec import ServiceSpec
 
-from rest_framework_mcp.auth.token_info import TokenInfo
-from rest_framework_mcp.handlers.context import MCPCallContext
+from rest_framework_mcp.auth.types.token_info import TokenInfo
 from rest_framework_mcp.handlers.handle_prompts_get import handle_prompts_get
 from rest_framework_mcp.handlers.handle_prompts_get_async import handle_prompts_get_async
 from rest_framework_mcp.handlers.handle_resources_read import handle_resources_read
 from rest_framework_mcp.handlers.handle_resources_read_async import handle_resources_read_async
 from rest_framework_mcp.handlers.handle_tools_call import handle_tools_call
 from rest_framework_mcp.handlers.handle_tools_call_async import handle_tools_call_async
+from rest_framework_mcp.handlers.types.context import MCPCallContext
 from rest_framework_mcp.handlers.utils import consume_rate_limits
-from rest_framework_mcp.protocol.json_rpc_error import JsonRpcError
-from rest_framework_mcp.registry.prompt_binding import PromptBinding
+from rest_framework_mcp.protocol.types.json_rpc_error import JsonRpcError
 from rest_framework_mcp.registry.prompt_registry import PromptRegistry
-from rest_framework_mcp.registry.resource_binding import ResourceBinding
 from rest_framework_mcp.registry.resource_registry import ResourceRegistry
-from rest_framework_mcp.registry.tool_binding import ToolBinding
 from rest_framework_mcp.registry.tool_registry import ToolRegistry
+from rest_framework_mcp.registry.types.prompt_binding import PromptBinding
+from rest_framework_mcp.registry.types.resource_binding import ResourceBinding
+from rest_framework_mcp.registry.types.tool_binding import ToolBinding
 
 
 class _AlwaysDeny:

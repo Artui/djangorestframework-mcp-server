@@ -4,4 +4,4 @@
 
 ## MCPServiceView
 
-::: rest_framework_mcp.server.mcp_service_view.MCPServiceView
+::: rest_framework_mcp.server.types.mcp_service_view.MCPServiceView

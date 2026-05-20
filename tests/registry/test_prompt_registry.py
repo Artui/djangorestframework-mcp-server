@@ -2,8 +2,8 @@ from __future__ import annotations
 
 import pytest
 
-from rest_framework_mcp.registry.prompt_binding import PromptBinding
 from rest_framework_mcp.registry.prompt_registry import PromptRegistry
+from rest_framework_mcp.registry.types.prompt_binding import PromptBinding
 
 
 def _binding(name: str = "p") -> PromptBinding:

@@ -29,6 +29,26 @@ This means a project that uses neither `ServiceViewSet` nor DRF routers can
 still expose its services over MCP. The HTTP and MCP transports are siblings,
 not layers — neither owns the other.
 
+### What `ServiceSpec` / `SelectorSpec` carries through to MCP
+
+Sister-repo (`djangorestframework-services`) 0.12.0 extended the spec
+dataclasses with three fields the MCP layer now honors automatically —
+register a spec once and both transports get the same shape:
+
+- **`permission_classes`** — DRF `BasePermission` classes. Auto-wrapped
+  with `DRFPermissionAdapter` and prepended to the per-binding
+  `permissions` tuple, so spec-declared permissions run before any
+  tool-level `MCPPermission` you add at the MCP call site.
+- **`SelectorSpec` queryset shaping** — `select_related`,
+  `prefetch_related`, `annotations`, and `extend_queryset` are applied
+  before the FilterSet / ordering / pagination pipeline. Non-queryset
+  returns (lists, scalars) pass through unchanged.
+- **Serializer context** — `input_serializer_context` /
+  `output_serializer_context` (on `ServiceSpec`) and
+  `output_serializer_context` (on `SelectorSpec`) are invoked with the
+  synthesised view + DRF request and forwarded as `context=` to the
+  serializer constructor on both sync and async dispatch paths.
+
 ### Per-spec kwargs providers
 
 `ServiceSpec.kwargs` (and `SelectorSpec.kwargs`) is a callable that returns
@@ -92,6 +112,84 @@ the imperative surface symmetric with `register_service_tool` makes the spec the
 single point where output serializers and kwargs providers attach. Use the
 `@server.resource(uri_template=...)` decorator if you'd rather skip the
 boilerplate; it wraps the function in a `SelectorSpec` for you.
+
+## Per-tool registration kwargs
+
+Beyond `permissions=`, `output_format=`, and `include_structured_content=`,
+`register_service_tool` / `register_selector_tool` (and their decorator
+forms) accept three behavior knobs:
+
+- **`argument_binding=`** — how the validated `arguments` flow into the
+  callable's kwarg pool.
+  - `ArgumentBinding.DATA_ONLY` (default for service tools) — only
+    `data=<validated>` enters the pool.
+  - `ArgumentBinding.MERGE` (default for selector tools) — every key from
+    the validated arguments is spread into the pool as a top-level kwarg,
+    so selectors can declare individual parameters
+    (`def list_drafts(*, project_id, page=1)`). `spec.kwargs(...)` wins
+    on conflict so author-declared invariants beat client input.
+  - `ArgumentBinding.REPLACE` — like `MERGE` but the spread wins on
+    conflict, so `spec.kwargs(...)` supplies client-overridable defaults.
+
+  Reserved transport-pool seeds (`request` / `user` / `data`) and the
+  selector pipeline keys (`ordering` / `page` / `limit`) are stripped
+  from the spread regardless of mode so clients can't poison
+  transport-controlled state.
+
+- **`unknown_arguments=`** — how `arguments` keys outside the binding's
+  declared field set are handled.
+  - `UnknownArguments.REJECT` (default) — outer `inputSchema` advertises
+    `"additionalProperties": false` and the validator rejects unknown
+    keys with `-32602`.
+  - `UnknownArguments.PASSTHROUGH` — `"additionalProperties": true`;
+    unknown keys survive validation and are merged onto the validated
+    payload before binding.
+  - `UnknownArguments.IGNORE` — `"additionalProperties": true`; unknown
+    keys are silently dropped (the historic DRF default).
+
+  Selector tools' pipeline-reserved keys are always treated as "known",
+  so the policy doesn't fight the post-fetch pipeline.
+
+- **`always_listed=`** — when
+  `REST_FRAMEWORK_MCP["FILTER_LISTINGS_BY_PERMISSIONS"]` is enabled,
+  bindings are dropped from `tools/list` / `resources/list` /
+  `prompts/list` when their permissions deny the current caller.
+  Setting `always_listed=True` keeps the binding visible as a discovery
+  aid; the permission still gates the actual invocation.
+
+### Bulk registration
+
+For projects that register many tools in one place, the
+`register_tools(server, definitions, *, selector_defaults=None,
+service_defaults=None)` entry point collapses the boilerplate. Pass a
+list of `ToolDefinition.service(...)` / `ToolDefinition.selector(...)`
+instances plus per-kind defaults that fill in fields each definition
+leaves as `None`. The function loops over the existing per-tool
+registration methods, so every guarantee and bug fix applies
+automatically.
+
+```python
+from rest_framework_mcp import (
+    ServiceDefaults,
+    SelectorDefaults,
+    ToolDefinition,
+    register_tools,
+)
+
+register_tools(
+    server,
+    [
+        ToolDefinition.service(name="invoices.create", spec=create_spec),
+        ToolDefinition.service(name="invoices.update", spec=update_spec),
+        ToolDefinition.selector(name="invoices.list", spec=list_spec),
+    ],
+    service_defaults=ServiceDefaults(permissions=[ScopeRequired(["invoices:write"])]),
+    selector_defaults=SelectorDefaults(permissions=[ScopeRequired(["invoices:read"])]),
+)
+```
+
+Per-definition kwargs win over defaults on conflict; `None` is the
+"no override" sentinel across both layers.
 
 ## Tools vs resources
 
@@ -170,7 +268,11 @@ The MCP 2025-11-25 transport requires:
 
 - **`MCP-Protocol-Version`** — the version the client speaks. Validated against
   `REST_FRAMEWORK_MCP["PROTOCOL_VERSIONS"]`. Missing → 400 except on
-  `initialize`, which is allowed to omit it for the initial handshake.
+  `initialize`, which is allowed to omit it for the initial handshake. Some
+  clients omit the header on every request; set
+  `REST_FRAMEWORK_MCP["REQUIRE_PROTOCOL_VERSION_HEADER"] = False` to accept
+  those by falling back to the first supported version. A present-but-
+  unsupported version is still rejected either way.
 - **`MCP-Session-Id`** — issued by the server in the response to `initialize`.
   Required on every subsequent call. Unknown id → 404 (forces the client to
   re-initialize). Sessions are stored in a pluggable
@@ -211,6 +313,27 @@ marker so clients that don't parse it natively can still render it.
 If TOON is requested but the optional extra is missing, the encoder falls back
 to JSON with a `warnings.warn` — a tool call never fails because an optional
 extra is absent.
+
+### Omitting `structuredContent`
+
+`structuredContent` is optional per the spec. Some clients echo both
+`content[0]` and `structuredContent` back to the LLM (doubling token usage on
+every tool call) or have bugs parsing the field. Two opt-outs:
+
+- Server-wide: set `REST_FRAMEWORK_MCP["INCLUDE_STRUCTURED_CONTENT"] = False`.
+- Per tool: pass `include_structured_content=False` to `register_service_tool`,
+  `register_selector_tool`, or their decorator forms. The per-tool kwarg is
+  tri-state — `None` (default) inherits the global, `True`/`False` force the
+  behavior regardless of the setting.
+
+When omitted, the text payload in `content[0]` still carries the full result
+(JSON-encoded by default, or TOON when requested), so clients can still parse
+the data — they just have to re-parse instead of getting a pre-parsed dict.
+
+The MCP tools spec requires that any tool declaring `outputSchema` always
+return conforming `structuredContent`. To keep that contract intact, when a
+binding opts out of `structuredContent` the corresponding `outputSchema` is
+also dropped from the tool's `tools/list` entry. The two move together.
 
 ## Auth model
 

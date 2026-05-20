@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import re
 
-from rest_framework_mcp.registry.resource_binding import ResourceBinding
+from rest_framework_mcp.registry.types.resource_binding import ResourceBinding
 
 _TEMPLATE_VAR = re.compile(r"\{([^}]+)\}")
 

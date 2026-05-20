@@ -155,10 +155,10 @@ def test_protected_resource_metadata_uses_settings(settings) -> None:
         }
     }
     md = DjangoOAuthToolkitBackend().protected_resource_metadata()
-    assert md["resource"] == "https://x/mcp"
-    assert md["authorization_servers"] == ["https://x/auth"]
-    assert md["scopes_supported"] == ["read"]
-    assert md["resource_documentation"] == "https://x/docs"
+    assert md.resource == "https://x/mcp"
+    assert md.authorization_servers == ["https://x/auth"]
+    assert md.scopes_supported == ["read"]
+    assert md.resource_documentation == "https://x/docs"
 
 
 def test_protected_resource_metadata_prefers_resource_url(settings) -> None:
@@ -172,13 +172,23 @@ def test_protected_resource_metadata_prefers_resource_url(settings) -> None:
         "SERVER_INFO": {"resource": "https://stale.example/mcp/"},
     }
     md = DjangoOAuthToolkitBackend().protected_resource_metadata()
-    assert md["resource"] == "https://canonical.example/mcp/"
+    assert md.resource == "https://canonical.example/mcp/"
 
 
 def test_protected_resource_metadata_omits_documentation_when_unset(settings) -> None:
     settings.REST_FRAMEWORK_MCP = {"SERVER_INFO": {"resource": "https://x/mcp"}}
     md = DjangoOAuthToolkitBackend().protected_resource_metadata()
-    assert "resource_documentation" not in md
+    assert md.resource_documentation is None
+    # ``to_dict()`` drops the key entirely so the wire shape is clean.
+    assert "resource_documentation" not in md.to_dict()
+
+
+def test_protected_resource_metadata_emits_documentation_when_set(settings) -> None:
+    settings.REST_FRAMEWORK_MCP = {
+        "SERVER_INFO": {"resource": "https://x/mcp", "documentation": "https://x/docs"},
+    }
+    md = DjangoOAuthToolkitBackend().protected_resource_metadata()
+    assert md.to_dict()["resource_documentation"] == "https://x/docs"
 
 
 def test_protected_resource_metadata_required_keys_present(settings) -> None:
@@ -191,14 +201,15 @@ def test_protected_resource_metadata_required_keys_present(settings) -> None:
         },
     }
     md = DjangoOAuthToolkitBackend().protected_resource_metadata()
+    payload = md.to_dict()
     for key in (
         "resource",
         "authorization_servers",
         "bearer_methods_supported",
         "scopes_supported",
     ):
-        assert key in md, f"PRM missing required key {key!r}"
-    assert md["bearer_methods_supported"] == ["header"]
+        assert key in payload, f"PRM missing required key {key!r}"
+    assert md.bearer_methods_supported == ["header"]
 
 
 def test_www_authenticate_challenge_includes_metadata(settings) -> None:
@@ -216,3 +227,43 @@ def test_www_authenticate_challenge_includes_metadata(settings) -> None:
 def test_www_authenticate_challenge_minimal(settings) -> None:
     settings.REST_FRAMEWORK_MCP = {"SERVER_INFO": {}}
     assert DjangoOAuthToolkitBackend().www_authenticate_challenge() == 'Bearer realm="mcp"'
+
+
+# ---------- authorization_server_metadata (Phase 10d) ----------
+
+
+def test_authorization_server_metadata_shape(settings) -> None:
+    """RFC 8414 payload derived from ``SERVER_INFO``."""
+    settings.REST_FRAMEWORK_MCP = {
+        "SERVER_INFO": {
+            "authorization_servers": ["https://issuer.example/oauth"],
+            "scopes_supported": ["mcp:read", "mcp:write"],
+        },
+    }
+    md = DjangoOAuthToolkitBackend().authorization_server_metadata()
+    assert md.issuer == "https://issuer.example/oauth"
+    assert md.authorization_endpoint == "https://issuer.example/oauth/oauth/authorize/"
+    assert md.token_endpoint == "https://issuer.example/oauth/oauth/token/"
+    assert md.registration_endpoint == "https://issuer.example/oauth/oauth/register/"
+    assert "authorization_code" in md.grant_types_supported
+    assert md.response_types_supported == ["code"]
+    assert md.code_challenge_methods_supported == ["S256"]
+    assert md.scopes_supported == ["mcp:read", "mcp:write"]
+
+
+def test_authorization_server_metadata_missing_issuer_returns_empty_endpoints(settings) -> None:
+    """No ``authorization_servers`` → empty issuer + endpoints, but valid JSON shape."""
+    settings.REST_FRAMEWORK_MCP = {"SERVER_INFO": {}}
+    md = DjangoOAuthToolkitBackend().authorization_server_metadata()
+    assert md.issuer == ""
+    assert md.authorization_endpoint == ""
+    assert md.token_endpoint == ""
+
+
+def test_authorization_server_metadata_strips_trailing_slash_in_issuer(settings) -> None:
+    settings.REST_FRAMEWORK_MCP = {
+        "SERVER_INFO": {"authorization_servers": ["https://issuer.example/oauth/"]},
+    }
+    md = DjangoOAuthToolkitBackend().authorization_server_metadata()
+    # Trailing slash is normalised so endpoints don't double-slash.
+    assert md.token_endpoint == "https://issuer.example/oauth/oauth/token/"

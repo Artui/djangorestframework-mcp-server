@@ -2,11 +2,11 @@ from __future__ import annotations
 
 from typing import Any
 
+from rest_framework_mcp.constants import OutputFormat
 from rest_framework_mcp.output.encode_json import encode_json
 from rest_framework_mcp.output.encode_toon import encode_toon
-from rest_framework_mcp.output.format import OutputFormat
-from rest_framework_mcp.protocol.tool_content_block import ToolContentBlock
-from rest_framework_mcp.protocol.tool_result import ToolResult
+from rest_framework_mcp.protocol.types.tool_content_block import ToolContentBlock
+from rest_framework_mcp.protocol.types.tool_result import ToolResult
 
 
 def _is_uniform_list_of_objects(payload: Any) -> bool:
@@ -34,6 +34,7 @@ def build_tool_result(
     *,
     output_format: OutputFormat = OutputFormat.JSON,
     is_error: bool = False,
+    include_structured_content: bool = True,
 ) -> ToolResult:
     """Build a :class:`ToolResult` for a successful (or tool-level error) call.
 
@@ -42,6 +43,11 @@ def build_tool_result(
     ``output_format``. TOON output is wrapped in a fenced ``toon`` block with
     a leading marker line so clients that don't parse TOON natively can still
     display it.
+
+    When ``include_structured_content`` is ``False``, the
+    ``structuredContent`` field is omitted from the response. The text
+    rendering in ``content[0]`` still carries the full payload, so clients
+    that don't consume the structured field lose nothing.
     """
     resolved: OutputFormat = _resolve_format(payload, output_format)
     if resolved is OutputFormat.TOON:
@@ -50,7 +56,7 @@ def build_tool_result(
         text = encode_json(payload)
     return ToolResult(
         content=[ToolContentBlock(type="text", text=text)],
-        structured_content=payload,
+        structured_content=payload if include_structured_content else None,
         is_error=is_error,
     )
 

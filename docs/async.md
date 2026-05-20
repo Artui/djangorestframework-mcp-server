@@ -41,7 +41,7 @@ modification — Django's `get_asgi_application()` happily serves async views.
 
 ## Sync collaborators are bridged automatically
 
-`AsyncStreamableHttpView` accepts the same auth backend and session store as
+`AsyncStreamableHttpViewSet` accepts the same auth backend and session store as
 the sync view. Sync methods on those collaborators are wrapped in
 `asgiref.sync.sync_to_async` at the call site, so the existing
 `AllowAnyBackend`, `DjangoOAuthToolkitBackend`, `InMemorySessionStore`, and

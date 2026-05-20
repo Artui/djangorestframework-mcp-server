@@ -19,6 +19,7 @@ selector. Selectors return raw, unscoped querysets.
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from typing import Any
 
 from rest_framework import serializers as drf_serializers
@@ -30,7 +31,13 @@ from rest_framework_services.views.utils import resolve_callable_kwargs
 from rest_framework_mcp._compat.acall import acall
 from rest_framework_mcp._compat.utils import arun_selector_sync_safe
 from rest_framework_mcp.conf import get_setting
-from rest_framework_mcp.handlers.context import MCPCallContext
+from rest_framework_mcp.constants import (
+    RESERVED_POST_FETCH_KEYS,
+    JsonRpcErrorCode,
+    OutputFormat,
+)
+from rest_framework_mcp.handlers.build_call_pool import build_call_pool
+from rest_framework_mcp.handlers.types.context import MCPCallContext
 from rest_framework_mcp.handlers.utils import (
     build_internal_drf_request,
     check_permissions,
@@ -38,12 +45,14 @@ from rest_framework_mcp.handlers.utils import (
     validate_input_against_serializer,
     validation_error_data,
 )
-from rest_framework_mcp.output.format import OutputFormat
+from rest_framework_mcp.output.resolve_include_structured_content import (
+    resolve_include_structured_content,
+)
 from rest_framework_mcp.output.tool_result import build_tool_result
-from rest_framework_mcp.protocol.json_rpc_error import JsonRpcError
-from rest_framework_mcp.protocol.json_rpc_error_code import JsonRpcErrorCode
-from rest_framework_mcp.registry.selector_tool_binding import SelectorToolBinding
-from rest_framework_mcp.server.mcp_service_view import MCPServiceView
+from rest_framework_mcp.protocol.types.json_rpc_error import JsonRpcError
+from rest_framework_mcp.registry.types.selector_tool_binding import SelectorToolBinding
+from rest_framework_mcp.schema.filterset_schema import filterset_to_schema_properties
+from rest_framework_mcp.server.types.mcp_service_view import MCPServiceView
 
 
 def dispatch_selector_tool(
@@ -62,7 +71,13 @@ def dispatch_selector_tool(
     if error is not None:
         return error
 
-    pool: dict[str, Any] = _build_kwarg_pool(binding, drf_request, context, validated)
+    pool: dict[str, Any] = build_call_pool(
+        binding,
+        drf_request=drf_request,
+        user=context.token.user,
+        validated=validated,
+        arguments_raw=arguments_raw,
+    )
 
     try:
         kwargs: dict[str, Any] = resolve_callable_kwargs(binding.selector, pool)
@@ -78,12 +93,13 @@ def dispatch_selector_tool(
             otel_span.record_exception(exc)
         return JsonRpcError(JsonRpcErrorCode.SERVER_ERROR, exc.message)
 
-    return _post_fetch_and_render(binding, result, arguments_raw, params)
+    return _post_fetch_and_render(binding, result, drf_request, arguments_raw, params)
 
 
 async def _post_fetch_and_render_async(
     binding: SelectorToolBinding,
     result: Any,
+    drf_request: Any,
     arguments_raw: dict[str, Any],
     params: dict[str, Any],
 ) -> dict[str, Any]:
@@ -94,7 +110,7 @@ async def _post_fetch_and_render_async(
     through a thread. The pipeline itself is unchanged — only the
     async-context boundary differs.
     """
-    return await acall(_post_fetch_and_render, binding, result, arguments_raw, params)
+    return await acall(_post_fetch_and_render, binding, result, drf_request, arguments_raw, params)
 
 
 async def dispatch_selector_tool_async(
@@ -113,7 +129,13 @@ async def dispatch_selector_tool_async(
     if error is not None:
         return error
 
-    pool: dict[str, Any] = _build_kwarg_pool(binding, drf_request, context, validated)
+    pool: dict[str, Any] = build_call_pool(
+        binding,
+        drf_request=drf_request,
+        user=context.token.user,
+        validated=validated,
+        arguments_raw=arguments_raw,
+    )
 
     try:
         kwargs: dict[str, Any] = resolve_callable_kwargs(binding.selector, pool)
@@ -129,7 +151,7 @@ async def dispatch_selector_tool_async(
             otel_span.record_exception(exc)
         return JsonRpcError(JsonRpcErrorCode.SERVER_ERROR, exc.message)
 
-    return await _post_fetch_and_render_async(binding, result, arguments_raw, params)
+    return await _post_fetch_and_render_async(binding, result, drf_request, arguments_raw, params)
 
 
 # ---------- helpers shared between sync + async ----------
@@ -169,12 +191,19 @@ def _build_request_and_validate(
     Filter / ordering / pagination args bypass ``input_serializer``
     validation — they're shape-checked at runtime by the FilterSet, the
     ordering enum at dispatch, and ``int(...)`` coercion respectively.
+    Their names are passed in as ``additional_known_keys`` so the
+    unknown-argument policy doesn't flag them as unrecognised.
     """
     drf_request = build_internal_drf_request(
         context.http_request, user=context.token.user, data=arguments_raw
     )
     try:
-        validated = validate_input_against_serializer(arguments_raw, binding.input_serializer)
+        validated = validate_input_against_serializer(
+            arguments_raw,
+            binding.input_serializer,
+            unknown_arguments=binding.unknown_arguments,
+            additional_known_keys=_selector_tool_additional_known_keys(binding),
+        )
     except drf_serializers.ValidationError as exc:
         return (
             drf_request,
@@ -188,32 +217,48 @@ def _build_request_and_validate(
     return drf_request, validated, None
 
 
-def _build_kwarg_pool(
-    binding: SelectorToolBinding,
-    drf_request: Any,
-    context: MCPCallContext,
-    validated: Any,
-) -> dict[str, Any]:
-    pool: dict[str, Any] = {
-        "request": drf_request,
-        "user": context.token.user,
-    }
-    if validated is not None:
-        pool["data"] = validated
-    if binding.spec.kwargs is not None:
-        view = MCPServiceView(request=drf_request, action=binding.name)
-        pool.update(binding.spec.kwargs(view, drf_request))
-    return pool
+def _selector_tool_additional_known_keys(binding: SelectorToolBinding) -> frozenset[str]:
+    """Compute the keys a selector tool's pipeline knobs claim from ``arguments``.
+
+    The post-fetch pipeline (filter / order / paginate) reads its inputs
+    directly from ``arguments`` rather than going through
+    ``input_serializer``. Surfacing them here lets the unknown-argument
+    policy treat them as "known" without forcing every selector binding to
+    restate them on its serializer. Filter-set property names come from
+    :func:`filterset_to_schema_properties` so an arbitrary
+    ``django-filter`` shape is supported.
+
+    Returns a ``frozenset`` for cheap union with the serializer's
+    declared fields.
+    """
+    known: set[str] = set()
+    if binding.filter_set is not None:
+        # Same helper that drives ``inputSchema`` generation, so the
+        # validation-side known set and the wire-side advertised schema
+        # never drift.
+        known.update(filterset_to_schema_properties(binding.filter_set).keys())
+    if binding.ordering_fields:
+        known.add("ordering")
+    if binding.paginate:
+        known.add("page")
+        known.add("limit")
+    return frozenset(known)
 
 
 def _post_fetch_and_render(
     binding: SelectorToolBinding,
     result: Any,
+    drf_request: Any,
     arguments_raw: dict[str, Any],
     params: dict[str, Any],
 ) -> dict[str, Any]:
-    """Apply filter → order → paginate, then render via output_serializer."""
+    """Apply shaping → filter → order → paginate, then render via output_serializer."""
     qs: Any = result
+
+    # Per-spec QuerySet shaping (sister-repo 0.12+): runs *before* FilterSet
+    # so the filter sees an already-shaped queryset. Skips non-queryset
+    # selector returns silently — matches sister-repo's contract.
+    qs = _apply_spec_shaping(binding, qs, drf_request)
 
     # Filter — only when both binding and the QS-shape support it. Plain
     # lists / scalars fall through unchanged.
@@ -226,10 +271,15 @@ def _post_fetch_and_render(
         if isinstance(ordering, str) and _is_valid_ordering(ordering, binding.ordering_fields):
             qs = qs.order_by(ordering)
 
+    # Output-serializer context (sister-repo 0.12+): the spec callable
+    # receives the synthesised view + request and contributes context keys
+    # to the ``many=True`` serializer. ``None`` from the spec → no context.
+    context: Mapping[str, Any] | None = _resolve_output_context(binding, drf_request)
+
     # Pagination — wraps the response in ``{items, page, totalPages, hasNext}``.
     if binding.paginate:
         page_no, limit, page_items, total = _slice_for_pagination(qs, arguments_raw)
-        rendered_items = _render_collection(page_items, binding)
+        rendered_items = _render_collection(page_items, binding, context=context)
         total_pages: int = max(1, -(-total // limit))  # ceil divide
         payload: dict[str, Any] = {
             "items": rendered_items,
@@ -238,12 +288,18 @@ def _post_fetch_and_render(
             "hasNext": page_no < total_pages,
         }
     else:
-        payload = _render_collection(qs, binding)  # type: ignore[assignment]
+        payload = _render_collection(qs, binding, context=context)  # type: ignore[assignment]
 
     output_format: OutputFormat = OutputFormat.coerce(
         params.get("outputFormat") or binding.output_format
     )
-    return build_tool_result(payload, output_format=output_format).to_dict()
+    return build_tool_result(
+        payload,
+        output_format=output_format,
+        include_structured_content=resolve_include_structured_content(
+            binding.include_structured_content
+        ),
+    ).to_dict()
 
 
 def _is_queryset_like(value: Any) -> bool:
@@ -263,7 +319,9 @@ def _apply_filter_set(filter_set_class: Any, qs: Any, arguments_raw: dict[str, A
     narrow the queryset.
     """
     filter_data: dict[str, Any] = {
-        k: v for k, v in arguments_raw.items() if k not in _RESERVED_KEYS and v is not None
+        k: v
+        for k, v in arguments_raw.items()
+        if k not in RESERVED_POST_FETCH_KEYS and v is not None
     }
     fs = filter_set_class(data=filter_data, queryset=qs)
     return fs.qs
@@ -308,12 +366,19 @@ def _coerce_int(value: Any, *, default: int) -> int:
     return default
 
 
-def _render_collection(items: Any, binding: SelectorToolBinding) -> Any:
+def _render_collection(
+    items: Any,
+    binding: SelectorToolBinding,
+    *,
+    context: Mapping[str, Any] | None = None,
+) -> Any:
     """Render a collection through the binding's output serializer.
 
     Falls back to a list/passthrough when no serializer is declared. List
     materialisation happens here because querysets aren't JSON-serialisable
-    directly.
+    directly. ``context`` is forwarded to the serializer when present so
+    sister-repo's ``output_serializer_context`` callable participates in
+    field rendering (e.g. hyperlinked relations needing the request).
     """
     output_serializer: type | None = binding.spec.output_serializer
     if output_serializer is None:
@@ -321,14 +386,48 @@ def _render_collection(items: Any, binding: SelectorToolBinding) -> Any:
         # gets evaluated; clients receive an array of dicts only if the
         # selector itself returns dict-shaped items.
         return list(items) if hasattr(items, "__iter__") else items
-    return output_serializer(items, many=True).data
+    if context is None:
+        return output_serializer(items, many=True).data
+    return output_serializer(items, many=True, context=dict(context)).data
 
 
-# Keys that selector tools reserve for the post-fetch pipeline. Filter
-# args with these names would conflict with the framework, so we surface
-# the conflict by simply not forwarding them to the FilterSet (they're
-# consumed by ordering / pagination instead).
-_RESERVED_KEYS: frozenset[str] = frozenset({"ordering", "page", "limit"})
+def _apply_spec_shaping(binding: SelectorToolBinding, qs: Any, drf_request: Any) -> Any:
+    """Apply ``spec.{select_related,prefetch_related,annotations,extend_queryset}``.
+
+    Sister-repo 0.12+ ``SelectorSpec`` carries the four shaping fields. They
+    only make sense on a Django ``QuerySet`` — selectors that return lists
+    or scalars are passed through unchanged (matches sister-repo's "shaping
+    only applies to QuerySets" contract; raising would break the otherwise-
+    legal "return a list" shape).
+
+    ``extend_queryset`` runs *last* so it always sees the fully statically-
+    shaped queryset (declarative fields applied first), matching sister-repo's
+    ordering in ``dispatch_selector_for_spec``.
+    """
+    spec = binding.spec
+    if not _is_queryset_like(qs):
+        return qs
+    if spec.select_related:
+        qs = qs.select_related(*spec.select_related)
+    if spec.prefetch_related:
+        qs = qs.prefetch_related(*spec.prefetch_related)
+    if spec.annotations:
+        qs = qs.annotate(**spec.annotations)
+    if spec.extend_queryset is not None:
+        view = MCPServiceView(request=drf_request, action=binding.name)
+        qs = spec.extend_queryset(qs, view, drf_request)
+    return qs
+
+
+def _resolve_output_context(
+    binding: SelectorToolBinding, drf_request: Any
+) -> Mapping[str, Any] | None:
+    """Invoke ``spec.output_serializer_context(view, request)`` if declared."""
+    spec = binding.spec
+    if spec.output_serializer_context is None:
+        return None
+    view = MCPServiceView(request=drf_request, action=binding.name)
+    return spec.output_serializer_context(view, drf_request)
 
 
 __all__ = ["dispatch_selector_tool", "dispatch_selector_tool_async"]

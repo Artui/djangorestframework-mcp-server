@@ -9,7 +9,7 @@ from django.http import HttpRequest
 from rest_framework_mcp.auth.rate_limits.sliding_window_rate_limit import (
     SlidingWindowRateLimit,
 )
-from rest_framework_mcp.auth.token_info import TokenInfo
+from rest_framework_mcp.auth.types.token_info import TokenInfo
 
 
 @pytest.fixture(autouse=True)
@@ -106,7 +106,7 @@ def test_invalid_per_seconds_rejected() -> None:
 
 
 def test_satisfies_mcprate_limit_protocol() -> None:
-    from rest_framework_mcp.auth.rate_limits.mcp_rate_limit import MCPRateLimit
+    from rest_framework_mcp.auth.rate_limits.types.mcp_rate_limit import MCPRateLimit
 
     limiter = SlidingWindowRateLimit(max_calls=1, per_seconds=60)
     assert isinstance(limiter, MCPRateLimit)

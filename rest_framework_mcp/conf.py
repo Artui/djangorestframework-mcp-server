@@ -6,6 +6,22 @@ from django.conf import settings as django_settings
 
 DEFAULTS: dict[str, Any] = {
     "PROTOCOL_VERSIONS": ["2025-11-25", "2025-06-18"],
+    # When True (the spec-compliant default), non-``initialize`` requests must
+    # carry an ``MCP-Protocol-Version`` header naming a supported version, or
+    # they are rejected with HTTP 400. Some real-world clients omit the header
+    # entirely; set this to False to accept those requests by falling back to
+    # the first entry in ``PROTOCOL_VERSIONS``. A *present-but-unsupported*
+    # header is still rejected either way — silently downgrading there would
+    # mask a genuine version mismatch.
+    "REQUIRE_PROTOCOL_VERSION_HEADER": True,
+    # When True (default), successful ``tools/call`` results include a
+    # ``structuredContent`` field carrying the typed JSON payload alongside
+    # the human-readable ``content[0]`` text. Set to False to omit
+    # ``structuredContent`` server-wide — useful when a downstream client
+    # echoes both fields back to the LLM and burns context, or chokes on the
+    # field altogether. Individual tools can override either direction via
+    # the ``include_structured_content`` kwarg on registration.
+    "INCLUDE_STRUCTURED_CONTENT": True,
     "AUTH_BACKEND": (
         "rest_framework_mcp.auth.backends.django_oauth_toolkit_backend.DjangoOAuthToolkitBackend"
     ),
@@ -42,6 +58,35 @@ DEFAULTS: dict[str, Any] = {
     # ``ServiceValidationError`` is never recorded — it represents
     # client-side input failure, not a server fault.
     "RECORD_SERVICE_EXCEPTIONS": False,
+    # Dynamic Client Registration (RFC 7591) gate. ``False`` (default) means
+    # the contrib ``/oauth/register/`` endpoint refuses every request with
+    # 403. Turn on only when you've thought through the abuse surface — an
+    # open DCR endpoint lets anyone create an OAuth client against your
+    # authorization server.
+    "DCR_ENABLED": False,
+    # Optional initial-access-token (RFC 7591 §3) that DCR clients must
+    # present in ``Authorization: Bearer <token>`` to register. ``None``
+    # means "no token check" — equivalent to "anyone who can reach the
+    # endpoint can register". Setting a static token is the simplest way
+    # to gate DCR behind shared knowledge; rotate it manually when needed.
+    "DCR_INITIAL_ACCESS_TOKEN": None,
+    # Dotted path to a :class:`AuthUserAdapter` implementation that hydrates
+    # ``request.user`` before DOT's ``AuthorizationView`` dispatches. ``None``
+    # (the default) means "no hydration; rely on Django's session middleware
+    # to populate ``request.user``". Used by the contrib ``include_authorize``
+    # passthrough wired by :func:`build_oauth_urlpatterns`.
+    "AUTH_USER_ADAPTER": None,
+    # Name of the cookie the SimpleJWT adapter reads access tokens from.
+    # Defaults to ``"access"`` which matches ``djangorestframework-simplejwt``'s
+    # documented ``AUTH_COOKIE`` default.
+    "SIMPLEJWT_ACCESS_COOKIE": "access",
+    # When True, ``tools/list`` / ``resources/list`` /
+    # ``resources/templates/list`` / ``prompts/list`` filter out bindings
+    # whose ``permissions`` deny the current caller. Off by default
+    # (existing wire shape unchanged). Per-binding ``always_listed=True``
+    # opts a binding back into the listing even when the caller can't
+    # invoke it — useful as a discovery aid for admin tools etc.
+    "FILTER_LISTINGS_BY_PERMISSIONS": False,
 }
 
 

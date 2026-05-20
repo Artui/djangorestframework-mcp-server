@@ -2,12 +2,12 @@ from __future__ import annotations
 
 from typing import Any
 
-from rest_framework_mcp.handlers.context import MCPCallContext
 from rest_framework_mcp.handlers.dispatch import dispatch
 from rest_framework_mcp.handlers.handle_prompts_get_async import handle_prompts_get_async
 from rest_framework_mcp.handlers.handle_resources_read_async import handle_resources_read_async
 from rest_framework_mcp.handlers.handle_tools_call_async import handle_tools_call_async
-from rest_framework_mcp.protocol.json_rpc_error import JsonRpcError
+from rest_framework_mcp.handlers.types.context import MCPCallContext
+from rest_framework_mcp.protocol.types.json_rpc_error import JsonRpcError
 
 
 async def adispatch(

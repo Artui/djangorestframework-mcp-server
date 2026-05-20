@@ -7,8 +7,8 @@ from typing import Any
 
 from django.http import StreamingHttpResponse
 
-from rest_framework_mcp.transport.sse_broker import SSEBroker
-from rest_framework_mcp.transport.sse_replay_buffer import SSEReplayBuffer
+from rest_framework_mcp.transport.types.sse_broker import SSEBroker
+from rest_framework_mcp.transport.types.sse_replay_buffer import SSEReplayBuffer
 
 # Time between idle keep-alive comments. The MCP spec doesn't prescribe a
 # value; 15 s is a common compromise that avoids most intermediate proxy

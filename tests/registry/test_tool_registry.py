@@ -3,8 +3,8 @@ from __future__ import annotations
 import pytest
 from rest_framework_services.types.service_spec import ServiceSpec
 
-from rest_framework_mcp.registry.tool_binding import ToolBinding
 from rest_framework_mcp.registry.tool_registry import ToolRegistry
+from rest_framework_mcp.registry.types.tool_binding import ToolBinding
 
 
 def _binding(name: str = "t") -> ToolBinding:

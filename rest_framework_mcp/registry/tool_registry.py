@@ -1,7 +1,7 @@
 from __future__ import annotations
 
-from rest_framework_mcp.registry.selector_tool_binding import SelectorToolBinding
-from rest_framework_mcp.registry.tool_binding import ToolBinding
+from rest_framework_mcp.registry.types.selector_tool_binding import SelectorToolBinding
+from rest_framework_mcp.registry.types.tool_binding import ToolBinding
 
 # Either binding type counts as a "tool" on the wire — ``tools/list`` and
 # ``tools/call`` discriminate at dispatch time. We deliberately do NOT

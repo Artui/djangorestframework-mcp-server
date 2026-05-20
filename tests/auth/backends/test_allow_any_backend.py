@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import pytest
 from django.contrib.auth.models import AnonymousUser
 from django.http import HttpRequest
 
@@ -25,8 +26,8 @@ def test_authenticate_uses_existing_request_user() -> None:
 
 def test_protected_resource_metadata_carries_warning() -> None:
     md = AllowAnyBackend().protected_resource_metadata()
-    assert md["bearer_methods_supported"] == ["header"]
-    assert "_warning" in md
+    assert md.bearer_methods_supported == ["header"]
+    assert md.warning is not None
 
 
 def test_www_authenticate_challenge_default() -> None:
@@ -37,3 +38,9 @@ def test_www_authenticate_challenge_with_error_and_scope() -> None:
     out = AllowAnyBackend().www_authenticate_challenge(scopes=["a", "b"], error="invalid_token")
     assert 'error="invalid_token"' in out
     assert 'scope="a b"' in out
+
+
+def test_authorization_server_metadata_raises_not_implemented() -> None:
+    """AllowAny doesn't host an authorization server — the contrib mount uses this signal."""
+    with pytest.raises(NotImplementedError, match="doesn't host"):
+        AllowAnyBackend().authorization_server_metadata()

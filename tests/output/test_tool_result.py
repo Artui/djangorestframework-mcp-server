@@ -3,7 +3,7 @@ from __future__ import annotations
 import json
 import sys
 
-from rest_framework_mcp.output.format import OutputFormat
+from rest_framework_mcp.constants import OutputFormat
 from rest_framework_mcp.output.tool_result import build_tool_result
 
 
@@ -61,3 +61,17 @@ def test_build_tool_result_auto_empty_list_picks_json() -> None:
 def test_build_tool_result_auto_list_of_non_dicts_picks_json() -> None:
     res = build_tool_result([1, 2, 3], output_format=OutputFormat.AUTO)
     assert "format: toon" not in (res.content[0].text or "")
+
+
+def test_build_tool_result_omits_structured_content_when_disabled() -> None:
+    res = build_tool_result({"a": 1}, include_structured_content=False)
+    assert res.structured_content is None
+    # Text payload still carries the data.
+    assert json.loads(res.content[0].text or "") == {"a": 1}
+    # ``to_dict`` drops the field entirely so the wire payload is leaner.
+    assert "structuredContent" not in res.to_dict()
+
+
+def test_build_tool_result_includes_structured_content_by_default() -> None:
+    res = build_tool_result({"a": 1})
+    assert res.to_dict()["structuredContent"] == {"a": 1}

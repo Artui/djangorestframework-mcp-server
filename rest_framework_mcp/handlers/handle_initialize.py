@@ -3,13 +3,13 @@ from __future__ import annotations
 from typing import Any
 
 from rest_framework_mcp.conf import get_setting
-from rest_framework_mcp.handlers.context import MCPCallContext
-from rest_framework_mcp.protocol.implementation import Implementation
-from rest_framework_mcp.protocol.initialize_params import InitializeParams
-from rest_framework_mcp.protocol.initialize_result import InitializeResult
-from rest_framework_mcp.protocol.json_rpc_error import JsonRpcError
-from rest_framework_mcp.protocol.json_rpc_error_code import JsonRpcErrorCode
-from rest_framework_mcp.protocol.server_capabilities import ServerCapabilities
+from rest_framework_mcp.constants import JsonRpcErrorCode
+from rest_framework_mcp.handlers.types.context import MCPCallContext
+from rest_framework_mcp.protocol.types.implementation import Implementation
+from rest_framework_mcp.protocol.types.initialize_params import InitializeParams
+from rest_framework_mcp.protocol.types.initialize_result import InitializeResult
+from rest_framework_mcp.protocol.types.json_rpc_error import JsonRpcError
+from rest_framework_mcp.protocol.types.server_capabilities import ServerCapabilities
 from rest_framework_mcp.version import __version__ as package_version
 
 

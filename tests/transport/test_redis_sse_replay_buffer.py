@@ -4,7 +4,7 @@ import pytest
 from fakeredis import FakeAsyncRedis
 
 from rest_framework_mcp.transport.redis_sse_replay_buffer import RedisSSEReplayBuffer
-from rest_framework_mcp.transport.sse_replay_buffer import SSEReplayBuffer
+from rest_framework_mcp.transport.types.sse_replay_buffer import SSEReplayBuffer
 
 
 def _client() -> FakeAsyncRedis:
