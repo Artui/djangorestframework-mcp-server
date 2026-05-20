@@ -395,6 +395,17 @@
       <ul class="md-nav__list">
         
           <li class="md-nav__item">
+  <a href="#what-servicespec-selectorspec-carries-through-to-mcp" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        What ServiceSpec / SelectorSpec carries through to MCP
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
   <a href="#per-spec-kwargs-providers" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -410,6 +421,34 @@
     <span class="md-ellipsis">
       
         SelectorSpec for resources
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#per-tool-registration-kwargs" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Per-tool registration kwargs
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Per-tool registration kwargs">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#bulk-registration" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Bulk registration
       
     </span>
   </a>
@@ -473,6 +512,23 @@
       
     </span>
   </a>
+  
+    <nav class="md-nav" aria-label="Output formats">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#omitting-structuredcontent" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Omitting structuredContent
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
   
 </li>
       
@@ -1301,6 +1357,17 @@
       <ul class="md-nav__list">
         
           <li class="md-nav__item">
+  <a href="#what-servicespec-selectorspec-carries-through-to-mcp" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        What ServiceSpec / SelectorSpec carries through to MCP
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
   <a href="#per-spec-kwargs-providers" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -1316,6 +1383,34 @@
     <span class="md-ellipsis">
       
         SelectorSpec for resources
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#per-tool-registration-kwargs" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Per-tool registration kwargs
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Per-tool registration kwargs">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#bulk-registration" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Bulk registration
       
     </span>
   </a>
@@ -1380,6 +1475,23 @@
     </span>
   </a>
   
+    <nav class="md-nav" aria-label="Output formats">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#omitting-structuredcontent" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Omitting structuredContent
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
 </li>
       
         <li class="md-nav__item">
@@ -1442,6 +1554,25 @@ serve both at once.</p>
 <p>This means a project that uses neither <code>ServiceViewSet</code> nor DRF routers can
 still expose its services over MCP. The HTTP and MCP transports are siblings,
 not layers — neither owns the other.</p>
+<h3 id="what-servicespec-selectorspec-carries-through-to-mcp">What <code>ServiceSpec</code> / <code>SelectorSpec</code> carries through to MCP<a class="headerlink" href="#what-servicespec-selectorspec-carries-through-to-mcp" title="Permanent link">&para;</a></h3>
+<p>Sister-repo (<code>djangorestframework-services</code>) 0.12.0 extended the spec
+dataclasses with three fields the MCP layer now honors automatically —
+register a spec once and both transports get the same shape:</p>
+<ul>
+<li><strong><code>permission_classes</code></strong> — DRF <code>BasePermission</code> classes. Auto-wrapped
+  with <code>DRFPermissionAdapter</code> and prepended to the per-binding
+  <code>permissions</code> tuple, so spec-declared permissions run before any
+  tool-level <code>MCPPermission</code> you add at the MCP call site.</li>
+<li><strong><code>SelectorSpec</code> queryset shaping</strong> — <code>select_related</code>,
+  <code>prefetch_related</code>, <code>annotations</code>, and <code>extend_queryset</code> are applied
+  before the FilterSet / ordering / pagination pipeline. Non-queryset
+  returns (lists, scalars) pass through unchanged.</li>
+<li><strong>Serializer context</strong> — <code>input_serializer_context</code> /
+  <code>output_serializer_context</code> (on <code>ServiceSpec</code>) and
+  <code>output_serializer_context</code> (on <code>SelectorSpec</code>) are invoked with the
+  synthesised view + DRF request and forwarded as <code>context=</code> to the
+  serializer constructor on both sync and async dispatch paths.</li>
+</ul>
 <h3 id="per-spec-kwargs-providers">Per-spec kwargs providers<a class="headerlink" href="#per-spec-kwargs-providers" title="Permanent link">&para;</a></h3>
 <p><code>ServiceSpec.kwargs</code> (and <code>SelectorSpec.kwargs</code>) is a callable that returns
 extra kwargs to merge into the dispatch pool — useful for plumbing per-tenant
@@ -1497,6 +1628,78 @@ the imperative surface symmetric with <code>register_service_tool</code> makes t
 single point where output serializers and kwargs providers attach. Use the
 <code>@server.resource(uri_template=...)</code> decorator if you'd rather skip the
 boilerplate; it wraps the function in a <code>SelectorSpec</code> for you.</p>
+<h2 id="per-tool-registration-kwargs">Per-tool registration kwargs<a class="headerlink" href="#per-tool-registration-kwargs" title="Permanent link">&para;</a></h2>
+<p>Beyond <code>permissions=</code>, <code>output_format=</code>, and <code>include_structured_content=</code>,
+<code>register_service_tool</code> / <code>register_selector_tool</code> (and their decorator
+forms) accept three behavior knobs:</p>
+<ul>
+<li><strong><code>argument_binding=</code></strong> — how the validated <code>arguments</code> flow into the
+  callable's kwarg pool.</li>
+<li><code>ArgumentBinding.DATA_ONLY</code> (default for service tools) — only
+    <code>data=&lt;validated&gt;</code> enters the pool.</li>
+<li><code>ArgumentBinding.MERGE</code> (default for selector tools) — every key from
+    the validated arguments is spread into the pool as a top-level kwarg,
+    so selectors can declare individual parameters
+    (<code>def list_drafts(*, project_id, page=1)</code>). <code>spec.kwargs(...)</code> wins
+    on conflict so author-declared invariants beat client input.</li>
+<li><code>ArgumentBinding.REPLACE</code> — like <code>MERGE</code> but the spread wins on
+    conflict, so <code>spec.kwargs(...)</code> supplies client-overridable defaults.</li>
+</ul>
+<p>Reserved transport-pool seeds (<code>request</code> / <code>user</code> / <code>data</code>) and the
+  selector pipeline keys (<code>ordering</code> / <code>page</code> / <code>limit</code>) are stripped
+  from the spread regardless of mode so clients can't poison
+  transport-controlled state.</p>
+<ul>
+<li><strong><code>unknown_arguments=</code></strong> — how <code>arguments</code> keys outside the binding's
+  declared field set are handled.</li>
+<li><code>UnknownArguments.REJECT</code> (default) — outer <code>inputSchema</code> advertises
+    <code>"additionalProperties": false</code> and the validator rejects unknown
+    keys with <code>-32602</code>.</li>
+<li><code>UnknownArguments.PASSTHROUGH</code> — <code>"additionalProperties": true</code>;
+    unknown keys survive validation and are merged onto the validated
+    payload before binding.</li>
+<li><code>UnknownArguments.IGNORE</code> — <code>"additionalProperties": true</code>; unknown
+    keys are silently dropped (the historic DRF default).</li>
+</ul>
+<p>Selector tools' pipeline-reserved keys are always treated as "known",
+  so the policy doesn't fight the post-fetch pipeline.</p>
+<ul>
+<li><strong><code>always_listed=</code></strong> — when
+  <code>REST_FRAMEWORK_MCP["FILTER_LISTINGS_BY_PERMISSIONS"]</code> is enabled,
+  bindings are dropped from <code>tools/list</code> / <code>resources/list</code> /
+  <code>prompts/list</code> when their permissions deny the current caller.
+  Setting <code>always_listed=True</code> keeps the binding visible as a discovery
+  aid; the permission still gates the actual invocation.</li>
+</ul>
+<h3 id="bulk-registration">Bulk registration<a class="headerlink" href="#bulk-registration" title="Permanent link">&para;</a></h3>
+<p>For projects that register many tools in one place, the
+<code>register_tools(server, definitions, *, selector_defaults=None,
+service_defaults=None)</code> entry point collapses the boilerplate. Pass a
+list of <code>ToolDefinition.service(...)</code> / <code>ToolDefinition.selector(...)</code>
+instances plus per-kind defaults that fill in fields each definition
+leaves as <code>None</code>. The function loops over the existing per-tool
+registration methods, so every guarantee and bug fix applies
+automatically.</p>
+<div class="language-python highlight"><pre><span></span><code><span id="__span-3-1"><a id="__codelineno-3-1" name="__codelineno-3-1" href="#__codelineno-3-1"></a><span class="kn">from</span><span class="w"> </span><span class="nn">rest_framework_mcp</span><span class="w"> </span><span class="kn">import</span> <span class="p">(</span>
+</span><span id="__span-3-2"><a id="__codelineno-3-2" name="__codelineno-3-2" href="#__codelineno-3-2"></a>    <span class="n">ServiceDefaults</span><span class="p">,</span>
+</span><span id="__span-3-3"><a id="__codelineno-3-3" name="__codelineno-3-3" href="#__codelineno-3-3"></a>    <span class="n">SelectorDefaults</span><span class="p">,</span>
+</span><span id="__span-3-4"><a id="__codelineno-3-4" name="__codelineno-3-4" href="#__codelineno-3-4"></a>    <span class="n">ToolDefinition</span><span class="p">,</span>
+</span><span id="__span-3-5"><a id="__codelineno-3-5" name="__codelineno-3-5" href="#__codelineno-3-5"></a>    <span class="n">register_tools</span><span class="p">,</span>
+</span><span id="__span-3-6"><a id="__codelineno-3-6" name="__codelineno-3-6" href="#__codelineno-3-6"></a><span class="p">)</span>
+</span><span id="__span-3-7"><a id="__codelineno-3-7" name="__codelineno-3-7" href="#__codelineno-3-7"></a>
+</span><span id="__span-3-8"><a id="__codelineno-3-8" name="__codelineno-3-8" href="#__codelineno-3-8"></a><span class="n">register_tools</span><span class="p">(</span>
+</span><span id="__span-3-9"><a id="__codelineno-3-9" name="__codelineno-3-9" href="#__codelineno-3-9"></a>    <span class="n">server</span><span class="p">,</span>
+</span><span id="__span-3-10"><a id="__codelineno-3-10" name="__codelineno-3-10" href="#__codelineno-3-10"></a>    <span class="p">[</span>
+</span><span id="__span-3-11"><a id="__codelineno-3-11" name="__codelineno-3-11" href="#__codelineno-3-11"></a>        <span class="n">ToolDefinition</span><span class="o">.</span><span class="n">service</span><span class="p">(</span><span class="n">name</span><span class="o">=</span><span class="s2">&quot;invoices.create&quot;</span><span class="p">,</span> <span class="n">spec</span><span class="o">=</span><span class="n">create_spec</span><span class="p">),</span>
+</span><span id="__span-3-12"><a id="__codelineno-3-12" name="__codelineno-3-12" href="#__codelineno-3-12"></a>        <span class="n">ToolDefinition</span><span class="o">.</span><span class="n">service</span><span class="p">(</span><span class="n">name</span><span class="o">=</span><span class="s2">&quot;invoices.update&quot;</span><span class="p">,</span> <span class="n">spec</span><span class="o">=</span><span class="n">update_spec</span><span class="p">),</span>
+</span><span id="__span-3-13"><a id="__codelineno-3-13" name="__codelineno-3-13" href="#__codelineno-3-13"></a>        <span class="n">ToolDefinition</span><span class="o">.</span><span class="n">selector</span><span class="p">(</span><span class="n">name</span><span class="o">=</span><span class="s2">&quot;invoices.list&quot;</span><span class="p">,</span> <span class="n">spec</span><span class="o">=</span><span class="n">list_spec</span><span class="p">),</span>
+</span><span id="__span-3-14"><a id="__codelineno-3-14" name="__codelineno-3-14" href="#__codelineno-3-14"></a>    <span class="p">],</span>
+</span><span id="__span-3-15"><a id="__codelineno-3-15" name="__codelineno-3-15" href="#__codelineno-3-15"></a>    <span class="n">service_defaults</span><span class="o">=</span><span class="n">ServiceDefaults</span><span class="p">(</span><span class="n">permissions</span><span class="o">=</span><span class="p">[</span><span class="n">ScopeRequired</span><span class="p">([</span><span class="s2">&quot;invoices:write&quot;</span><span class="p">])]),</span>
+</span><span id="__span-3-16"><a id="__codelineno-3-16" name="__codelineno-3-16" href="#__codelineno-3-16"></a>    <span class="n">selector_defaults</span><span class="o">=</span><span class="n">SelectorDefaults</span><span class="p">(</span><span class="n">permissions</span><span class="o">=</span><span class="p">[</span><span class="n">ScopeRequired</span><span class="p">([</span><span class="s2">&quot;invoices:read&quot;</span><span class="p">])]),</span>
+</span><span id="__span-3-17"><a id="__codelineno-3-17" name="__codelineno-3-17" href="#__codelineno-3-17"></a><span class="p">)</span>
+</span></code></pre></div>
+<p>Per-definition kwargs win over defaults on conflict; <code>None</code> is the
+"no override" sentinel across both layers.</p>
 <h2 id="tools-vs-resources">Tools vs resources<a class="headerlink" href="#tools-vs-resources" title="Permanent link">&para;</a></h2>
 <table>
 <thead>
@@ -1546,14 +1749,14 @@ over time.</p>
 <h2 id="uri-templates">URI templates<a class="headerlink" href="#uri-templates" title="Permanent link">&para;</a></h2>
 <p>Resource URIs follow a small subset of <a href="https://www.rfc-editor.org/rfc/rfc6570">RFC 6570</a>.
 Each <code>{var}</code> placeholder becomes a kwarg in the selector's signature:</p>
-<div class="language-python highlight"><pre><span></span><code><span id="__span-3-1"><a id="__codelineno-3-1" name="__codelineno-3-1" href="#__codelineno-3-1"></a><span class="n">server</span><span class="o">.</span><span class="n">register_resource</span><span class="p">(</span>
-</span><span id="__span-3-2"><a id="__codelineno-3-2" name="__codelineno-3-2" href="#__codelineno-3-2"></a>    <span class="n">name</span><span class="o">=</span><span class="s2">&quot;invoice&quot;</span><span class="p">,</span>
-</span><span id="__span-3-3"><a id="__codelineno-3-3" name="__codelineno-3-3" href="#__codelineno-3-3"></a>    <span class="n">uri_template</span><span class="o">=</span><span class="s2">&quot;invoices://</span><span class="si">{pk}</span><span class="s2">&quot;</span><span class="p">,</span>
-</span><span id="__span-3-4"><a id="__codelineno-3-4" name="__codelineno-3-4" href="#__codelineno-3-4"></a>    <span class="n">selector</span><span class="o">=</span><span class="n">SelectorSpec</span><span class="p">(</span>
-</span><span id="__span-3-5"><a id="__codelineno-3-5" name="__codelineno-3-5" href="#__codelineno-3-5"></a>        <span class="n">selector</span><span class="o">=</span><span class="n">get_invoice</span><span class="p">,</span>             <span class="c1"># def get_invoice(*, pk): ...</span>
-</span><span id="__span-3-6"><a id="__codelineno-3-6" name="__codelineno-3-6" href="#__codelineno-3-6"></a>        <span class="n">output_serializer</span><span class="o">=</span><span class="n">InvoiceOutputSerializer</span><span class="p">,</span>
-</span><span id="__span-3-7"><a id="__codelineno-3-7" name="__codelineno-3-7" href="#__codelineno-3-7"></a>    <span class="p">),</span>
-</span><span id="__span-3-8"><a id="__codelineno-3-8" name="__codelineno-3-8" href="#__codelineno-3-8"></a><span class="p">)</span>
+<div class="language-python highlight"><pre><span></span><code><span id="__span-4-1"><a id="__codelineno-4-1" name="__codelineno-4-1" href="#__codelineno-4-1"></a><span class="n">server</span><span class="o">.</span><span class="n">register_resource</span><span class="p">(</span>
+</span><span id="__span-4-2"><a id="__codelineno-4-2" name="__codelineno-4-2" href="#__codelineno-4-2"></a>    <span class="n">name</span><span class="o">=</span><span class="s2">&quot;invoice&quot;</span><span class="p">,</span>
+</span><span id="__span-4-3"><a id="__codelineno-4-3" name="__codelineno-4-3" href="#__codelineno-4-3"></a>    <span class="n">uri_template</span><span class="o">=</span><span class="s2">&quot;invoices://</span><span class="si">{pk}</span><span class="s2">&quot;</span><span class="p">,</span>
+</span><span id="__span-4-4"><a id="__codelineno-4-4" name="__codelineno-4-4" href="#__codelineno-4-4"></a>    <span class="n">selector</span><span class="o">=</span><span class="n">SelectorSpec</span><span class="p">(</span>
+</span><span id="__span-4-5"><a id="__codelineno-4-5" name="__codelineno-4-5" href="#__codelineno-4-5"></a>        <span class="n">selector</span><span class="o">=</span><span class="n">get_invoice</span><span class="p">,</span>             <span class="c1"># def get_invoice(*, pk): ...</span>
+</span><span id="__span-4-6"><a id="__codelineno-4-6" name="__codelineno-4-6" href="#__codelineno-4-6"></a>        <span class="n">output_serializer</span><span class="o">=</span><span class="n">InvoiceOutputSerializer</span><span class="p">,</span>
+</span><span id="__span-4-7"><a id="__codelineno-4-7" name="__codelineno-4-7" href="#__codelineno-4-7"></a>    <span class="p">),</span>
+</span><span id="__span-4-8"><a id="__codelineno-4-8" name="__codelineno-4-8" href="#__codelineno-4-8"></a><span class="p">)</span>
 </span></code></pre></div>
 <p>Concrete URIs (no placeholders) appear in <code>resources/list</code>; templated ones
 appear in <code>resources/templates/list</code> so clients can fill them in.</p>
@@ -1596,7 +1799,11 @@ appear in <code>resources/templates/list</code> so clients can fill them in.</p>
 <ul>
 <li><strong><code>MCP-Protocol-Version</code></strong> — the version the client speaks. Validated against
   <code>REST_FRAMEWORK_MCP["PROTOCOL_VERSIONS"]</code>. Missing → 400 except on
-  <code>initialize</code>, which is allowed to omit it for the initial handshake.</li>
+  <code>initialize</code>, which is allowed to omit it for the initial handshake. Some
+  clients omit the header on every request; set
+  <code>REST_FRAMEWORK_MCP["REQUIRE_PROTOCOL_VERSION_HEADER"] = False</code> to accept
+  those by falling back to the first supported version. A present-but-
+  unsupported version is still rejected either way.</li>
 <li><strong><code>MCP-Session-Id</code></strong> — issued by the server in the response to <code>initialize</code>.
   Required on every subsequent call. Unknown id → 404 (forces the client to
   re-initialize). Sessions are stored in a pluggable
@@ -1618,13 +1825,13 @@ optional <code>structuredContent</code>:</p>
 <li><code>structuredContent</code> is always JSON-shaped — clients parse it directly.</li>
 <li><code>content[0]</code> is a text block whose payload is encoded per <code>OutputFormat</code>.</li>
 </ul>
-<div class="language-python highlight"><pre><span></span><code><span id="__span-4-1"><a id="__codelineno-4-1" name="__codelineno-4-1" href="#__codelineno-4-1"></a><span class="kn">from</span><span class="w"> </span><span class="nn">rest_framework_mcp</span><span class="w"> </span><span class="kn">import</span> <span class="n">OutputFormat</span>
-</span><span id="__span-4-2"><a id="__codelineno-4-2" name="__codelineno-4-2" href="#__codelineno-4-2"></a>
-</span><span id="__span-4-3"><a id="__codelineno-4-3" name="__codelineno-4-3" href="#__codelineno-4-3"></a><span class="n">server</span><span class="o">.</span><span class="n">register_service_tool</span><span class="p">(</span>
-</span><span id="__span-4-4"><a id="__codelineno-4-4" name="__codelineno-4-4" href="#__codelineno-4-4"></a>    <span class="n">name</span><span class="o">=</span><span class="s2">&quot;invoices.list&quot;</span><span class="p">,</span>
-</span><span id="__span-4-5"><a id="__codelineno-4-5" name="__codelineno-4-5" href="#__codelineno-4-5"></a>    <span class="n">spec</span><span class="o">=</span><span class="n">ServiceSpec</span><span class="p">(</span><span class="n">service</span><span class="o">=</span><span class="n">list_invoices</span><span class="p">,</span> <span class="n">output_serializer</span><span class="o">=</span><span class="n">InvoiceOutputSerializer</span><span class="p">),</span>
-</span><span id="__span-4-6"><a id="__codelineno-4-6" name="__codelineno-4-6" href="#__codelineno-4-6"></a>    <span class="n">output_format</span><span class="o">=</span><span class="n">OutputFormat</span><span class="o">.</span><span class="n">AUTO</span><span class="p">,</span>   <span class="c1"># JSON, TOON, or AUTO</span>
-</span><span id="__span-4-7"><a id="__codelineno-4-7" name="__codelineno-4-7" href="#__codelineno-4-7"></a><span class="p">)</span>
+<div class="language-python highlight"><pre><span></span><code><span id="__span-5-1"><a id="__codelineno-5-1" name="__codelineno-5-1" href="#__codelineno-5-1"></a><span class="kn">from</span><span class="w"> </span><span class="nn">rest_framework_mcp</span><span class="w"> </span><span class="kn">import</span> <span class="n">OutputFormat</span>
+</span><span id="__span-5-2"><a id="__codelineno-5-2" name="__codelineno-5-2" href="#__codelineno-5-2"></a>
+</span><span id="__span-5-3"><a id="__codelineno-5-3" name="__codelineno-5-3" href="#__codelineno-5-3"></a><span class="n">server</span><span class="o">.</span><span class="n">register_service_tool</span><span class="p">(</span>
+</span><span id="__span-5-4"><a id="__codelineno-5-4" name="__codelineno-5-4" href="#__codelineno-5-4"></a>    <span class="n">name</span><span class="o">=</span><span class="s2">&quot;invoices.list&quot;</span><span class="p">,</span>
+</span><span id="__span-5-5"><a id="__codelineno-5-5" name="__codelineno-5-5" href="#__codelineno-5-5"></a>    <span class="n">spec</span><span class="o">=</span><span class="n">ServiceSpec</span><span class="p">(</span><span class="n">service</span><span class="o">=</span><span class="n">list_invoices</span><span class="p">,</span> <span class="n">output_serializer</span><span class="o">=</span><span class="n">InvoiceOutputSerializer</span><span class="p">),</span>
+</span><span id="__span-5-6"><a id="__codelineno-5-6" name="__codelineno-5-6" href="#__codelineno-5-6"></a>    <span class="n">output_format</span><span class="o">=</span><span class="n">OutputFormat</span><span class="o">.</span><span class="n">AUTO</span><span class="p">,</span>   <span class="c1"># JSON, TOON, or AUTO</span>
+</span><span id="__span-5-7"><a id="__codelineno-5-7" name="__codelineno-5-7" href="#__codelineno-5-7"></a><span class="p">)</span>
 </span></code></pre></div>
 <p><code>AUTO</code> picks per-payload — TOON for uniform list-of-objects, JSON otherwise.
 TOON is wrapped in a fenced <code>```toon</code> block with a leading <code># format: toon</code>
@@ -1632,6 +1839,24 @@ marker so clients that don't parse it natively can still render it.</p>
 <p>If TOON is requested but the optional extra is missing, the encoder falls back
 to JSON with a <code>warnings.warn</code> — a tool call never fails because an optional
 extra is absent.</p>
+<h3 id="omitting-structuredcontent">Omitting <code>structuredContent</code><a class="headerlink" href="#omitting-structuredcontent" title="Permanent link">&para;</a></h3>
+<p><code>structuredContent</code> is optional per the spec. Some clients echo both
+<code>content[0]</code> and <code>structuredContent</code> back to the LLM (doubling token usage on
+every tool call) or have bugs parsing the field. Two opt-outs:</p>
+<ul>
+<li>Server-wide: set <code>REST_FRAMEWORK_MCP["INCLUDE_STRUCTURED_CONTENT"] = False</code>.</li>
+<li>Per tool: pass <code>include_structured_content=False</code> to <code>register_service_tool</code>,
+  <code>register_selector_tool</code>, or their decorator forms. The per-tool kwarg is
+  tri-state — <code>None</code> (default) inherits the global, <code>True</code>/<code>False</code> force the
+  behavior regardless of the setting.</li>
+</ul>
+<p>When omitted, the text payload in <code>content[0]</code> still carries the full result
+(JSON-encoded by default, or TOON when requested), so clients can still parse
+the data — they just have to re-parse instead of getting a pre-parsed dict.</p>
+<p>The MCP tools spec requires that any tool declaring <code>outputSchema</code> always
+return conforming <code>structuredContent</code>. To keep that contract intact, when a
+binding opts out of <code>structuredContent</code> the corresponding <code>outputSchema</code> is
+also dropped from the tool's <code>tools/list</code> entry. The two move together.</p>
 <h2 id="auth-model">Auth model<a class="headerlink" href="#auth-model" title="Permanent link">&para;</a></h2>
 <p>Two pluggable surfaces:</p>
 <ul>

@@ -1419,7 +1419,7 @@ many concurrent MCP calls without a thread pool.</p>
 <p>A standard <code>myproject/asgi.py</code> from <code>django-admin startproject</code> works without
 modification — Django's <code>get_asgi_application()</code> happily serves async views.</p>
 <h2 id="sync-collaborators-are-bridged-automatically">Sync collaborators are bridged automatically<a class="headerlink" href="#sync-collaborators-are-bridged-automatically" title="Permanent link">&para;</a></h2>
-<p><code>AsyncStreamableHttpView</code> accepts the same auth backend and session store as
+<p><code>AsyncStreamableHttpViewSet</code> accepts the same auth backend and session store as
 the sync view. Sync methods on those collaborators are wrapped in
 <code>asgiref.sync.sync_to_async</code> at the call site, so the existing
 <code>AllowAnyBackend</code>, <code>DjangoOAuthToolkitBackend</code>, <code>InMemorySessionStore</code>, and

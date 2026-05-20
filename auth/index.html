@@ -451,6 +451,34 @@
     </span>
   </a>
   
+    <nav class="md-nav" aria-label="MCPPermission classes">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#reusing-drf-basepermission-classes" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Reusing DRF BasePermission classes
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#filtering-listings-by-permissions" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Filtering listings by permissions
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
 </li>
       
         <li class="md-nav__item">
@@ -458,6 +486,17 @@
     <span class="md-ellipsis">
       
         Audience binding (RFC 8707)
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#oauth-contrib-mount" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        OAuth contrib mount
       
     </span>
   </a>
@@ -1330,6 +1369,34 @@
     </span>
   </a>
   
+    <nav class="md-nav" aria-label="MCPPermission classes">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#reusing-drf-basepermission-classes" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Reusing DRF BasePermission classes
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#filtering-listings-by-permissions" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Filtering listings by permissions
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
 </li>
       
         <li class="md-nav__item">
@@ -1337,6 +1404,17 @@
     <span class="md-ellipsis">
       
         Audience binding (RFC 8707)
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#oauth-contrib-mount" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        OAuth contrib mount
       
     </span>
   </a>
@@ -1424,11 +1502,13 @@ that someone else issued. The library does not implement a token issuer (that's
 the job of an Authorization Server / IDP). It does ship two backends and the
 RFC 9728 metadata endpoint clients use to discover them.</p>
 <div class="admonition tip">
-<p class="admonition-title">v1 scope</p>
-<p>The library does not implement Dynamic Client Registration (DCR) itself.
-The two recipes below show how to make DCR or Client ID Metadata Documents
-work with your existing Authorization Server — both spec-compliant and
-sufficient for modern MCP clients.</p>
+<p class="admonition-title">OAuth contrib mount</p>
+<p>The core <code>MCPServer.urls</code> exposes only the spec-mandated PRM endpoint.
+For deployments that want the full discovery + DCR matrix without
+fronting their own AS, <code>rest_framework_mcp.contrib.oauth.build_oauth_urlpatterns</code>
+bundles RFC 8414 AS metadata, OIDC discovery, RFC 7591 Dynamic Client
+Registration, and the alias paths different LLM hosts probe. See
+<a href="#oauth-contrib-mount">OAuth contrib mount</a> below.</p>
 </div>
 <h2 id="the-pieces">The pieces<a class="headerlink" href="#the-pieces" title="Permanent link">&para;</a></h2>
 <table>
@@ -1549,23 +1629,54 @@ backend module imports cleanly even without <code>oauth2_provider</code> install
 </span></code></pre></div>
 <p><code>required_scopes()</code> is what gets surfaced in the <code>WWW-Authenticate</code> header on
 denial — return <code>[]</code> if there's nothing scope-shaped to advertise.</p>
+<h3 id="reusing-drf-basepermission-classes">Reusing DRF <code>BasePermission</code> classes<a class="headerlink" href="#reusing-drf-basepermission-classes" title="Permanent link">&para;</a></h3>
+<p>If a permission class already exists as a DRF <code>BasePermission</code> (e.g. one
+shared with your HTTP transport), wrap it with <code>DRFPermissionAdapter</code>
+rather than rewriting it for MCP:</p>
+<div class="language-python highlight"><pre><span></span><code><span id="__span-6-1"><a id="__codelineno-6-1" name="__codelineno-6-1" href="#__codelineno-6-1"></a><span class="kn">from</span><span class="w"> </span><span class="nn">rest_framework.permissions</span><span class="w"> </span><span class="kn">import</span> <span class="n">DjangoModelPermissions</span>
+</span><span id="__span-6-2"><a id="__codelineno-6-2" name="__codelineno-6-2" href="#__codelineno-6-2"></a><span class="kn">from</span><span class="w"> </span><span class="nn">rest_framework_mcp</span><span class="w"> </span><span class="kn">import</span> <span class="n">DRFPermissionAdapter</span>
+</span><span id="__span-6-3"><a id="__codelineno-6-3" name="__codelineno-6-3" href="#__codelineno-6-3"></a>
+</span><span id="__span-6-4"><a id="__codelineno-6-4" name="__codelineno-6-4" href="#__codelineno-6-4"></a><span class="n">server</span><span class="o">.</span><span class="n">register_service_tool</span><span class="p">(</span>
+</span><span id="__span-6-5"><a id="__codelineno-6-5" name="__codelineno-6-5" href="#__codelineno-6-5"></a>    <span class="n">name</span><span class="o">=</span><span class="s2">&quot;invoices.create&quot;</span><span class="p">,</span>
+</span><span id="__span-6-6"><a id="__codelineno-6-6" name="__codelineno-6-6" href="#__codelineno-6-6"></a>    <span class="n">spec</span><span class="o">=</span><span class="n">ServiceSpec</span><span class="p">(</span><span class="n">service</span><span class="o">=</span><span class="n">create_invoice</span><span class="p">),</span>
+</span><span id="__span-6-7"><a id="__codelineno-6-7" name="__codelineno-6-7" href="#__codelineno-6-7"></a>    <span class="n">permissions</span><span class="o">=</span><span class="p">[</span><span class="n">DRFPermissionAdapter</span><span class="p">(</span><span class="n">DjangoModelPermissions</span><span class="p">)],</span>
+</span><span id="__span-6-8"><a id="__codelineno-6-8" name="__codelineno-6-8" href="#__codelineno-6-8"></a><span class="p">)</span>
+</span></code></pre></div>
+<p><code>ServiceSpec</code> / <code>SelectorSpec</code> from sister-repo 0.12.0 also carry a
+<code>permission_classes</code> attribute. Any DRF permission classes declared on
+the spec are auto-wrapped and prepended to the per-binding <code>permissions</code>
+tuple — the same spec that backs your HTTP view governs the MCP binding
+without you restating the contract at the MCP call site.</p>
+<h3 id="filtering-listings-by-permissions">Filtering listings by permissions<a class="headerlink" href="#filtering-listings-by-permissions" title="Permanent link">&para;</a></h3>
+<p>By default <code>tools/list</code>, <code>resources/list</code>, <code>resources/templates/list</code>,
+and <code>prompts/list</code> return every registered binding regardless of whether
+the current caller could invoke it. Set
+<code>REST_FRAMEWORK_MCP["FILTER_LISTINGS_BY_PERMISSIONS"] = True</code> to drop
+bindings whose permissions deny the caller before paginating.</p>
+<p>This is <strong>binding-level</strong> gating — permissions are evaluated against a
+synthetic data-less request, so a permission whose decision depends on
+the call arguments will conservatively deny at list time. Mark such a
+binding with <code>always_listed=True</code> to keep it visible as a discovery aid;
+the permission still gates the actual invocation. Custom permissions can
+declare an <code>is_listable(token)</code> method to override the list-time check
+independently of <code>has_permission(request, token)</code>.</p>
 <h2 id="audience-binding-rfc-8707">Audience binding (RFC 8707)<a class="headerlink" href="#audience-binding-rfc-8707" title="Permanent link">&para;</a></h2>
 <p><code>DjangoOAuthToolkitBackend</code> enforces RFC 8707 audience binding when
 <code>REST_FRAMEWORK_MCP["RESOURCE_URL"]</code> is configured. Every accepted token must
 carry that URL as its bound resource; tokens with a missing or mismatched
 <code>aud</code> / <code>resource</code> are rejected as if the bearer were absent.</p>
-<div class="language-python highlight"><pre><span></span><code><span id="__span-6-1"><a id="__codelineno-6-1" name="__codelineno-6-1" href="#__codelineno-6-1"></a><span class="n">REST_FRAMEWORK_MCP</span> <span class="o">=</span> <span class="p">{</span>
-</span><span id="__span-6-2"><a id="__codelineno-6-2" name="__codelineno-6-2" href="#__codelineno-6-2"></a>    <span class="s2">&quot;RESOURCE_URL&quot;</span><span class="p">:</span> <span class="s2">&quot;https://example.com/mcp/&quot;</span><span class="p">,</span>
-</span><span id="__span-6-3"><a id="__codelineno-6-3" name="__codelineno-6-3" href="#__codelineno-6-3"></a>    <span class="s2">&quot;AUTH_BACKEND&quot;</span><span class="p">:</span>
-</span><span id="__span-6-4"><a id="__codelineno-6-4" name="__codelineno-6-4" href="#__codelineno-6-4"></a>        <span class="s2">&quot;rest_framework_mcp.auth.backends.django_oauth_toolkit_backend&quot;</span>
-</span><span id="__span-6-5"><a id="__codelineno-6-5" name="__codelineno-6-5" href="#__codelineno-6-5"></a>        <span class="s2">&quot;.DjangoOAuthToolkitBackend&quot;</span><span class="p">,</span>
-</span><span id="__span-6-6"><a id="__codelineno-6-6" name="__codelineno-6-6" href="#__codelineno-6-6"></a>    <span class="s2">&quot;SERVER_INFO&quot;</span><span class="p">:</span> <span class="p">{</span>
-</span><span id="__span-6-7"><a id="__codelineno-6-7" name="__codelineno-6-7" href="#__codelineno-6-7"></a>        <span class="s2">&quot;authorization_servers&quot;</span><span class="p">:</span> <span class="p">[</span><span class="s2">&quot;https://example.com/oauth/&quot;</span><span class="p">],</span>
-</span><span id="__span-6-8"><a id="__codelineno-6-8" name="__codelineno-6-8" href="#__codelineno-6-8"></a>        <span class="s2">&quot;scopes_supported&quot;</span><span class="p">:</span> <span class="p">[</span><span class="s2">&quot;invoices:read&quot;</span><span class="p">,</span> <span class="s2">&quot;invoices:write&quot;</span><span class="p">],</span>
-</span><span id="__span-6-9"><a id="__codelineno-6-9" name="__codelineno-6-9" href="#__codelineno-6-9"></a>        <span class="s2">&quot;resource_metadata_url&quot;</span><span class="p">:</span>
-</span><span id="__span-6-10"><a id="__codelineno-6-10" name="__codelineno-6-10" href="#__codelineno-6-10"></a>            <span class="s2">&quot;https://example.com/mcp/.well-known/oauth-protected-resource&quot;</span><span class="p">,</span>
-</span><span id="__span-6-11"><a id="__codelineno-6-11" name="__codelineno-6-11" href="#__codelineno-6-11"></a>    <span class="p">},</span>
-</span><span id="__span-6-12"><a id="__codelineno-6-12" name="__codelineno-6-12" href="#__codelineno-6-12"></a><span class="p">}</span>
+<div class="language-python highlight"><pre><span></span><code><span id="__span-7-1"><a id="__codelineno-7-1" name="__codelineno-7-1" href="#__codelineno-7-1"></a><span class="n">REST_FRAMEWORK_MCP</span> <span class="o">=</span> <span class="p">{</span>
+</span><span id="__span-7-2"><a id="__codelineno-7-2" name="__codelineno-7-2" href="#__codelineno-7-2"></a>    <span class="s2">&quot;RESOURCE_URL&quot;</span><span class="p">:</span> <span class="s2">&quot;https://example.com/mcp/&quot;</span><span class="p">,</span>
+</span><span id="__span-7-3"><a id="__codelineno-7-3" name="__codelineno-7-3" href="#__codelineno-7-3"></a>    <span class="s2">&quot;AUTH_BACKEND&quot;</span><span class="p">:</span>
+</span><span id="__span-7-4"><a id="__codelineno-7-4" name="__codelineno-7-4" href="#__codelineno-7-4"></a>        <span class="s2">&quot;rest_framework_mcp.auth.backends.django_oauth_toolkit_backend&quot;</span>
+</span><span id="__span-7-5"><a id="__codelineno-7-5" name="__codelineno-7-5" href="#__codelineno-7-5"></a>        <span class="s2">&quot;.DjangoOAuthToolkitBackend&quot;</span><span class="p">,</span>
+</span><span id="__span-7-6"><a id="__codelineno-7-6" name="__codelineno-7-6" href="#__codelineno-7-6"></a>    <span class="s2">&quot;SERVER_INFO&quot;</span><span class="p">:</span> <span class="p">{</span>
+</span><span id="__span-7-7"><a id="__codelineno-7-7" name="__codelineno-7-7" href="#__codelineno-7-7"></a>        <span class="s2">&quot;authorization_servers&quot;</span><span class="p">:</span> <span class="p">[</span><span class="s2">&quot;https://example.com/oauth/&quot;</span><span class="p">],</span>
+</span><span id="__span-7-8"><a id="__codelineno-7-8" name="__codelineno-7-8" href="#__codelineno-7-8"></a>        <span class="s2">&quot;scopes_supported&quot;</span><span class="p">:</span> <span class="p">[</span><span class="s2">&quot;invoices:read&quot;</span><span class="p">,</span> <span class="s2">&quot;invoices:write&quot;</span><span class="p">],</span>
+</span><span id="__span-7-9"><a id="__codelineno-7-9" name="__codelineno-7-9" href="#__codelineno-7-9"></a>        <span class="s2">&quot;resource_metadata_url&quot;</span><span class="p">:</span>
+</span><span id="__span-7-10"><a id="__codelineno-7-10" name="__codelineno-7-10" href="#__codelineno-7-10"></a>            <span class="s2">&quot;https://example.com/mcp/.well-known/oauth-protected-resource&quot;</span><span class="p">,</span>
+</span><span id="__span-7-11"><a id="__codelineno-7-11" name="__codelineno-7-11" href="#__codelineno-7-11"></a>    <span class="p">},</span>
+</span><span id="__span-7-12"><a id="__codelineno-7-12" name="__codelineno-7-12" href="#__codelineno-7-12"></a><span class="p">}</span>
 </span></code></pre></div>
 <p><code>RESOURCE_URL</code> is also what the PRM endpoint advertises as <code>resource</code>, so the
 configuration cannot drift between "what we accept" and "what we tell clients
@@ -1578,57 +1689,117 @@ binding happens at an upstream gateway.</p>
 matches are unsafe (a token bound to <code>…/mcp</code> would otherwise satisfy a
 server expecting <code>…/mcp-admin</code>). The implementation enforces equality only.</p>
 </div>
+<h2 id="oauth-contrib-mount">OAuth contrib mount<a class="headerlink" href="#oauth-contrib-mount" title="Permanent link">&para;</a></h2>
+<p><code>rest_framework_mcp.contrib.oauth.build_oauth_urlpatterns(server, *,
+include_dcr=False, include_aliases=True, include_openid_discovery=True)</code>
+returns URL patterns ready to mount alongside your server. It exposes the
+full set of discovery endpoints LLM hosts probe so MCP clients (Claude
+Desktop, Inspector, the various MCP-aware editors) can walk the auth
+flow without you running a separate AS-facing service:</p>
+<table>
+<thead>
+<tr>
+<th>Endpoint</th>
+<th>Source</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>/.well-known/oauth-authorization-server</code></td>
+<td>RFC 8414 AS metadata</td>
+</tr>
+<tr>
+<td><code>/.well-known/openid-configuration</code></td>
+<td>OIDC discovery (alias / minimal payload)</td>
+</tr>
+<tr>
+<td><code>/oauth/register/</code> (and aliases)</td>
+<td>RFC 7591 Dynamic Client Registration</td>
+</tr>
+<tr>
+<td><code>/oauth/authorize/</code></td>
+<td>DOT's <code>AuthorizationView</code> (proxied so the user-adapter hook runs)</td>
+</tr>
+</tbody>
+</table>
+<p>Aliases render the canonical payload — they are not HTTP redirects.</p>
+<div class="language-python highlight"><span class="filename">urls.py</span><pre><span></span><code><span id="__span-8-1"><a id="__codelineno-8-1" name="__codelineno-8-1" href="#__codelineno-8-1"></a><span class="kn">from</span><span class="w"> </span><span class="nn">django.urls</span><span class="w"> </span><span class="kn">import</span> <span class="n">path</span>
+</span><span id="__span-8-2"><a id="__codelineno-8-2" name="__codelineno-8-2" href="#__codelineno-8-2"></a>
+</span><span id="__span-8-3"><a id="__codelineno-8-3" name="__codelineno-8-3" href="#__codelineno-8-3"></a><span class="kn">from</span><span class="w"> </span><span class="nn">invoices.mcp</span><span class="w"> </span><span class="kn">import</span> <span class="n">server</span>
+</span><span id="__span-8-4"><a id="__codelineno-8-4" name="__codelineno-8-4" href="#__codelineno-8-4"></a><span class="kn">from</span><span class="w"> </span><span class="nn">rest_framework_mcp.contrib.oauth</span><span class="w"> </span><span class="kn">import</span> <span class="n">build_oauth_urlpatterns</span>
+</span><span id="__span-8-5"><a id="__codelineno-8-5" name="__codelineno-8-5" href="#__codelineno-8-5"></a>
+</span><span id="__span-8-6"><a id="__codelineno-8-6" name="__codelineno-8-6" href="#__codelineno-8-6"></a><span class="n">urlpatterns</span> <span class="o">=</span> <span class="p">[</span>
+</span><span id="__span-8-7"><a id="__codelineno-8-7" name="__codelineno-8-7" href="#__codelineno-8-7"></a>    <span class="o">*</span><span class="n">build_oauth_urlpatterns</span><span class="p">(</span><span class="n">server</span><span class="p">,</span> <span class="n">include_dcr</span><span class="o">=</span><span class="kc">True</span><span class="p">),</span>
+</span><span id="__span-8-8"><a id="__codelineno-8-8" name="__codelineno-8-8" href="#__codelineno-8-8"></a>    <span class="n">path</span><span class="p">(</span><span class="s2">&quot;mcp/&quot;</span><span class="p">,</span> <span class="n">server</span><span class="o">.</span><span class="n">urls</span><span class="p">),</span>
+</span><span id="__span-8-9"><a id="__codelineno-8-9" name="__codelineno-8-9" href="#__codelineno-8-9"></a><span class="p">]</span>
+</span></code></pre></div>
+<p>DCR is gated behind two settings — defaults are deliberately
+conservative so an accidental mount doesn't auto-register clients:</p>
+<div class="language-python highlight"><pre><span></span><code><span id="__span-9-1"><a id="__codelineno-9-1" name="__codelineno-9-1" href="#__codelineno-9-1"></a><span class="n">REST_FRAMEWORK_MCP</span> <span class="o">=</span> <span class="p">{</span>
+</span><span id="__span-9-2"><a id="__codelineno-9-2" name="__codelineno-9-2" href="#__codelineno-9-2"></a>    <span class="s2">&quot;DCR_ENABLED&quot;</span><span class="p">:</span> <span class="kc">True</span><span class="p">,</span>
+</span><span id="__span-9-3"><a id="__codelineno-9-3" name="__codelineno-9-3" href="#__codelineno-9-3"></a>    <span class="s2">&quot;DCR_INITIAL_ACCESS_TOKEN&quot;</span><span class="p">:</span> <span class="s2">&quot;share-this-with-trusted-clients&quot;</span><span class="p">,</span>  <span class="c1"># optional</span>
+</span><span id="__span-9-4"><a id="__codelineno-9-4" name="__codelineno-9-4" href="#__codelineno-9-4"></a>    <span class="c1"># ... AUTH_BACKEND, SERVER_INFO, etc.</span>
+</span><span id="__span-9-5"><a id="__codelineno-9-5" name="__codelineno-9-5" href="#__codelineno-9-5"></a><span class="p">}</span>
+</span></code></pre></div>
+<p>When <code>DCR_ENABLED</code> is <code>False</code> the DCR endpoint returns <code>501 Not
+Implemented</code>. When <code>DCR_INITIAL_ACCESS_TOKEN</code> is set, POST requests must
+present it as a bearer — per RFC 7591 §3.</p>
+<p>The contrib mount also surfaces AS metadata, so <code>AllowAnyBackend</code>
+deployments (which have no AS) return <code>501 Not Implemented</code> on the AS
+metadata endpoints rather than serving a fake payload. Use
+<code>DjangoOAuthToolkitBackend</code> (or another backend that implements
+<code>authorization_server_metadata()</code>) in production.</p>
 <h2 id="recipe-bring-your-own-as-via-django-oauth-toolkit">Recipe: bring-your-own AS via django-oauth-toolkit<a class="headerlink" href="#recipe-bring-your-own-as-via-django-oauth-toolkit" title="Permanent link">&para;</a></h2>
 <p>DOT can act as the Authorization Server too. The MCP package only consumes the
 tokens it issues — DCR, the authorization endpoint, token endpoint, and refresh
 flow are all handled by DOT itself. Modern MCP clients (Claude Desktop,
 Inspector) discover them through PRM → AS metadata.</p>
-<div class="language-python highlight"><span class="filename">settings.py</span><pre><span></span><code><span id="__span-7-1"><a id="__codelineno-7-1" name="__codelineno-7-1" href="#__codelineno-7-1"></a><span class="n">INSTALLED_APPS</span> <span class="o">=</span> <span class="p">[</span>
-</span><span id="__span-7-2"><a id="__codelineno-7-2" name="__codelineno-7-2" href="#__codelineno-7-2"></a>    <span class="c1"># ...</span>
-</span><span id="__span-7-3"><a id="__codelineno-7-3" name="__codelineno-7-3" href="#__codelineno-7-3"></a>    <span class="s2">&quot;oauth2_provider&quot;</span><span class="p">,</span>
-</span><span id="__span-7-4"><a id="__codelineno-7-4" name="__codelineno-7-4" href="#__codelineno-7-4"></a><span class="p">]</span>
-</span><span id="__span-7-5"><a id="__codelineno-7-5" name="__codelineno-7-5" href="#__codelineno-7-5"></a>
-</span><span id="__span-7-6"><a id="__codelineno-7-6" name="__codelineno-7-6" href="#__codelineno-7-6"></a><span class="n">OAUTH2_PROVIDER</span> <span class="o">=</span> <span class="p">{</span>
-</span><span id="__span-7-7"><a id="__codelineno-7-7" name="__codelineno-7-7" href="#__codelineno-7-7"></a>    <span class="c1"># Bind every issued token to the canonical resource URL so the resource</span>
-</span><span id="__span-7-8"><a id="__codelineno-7-8" name="__codelineno-7-8" href="#__codelineno-7-8"></a>    <span class="c1"># server can perform RFC 8707 audience checks.</span>
-</span><span id="__span-7-9"><a id="__codelineno-7-9" name="__codelineno-7-9" href="#__codelineno-7-9"></a>    <span class="s2">&quot;REQUIRE_RESOURCE&quot;</span><span class="p">:</span> <span class="kc">True</span><span class="p">,</span>
-</span><span id="__span-7-10"><a id="__codelineno-7-10" name="__codelineno-7-10" href="#__codelineno-7-10"></a>    <span class="s2">&quot;SCOPES&quot;</span><span class="p">:</span> <span class="p">{</span>
-</span><span id="__span-7-11"><a id="__codelineno-7-11" name="__codelineno-7-11" href="#__codelineno-7-11"></a>        <span class="s2">&quot;invoices:read&quot;</span><span class="p">:</span>  <span class="s2">&quot;Read invoices&quot;</span><span class="p">,</span>
-</span><span id="__span-7-12"><a id="__codelineno-7-12" name="__codelineno-7-12" href="#__codelineno-7-12"></a>        <span class="s2">&quot;invoices:write&quot;</span><span class="p">:</span> <span class="s2">&quot;Mutate invoices&quot;</span><span class="p">,</span>
-</span><span id="__span-7-13"><a id="__codelineno-7-13" name="__codelineno-7-13" href="#__codelineno-7-13"></a>    <span class="p">},</span>
-</span><span id="__span-7-14"><a id="__codelineno-7-14" name="__codelineno-7-14" href="#__codelineno-7-14"></a>    <span class="c1"># Token lifetimes appropriate for an MCP session — short access tokens,</span>
-</span><span id="__span-7-15"><a id="__codelineno-7-15" name="__codelineno-7-15" href="#__codelineno-7-15"></a>    <span class="c1"># refresh on demand.</span>
-</span><span id="__span-7-16"><a id="__codelineno-7-16" name="__codelineno-7-16" href="#__codelineno-7-16"></a>    <span class="s2">&quot;ACCESS_TOKEN_EXPIRE_SECONDS&quot;</span><span class="p">:</span> <span class="mi">600</span><span class="p">,</span>
-</span><span id="__span-7-17"><a id="__codelineno-7-17" name="__codelineno-7-17" href="#__codelineno-7-17"></a>    <span class="s2">&quot;REFRESH_TOKEN_EXPIRE_SECONDS&quot;</span><span class="p">:</span> <span class="mi">60</span> <span class="o">*</span> <span class="mi">60</span> <span class="o">*</span> <span class="mi">24</span><span class="p">,</span>
-</span><span id="__span-7-18"><a id="__codelineno-7-18" name="__codelineno-7-18" href="#__codelineno-7-18"></a><span class="p">}</span>
-</span><span id="__span-7-19"><a id="__codelineno-7-19" name="__codelineno-7-19" href="#__codelineno-7-19"></a>
-</span><span id="__span-7-20"><a id="__codelineno-7-20" name="__codelineno-7-20" href="#__codelineno-7-20"></a><span class="n">REST_FRAMEWORK_MCP</span> <span class="o">=</span> <span class="p">{</span>
-</span><span id="__span-7-21"><a id="__codelineno-7-21" name="__codelineno-7-21" href="#__codelineno-7-21"></a>    <span class="s2">&quot;RESOURCE_URL&quot;</span><span class="p">:</span> <span class="s2">&quot;https://example.com/mcp/&quot;</span><span class="p">,</span>
-</span><span id="__span-7-22"><a id="__codelineno-7-22" name="__codelineno-7-22" href="#__codelineno-7-22"></a>    <span class="s2">&quot;AUTH_BACKEND&quot;</span><span class="p">:</span>
-</span><span id="__span-7-23"><a id="__codelineno-7-23" name="__codelineno-7-23" href="#__codelineno-7-23"></a>        <span class="s2">&quot;rest_framework_mcp.auth.backends.django_oauth_toolkit_backend&quot;</span>
-</span><span id="__span-7-24"><a id="__codelineno-7-24" name="__codelineno-7-24" href="#__codelineno-7-24"></a>        <span class="s2">&quot;.DjangoOAuthToolkitBackend&quot;</span><span class="p">,</span>
-</span><span id="__span-7-25"><a id="__codelineno-7-25" name="__codelineno-7-25" href="#__codelineno-7-25"></a>    <span class="s2">&quot;ALLOWED_ORIGINS&quot;</span><span class="p">:</span> <span class="p">[</span><span class="s2">&quot;https://app.example.com&quot;</span><span class="p">],</span>
-</span><span id="__span-7-26"><a id="__codelineno-7-26" name="__codelineno-7-26" href="#__codelineno-7-26"></a>    <span class="s2">&quot;SERVER_INFO&quot;</span><span class="p">:</span> <span class="p">{</span>
-</span><span id="__span-7-27"><a id="__codelineno-7-27" name="__codelineno-7-27" href="#__codelineno-7-27"></a>        <span class="s2">&quot;authorization_servers&quot;</span><span class="p">:</span> <span class="p">[</span><span class="s2">&quot;https://example.com/oauth/&quot;</span><span class="p">],</span>
-</span><span id="__span-7-28"><a id="__codelineno-7-28" name="__codelineno-7-28" href="#__codelineno-7-28"></a>        <span class="s2">&quot;scopes_supported&quot;</span><span class="p">:</span> <span class="p">[</span><span class="s2">&quot;invoices:read&quot;</span><span class="p">,</span> <span class="s2">&quot;invoices:write&quot;</span><span class="p">],</span>
-</span><span id="__span-7-29"><a id="__codelineno-7-29" name="__codelineno-7-29" href="#__codelineno-7-29"></a>        <span class="s2">&quot;resource_metadata_url&quot;</span><span class="p">:</span>
-</span><span id="__span-7-30"><a id="__codelineno-7-30" name="__codelineno-7-30" href="#__codelineno-7-30"></a>            <span class="s2">&quot;https://example.com/mcp/.well-known/oauth-protected-resource&quot;</span><span class="p">,</span>
-</span><span id="__span-7-31"><a id="__codelineno-7-31" name="__codelineno-7-31" href="#__codelineno-7-31"></a>    <span class="p">},</span>
-</span><span id="__span-7-32"><a id="__codelineno-7-32" name="__codelineno-7-32" href="#__codelineno-7-32"></a><span class="p">}</span>
+<div class="language-python highlight"><span class="filename">settings.py</span><pre><span></span><code><span id="__span-10-1"><a id="__codelineno-10-1" name="__codelineno-10-1" href="#__codelineno-10-1"></a><span class="n">INSTALLED_APPS</span> <span class="o">=</span> <span class="p">[</span>
+</span><span id="__span-10-2"><a id="__codelineno-10-2" name="__codelineno-10-2" href="#__codelineno-10-2"></a>    <span class="c1"># ...</span>
+</span><span id="__span-10-3"><a id="__codelineno-10-3" name="__codelineno-10-3" href="#__codelineno-10-3"></a>    <span class="s2">&quot;oauth2_provider&quot;</span><span class="p">,</span>
+</span><span id="__span-10-4"><a id="__codelineno-10-4" name="__codelineno-10-4" href="#__codelineno-10-4"></a><span class="p">]</span>
+</span><span id="__span-10-5"><a id="__codelineno-10-5" name="__codelineno-10-5" href="#__codelineno-10-5"></a>
+</span><span id="__span-10-6"><a id="__codelineno-10-6" name="__codelineno-10-6" href="#__codelineno-10-6"></a><span class="n">OAUTH2_PROVIDER</span> <span class="o">=</span> <span class="p">{</span>
+</span><span id="__span-10-7"><a id="__codelineno-10-7" name="__codelineno-10-7" href="#__codelineno-10-7"></a>    <span class="c1"># Bind every issued token to the canonical resource URL so the resource</span>
+</span><span id="__span-10-8"><a id="__codelineno-10-8" name="__codelineno-10-8" href="#__codelineno-10-8"></a>    <span class="c1"># server can perform RFC 8707 audience checks.</span>
+</span><span id="__span-10-9"><a id="__codelineno-10-9" name="__codelineno-10-9" href="#__codelineno-10-9"></a>    <span class="s2">&quot;REQUIRE_RESOURCE&quot;</span><span class="p">:</span> <span class="kc">True</span><span class="p">,</span>
+</span><span id="__span-10-10"><a id="__codelineno-10-10" name="__codelineno-10-10" href="#__codelineno-10-10"></a>    <span class="s2">&quot;SCOPES&quot;</span><span class="p">:</span> <span class="p">{</span>
+</span><span id="__span-10-11"><a id="__codelineno-10-11" name="__codelineno-10-11" href="#__codelineno-10-11"></a>        <span class="s2">&quot;invoices:read&quot;</span><span class="p">:</span>  <span class="s2">&quot;Read invoices&quot;</span><span class="p">,</span>
+</span><span id="__span-10-12"><a id="__codelineno-10-12" name="__codelineno-10-12" href="#__codelineno-10-12"></a>        <span class="s2">&quot;invoices:write&quot;</span><span class="p">:</span> <span class="s2">&quot;Mutate invoices&quot;</span><span class="p">,</span>
+</span><span id="__span-10-13"><a id="__codelineno-10-13" name="__codelineno-10-13" href="#__codelineno-10-13"></a>    <span class="p">},</span>
+</span><span id="__span-10-14"><a id="__codelineno-10-14" name="__codelineno-10-14" href="#__codelineno-10-14"></a>    <span class="c1"># Token lifetimes appropriate for an MCP session — short access tokens,</span>
+</span><span id="__span-10-15"><a id="__codelineno-10-15" name="__codelineno-10-15" href="#__codelineno-10-15"></a>    <span class="c1"># refresh on demand.</span>
+</span><span id="__span-10-16"><a id="__codelineno-10-16" name="__codelineno-10-16" href="#__codelineno-10-16"></a>    <span class="s2">&quot;ACCESS_TOKEN_EXPIRE_SECONDS&quot;</span><span class="p">:</span> <span class="mi">600</span><span class="p">,</span>
+</span><span id="__span-10-17"><a id="__codelineno-10-17" name="__codelineno-10-17" href="#__codelineno-10-17"></a>    <span class="s2">&quot;REFRESH_TOKEN_EXPIRE_SECONDS&quot;</span><span class="p">:</span> <span class="mi">60</span> <span class="o">*</span> <span class="mi">60</span> <span class="o">*</span> <span class="mi">24</span><span class="p">,</span>
+</span><span id="__span-10-18"><a id="__codelineno-10-18" name="__codelineno-10-18" href="#__codelineno-10-18"></a><span class="p">}</span>
+</span><span id="__span-10-19"><a id="__codelineno-10-19" name="__codelineno-10-19" href="#__codelineno-10-19"></a>
+</span><span id="__span-10-20"><a id="__codelineno-10-20" name="__codelineno-10-20" href="#__codelineno-10-20"></a><span class="n">REST_FRAMEWORK_MCP</span> <span class="o">=</span> <span class="p">{</span>
+</span><span id="__span-10-21"><a id="__codelineno-10-21" name="__codelineno-10-21" href="#__codelineno-10-21"></a>    <span class="s2">&quot;RESOURCE_URL&quot;</span><span class="p">:</span> <span class="s2">&quot;https://example.com/mcp/&quot;</span><span class="p">,</span>
+</span><span id="__span-10-22"><a id="__codelineno-10-22" name="__codelineno-10-22" href="#__codelineno-10-22"></a>    <span class="s2">&quot;AUTH_BACKEND&quot;</span><span class="p">:</span>
+</span><span id="__span-10-23"><a id="__codelineno-10-23" name="__codelineno-10-23" href="#__codelineno-10-23"></a>        <span class="s2">&quot;rest_framework_mcp.auth.backends.django_oauth_toolkit_backend&quot;</span>
+</span><span id="__span-10-24"><a id="__codelineno-10-24" name="__codelineno-10-24" href="#__codelineno-10-24"></a>        <span class="s2">&quot;.DjangoOAuthToolkitBackend&quot;</span><span class="p">,</span>
+</span><span id="__span-10-25"><a id="__codelineno-10-25" name="__codelineno-10-25" href="#__codelineno-10-25"></a>    <span class="s2">&quot;ALLOWED_ORIGINS&quot;</span><span class="p">:</span> <span class="p">[</span><span class="s2">&quot;https://app.example.com&quot;</span><span class="p">],</span>
+</span><span id="__span-10-26"><a id="__codelineno-10-26" name="__codelineno-10-26" href="#__codelineno-10-26"></a>    <span class="s2">&quot;SERVER_INFO&quot;</span><span class="p">:</span> <span class="p">{</span>
+</span><span id="__span-10-27"><a id="__codelineno-10-27" name="__codelineno-10-27" href="#__codelineno-10-27"></a>        <span class="s2">&quot;authorization_servers&quot;</span><span class="p">:</span> <span class="p">[</span><span class="s2">&quot;https://example.com/oauth/&quot;</span><span class="p">],</span>
+</span><span id="__span-10-28"><a id="__codelineno-10-28" name="__codelineno-10-28" href="#__codelineno-10-28"></a>        <span class="s2">&quot;scopes_supported&quot;</span><span class="p">:</span> <span class="p">[</span><span class="s2">&quot;invoices:read&quot;</span><span class="p">,</span> <span class="s2">&quot;invoices:write&quot;</span><span class="p">],</span>
+</span><span id="__span-10-29"><a id="__codelineno-10-29" name="__codelineno-10-29" href="#__codelineno-10-29"></a>        <span class="s2">&quot;resource_metadata_url&quot;</span><span class="p">:</span>
+</span><span id="__span-10-30"><a id="__codelineno-10-30" name="__codelineno-10-30" href="#__codelineno-10-30"></a>            <span class="s2">&quot;https://example.com/mcp/.well-known/oauth-protected-resource&quot;</span><span class="p">,</span>
+</span><span id="__span-10-31"><a id="__codelineno-10-31" name="__codelineno-10-31" href="#__codelineno-10-31"></a>    <span class="p">},</span>
+</span><span id="__span-10-32"><a id="__codelineno-10-32" name="__codelineno-10-32" href="#__codelineno-10-32"></a><span class="p">}</span>
 </span></code></pre></div>
-<div class="language-python highlight"><span class="filename">urls.py</span><pre><span></span><code><span id="__span-8-1"><a id="__codelineno-8-1" name="__codelineno-8-1" href="#__codelineno-8-1"></a><span class="kn">from</span><span class="w"> </span><span class="nn">django.urls</span><span class="w"> </span><span class="kn">import</span> <span class="n">include</span><span class="p">,</span> <span class="n">path</span>
-</span><span id="__span-8-2"><a id="__codelineno-8-2" name="__codelineno-8-2" href="#__codelineno-8-2"></a>
-</span><span id="__span-8-3"><a id="__codelineno-8-3" name="__codelineno-8-3" href="#__codelineno-8-3"></a><span class="kn">from</span><span class="w"> </span><span class="nn">invoices.mcp</span><span class="w"> </span><span class="kn">import</span> <span class="n">server</span>
-</span><span id="__span-8-4"><a id="__codelineno-8-4" name="__codelineno-8-4" href="#__codelineno-8-4"></a>
-</span><span id="__span-8-5"><a id="__codelineno-8-5" name="__codelineno-8-5" href="#__codelineno-8-5"></a><span class="n">urlpatterns</span> <span class="o">=</span> <span class="p">[</span>
-</span><span id="__span-8-6"><a id="__codelineno-8-6" name="__codelineno-8-6" href="#__codelineno-8-6"></a>    <span class="n">path</span><span class="p">(</span><span class="s2">&quot;oauth/&quot;</span><span class="p">,</span> <span class="n">include</span><span class="p">(</span><span class="s2">&quot;oauth2_provider.urls&quot;</span><span class="p">,</span> <span class="n">namespace</span><span class="o">=</span><span class="s2">&quot;oauth2_provider&quot;</span><span class="p">)),</span>
-</span><span id="__span-8-7"><a id="__codelineno-8-7" name="__codelineno-8-7" href="#__codelineno-8-7"></a>    <span class="n">path</span><span class="p">(</span><span class="s2">&quot;mcp/&quot;</span><span class="p">,</span> <span class="n">include</span><span class="p">(</span><span class="n">server</span><span class="o">.</span><span class="n">urls</span><span class="p">)),</span>
-</span><span id="__span-8-8"><a id="__codelineno-8-8" name="__codelineno-8-8" href="#__codelineno-8-8"></a><span class="p">]</span>
+<div class="language-python highlight"><span class="filename">urls.py</span><pre><span></span><code><span id="__span-11-1"><a id="__codelineno-11-1" name="__codelineno-11-1" href="#__codelineno-11-1"></a><span class="kn">from</span><span class="w"> </span><span class="nn">django.urls</span><span class="w"> </span><span class="kn">import</span> <span class="n">include</span><span class="p">,</span> <span class="n">path</span>
+</span><span id="__span-11-2"><a id="__codelineno-11-2" name="__codelineno-11-2" href="#__codelineno-11-2"></a>
+</span><span id="__span-11-3"><a id="__codelineno-11-3" name="__codelineno-11-3" href="#__codelineno-11-3"></a><span class="kn">from</span><span class="w"> </span><span class="nn">invoices.mcp</span><span class="w"> </span><span class="kn">import</span> <span class="n">server</span>
+</span><span id="__span-11-4"><a id="__codelineno-11-4" name="__codelineno-11-4" href="#__codelineno-11-4"></a>
+</span><span id="__span-11-5"><a id="__codelineno-11-5" name="__codelineno-11-5" href="#__codelineno-11-5"></a><span class="n">urlpatterns</span> <span class="o">=</span> <span class="p">[</span>
+</span><span id="__span-11-6"><a id="__codelineno-11-6" name="__codelineno-11-6" href="#__codelineno-11-6"></a>    <span class="n">path</span><span class="p">(</span><span class="s2">&quot;oauth/&quot;</span><span class="p">,</span> <span class="n">include</span><span class="p">(</span><span class="s2">&quot;oauth2_provider.urls&quot;</span><span class="p">,</span> <span class="n">namespace</span><span class="o">=</span><span class="s2">&quot;oauth2_provider&quot;</span><span class="p">)),</span>
+</span><span id="__span-11-7"><a id="__codelineno-11-7" name="__codelineno-11-7" href="#__codelineno-11-7"></a>    <span class="n">path</span><span class="p">(</span><span class="s2">&quot;mcp/&quot;</span><span class="p">,</span> <span class="n">include</span><span class="p">(</span><span class="n">server</span><span class="o">.</span><span class="n">urls</span><span class="p">)),</span>
+</span><span id="__span-11-8"><a id="__codelineno-11-8" name="__codelineno-11-8" href="#__codelineno-11-8"></a><span class="p">]</span>
 </span></code></pre></div>
 <p>Verify the AS publishes <a href="https://datatracker.ietf.org/doc/html/rfc8414">RFC 8414</a>
 metadata before debugging client-side issues — DOT supports this, but the URL
 is configurable. From a shell:</p>
-<div class="language-bash highlight"><pre><span></span><code><span id="__span-9-1"><a id="__codelineno-9-1" name="__codelineno-9-1" href="#__codelineno-9-1"></a>curl<span class="w"> </span>https://example.com/oauth/.well-known/oauth-authorization-server<span class="w"> </span><span class="p">|</span><span class="w"> </span>jq<span class="w"> </span>.
+<div class="language-bash highlight"><pre><span></span><code><span id="__span-12-1"><a id="__codelineno-12-1" name="__codelineno-12-1" href="#__codelineno-12-1"></a>curl<span class="w"> </span>https://example.com/oauth/.well-known/oauth-authorization-server<span class="w"> </span><span class="p">|</span><span class="w"> </span>jq<span class="w"> </span>.
 </span></code></pre></div>
 <p>You should see at minimum <code>issuer</code>, <code>authorization_endpoint</code>, <code>token_endpoint</code>,
 and (for DCR-aware clients) <code>registration_endpoint</code>. The PRM endpoint you serve
@@ -1655,13 +1826,13 @@ cause of "Inspector can't authenticate" reports.</p>
 (CIMD) over DCR — they avoid an extra registration round-trip and let clients
 rotate without server-side state. If your AS supports CIMD, advertise it in
 the AS metadata response:</p>
-<div class="language-json highlight"><pre><span></span><code><span id="__span-10-1"><a id="__codelineno-10-1" name="__codelineno-10-1" href="#__codelineno-10-1"></a><span class="p">{</span>
-</span><span id="__span-10-2"><a id="__codelineno-10-2" name="__codelineno-10-2" href="#__codelineno-10-2"></a><span class="w">  </span><span class="nt">&quot;issuer&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;https://example.com/oauth/&quot;</span><span class="p">,</span>
-</span><span id="__span-10-3"><a id="__codelineno-10-3" name="__codelineno-10-3" href="#__codelineno-10-3"></a><span class="w">  </span><span class="nt">&quot;authorization_endpoint&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;https://example.com/oauth/authorize/&quot;</span><span class="p">,</span>
-</span><span id="__span-10-4"><a id="__codelineno-10-4" name="__codelineno-10-4" href="#__codelineno-10-4"></a><span class="w">  </span><span class="nt">&quot;token_endpoint&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;https://example.com/oauth/token/&quot;</span><span class="p">,</span>
-</span><span id="__span-10-5"><a id="__codelineno-10-5" name="__codelineno-10-5" href="#__codelineno-10-5"></a><span class="w">  </span><span class="nt">&quot;registration_endpoint&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;https://example.com/oauth/register/&quot;</span><span class="p">,</span>
-</span><span id="__span-10-6"><a id="__codelineno-10-6" name="__codelineno-10-6" href="#__codelineno-10-6"></a><span class="w">  </span><span class="nt">&quot;client_id_metadata_document_supported&quot;</span><span class="p">:</span><span class="w"> </span><span class="kc">true</span>
-</span><span id="__span-10-7"><a id="__codelineno-10-7" name="__codelineno-10-7" href="#__codelineno-10-7"></a><span class="p">}</span>
+<div class="language-json highlight"><pre><span></span><code><span id="__span-13-1"><a id="__codelineno-13-1" name="__codelineno-13-1" href="#__codelineno-13-1"></a><span class="p">{</span>
+</span><span id="__span-13-2"><a id="__codelineno-13-2" name="__codelineno-13-2" href="#__codelineno-13-2"></a><span class="w">  </span><span class="nt">&quot;issuer&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;https://example.com/oauth/&quot;</span><span class="p">,</span>
+</span><span id="__span-13-3"><a id="__codelineno-13-3" name="__codelineno-13-3" href="#__codelineno-13-3"></a><span class="w">  </span><span class="nt">&quot;authorization_endpoint&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;https://example.com/oauth/authorize/&quot;</span><span class="p">,</span>
+</span><span id="__span-13-4"><a id="__codelineno-13-4" name="__codelineno-13-4" href="#__codelineno-13-4"></a><span class="w">  </span><span class="nt">&quot;token_endpoint&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;https://example.com/oauth/token/&quot;</span><span class="p">,</span>
+</span><span id="__span-13-5"><a id="__codelineno-13-5" name="__codelineno-13-5" href="#__codelineno-13-5"></a><span class="w">  </span><span class="nt">&quot;registration_endpoint&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;https://example.com/oauth/register/&quot;</span><span class="p">,</span>
+</span><span id="__span-13-6"><a id="__codelineno-13-6" name="__codelineno-13-6" href="#__codelineno-13-6"></a><span class="w">  </span><span class="nt">&quot;client_id_metadata_document_supported&quot;</span><span class="p">:</span><span class="w"> </span><span class="kc">true</span>
+</span><span id="__span-13-7"><a id="__codelineno-13-7" name="__codelineno-13-7" href="#__codelineno-13-7"></a><span class="p">}</span>
 </span></code></pre></div>
 <p>DOT does not implement CIMD natively today; the typical setup is to front it
 with a small wrapper view that:</p>
@@ -1677,7 +1848,7 @@ issued at the end of the flow look identical. The only requirement is that
 the AS is forwarding the <code>resource</code> parameter through to the token, which DOT
 handles when <code>REQUIRE_RESOURCE</code> is set.</p>
 <h2 id="try-it-with-mcp-inspector">Try it with mcp-inspector<a class="headerlink" href="#try-it-with-mcp-inspector" title="Permanent link">&para;</a></h2>
-<div class="language-bash highlight"><pre><span></span><code><span id="__span-11-1"><a id="__codelineno-11-1" name="__codelineno-11-1" href="#__codelineno-11-1"></a>npx<span class="w"> </span>@modelcontextprotocol/inspector<span class="w"> </span>--url<span class="w"> </span>http://localhost:8000/mcp/
+<div class="language-bash highlight"><pre><span></span><code><span id="__span-14-1"><a id="__codelineno-14-1" name="__codelineno-14-1" href="#__codelineno-14-1"></a>npx<span class="w"> </span>@modelcontextprotocol/inspector<span class="w"> </span>--url<span class="w"> </span>http://localhost:8000/mcp/
 </span></code></pre></div>
 <p>Inspector reads PRM, hits your AS metadata, walks the auth flow, and exercises
 <code>tools/list</code> + <code>tools/call</code>. Common failure modes and where to look:</p>

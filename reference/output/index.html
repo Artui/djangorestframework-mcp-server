@@ -1140,7 +1140,7 @@
     <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
       
         <li class="md-nav__item">
-  <a href="#rest_framework_mcp.output.format.OutputFormat" class="md-nav__link">
+  <a href="#rest_framework_mcp.constants.OutputFormat" class="md-nav__link">
     <span class="md-ellipsis">
       
         OutputFormat
@@ -1152,7 +1152,7 @@
       <ul class="md-nav__list">
         
           <li class="md-nav__item">
-  <a href="#rest_framework_mcp.output.format.OutputFormat.coerce" class="md-nav__link">
+  <a href="#rest_framework_mcp.constants.OutputFormat.coerce" class="md-nav__link">
     <span class="md-ellipsis">
       
         coerce
@@ -1243,7 +1243,7 @@
     <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
       
         <li class="md-nav__item">
-  <a href="#rest_framework_mcp.output.format.OutputFormat" class="md-nav__link">
+  <a href="#rest_framework_mcp.constants.OutputFormat" class="md-nav__link">
     <span class="md-ellipsis">
       
         OutputFormat
@@ -1255,7 +1255,7 @@
       <ul class="md-nav__list">
         
           <li class="md-nav__item">
-  <a href="#rest_framework_mcp.output.format.OutputFormat.coerce" class="md-nav__link">
+  <a href="#rest_framework_mcp.constants.OutputFormat.coerce" class="md-nav__link">
     <span class="md-ellipsis">
       
         coerce
@@ -1336,11 +1336,11 @@
 
 
 
-<h2 id="rest_framework_mcp.output.format.OutputFormat" class="doc doc-heading">
+<h2 id="rest_framework_mcp.constants.OutputFormat" class="doc doc-heading">
             <span class="doc doc-object-name doc-class-name">OutputFormat</span>
 
 
-<a href="#rest_framework_mcp.output.format.OutputFormat" class="headerlink" title="Permanent link">&para;</a></h2>
+<a href="#rest_framework_mcp.constants.OutputFormat" class="headerlink" title="Permanent link">&para;</a></h2>
 
 
     <div class="doc doc-contents first">
@@ -1385,7 +1385,7 @@ encoding of the <code>content[0]</code> text block:</p>
 <div class="doc doc-object doc-function">
 
 
-<h3 id="rest_framework_mcp.output.format.OutputFormat.coerce" class="doc doc-heading">
+<h3 id="rest_framework_mcp.constants.OutputFormat.coerce" class="doc doc-heading">
             <span class="doc doc-object-name doc-function-name">coerce</span>
 
 
@@ -1393,7 +1393,7 @@ encoding of the <code>content[0]</code> text block:</p>
       <small class="doc doc-label doc-label-classmethod"><code>classmethod</code></small>
   </span>
 
-<a href="#rest_framework_mcp.output.format.OutputFormat.coerce" class="headerlink" title="Permanent link">&para;</a></h3>
+<a href="#rest_framework_mcp.constants.OutputFormat.coerce" class="headerlink" title="Permanent link">&para;</a></h3>
 <div class="language-python doc-signature highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="nf">coerce</span><span class="p">(</span><span class="n">value</span><span class="p">:</span> <span class="n">OutputFormat</span> <span class="o">|</span> <span class="nb">str</span> <span class="o">|</span> <span class="kc">None</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">OutputFormat</span>
 </span></code></pre></div>
 
@@ -1478,7 +1478,8 @@ flag the optional module as unresolved on environments without the
 </span><span id="__span-0-3"><a id="__codelineno-0-3" name="__codelineno-0-3" href="#__codelineno-0-3"></a>    <span class="o">*</span><span class="p">,</span>
 </span><span id="__span-0-4"><a id="__codelineno-0-4" name="__codelineno-0-4" href="#__codelineno-0-4"></a>    <span class="n">output_format</span><span class="p">:</span> <span class="n">OutputFormat</span> <span class="o">=</span> <span class="n">OutputFormat</span><span class="o">.</span><span class="n">JSON</span><span class="p">,</span>
 </span><span id="__span-0-5"><a id="__codelineno-0-5" name="__codelineno-0-5" href="#__codelineno-0-5"></a>    <span class="n">is_error</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">,</span>
-</span><span id="__span-0-6"><a id="__codelineno-0-6" name="__codelineno-0-6" href="#__codelineno-0-6"></a><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">ToolResult</span>
+</span><span id="__span-0-6"><a id="__codelineno-0-6" name="__codelineno-0-6" href="#__codelineno-0-6"></a>    <span class="n">include_structured_content</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">True</span><span class="p">,</span>
+</span><span id="__span-0-7"><a id="__codelineno-0-7" name="__codelineno-0-7" href="#__codelineno-0-7"></a><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">ToolResult</span>
 </span></code></pre></div>
 
     <div class="doc doc-contents first">
@@ -1489,6 +1490,10 @@ verbatim and is also rendered as the first content block per
 <code>output_format</code>. TOON output is wrapped in a fenced <code>toon</code> block with
 a leading marker line so clients that don't parse TOON natively can still
 display it.</p>
+<p>When <code>include_structured_content</code> is <code>False</code>, the
+<code>structuredContent</code> field is omitted from the response. The text
+rendering in <code>content[0]</code> still carries the full payload, so clients
+that don't consume the structured field lose nothing.</p>
 
 
     </div>
