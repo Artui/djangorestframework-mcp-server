@@ -517,10 +517,10 @@
       <ul class="md-nav__list">
         
           <li class="md-nav__item">
-  <a href="#omitting-structuredcontent" class="md-nav__link">
+  <a href="#omitting-structuredcontent-and-outputschema" class="md-nav__link">
     <span class="md-ellipsis">
       
-        Omitting structuredContent
+        Omitting structuredContent and outputSchema
       
     </span>
   </a>
@@ -1479,10 +1479,10 @@
       <ul class="md-nav__list">
         
           <li class="md-nav__item">
-  <a href="#omitting-structuredcontent" class="md-nav__link">
+  <a href="#omitting-structuredcontent-and-outputschema" class="md-nav__link">
     <span class="md-ellipsis">
       
-        Omitting structuredContent
+        Omitting structuredContent and outputSchema
       
     </span>
   </a>
@@ -1839,24 +1839,40 @@ marker so clients that don't parse it natively can still render it.</p>
 <p>If TOON is requested but the optional extra is missing, the encoder falls back
 to JSON with a <code>warnings.warn</code> — a tool call never fails because an optional
 extra is absent.</p>
-<h3 id="omitting-structuredcontent">Omitting <code>structuredContent</code><a class="headerlink" href="#omitting-structuredcontent" title="Permanent link">&para;</a></h3>
-<p><code>structuredContent</code> is optional per the spec. Some clients echo both
-<code>content[0]</code> and <code>structuredContent</code> back to the LLM (doubling token usage on
-every tool call) or have bugs parsing the field. Two opt-outs:</p>
+<h3 id="omitting-structuredcontent-and-outputschema">Omitting <code>structuredContent</code> and <code>outputSchema</code><a class="headerlink" href="#omitting-structuredcontent-and-outputschema" title="Permanent link">&para;</a></h3>
+<p><code>structuredContent</code> and <code>outputSchema</code> are independently toggleable. The MCP
+spec (2025-06-18, SEP-1624) imposes one asymmetric rule: a tool that
+advertises <code>outputSchema</code> <strong>must</strong> return conforming <code>structuredContent</code>. The
+reverse — emitting <code>structuredContent</code> without an <code>outputSchema</code> — is
+allowed.</p>
+<p>Two server-wide settings, both default <code>True</code>:</p>
 <ul>
-<li>Server-wide: set <code>REST_FRAMEWORK_MCP["INCLUDE_STRUCTURED_CONTENT"] = False</code>.</li>
-<li>Per tool: pass <code>include_structured_content=False</code> to <code>register_service_tool</code>,
-  <code>register_selector_tool</code>, or their decorator forms. The per-tool kwarg is
-  tri-state — <code>None</code> (default) inherits the global, <code>True</code>/<code>False</code> force the
-  behavior regardless of the setting.</li>
+<li><code>REST_FRAMEWORK_MCP["INCLUDE_STRUCTURED_CONTENT"]</code> — gates the
+  <code>structuredContent</code> field on <code>tools/call</code> results.</li>
+<li><code>REST_FRAMEWORK_MCP["INCLUDE_OUTPUT_SCHEMA"]</code> — gates the <code>outputSchema</code>
+  field on <code>tools/list</code> entries.</li>
 </ul>
-<p>When omitted, the text payload in <code>content[0]</code> still carries the full result
-(JSON-encoded by default, or TOON when requested), so clients can still parse
-the data — they just have to re-parse instead of getting a pre-parsed dict.</p>
-<p>The MCP tools spec requires that any tool declaring <code>outputSchema</code> always
-return conforming <code>structuredContent</code>. To keep that contract intact, when a
-binding opts out of <code>structuredContent</code> the corresponding <code>outputSchema</code> is
-also dropped from the tool's <code>tools/list</code> entry. The two move together.</p>
+<p>Per-tool overrides mirror them: <code>include_structured_content</code> and
+<code>include_output_schema</code> on <code>register_service_tool</code>, <code>register_selector_tool</code>,
+or their decorator forms. Each is tri-state — <code>None</code> (default) inherits the
+global, <code>True</code>/<code>False</code> force the behaviour regardless of the setting.</p>
+<p>Common patterns:</p>
+<ul>
+<li><strong>Default</strong>: both <code>True</code>. Tools advertise their schema and return matching
+  structured content. Spec-compliant and easiest for typed clients.</li>
+<li><strong>Drop only <code>outputSchema</code></strong>: useful when the schema bloats <code>tools/list</code>
+  responses but you still want machine-parsable results. Set
+  <code>INCLUDE_OUTPUT_SCHEMA=False</code>; leave <code>INCLUDE_STRUCTURED_CONTENT=True</code>.</li>
+<li><strong>Drop both</strong>: useful when a downstream client echoes both fields back to
+  the LLM (doubling token usage) or chokes on <code>structuredContent</code>. Set both
+  to <code>False</code>. The text payload in <code>content[0]</code> still carries the full result
+  (JSON-encoded by default, or TOON when requested).</li>
+</ul>
+<p>The fourth combination — advertising <code>outputSchema</code> while suppressing
+<code>structuredContent</code> — violates the spec. It is rejected with
+<code>ImproperlyConfigured</code> at construction time (for explicit per-binding
+conflicts) or at request time (for setting-level conflicts), so the misconfig
+surfaces immediately rather than producing a non-compliant response.</p>
 <h2 id="auth-model">Auth model<a class="headerlink" href="#auth-model" title="Permanent link">&para;</a></h2>
 <p>Two pluggable surfaces:</p>
 <ul>
