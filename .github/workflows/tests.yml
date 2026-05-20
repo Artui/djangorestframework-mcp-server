@@ -180,12 +180,12 @@ jobs:
               s.set_attribute("k", "v")
 
           # The OAuth contrib mount imports fine without ``oauth2_provider``;
-          # ``DynamicClientRegistrationView`` only requires DOT when DCR is
+          # ``DynamicClientRegistrationViewSet`` only requires DOT when DCR is
           # enabled and a request reaches the handler.
           from rest_framework_mcp.contrib.oauth import (
-              AuthorizationServerMetadataView,  # noqa: F401
-              DynamicClientRegistrationView,  # noqa: F401
-              OpenIDDiscoveryView,  # noqa: F401
+              AuthorizationServerMetadataViewSet,  # noqa: F401
+              DynamicClientRegistrationViewSet,  # noqa: F401
+              OpenIDDiscoveryViewSet,  # noqa: F401
               build_oauth_urlpatterns,
           )
           patterns = build_oauth_urlpatterns(server=server, include_dcr=True)
