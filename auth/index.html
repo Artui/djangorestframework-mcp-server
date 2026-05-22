@@ -1642,10 +1642,10 @@ rather than rewriting it for MCP:</p>
 </span><span id="__span-6-7"><a id="__codelineno-6-7" name="__codelineno-6-7" href="#__codelineno-6-7"></a>    <span class="n">permissions</span><span class="o">=</span><span class="p">[</span><span class="n">DRFPermissionAdapter</span><span class="p">(</span><span class="n">DjangoModelPermissions</span><span class="p">)],</span>
 </span><span id="__span-6-8"><a id="__codelineno-6-8" name="__codelineno-6-8" href="#__codelineno-6-8"></a><span class="p">)</span>
 </span></code></pre></div>
-<p><code>ServiceSpec</code> / <code>SelectorSpec</code> from sister-repo 0.12.0 also carry a
-<code>permission_classes</code> attribute. Any DRF permission classes declared on
-the spec are auto-wrapped and prepended to the per-binding <code>permissions</code>
-tuple — the same spec that backs your HTTP view governs the MCP binding
+<p><code>ServiceSpec</code> / <code>SelectorSpec</code> also carry a <code>permission_classes</code>
+attribute. Any DRF permission classes declared on the spec are
+auto-wrapped and prepended to the per-binding <code>permissions</code> tuple —
+the same spec that backs your HTTP view governs the MCP binding
 without you restating the contract at the MCP call site.</p>
 <h3 id="filtering-listings-by-permissions">Filtering listings by permissions<a class="headerlink" href="#filtering-listings-by-permissions" title="Permanent link">&para;</a></h3>
 <p>By default <code>tools/list</code>, <code>resources/list</code>, <code>resources/templates/list</code>,

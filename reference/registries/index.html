@@ -1105,6 +1105,23 @@
     </span>
   </a>
   
+    <nav class="md-nav" aria-label="SelectorToolBinding">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#rest_framework_mcp.registry.types.selector_tool_binding.SelectorToolBinding.kind" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        kind
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
 </li>
       
         <li class="md-nav__item">
@@ -1673,6 +1690,23 @@
     </span>
   </a>
   
+    <nav class="md-nav" aria-label="SelectorToolBinding">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#rest_framework_mcp.registry.types.selector_tool_binding.SelectorToolBinding.kind" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        kind
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
 </li>
       
         <li class="md-nav__item">
@@ -2240,7 +2274,9 @@ keep working unchanged.</p>
 
         <p>All wiring for a single MCP <strong>read-shaped</strong> tool, derived from a <code>SelectorSpec</code>.</p>
 <p>Mirrors :class:<code>ToolBinding</code> (which wraps a <code>ServiceSpec</code> for
-mutations), but the dispatch pipeline is read-shaped:</p>
+mutations), but the dispatch pipeline is read-shaped. The shape is
+chosen by :attr:<code>kind</code>:</p>
+<p><code>kind=LIST</code> runs the full pipeline:</p>
 <p>.. code-block:: text</p>
 <div class="language-text highlight"><pre><span></span><code>arguments → validate(merged inputSchema) → run_selector
           → FilterSet(data=...).qs    (if ``filter_set`` set)
@@ -2249,10 +2285,16 @@ mutations), but the dispatch pipeline is read-shaped:</p>
           → output_serializer(many=True)
           → ToolResult
 </code></pre></div>
-<p>Selectors return raw, unscoped querysets — the tool layer owns the
-post-fetch pipeline. A binding with none of <code>filter_set</code> /
-<code>ordering_fields</code> / <code>paginate</code> set behaves like a plain RPC read
-that calls the selector and renders its return value verbatim.</p>
+<p><code>kind=RETRIEVE</code> skips the post-fetch pipeline entirely — the
+selector's single-instance return goes straight to
+<code>output_serializer(many=False)</code>. Combining <code>RETRIEVE</code> with
+<code>filter_set</code> / <code>ordering_fields</code> / <code>paginate</code> is rejected at
+construction (those knobs only make sense on a collection).</p>
+<p>Selectors return raw, unscoped data (a queryset for <code>LIST</code>, a
+single instance for <code>RETRIEVE</code>) — the tool layer owns shape
+decisions. A <code>LIST</code> binding with none of <code>filter_set</code> /
+<code>ordering_fields</code> / <code>paginate</code> set behaves like a plain RPC
+read that calls the selector and renders its return value verbatim.</p>
 <p>The <code>Generic[InputT, ResultT, ExtraT]</code> parameters mirror
 <code>SelectorSpec</code>'s generics and are purely informational for type
 checkers.</p>
@@ -2274,6 +2316,35 @@ checkers.</p>
 
 
 
+
+<div class="doc doc-object doc-attribute">
+
+
+
+<h3 id="rest_framework_mcp.registry.types.selector_tool_binding.SelectorToolBinding.kind" class="doc doc-heading">
+            <span class="doc doc-object-name doc-attribute-name">kind</span>
+
+
+  <span class="doc doc-labels">
+      <small class="doc doc-label doc-label-property"><code>property</code></small>
+  </span>
+
+<a href="#rest_framework_mcp.registry.types.selector_tool_binding.SelectorToolBinding.kind" class="headerlink" title="Permanent link">&para;</a></h3>
+<div class="language-python doc-signature highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="n">kind</span><span class="p">:</span> <span class="n">SelectorKind</span>
+</span></code></pre></div>
+
+    <div class="doc doc-contents ">
+
+        <p>Shape discriminator — derived from the spec's required <code>kind</code> field.</p>
+<p>Sister-repo 0.13+ made <code>kind</code> a required field on
+:class:<code>SelectorSpec</code>, so the binding doesn't store an
+independent copy — it would only be a chance for the two to
+drift. Exposed as a property so the dispatch layer can keep
+reading <code>binding.kind</code> unchanged.</p>
+
+    </div>
+
+</div>
 
 
 
@@ -2689,7 +2760,8 @@ default if neither is set.</p>
 </span><span id="__span-0-13"><a id="__codelineno-0-13" name="__codelineno-0-13" href="#__codelineno-0-13"></a>    <span class="n">argument_binding</span><span class="p">:</span> <span class="n">ArgumentBinding</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
 </span><span id="__span-0-14"><a id="__codelineno-0-14" name="__codelineno-0-14" href="#__codelineno-0-14"></a>    <span class="n">unknown_arguments</span><span class="p">:</span> <span class="n">UnknownArguments</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
 </span><span id="__span-0-15"><a id="__codelineno-0-15" name="__codelineno-0-15" href="#__codelineno-0-15"></a>    <span class="n">always_listed</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
-</span><span id="__span-0-16"><a id="__codelineno-0-16" name="__codelineno-0-16" href="#__codelineno-0-16"></a><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">ToolDefinition</span>
+</span><span id="__span-0-16"><a id="__codelineno-0-16" name="__codelineno-0-16" href="#__codelineno-0-16"></a>    <span class="n">spec_kwargs_provides</span><span class="p">:</span> <span class="n">Sequence</span><span class="p">[</span><span class="nb">str</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+</span><span id="__span-0-17"><a id="__codelineno-0-17" name="__codelineno-0-17" href="#__codelineno-0-17"></a><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">ToolDefinition</span>
 </span></code></pre></div>
 
     <div class="doc doc-contents ">
@@ -2732,12 +2804,17 @@ default if neither is set.</p>
 </span><span id="__span-0-17"><a id="__codelineno-0-17" name="__codelineno-0-17" href="#__codelineno-0-17"></a>    <span class="n">argument_binding</span><span class="p">:</span> <span class="n">ArgumentBinding</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
 </span><span id="__span-0-18"><a id="__codelineno-0-18" name="__codelineno-0-18" href="#__codelineno-0-18"></a>    <span class="n">unknown_arguments</span><span class="p">:</span> <span class="n">UnknownArguments</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
 </span><span id="__span-0-19"><a id="__codelineno-0-19" name="__codelineno-0-19" href="#__codelineno-0-19"></a>    <span class="n">always_listed</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
-</span><span id="__span-0-20"><a id="__codelineno-0-20" name="__codelineno-0-20" href="#__codelineno-0-20"></a><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">ToolDefinition</span>
+</span><span id="__span-0-20"><a id="__codelineno-0-20" name="__codelineno-0-20" href="#__codelineno-0-20"></a>    <span class="n">spec_kwargs_provides</span><span class="p">:</span> <span class="n">Sequence</span><span class="p">[</span><span class="nb">str</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+</span><span id="__span-0-21"><a id="__codelineno-0-21" name="__codelineno-0-21" href="#__codelineno-0-21"></a><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">ToolDefinition</span>
 </span></code></pre></div>
 
     <div class="doc doc-contents ">
 
         <p>Typed entry point for selector-tool definitions.</p>
+<p>The selector's <code>LIST</code> / <code>RETRIEVE</code> shape lives on the spec
+(<code>SelectorSpec.kind</code>, required in
+<code>djangorestframework-services</code> 0.13+), not here — the bulk
+registration loop reads it from there.</p>
 
 
     </div>
