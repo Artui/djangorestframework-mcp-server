@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from rest_framework_services.types.selector_kind import SelectorKind
 from rest_framework_services.types.selector_spec import SelectorSpec
 from rest_framework_services.types.service_spec import ServiceSpec
 
@@ -29,13 +30,13 @@ def _build_server() -> MCPServer:
         server.register_resource(
             name=f"r.{i}",
             uri_template=f"r{i}://",
-            selector=SelectorSpec(selector=lambda: None),
+            selector=SelectorSpec(kind=SelectorKind.LIST, selector=lambda: None),
         )
     for i in range(3):
         server.register_resource(
             name=f"rt.{i}",
             uri_template=f"rt{i}://" + "{pk}",
-            selector=SelectorSpec(selector=lambda *, pk: None),
+            selector=SelectorSpec(kind=SelectorKind.RETRIEVE, selector=lambda *, pk: None),
         )
     return server
 

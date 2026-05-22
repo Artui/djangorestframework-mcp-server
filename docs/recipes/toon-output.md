@@ -12,11 +12,17 @@ pip install "djangorestframework-mcp-server[toon]"
 Pick the format per binding:
 
 ```python
-from rest_framework_mcp import OutputFormat
+from rest_framework_mcp import OutputFormat, SelectorKind, SelectorSpec
 
 server.register_service_tool(
     name="invoices.list",
-    spec=ServiceSpec(service=list_invoices, output_serializer=InvoiceOutputSerializer),
+    spec=ServiceSpec(
+        service=list_invoices,
+        output_selector_spec=SelectorSpec(
+            kind=SelectorKind.LIST,
+            output_serializer=InvoiceOutputSerializer,
+        ),
+    ),
     output_format=OutputFormat.AUTO,   # picks TOON when the payload is uniform
 )
 ```

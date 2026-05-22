@@ -12,13 +12,16 @@ instances directly. Same value object as the HTTP transport — same callable ca
 serve both at once.
 
 ```python
-from rest_framework_mcp import ServiceSpec  # re-exported for ergonomics
+from rest_framework_mcp import SelectorKind, SelectorSpec, ServiceSpec  # re-exported for ergonomics
 
 spec = ServiceSpec(
     service=create_invoice,
     input_serializer=InvoiceInputSerializer,
-    output_serializer=InvoiceOutputSerializer,
-    output_selector=None,   # optional post-call shaping
+    output_selector_spec=SelectorSpec(   # nested spec for the post-call
+        kind=SelectorKind.RETRIEVE,      # render pipeline (RETRIEVE → many=False,
+        output_serializer=InvoiceOutputSerializer,  # LIST → many=True)
+        selector=None,                   # optional post-call re-fetch callable
+    ),
     atomic=True,            # wrap dispatch in transaction.atomic()
     success_status=None,    # ignored by MCP — used by HTTP
     kwargs=None,            # optional per-spec kwargs provider; see below
@@ -31,9 +34,8 @@ not layers — neither owns the other.
 
 ### What `ServiceSpec` / `SelectorSpec` carries through to MCP
 
-Sister-repo (`djangorestframework-services`) 0.12.0 extended the spec
-dataclasses with three fields the MCP layer now honors automatically —
-register a spec once and both transports get the same shape:
+The MCP layer honors the same spec fields as the HTTP transport —
+register a spec once and both surfaces get the same shape:
 
 - **`permission_classes`** — DRF `BasePermission` classes. Auto-wrapped
   with `DRFPermissionAdapter` and prepended to the per-binding
@@ -48,6 +50,19 @@ register a spec once and both transports get the same shape:
   `output_serializer_context` (on `SelectorSpec`) are invoked with the
   synthesised view + DRF request and forwarded as `context=` to the
   serializer constructor on both sync and async dispatch paths.
+- **`SelectorSpec.kind`** — required `SelectorKind` discriminator
+  (`LIST` or `RETRIEVE`). It drives the `many=` flag on the output
+  serializer and gates which post-fetch knobs the registration
+  accepts (a `RETRIEVE` spec rejects `filter_set` / `ordering_fields`
+  / `paginate`). `SelectorKind` is re-exported from
+  `rest_framework_mcp` for convenience.
+- **`ServiceSpec.output_selector_spec`** — a nested
+  `SelectorSpec | None` describing the post-call render pipeline
+  (optional re-fetch via its `selector`, then `output_serializer`
+  with `many=` driven by its `kind`). The decorator forms
+  (`@server.service_tool`, etc.) accept flat `output_serializer=` /
+  `output_selector=` kwargs and build the nested spec internally;
+  direct `ServiceSpec(...)` construction uses the nested shape.
 
 ### Per-spec kwargs providers
 
@@ -69,7 +84,10 @@ server.register_service_tool(
     spec=ServiceSpec(
         service=create_invoice,
         input_serializer=InvoiceInputSerializer,
-        output_serializer=InvoiceOutputSerializer,
+        output_selector_spec=SelectorSpec(
+            kind=SelectorKind.RETRIEVE,
+            output_serializer=InvoiceOutputSerializer,
+        ),
         kwargs=with_tenant,
     ),
 )
@@ -88,18 +106,23 @@ transports.
 mirroring `register_service_tool(spec=ServiceSpec(...))`. The unit of registration
 is a spec on both surfaces.
 
+- `.kind` is the required `SelectorKind` discriminator (`LIST` or
+  `RETRIEVE`); it drives the `many=` flag on the output serializer at
+  dispatch. `RETRIEVE` is the typical choice for a single-object
+  URI-template lookup.
 - `.selector` is the callable that gets dispatched (must be set; specs with
   `selector=None` are rejected).
 - `.output_serializer` fills in when the caller didn't pass one explicitly.
 - `.kwargs` becomes the binding's per-request kwargs provider.
 
 ```python
-from rest_framework_mcp import SelectorSpec
+from rest_framework_mcp import SelectorKind, SelectorSpec
 
 server.register_resource(
     name="invoice",
     uri_template="invoices://{pk}",
     selector=SelectorSpec(
+        kind=SelectorKind.RETRIEVE,
         selector=get_invoice,
         output_serializer=InvoiceOutputSerializer,
         kwargs=with_tenant,
@@ -217,6 +240,7 @@ server.register_resource(
     name="invoice",
     uri_template="invoices://{pk}",
     selector=SelectorSpec(
+        kind=SelectorKind.RETRIEVE,
         selector=get_invoice,             # def get_invoice(*, pk): ...
         output_serializer=InvoiceOutputSerializer,
     ),
@@ -247,10 +271,13 @@ The MCP package owns its own dispatch flow. It does **not** import
    echoes the offending `arguments` dict back as `data.value` — handy for
    debugging schema mismatches against opaque client SDKs, off by default
    because the dict can carry sensitive payloads.
-7. Optionally post-process via `spec.output_selector` (also a callable; same
-   kwarg-pool dispatch).
-8. Render through `spec.output_serializer` if set, else pass through.
-9. Wrap as a `ToolResult` with `OutputFormat`-driven encoding for the human-
+7. If `spec.output_selector_spec` is set, run its post-call pipeline:
+   optionally re-fetch via `output_selector_spec.selector` (same
+   kwarg-pool dispatch), then render through
+   `output_selector_spec.output_serializer` with `many=` driven by
+   `output_selector_spec.kind`. If `output_selector_spec` is `None`,
+   the service's return value is passed through unchanged.
+8. Wrap as a `ToolResult` with `OutputFormat`-driven encoding for the human-
    readable `content[0]` block. `structuredContent` is always JSON.
 
 `resources/read`:
@@ -301,7 +328,13 @@ from rest_framework_mcp import OutputFormat
 
 server.register_service_tool(
     name="invoices.list",
-    spec=ServiceSpec(service=list_invoices, output_serializer=InvoiceOutputSerializer),
+    spec=ServiceSpec(
+        service=list_invoices,
+        output_selector_spec=SelectorSpec(
+            kind=SelectorKind.LIST,
+            output_serializer=InvoiceOutputSerializer,
+        ),
+    ),
     output_format=OutputFormat.AUTO,   # JSON, TOON, or AUTO
 )
 ```

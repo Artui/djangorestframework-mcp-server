@@ -9,6 +9,7 @@ tests pin the equivalence.
 from __future__ import annotations
 
 import pytest
+from rest_framework_services.types.selector_kind import SelectorKind
 from rest_framework_services.types.selector_spec import SelectorSpec
 from rest_framework_services.types.service_spec import ServiceSpec
 
@@ -47,7 +48,7 @@ def _sel() -> list[dict[str, str]]:
 def test_returns_bindings_in_definition_order() -> None:
     server = _server()
     sp1 = ServiceSpec(service=_svc, atomic=False)
-    sp2 = SelectorSpec(selector=_sel)
+    sp2 = SelectorSpec(kind=SelectorKind.LIST, selector=_sel)
     bindings = register_tools(
         server,
         definitions=[
@@ -66,7 +67,9 @@ def test_each_definition_registers_against_the_server_registry() -> None:
         server,
         definitions=[
             ToolDefinition.service(name="a", spec=ServiceSpec(service=_svc, atomic=False)),
-            ToolDefinition.selector(name="b", spec=SelectorSpec(selector=_sel)),
+            ToolDefinition.selector(
+                name="b", spec=SelectorSpec(kind=SelectorKind.LIST, selector=_sel)
+            ),
         ],
     )
     assert server.tools.get("a") is not None
@@ -115,7 +118,10 @@ def test_selector_defaults_apply_when_definition_unset() -> None:
     bindings = register_tools(
         server,
         definitions=[
-            ToolDefinition.selector(name="b", spec=SelectorSpec(selector=_sel)),
+            ToolDefinition.selector(
+                name="b",
+                spec=SelectorSpec(kind=SelectorKind.LIST, selector=_sel),
+            ),
         ],
         selector_defaults=SelectorDefaults(
             paginate=True,
@@ -134,7 +140,10 @@ def test_service_defaults_do_not_leak_to_selector_definitions() -> None:
         server,
         definitions=[
             ToolDefinition.service(name="a", spec=ServiceSpec(service=_svc, atomic=False)),
-            ToolDefinition.selector(name="b", spec=SelectorSpec(selector=_sel)),
+            ToolDefinition.selector(
+                name="b",
+                spec=SelectorSpec(kind=SelectorKind.LIST, selector=_sel),
+            ),
         ],
         service_defaults=ServiceDefaults(output_format=OutputFormat.TOON),
         selector_defaults=SelectorDefaults(output_format=OutputFormat.JSON),

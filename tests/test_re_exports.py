@@ -11,10 +11,16 @@ def test_service_protocols_reexported() -> None:
 
 
 def test_selector_protocols_reexported() -> None:
-    from rest_framework_mcp import ListSelector, OutputSelector, RetrieveSelector
+    from rest_framework_mcp import ListSelector, RetrieveSelector
 
-    for proto in (ListSelector, RetrieveSelector, OutputSelector):
+    for proto in (ListSelector, RetrieveSelector):
         assert proto.__module__.startswith("rest_framework_services.")
+
+
+def test_selector_kind_reexported() -> None:
+    from rest_framework_mcp import SelectorKind
+
+    assert SelectorKind.__module__.startswith("rest_framework_services.")
 
 
 def test_spec_and_view_reexported() -> None:

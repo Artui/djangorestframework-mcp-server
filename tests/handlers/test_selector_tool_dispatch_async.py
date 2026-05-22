@@ -11,6 +11,7 @@ from typing import Any
 import django_filters
 import pytest
 from django.http import HttpRequest
+from rest_framework_services.types.selector_kind import SelectorKind
 from rest_framework_services.types.selector_spec import SelectorSpec
 
 from rest_framework_mcp import MCPServer
@@ -68,7 +69,11 @@ async def test_async_filter_then_paginate() -> None:
 
     server.register_selector_tool(
         name="invoices.list",
-        spec=SelectorSpec(selector=list_invoices, output_serializer=InvoiceOutputSerializer),
+        spec=SelectorSpec(
+            kind=SelectorKind.LIST,
+            selector=list_invoices,
+            output_serializer=InvoiceOutputSerializer,
+        ),
         filter_set=InvoiceFilterSet,
         ordering_fields=["amount_cents"],
         paginate=True,
@@ -98,7 +103,10 @@ async def test_async_translates_service_validation_error() -> None:
     def selector() -> None:
         raise ServiceValidationError({"f": ["bad"]})
 
-    server.register_selector_tool(name="x", spec=SelectorSpec(selector=selector))
+    server.register_selector_tool(
+        name="x",
+        spec=SelectorSpec(kind=SelectorKind.LIST, selector=selector),
+    )
     out = await handle_tools_call_async({"name": "x", "arguments": {}}, _ctx(server))
     assert isinstance(out, JsonRpcError)
     assert out.code == -32602
@@ -115,7 +123,10 @@ async def test_async_translates_service_error_with_recording(settings) -> None:
     def selector() -> None:
         raise ServiceError("nope")
 
-    server.register_selector_tool(name="x", spec=SelectorSpec(selector=selector))
+    server.register_selector_tool(
+        name="x",
+        spec=SelectorSpec(kind=SelectorKind.LIST, selector=selector),
+    )
     out = await handle_tools_call_async({"name": "x", "arguments": {}}, _ctx(server))
     assert isinstance(out, JsonRpcError)
     assert out.code == -32000
@@ -130,7 +141,10 @@ async def test_async_translates_service_error_without_recording() -> None:
     def selector() -> None:
         raise ServiceError("nope")
 
-    server.register_selector_tool(name="x", spec=SelectorSpec(selector=selector))
+    server.register_selector_tool(
+        name="x",
+        spec=SelectorSpec(kind=SelectorKind.LIST, selector=selector),
+    )
     out = await handle_tools_call_async({"name": "x", "arguments": {}}, _ctx(server))
     assert isinstance(out, JsonRpcError)
     assert out.code == -32000
@@ -149,7 +163,7 @@ async def test_async_input_serializer_rejects_invalid() -> None:
 
     server.register_selector_tool(
         name="x",
-        spec=SelectorSpec(selector=selector),
+        spec=SelectorSpec(kind=SelectorKind.LIST, selector=selector),
         input_serializer=_Args,
     )
     out = await handle_tools_call_async(
@@ -174,7 +188,7 @@ async def test_async_denies_on_permission() -> None:
 
     server.register_selector_tool(
         name="x",
-        spec=SelectorSpec(selector=selector),
+        spec=SelectorSpec(kind=SelectorKind.LIST, selector=selector),
         permissions=[_Deny()],
     )
     out = await handle_tools_call_async({"name": "x", "arguments": {}}, _ctx(server))

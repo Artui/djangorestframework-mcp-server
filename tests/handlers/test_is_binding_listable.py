@@ -5,6 +5,7 @@ from __future__ import annotations
 from typing import Any
 
 from django.http import HttpRequest
+from rest_framework_services.types.selector_kind import SelectorKind
 from rest_framework_services.types.selector_spec import SelectorSpec
 from rest_framework_services.types.service_spec import ServiceSpec
 
@@ -119,7 +120,7 @@ def test_selector_tool_binding_uses_same_shape() -> None:
     binding = SelectorToolBinding(
         name="s",
         description=None,
-        spec=SelectorSpec(selector=_sel),
+        spec=SelectorSpec(kind=SelectorKind.LIST, selector=_sel),
         permissions=(_DenyAll(),),
     )
     assert is_binding_listable(binding, _request(), _token()) is False
@@ -131,6 +132,7 @@ def test_resource_binding_uses_same_shape() -> None:
         uri_template="r://",
         description=None,
         selector=_sel,
+        kind=SelectorKind.LIST,
         permissions=(_DenyAll(),),
     )
     assert is_binding_listable(binding, _request(), _token()) is False

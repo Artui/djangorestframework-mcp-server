@@ -11,6 +11,7 @@ from __future__ import annotations
 from typing import Any
 
 from django.http import HttpRequest
+from rest_framework_services.types.selector_kind import SelectorKind
 from rest_framework_services.types.service_spec import ServiceSpec
 
 from rest_framework_mcp.auth.types.token_info import TokenInfo
@@ -146,6 +147,7 @@ def _resource(name: str, *, permissions: tuple[Any, ...] = ()) -> ResourceBindin
         uri_template=f"r://{name}",
         description=None,
         selector=_sel,
+        kind=SelectorKind.LIST,
         permissions=permissions,
     )
 
@@ -178,6 +180,7 @@ def _template_resource(name: str, *, permissions: tuple[Any, ...] = ()) -> Resou
         uri_template=f"r://{name}/{{pk}}",
         description=None,
         selector=_sel,
+        kind=SelectorKind.LIST,
         permissions=permissions,
     )
 

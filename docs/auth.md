@@ -150,10 +150,10 @@ server.register_service_tool(
 )
 ```
 
-`ServiceSpec` / `SelectorSpec` from sister-repo 0.12.0 also carry a
-`permission_classes` attribute. Any DRF permission classes declared on
-the spec are auto-wrapped and prepended to the per-binding `permissions`
-tuple — the same spec that backs your HTTP view governs the MCP binding
+`ServiceSpec` / `SelectorSpec` also carry a `permission_classes`
+attribute. Any DRF permission classes declared on the spec are
+auto-wrapped and prepended to the per-binding `permissions` tuple —
+the same spec that backs your HTTP view governs the MCP binding
 without you restating the contract at the MCP call site.
 
 ### Filtering listings by permissions

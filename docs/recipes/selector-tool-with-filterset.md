@@ -103,6 +103,7 @@ class InvoiceFilterSet(django_filters.FilterSet):
 ## Register the selector tool
 
 ```python
+from rest_framework_services.types.selector_kind import SelectorKind
 from rest_framework_services.types.selector_spec import SelectorSpec
 from rest_framework_mcp import MCPServer
 
@@ -114,7 +115,11 @@ server = MCPServer(name="invoicing")
 
 server.register_selector_tool(
     name="invoices.list",
-    spec=SelectorSpec(selector=list_invoices, output_serializer=InvoiceOutputSerializer),
+    spec=SelectorSpec(
+        kind=SelectorKind.LIST,
+        selector=list_invoices,
+        output_serializer=InvoiceOutputSerializer,
+    ),
     description="List invoices, optionally filtered / ordered / paginated.",
     filter_set=InvoiceFilterSet,
     ordering_fields=["created_at", "amount_cents"],
@@ -221,7 +226,11 @@ class InvoiceListInput(serializers.Serializer):
 
 server.register_selector_tool(
     name="invoices.list",
-    spec=SelectorSpec(selector=list_invoices, output_serializer=InvoiceOutputSerializer),
+    spec=SelectorSpec(
+        kind=SelectorKind.LIST,
+        selector=list_invoices,
+        output_serializer=InvoiceOutputSerializer,
+    ),
     input_serializer=InvoiceListInput,
     filter_set=InvoiceFilterSet,
     ordering_fields=["created_at"],

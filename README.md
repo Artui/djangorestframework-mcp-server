@@ -20,6 +20,7 @@ involvement. The unit of registration is the `ServiceSpec`, not a view.
 
 ```python
 from django.urls import include, path
+from rest_framework_services.types.selector_kind import SelectorKind
 from rest_framework_services.types.selector_spec import SelectorSpec
 from rest_framework_services.types.service_spec import ServiceSpec
 
@@ -32,7 +33,10 @@ server.register_service_tool(
     spec=ServiceSpec(
         service=create_invoice,
         input_serializer=InvoiceInputSerializer,
-        output_serializer=InvoiceOutputSerializer,
+        output_selector_spec=SelectorSpec(
+            kind=SelectorKind.RETRIEVE,
+            output_serializer=InvoiceOutputSerializer,
+        ),
     ),
 )
 
@@ -40,6 +44,7 @@ server.register_resource(
     name="invoice",
     uri_template="invoices://{pk}",
     selector=SelectorSpec(
+        kind=SelectorKind.RETRIEVE,
         selector=get_invoice,
         output_serializer=InvoiceOutputSerializer,
     ),

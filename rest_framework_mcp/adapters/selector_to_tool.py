@@ -4,6 +4,7 @@ from typing import Any
 
 from rest_framework_services.types.selector_spec import SelectorSpec
 
+from rest_framework_mcp.adapters.utils import validate_input_serializer_against_callable
 from rest_framework_mcp.auth.permissions.wrap_spec_permissions import wrap_spec_permissions
 from rest_framework_mcp.constants import ArgumentBinding, OutputFormat, UnknownArguments
 from rest_framework_mcp.registry.types.selector_tool_binding import SelectorToolBinding
@@ -28,6 +29,7 @@ def selector_spec_to_tool(
     argument_binding: ArgumentBinding = ArgumentBinding.MERGE,
     unknown_arguments: UnknownArguments = UnknownArguments.REJECT,
     always_listed: bool = False,
+    spec_kwargs_provides: tuple[str, ...] = (),
 ) -> SelectorToolBinding:
     """Lift a ``SelectorSpec`` into a :class:`SelectorToolBinding`.
 
@@ -39,12 +41,24 @@ def selector_spec_to_tool(
     carry it because the sister repo's read-views derive their args from
     the URL/query, not a request body. MCP tools always pass arguments
     as a JSON dict, so we surface the serializer on the binding instead.
+
+    The selector's shape (``LIST`` vs ``RETRIEVE``) is read from
+    ``spec.kind`` — a required field on ``SelectorSpec`` since
+    ``djangorestframework-services`` 0.13. No separate ``kind`` kwarg is
+    accepted here; the spec is the single source of truth.
     """
     if spec.selector is None:
         raise ValueError(
             f"SelectorSpec for selector tool {name!r} has selector=None — MCP needs a "
             "concrete callable to dispatch to."
         )
+    validate_input_serializer_against_callable(
+        label=f"selector tool {name!r}",
+        input_serializer=input_serializer,
+        callable_=spec.selector,
+        argument_binding=argument_binding,
+        spec_kwargs_provides=frozenset(spec_kwargs_provides),
+    )
     spec_perms: tuple[Any, ...] = wrap_spec_permissions(spec.permission_classes, label=name)
     effective_perms: tuple[Any, ...] = spec_perms + tuple(permissions)
     return SelectorToolBinding(

@@ -5,6 +5,8 @@ from typing import Any
 
 from django.http import HttpRequest
 from rest_framework_services.exceptions.service_validation_error import ServiceValidationError
+from rest_framework_services.types.selector_kind import SelectorKind
+from rest_framework_services.types.selector_spec import SelectorSpec
 from rest_framework_services.types.service_spec import ServiceSpec
 
 from rest_framework_mcp.auth.types.token_info import TokenInfo
@@ -127,7 +129,11 @@ def test_tools_call_with_output_selector() -> None:
         ToolBinding(
             name="t",
             description=None,
-            spec=ServiceSpec(service=svc, output_selector=shape, atomic=False),
+            spec=ServiceSpec(
+                service=svc,
+                output_selector_spec=SelectorSpec(kind=SelectorKind.RETRIEVE, selector=shape),
+                atomic=False,
+            ),
         )
     )
     out = handle_tools_call({"name": "t", "arguments": {}}, _ctx(tools))
@@ -146,6 +152,7 @@ def test_resources_read_passes_through_when_no_output_serializer() -> None:
             uri_template="r://{pk}",
             description=None,
             selector=selector,
+            kind=SelectorKind.RETRIEVE,
         )
     )
     ctx = MCPCallContext(
@@ -172,6 +179,7 @@ def test_resources_read_denied_by_permission() -> None:
             uri_template="r://",
             description=None,
             selector=selector,
+            kind=SelectorKind.LIST,
             permissions=(_DenyEveryone(),),
         )
     )
@@ -304,7 +312,13 @@ def test_tools_list_drops_output_schema_when_explicitly_disabled() -> None:
         ToolBinding(
             name="t",
             description=None,
-            spec=ServiceSpec(service=svc, output_serializer=_Ser, atomic=False),
+            spec=ServiceSpec(
+                service=svc,
+                output_selector_spec=SelectorSpec(
+                    kind=SelectorKind.RETRIEVE, output_serializer=_Ser
+                ),
+                atomic=False,
+            ),
             include_output_schema=False,
         )
     )
@@ -331,7 +345,13 @@ def test_tools_list_drops_output_schema_when_global_setting_disabled(settings) -
         ToolBinding(
             name="t",
             description=None,
-            spec=ServiceSpec(service=svc, output_serializer=_Ser, atomic=False),
+            spec=ServiceSpec(
+                service=svc,
+                output_selector_spec=SelectorSpec(
+                    kind=SelectorKind.RETRIEVE, output_serializer=_Ser
+                ),
+                atomic=False,
+            ),
         )
     )
     out = handle_tools_list(None, _ctx(tools))
@@ -359,7 +379,13 @@ def test_tools_list_emits_output_schema_when_structured_content_enabled() -> Non
         ToolBinding(
             name="t",
             description=None,
-            spec=ServiceSpec(service=svc, output_serializer=_Ser, atomic=False),
+            spec=ServiceSpec(
+                service=svc,
+                output_selector_spec=SelectorSpec(
+                    kind=SelectorKind.RETRIEVE, output_serializer=_Ser
+                ),
+                atomic=False,
+            ),
         )
     )
     out = handle_tools_list(None, _ctx(tools))

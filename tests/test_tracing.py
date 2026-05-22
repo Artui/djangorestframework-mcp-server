@@ -13,6 +13,7 @@ from opentelemetry import trace
 from opentelemetry.sdk.trace import TracerProvider
 from opentelemetry.sdk.trace.export import SimpleSpanProcessor
 from opentelemetry.sdk.trace.export.in_memory_span_exporter import InMemorySpanExporter
+from rest_framework_services.types.selector_kind import SelectorKind
 from rest_framework_services.types.selector_spec import SelectorSpec
 from rest_framework_services.types.service_spec import ServiceSpec
 
@@ -84,7 +85,7 @@ def test_resources_read_emits_span_with_uri(exporter: InMemorySpanExporter) -> N
     server.register_resource(
         name="r",
         uri_template="r://{pk}",
-        selector=SelectorSpec(selector=lambda *, pk: {"pk": pk}),
+        selector=SelectorSpec(kind=SelectorKind.RETRIEVE, selector=lambda *, pk: {"pk": pk}),
     )
     handle_resources_read({"uri": "r://7"}, _ctx(server))
     spans = list(exporter.get_finished_spans())

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from rest_framework_services.types.selector_kind import SelectorKind
 from rest_framework_services.types.selector_spec import SelectorSpec
 from rest_framework_services.types.service_spec import ServiceSpec
 
@@ -29,8 +30,11 @@ def test_service_classmethod_sets_kind_service() -> None:
 
 
 def test_selector_classmethod_sets_kind_selector() -> None:
-    spec = SelectorSpec(selector=_sel)
-    d = ToolDefinition.selector(name="x", spec=spec)
+    spec = SelectorSpec(kind=SelectorKind.LIST, selector=_sel)
+    d = ToolDefinition.selector(
+        name="x",
+        spec=spec,
+    )
     assert d.kind is ToolKind.SELECTOR
     assert d.name == "x"
     assert d.spec is spec
@@ -67,7 +71,7 @@ def test_service_classmethod_forwards_include_output_schema() -> None:
 def test_selector_classmethod_forwards_include_output_schema() -> None:
     d = ToolDefinition.selector(
         name="x",
-        spec=SelectorSpec(selector=_sel),
+        spec=SelectorSpec(kind=SelectorKind.LIST, selector=_sel),
         include_output_schema=True,
     )
     assert d.include_output_schema is True
@@ -76,7 +80,7 @@ def test_selector_classmethod_forwards_include_output_schema() -> None:
 def test_selector_classmethod_forwards_all_selector_kwargs() -> None:
     d = ToolDefinition.selector(
         name="x",
-        spec=SelectorSpec(selector=_sel),
+        spec=SelectorSpec(kind=SelectorKind.LIST, selector=_sel),
         input_serializer=str,
         ordering_fields=("a",),
         paginate=True,

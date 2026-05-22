@@ -15,6 +15,7 @@ from django.http import HttpRequest
 from rest_framework import serializers as drf_serializers
 from rest_framework_services.exceptions.service_error import ServiceError
 from rest_framework_services.exceptions.service_validation_error import ServiceValidationError
+from rest_framework_services.types.selector_kind import SelectorKind
 from rest_framework_services.types.selector_spec import SelectorSpec
 
 from rest_framework_mcp import MCPServer
@@ -67,7 +68,11 @@ def test_register_selector_tool_creates_binding() -> None:
     server = _server()
     binding = server.register_selector_tool(
         name="invoices.list",
-        spec=SelectorSpec(selector=_list_invoices, output_serializer=InvoiceOutputSerializer),
+        spec=SelectorSpec(
+            kind=SelectorKind.LIST,
+            selector=_list_invoices,
+            output_serializer=InvoiceOutputSerializer,
+        ),
     )
     assert binding.name == "invoices.list"
     assert server.tools.get("invoices.list") is binding
@@ -78,7 +83,7 @@ def test_register_selector_tool_rejects_spec_with_no_selector() -> None:
     with pytest.raises(ValueError, match="selector=None"):
         server.register_selector_tool(
             name="x",
-            spec=SelectorSpec(selector=None),
+            spec=SelectorSpec(kind=SelectorKind.LIST, selector=None),
         )
 
 
@@ -87,6 +92,7 @@ def test_decorator_form_wraps_callable_in_spec() -> None:
 
     @server.selector_tool(
         name="invoices.list",
+        kind=SelectorKind.LIST,
         output_serializer=InvoiceOutputSerializer,
     )
     def list_invoices(*, user: Any) -> Any:  # noqa: ARG001
@@ -100,7 +106,11 @@ def test_tools_list_emits_filter_args_in_input_schema() -> None:
     server = _server()
     server.register_selector_tool(
         name="invoices.list",
-        spec=SelectorSpec(selector=_list_invoices, output_serializer=InvoiceOutputSerializer),
+        spec=SelectorSpec(
+            kind=SelectorKind.LIST,
+            selector=_list_invoices,
+            output_serializer=InvoiceOutputSerializer,
+        ),
         filter_set=InvoiceFilterSet,
         ordering_fields=["amount_cents"],
         paginate=True,
@@ -131,7 +141,11 @@ def test_filter_narrows_queryset() -> None:
     server = _server()
     server.register_selector_tool(
         name="invoices.list",
-        spec=SelectorSpec(selector=_list_invoices, output_serializer=InvoiceOutputSerializer),
+        spec=SelectorSpec(
+            kind=SelectorKind.LIST,
+            selector=_list_invoices,
+            output_serializer=InvoiceOutputSerializer,
+        ),
         filter_set=InvoiceFilterSet,
     )
 
@@ -149,7 +163,11 @@ def test_filter_with_no_args_returns_everything() -> None:
     server = _server()
     server.register_selector_tool(
         name="invoices.list",
-        spec=SelectorSpec(selector=_list_invoices, output_serializer=InvoiceOutputSerializer),
+        spec=SelectorSpec(
+            kind=SelectorKind.LIST,
+            selector=_list_invoices,
+            output_serializer=InvoiceOutputSerializer,
+        ),
         filter_set=InvoiceFilterSet,
     )
 
@@ -167,7 +185,11 @@ def test_no_filter_set_means_no_filtering() -> None:
     server = _server()
     server.register_selector_tool(
         name="invoices.list",
-        spec=SelectorSpec(selector=_list_invoices, output_serializer=InvoiceOutputSerializer),
+        spec=SelectorSpec(
+            kind=SelectorKind.LIST,
+            selector=_list_invoices,
+            output_serializer=InvoiceOutputSerializer,
+        ),
     )
 
     # Even when "sent" is in arguments, no filter applies.
@@ -188,7 +210,11 @@ def test_ordering_applies_when_value_is_allowed() -> None:
     server = _server()
     server.register_selector_tool(
         name="invoices.list",
-        spec=SelectorSpec(selector=_list_invoices, output_serializer=InvoiceOutputSerializer),
+        spec=SelectorSpec(
+            kind=SelectorKind.LIST,
+            selector=_list_invoices,
+            output_serializer=InvoiceOutputSerializer,
+        ),
         ordering_fields=["amount_cents"],
     )
 
@@ -208,7 +234,11 @@ def test_descending_ordering_is_supported() -> None:
     server = _server()
     server.register_selector_tool(
         name="invoices.list",
-        spec=SelectorSpec(selector=_list_invoices, output_serializer=InvoiceOutputSerializer),
+        spec=SelectorSpec(
+            kind=SelectorKind.LIST,
+            selector=_list_invoices,
+            output_serializer=InvoiceOutputSerializer,
+        ),
         ordering_fields=["amount_cents"],
     )
 
@@ -228,7 +258,11 @@ def test_ordering_with_disallowed_field_is_silently_ignored() -> None:
     server = _server()
     server.register_selector_tool(
         name="invoices.list",
-        spec=SelectorSpec(selector=_list_invoices, output_serializer=InvoiceOutputSerializer),
+        spec=SelectorSpec(
+            kind=SelectorKind.LIST,
+            selector=_list_invoices,
+            output_serializer=InvoiceOutputSerializer,
+        ),
         ordering_fields=["amount_cents"],
     )
 
@@ -254,7 +288,11 @@ def test_pagination_wraps_response_in_metadata() -> None:
     server = _server()
     server.register_selector_tool(
         name="invoices.list",
-        spec=SelectorSpec(selector=_list_invoices, output_serializer=InvoiceOutputSerializer),
+        spec=SelectorSpec(
+            kind=SelectorKind.LIST,
+            selector=_list_invoices,
+            output_serializer=InvoiceOutputSerializer,
+        ),
         ordering_fields=["amount_cents"],
         paginate=True,
     )
@@ -282,7 +320,11 @@ def test_pagination_last_page_reports_no_next() -> None:
     server = _server()
     server.register_selector_tool(
         name="invoices.list",
-        spec=SelectorSpec(selector=_list_invoices, output_serializer=InvoiceOutputSerializer),
+        spec=SelectorSpec(
+            kind=SelectorKind.LIST,
+            selector=_list_invoices,
+            output_serializer=InvoiceOutputSerializer,
+        ),
         paginate=True,
     )
 
@@ -304,7 +346,11 @@ def test_pagination_defaults_to_page_one_limit_hundred() -> None:
     server = _server()
     server.register_selector_tool(
         name="invoices.list",
-        spec=SelectorSpec(selector=_list_invoices, output_serializer=InvoiceOutputSerializer),
+        spec=SelectorSpec(
+            kind=SelectorKind.LIST,
+            selector=_list_invoices,
+            output_serializer=InvoiceOutputSerializer,
+        ),
         paginate=True,
     )
 
@@ -321,7 +367,11 @@ def test_pagination_clamps_invalid_inputs_to_safe_defaults() -> None:
     server = _server()
     server.register_selector_tool(
         name="invoices.list",
-        spec=SelectorSpec(selector=_list_invoices, output_serializer=InvoiceOutputSerializer),
+        spec=SelectorSpec(
+            kind=SelectorKind.LIST,
+            selector=_list_invoices,
+            output_serializer=InvoiceOutputSerializer,
+        ),
         paginate=True,
     )
 
@@ -342,7 +392,11 @@ def test_pagination_accepts_string_int() -> None:
     server = _server()
     server.register_selector_tool(
         name="invoices.list",
-        spec=SelectorSpec(selector=_list_invoices, output_serializer=InvoiceOutputSerializer),
+        spec=SelectorSpec(
+            kind=SelectorKind.LIST,
+            selector=_list_invoices,
+            output_serializer=InvoiceOutputSerializer,
+        ),
         paginate=True,
     )
 
@@ -368,7 +422,11 @@ def test_full_pipeline_filter_then_order_then_paginate() -> None:
     server = _server()
     server.register_selector_tool(
         name="invoices.list",
-        spec=SelectorSpec(selector=_list_invoices, output_serializer=InvoiceOutputSerializer),
+        spec=SelectorSpec(
+            kind=SelectorKind.LIST,
+            selector=_list_invoices,
+            output_serializer=InvoiceOutputSerializer,
+        ),
         filter_set=InvoiceFilterSet,
         ordering_fields=["amount_cents"],
         paginate=True,
@@ -416,7 +474,9 @@ def test_selector_tool_with_input_serializer_validates_custom_args() -> None:
 
     server.register_selector_tool(
         name="invoices.list",
-        spec=SelectorSpec(selector=selector, output_serializer=InvoiceOutputSerializer),
+        spec=SelectorSpec(
+            kind=SelectorKind.LIST, selector=selector, output_serializer=InvoiceOutputSerializer
+        ),
         input_serializer=_CustomArgs,
     )
 
@@ -428,9 +488,13 @@ def test_selector_tool_with_input_serializer_validates_custom_args() -> None:
 @pytest.mark.django_db
 def test_selector_tool_input_serializer_rejects_invalid_args() -> None:
     server = _server()
+
+    def selector(*, user: Any, expand: bool = False) -> Any:  # noqa: ARG001
+        return Invoice.objects.all()
+
     server.register_selector_tool(
         name="invoices.list",
-        spec=SelectorSpec(selector=_list_invoices),
+        spec=SelectorSpec(kind=SelectorKind.LIST, selector=selector),
         input_serializer=_CustomArgs,
     )
 
@@ -454,7 +518,7 @@ def test_selector_returning_list_skips_queryset_pipeline() -> None:
 
     server.register_selector_tool(
         name="things.list",
-        spec=SelectorSpec(selector=selector),
+        spec=SelectorSpec(kind=SelectorKind.LIST, selector=selector),
         # filter_set is set but won't apply because the result isn't a QS.
         filter_set=InvoiceFilterSet,
     )
@@ -472,7 +536,10 @@ def test_selector_returning_none_renders_as_empty() -> None:
     def selector() -> None:
         return None
 
-    server.register_selector_tool(name="x", spec=SelectorSpec(selector=selector))
+    server.register_selector_tool(
+        name="x",
+        spec=SelectorSpec(kind=SelectorKind.LIST, selector=selector),
+    )
 
     out = handle_tools_call({"name": "x", "arguments": {}}, _ctx(server))
     assert isinstance(out, dict)
@@ -497,7 +564,7 @@ def test_selector_tool_denied_by_permission() -> None:
     server = _server()
     server.register_selector_tool(
         name="invoices.list",
-        spec=SelectorSpec(selector=_list_invoices),
+        spec=SelectorSpec(kind=SelectorKind.LIST, selector=_list_invoices),
         permissions=[_DenyAll()],
     )
     out = handle_tools_call({"name": "invoices.list", "arguments": {}}, _ctx(server))
@@ -514,7 +581,7 @@ def test_selector_tool_rate_limited() -> None:
     server = _server()
     server.register_selector_tool(
         name="invoices.list",
-        spec=SelectorSpec(selector=_list_invoices),
+        spec=SelectorSpec(kind=SelectorKind.LIST, selector=_list_invoices),
         rate_limits=[_AlwaysDeny()],
     )
     out = handle_tools_call({"name": "invoices.list", "arguments": {}}, _ctx(server))
@@ -529,7 +596,10 @@ def test_selector_tool_translates_service_validation_error() -> None:
     def selector() -> None:
         raise ServiceValidationError({"f": ["bad"]})
 
-    server.register_selector_tool(name="x", spec=SelectorSpec(selector=selector))
+    server.register_selector_tool(
+        name="x",
+        spec=SelectorSpec(kind=SelectorKind.LIST, selector=selector),
+    )
     out = handle_tools_call({"name": "x", "arguments": {}}, _ctx(server))
     assert isinstance(out, JsonRpcError)
     assert out.code == -32602
@@ -542,7 +612,10 @@ def test_selector_tool_translates_service_error() -> None:
     def selector() -> None:
         raise ServiceError("nope")
 
-    server.register_selector_tool(name="x", spec=SelectorSpec(selector=selector))
+    server.register_selector_tool(
+        name="x",
+        spec=SelectorSpec(kind=SelectorKind.LIST, selector=selector),
+    )
     out = handle_tools_call({"name": "x", "arguments": {}}, _ctx(server))
     assert isinstance(out, JsonRpcError)
     assert out.code == -32000
@@ -556,7 +629,10 @@ def test_selector_tool_records_service_error_when_setting_enabled(settings) -> N
     def selector() -> None:
         raise ServiceError("oh no")
 
-    server.register_selector_tool(name="x", spec=SelectorSpec(selector=selector))
+    server.register_selector_tool(
+        name="x",
+        spec=SelectorSpec(kind=SelectorKind.LIST, selector=selector),
+    )
     out = handle_tools_call({"name": "x", "arguments": {}}, _ctx(server))
     assert isinstance(out, JsonRpcError)
     assert out.code == -32000
@@ -577,7 +653,7 @@ def test_selector_tool_kwargs_provider_merges_into_pool() -> None:
 
     server.register_selector_tool(
         name="x",
-        spec=SelectorSpec(selector=selector, kwargs=kwargs_provider),
+        spec=SelectorSpec(kind=SelectorKind.LIST, selector=selector, kwargs=kwargs_provider),
     )
     out = handle_tools_call({"name": "x", "arguments": {}}, _ctx(server))
     assert isinstance(out, dict)
@@ -590,10 +666,13 @@ def test_selector_tool_inputschema_with_required_input_serializer_field(settings
     class _Args(drf_serializers.Serializer):
         token = drf_serializers.CharField()  # required
 
+    def selector(*, user: Any, token: str) -> Any:  # noqa: ARG001
+        return Invoice.objects.all()
+
     server = _server()
     server.register_selector_tool(
         name="x",
-        spec=SelectorSpec(selector=_list_invoices),
+        spec=SelectorSpec(kind=SelectorKind.LIST, selector=selector),
         input_serializer=_Args,
         ordering_fields=["amount_cents"],
     )
@@ -607,7 +686,10 @@ def test_selector_tool_inputschema_with_required_input_serializer_field(settings
 def test_selector_tool_inputschema_minimal_no_optional_pipeline_knobs() -> None:
     """A binding with no filter / ordering / paginate / input_serializer."""
     server = _server()
-    server.register_selector_tool(name="x", spec=SelectorSpec(selector=_list_invoices))
+    server.register_selector_tool(
+        name="x",
+        spec=SelectorSpec(kind=SelectorKind.LIST, selector=_list_invoices),
+    )
     out = handle_tools_list(None, _ctx(server))
     assert isinstance(out, dict)
     schema = out["tools"][0]["inputSchema"]
@@ -628,7 +710,11 @@ def test_selector_tool_honors_include_structured_content_override() -> None:
     server = _server()
     server.register_selector_tool(
         name="invoices.list",
-        spec=SelectorSpec(selector=_list_invoices, output_serializer=InvoiceOutputSerializer),
+        spec=SelectorSpec(
+            kind=SelectorKind.LIST,
+            selector=_list_invoices,
+            output_serializer=InvoiceOutputSerializer,
+        ),
         include_structured_content=False,
         include_output_schema=False,
     )
@@ -637,3 +723,79 @@ def test_selector_tool_honors_include_structured_content_override() -> None:
     assert "structuredContent" not in out
     # The text payload still carries the full result.
     assert "A" in out["content"][0]["text"]
+
+
+# ---------- kind=RETRIEVE — single-instance selector tools ----------
+
+
+@pytest.mark.django_db
+def test_retrieve_kind_renders_single_instance_with_serializer() -> None:
+    """A retrieve selector tool calls ``output_serializer(many=False)``."""
+    invoice = Invoice.objects.create(number="A", amount_cents=100, sent=True)
+
+    def _get_invoice(*, user: Any) -> Any:  # noqa: ARG001
+        return invoice
+
+    server = _server()
+    server.register_selector_tool(
+        name="invoices.retrieve",
+        spec=SelectorSpec(
+            kind=SelectorKind.RETRIEVE,
+            selector=_get_invoice,
+            output_serializer=InvoiceOutputSerializer,
+        ),
+    )
+    out = handle_tools_call({"name": "invoices.retrieve", "arguments": {}}, _ctx(server))
+    assert isinstance(out, dict)
+    # many=False → an object, not a list.
+    assert isinstance(out["structuredContent"], dict)
+    assert out["structuredContent"]["number"] == "A"
+
+
+def test_retrieve_kind_without_serializer_passes_instance_through() -> None:
+    """No output serializer → render whatever the selector returned verbatim."""
+    server = _server()
+
+    def _selector() -> dict[str, str]:
+        return {"id": "1", "label": "X"}
+
+    server.register_selector_tool(
+        name="x.retrieve",
+        spec=SelectorSpec(kind=SelectorKind.RETRIEVE, selector=_selector),
+    )
+    out = handle_tools_call({"name": "x.retrieve", "arguments": {}}, _ctx(server))
+    assert isinstance(out, dict)
+    assert out["structuredContent"] == {"id": "1", "label": "X"}
+
+
+@pytest.mark.django_db
+def test_retrieve_kind_forwards_output_serializer_context() -> None:
+    """``spec.output_serializer_context`` participates in single-instance render."""
+    invoice = Invoice.objects.create(number="A", amount_cents=100, sent=True)
+
+    class _ContextProbe(drf_serializers.ModelSerializer):
+        extra = drf_serializers.SerializerMethodField()
+
+        class Meta:
+            model = Invoice
+            fields = ["number", "extra"]
+
+        def get_extra(self, _: Invoice) -> str:
+            return self.context["tag"]
+
+    def _ctx_provider(view: Any, request: Any) -> dict[str, Any]:  # noqa: ARG001
+        return {"tag": "via-spec"}
+
+    server = _server()
+    server.register_selector_tool(
+        name="invoices.retrieve",
+        spec=SelectorSpec(
+            kind=SelectorKind.RETRIEVE,
+            selector=lambda: invoice,
+            output_serializer=_ContextProbe,
+            output_serializer_context=_ctx_provider,
+        ),
+    )
+    out = handle_tools_call({"name": "invoices.retrieve", "arguments": {}}, _ctx(server))
+    assert isinstance(out, dict)
+    assert out["structuredContent"] == {"number": "A", "extra": "via-spec"}

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import pytest
+from rest_framework_services.types.selector_kind import SelectorKind
 from rest_framework_services.types.selector_spec import SelectorSpec
 from rest_framework_services.types.service_spec import ServiceSpec
 
@@ -33,7 +34,9 @@ def test_register_tool_imperative() -> None:
 def test_register_resource_imperative() -> None:
     server = _make()
     binding = server.register_resource(
-        name="r", uri_template="r://", selector=SelectorSpec(selector=lambda: None)
+        name="r",
+        uri_template="r://",
+        selector=SelectorSpec(kind=SelectorKind.LIST, selector=lambda: None),
     )
     assert server.resources.resolve("r://") is not None
     assert binding.name == "r"
@@ -46,7 +49,7 @@ def test_register_resource_rejects_bare_callable() -> None:
         server.register_resource(
             name="r",
             uri_template="r://",
-            selector=lambda: None,  # type: ignore[arg-type]
+            selector=lambda: None,  # type: ignore[arg-type],
         )
 
 
@@ -80,7 +83,7 @@ def test_tool_decorator_with_explicit_spec() -> None:
 def test_resource_decorator_uses_function_name_when_unspecified() -> None:
     server = _make()
 
-    @server.resource(uri_template="x://{pk}")
+    @server.resource(uri_template="x://{pk}", kind=SelectorKind.RETRIEVE)
     def get_x(*, pk: int) -> int:
         """Fetch an x."""
         return pk
@@ -95,12 +98,79 @@ def test_resource_decorator_uses_function_name_when_unspecified() -> None:
 def test_resource_decorator_overrides_name() -> None:
     server = _make()
 
-    @server.resource(uri_template="y://", name="custom")
+    @server.resource(uri_template="y://", name="custom", kind=SelectorKind.LIST)
     def listy() -> list:
         return []
 
     found = server.resources.resolve("y://")
     assert found is not None and found[0].name == "custom"
+
+
+def test_service_tool_decorator_builds_output_selector_spec_when_serializer_given() -> None:
+    """The flat ``output_serializer`` decorator kwarg flows into a
+    nested ``output_selector_spec`` (sister-repo 0.13+).
+    """
+    from rest_framework import serializers
+
+    class _Out(serializers.Serializer):
+        x = serializers.IntegerField()
+
+    server = _make()
+
+    @server.service_tool(name="t.create", output_serializer=_Out)
+    def create(*, data: dict) -> dict:
+        return data
+
+    binding = server.tools.get("t.create")
+    assert binding.spec.output_selector_spec is not None
+    assert binding.spec.output_selector_spec.output_serializer is _Out
+    assert binding.spec.output_selector_spec.kind is SelectorKind.RETRIEVE
+
+
+def test_selector_tool_decorator_requires_kind_when_spec_omitted() -> None:
+    server = _make()
+    with pytest.raises(TypeError, match="``kind`` is required"):
+
+        @server.selector_tool(name="t")
+        def fn() -> list:
+            return []
+
+
+def test_selector_tool_decorator_accepts_explicit_spec() -> None:
+    """When ``spec=`` is passed, ``kind`` kwarg is ignored and spec.kind wins."""
+    server = _make()
+
+    @server.selector_tool(name="t", spec=SelectorSpec(kind=SelectorKind.LIST, selector=lambda: []))
+    def fn() -> list:
+        return []
+
+    binding = server.tools.get("t")
+    assert binding.kind is SelectorKind.LIST
+
+
+def test_resource_decorator_requires_kind_when_spec_omitted() -> None:
+    server = _make()
+    with pytest.raises(TypeError, match="``kind`` is required"):
+
+        @server.resource(uri_template="x://")
+        def fn() -> list:
+            return []
+
+
+def test_resource_decorator_accepts_explicit_spec() -> None:
+    server = _make()
+
+    @server.resource(
+        uri_template="x://",
+        spec=SelectorSpec(kind=SelectorKind.LIST, selector=lambda: []),
+    )
+    def fn() -> list:
+        return []
+
+    found = server.resources.resolve("x://")
+    assert found is not None
+    binding, _ = found
+    assert binding.kind is SelectorKind.LIST
 
 
 def test_accessors() -> None:

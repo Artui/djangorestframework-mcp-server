@@ -16,6 +16,7 @@ from typing import Any
 import pytest
 from django.http import HttpRequest
 from rest_framework import serializers as drf_serializers
+from rest_framework_services.types.selector_kind import SelectorKind
 from rest_framework_services.types.selector_spec import SelectorSpec
 from rest_framework_services.types.service_spec import ServiceSpec
 
@@ -173,7 +174,10 @@ def test_reject_does_not_flag_pool_seed_keys() -> None:
 # ---------- Selector tool: filter / ordering / pagination keys are "known" ----------
 
 
-def _list() -> list[dict[str, str]]:
+def _list(**_kwargs: Any) -> list[dict[str, str]]:
+    # ``**kwargs`` absorbs whatever flows through the spread so the
+    # registration-time field/param check is happy regardless of which
+    # input_serializer this fixture is paired with.
     return [{"id": "1"}]
 
 
@@ -190,7 +194,7 @@ def test_selector_tool_reject_treats_post_fetch_keys_as_known() -> None:
     server = _server()
     server.register_selector_tool(
         name="x",
-        spec=SelectorSpec(selector=_list),
+        spec=SelectorSpec(kind=SelectorKind.LIST, selector=_list),
         unknown_arguments=UnknownArguments.REJECT,
     )
     out = handle_tools_call(
@@ -204,7 +208,7 @@ def test_selector_tool_reject_rejects_truly_unknown_keys() -> None:
     server = _server()
     server.register_selector_tool(
         name="x",
-        spec=SelectorSpec(selector=_list),
+        spec=SelectorSpec(kind=SelectorKind.LIST, selector=_list),
         paginate=True,
         unknown_arguments=UnknownArguments.REJECT,
         input_serializer=_OneFieldInput,
@@ -221,7 +225,7 @@ def test_selector_tool_schema_additional_properties_false_under_reject() -> None
     server = _server()
     server.register_selector_tool(
         name="x",
-        spec=SelectorSpec(selector=_list),
+        spec=SelectorSpec(kind=SelectorKind.LIST, selector=_list),
         paginate=True,
         unknown_arguments=UnknownArguments.REJECT,
     )
@@ -234,7 +238,7 @@ def test_selector_tool_schema_additional_properties_true_under_passthrough() -> 
     server = _server()
     server.register_selector_tool(
         name="x",
-        spec=SelectorSpec(selector=_list),
+        spec=SelectorSpec(kind=SelectorKind.LIST, selector=_list),
         paginate=True,
         unknown_arguments=UnknownArguments.PASSTHROUGH,
     )

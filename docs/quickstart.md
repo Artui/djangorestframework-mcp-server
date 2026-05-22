@@ -57,6 +57,8 @@ class InvoiceOutputSerializer(serializers.ModelSerializer):
 ## 4. Wire the MCP server
 
 ```python title="invoices/mcp.py"
+from rest_framework_services.types.selector_kind import SelectorKind
+from rest_framework_services.types.selector_spec import SelectorSpec
 from rest_framework_services.types.service_spec import ServiceSpec
 from rest_framework_mcp import MCPServer
 
@@ -70,11 +72,21 @@ server.register_service_tool(
     spec=ServiceSpec(
         service=create_invoice,
         input_serializer=InvoiceInputSerializer,
-        output_serializer=InvoiceOutputSerializer,
+        output_selector_spec=SelectorSpec(
+            kind=SelectorKind.RETRIEVE,
+            output_serializer=InvoiceOutputSerializer,
+        ),
     ),
     description="Create a new invoice.",
 )
 ```
+
+`ServiceSpec`'s output pipeline lives under `output_selector_spec` —
+a `SelectorSpec` describing how to render the mutation result. Use
+`SelectorKind.RETRIEVE` for a single-object result and
+`SelectorKind.LIST` when the service returns a list. The decorator
+form (below) accepts a flat `output_serializer=` shortcut and builds
+the nested spec for you.
 
 You can also use the decorator form — both register the same `ToolBinding`:
 

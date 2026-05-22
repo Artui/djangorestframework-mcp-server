@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import pytest
+from rest_framework_services.types.selector_kind import SelectorKind
 
 from rest_framework_mcp.registry.resource_registry import ResourceRegistry
 from rest_framework_mcp.registry.types.resource_binding import ResourceBinding
@@ -8,7 +9,11 @@ from rest_framework_mcp.registry.types.resource_binding import ResourceBinding
 
 def _binding(uri_template: str, name: str = "r") -> ResourceBinding:
     return ResourceBinding(
-        name=name, uri_template=uri_template, description=None, selector=lambda: None
+        name=name,
+        uri_template=uri_template,
+        description=None,
+        selector=lambda: None,
+        kind=SelectorKind.LIST,
     )
 
 

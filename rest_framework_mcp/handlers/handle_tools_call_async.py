@@ -148,24 +148,24 @@ async def handle_tools_call_async(
                 otel_span.record_exception(exc)
             return JsonRpcError(JsonRpcErrorCode.SERVER_ERROR, exc.message)
 
-        if binding.spec.output_selector is not None:
+        # Sister-repo 0.13+ moved the output pipeline under
+        # ``spec.output_selector_spec`` — see the sync sibling for the
+        # rationale; this branch mirrors that shape.
+        out_spec = binding.spec.output_selector_spec
+        if out_spec is not None and out_spec.selector is not None:
             sel_pool: dict[str, Any] = {
                 "request": drf_request,
                 "user": context.token.user,
                 "instance": result,
                 "result": result,
             }
-            sel_kwargs: dict[str, Any] = resolve_callable_kwargs(
-                binding.spec.output_selector, sel_pool
-            )
-            result = await arun_selector_sync_safe(binding.spec.output_selector, sel_kwargs)
+            sel_kwargs: dict[str, Any] = resolve_callable_kwargs(out_spec.selector, sel_pool)
+            result = await arun_selector_sync_safe(out_spec.selector, sel_kwargs)
 
         output_context: Mapping[str, Any] | None = None
-        if binding.spec.output_serializer_context is not None:
+        if out_spec is not None and out_spec.output_serializer_context is not None:
             output_context_view = MCPServiceView(request=drf_request, action=binding.name)
-            output_context = binding.spec.output_serializer_context(
-                output_context_view, drf_request
-            )
+            output_context = out_spec.output_serializer_context(output_context_view, drf_request)
         payload: Any = _render_output(result, binding.spec, context=output_context)
         output_format: OutputFormat = OutputFormat.coerce(
             params.get("outputFormat") or binding.output_format
