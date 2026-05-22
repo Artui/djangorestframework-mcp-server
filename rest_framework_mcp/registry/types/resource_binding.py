@@ -4,6 +4,8 @@ from collections.abc import Callable
 from dataclasses import dataclass, field
 from typing import Any, Generic, TypeVar
 
+from rest_framework_services.types.selector_kind import SelectorKind
+
 ResultT = TypeVar("ResultT")
 
 
@@ -35,6 +37,13 @@ class ResourceBinding(Generic[ResultT]):
     uri_template: str
     description: str | None
     selector: Callable[..., ResultT]
+    # Required — no default. Pulled out of ``SelectorSpec.kind`` by the
+    # adapter so the binding doesn't carry a reference to the whole spec.
+    # ``LIST`` invokes the output serializer with ``many=True``;
+    # ``RETRIEVE`` (the common case for URI-template resources) invokes it
+    # with ``many=False``. Resources have no post-fetch pipeline, so both
+    # kinds are unconditionally accepted.
+    kind: SelectorKind
     output_serializer: type | None = None
     mime_type: str = "application/json"
     permissions: tuple[Any, ...] = ()

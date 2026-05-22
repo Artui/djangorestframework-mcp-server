@@ -6,6 +6,7 @@ from typing import Any
 from django.urls import URLPattern, path
 from django.utils.module_loading import import_string
 from rest_framework.serializers import Serializer
+from rest_framework_services.types.selector_kind import SelectorKind
 from rest_framework_services.types.selector_spec import SelectorSpec
 from rest_framework_services.types.service_spec import ServiceSpec
 
@@ -123,6 +124,7 @@ class MCPServer:
         argument_binding: ArgumentBinding = ArgumentBinding.DATA_ONLY,
         unknown_arguments: UnknownArguments = UnknownArguments.REJECT,
         always_listed: bool = False,
+        spec_kwargs_provides: tuple[str, ...] = (),
     ) -> ToolBinding:
         """Register a :class:`ServiceSpec` as an MCP **mutation** tool.
 
@@ -153,6 +155,7 @@ class MCPServer:
             argument_binding=argument_binding,
             unknown_arguments=unknown_arguments,
             always_listed=always_listed,
+            spec_kwargs_provides=spec_kwargs_provides,
         )
         self._tools.register(binding)
         return binding
@@ -177,6 +180,7 @@ class MCPServer:
         argument_binding: ArgumentBinding = ArgumentBinding.MERGE,
         unknown_arguments: UnknownArguments = UnknownArguments.REJECT,
         always_listed: bool = False,
+        spec_kwargs_provides: tuple[str, ...] = (),
     ) -> SelectorToolBinding:
         """Register a :class:`SelectorSpec` as an MCP **read** tool.
 
@@ -202,6 +206,14 @@ class MCPServer:
         ``filter_set`` requires the ``[filter]`` extra
         (``django-filter``). The constructor surfaces a clear
         ``ImportError`` if you set it without the package installed.
+
+        The selector's shape (``LIST`` vs ``RETRIEVE``) is read from
+        ``spec.kind`` — a required field on ``SelectorSpec`` in
+        ``djangorestframework-services`` 0.13+. ``LIST`` runs the full
+        post-fetch pipeline (``filter_set`` / ``ordering_fields`` /
+        ``paginate``) and renders with ``many=True``; ``RETRIEVE``
+        rejects those pipeline knobs at registration and renders the
+        result with ``many=False``.
         """
         binding = selector_spec_to_tool(
             name=name,
@@ -221,6 +233,7 @@ class MCPServer:
             argument_binding=argument_binding,
             unknown_arguments=unknown_arguments,
             always_listed=always_listed,
+            spec_kwargs_provides=spec_kwargs_provides,
         )
         self._tools.register(binding)
         return binding
@@ -253,6 +266,11 @@ class MCPServer:
         Bare callables are no longer accepted at this surface — wrap them in
         ``SelectorSpec(selector=fn)``, or use :meth:`resource` (the decorator
         form), which wraps the function automatically.
+
+        The shape (``LIST`` vs ``RETRIEVE``) is read from
+        ``selector.kind`` and drives the ``many=`` flag on
+        ``output_serializer`` at dispatch. ``RETRIEVE`` is the typical
+        case for a URI-template lookup.
         """
         binding = selector_to_resource(
             name=name,
@@ -327,6 +345,7 @@ class MCPServer:
         argument_binding: ArgumentBinding = ArgumentBinding.DATA_ONLY,
         unknown_arguments: UnknownArguments = UnknownArguments.REJECT,
         always_listed: bool = False,
+        spec_kwargs_provides: tuple[str, ...] = (),
     ) -> Callable[[Callable[..., Any]], Callable[..., Any]]:
         """Decorator form of :meth:`register_service_tool`.
 
@@ -337,11 +356,21 @@ class MCPServer:
         """
 
         def wrap(fn: Callable[..., Any]) -> Callable[..., Any]:
+            # Sister-repo 0.13+ collapsed the flat output fields under
+            # ``output_selector_spec``. Build the nested spec lazily so a
+            # decorator with no output-side declarations doesn't pay the
+            # cost of an empty RetrieveSelector envelope.
+            output_selector_spec: SelectorSpec | None = None
+            if output_serializer is not None or output_selector is not None:
+                output_selector_spec = SelectorSpec(
+                    kind=SelectorKind.RETRIEVE,
+                    selector=output_selector,
+                    output_serializer=output_serializer,
+                )
             effective_spec: ServiceSpec = spec or ServiceSpec(
                 service=fn,
                 input_serializer=input_serializer,
-                output_serializer=output_serializer,
-                output_selector=output_selector,
+                output_selector_spec=output_selector_spec,
                 atomic=atomic,
                 success_status=success_status,
             )
@@ -359,6 +388,7 @@ class MCPServer:
                 argument_binding=argument_binding,
                 unknown_arguments=unknown_arguments,
                 always_listed=always_listed,
+                spec_kwargs_provides=spec_kwargs_provides,
             )
             return fn
 
@@ -368,6 +398,7 @@ class MCPServer:
         self,
         *,
         name: str,
+        kind: SelectorKind | None = None,
         spec: SelectorSpec | None = None,
         input_serializer: type | None = None,
         output_serializer: type[Serializer] | None = None,
@@ -385,6 +416,7 @@ class MCPServer:
         argument_binding: ArgumentBinding = ArgumentBinding.MERGE,
         unknown_arguments: UnknownArguments = UnknownArguments.REJECT,
         always_listed: bool = False,
+        spec_kwargs_provides: tuple[str, ...] = (),
     ) -> Callable[[Callable[..., Any]], Callable[..., Any]]:
         """Decorator form of :meth:`register_selector_tool`.
 
@@ -393,13 +425,30 @@ class MCPServer:
         and the keyword arguments. The original function is returned
         unchanged so it remains callable from Python without going
         through the MCP transport.
+
+        ``kind`` is required when ``spec`` is omitted (the decorator
+        auto-constructs a :class:`SelectorSpec` and the spec's own
+        ``kind`` field is mandatory). When ``spec`` is supplied,
+        ``kind`` is read from ``spec.kind`` and any value passed here
+        is ignored.
         """
 
         def wrap(fn: Callable[..., Any]) -> Callable[..., Any]:
-            effective_spec: SelectorSpec = spec or SelectorSpec(
-                selector=fn,
-                output_serializer=output_serializer,
-            )
+            if spec is None:
+                if kind is None:
+                    raise TypeError(
+                        f"@selector_tool {name!r}: ``kind`` is required when "
+                        "``spec`` is omitted — the decorator auto-constructs a "
+                        "SelectorSpec and the spec's own ``kind`` field is "
+                        "mandatory. Pass kind=SelectorKind.LIST | RETRIEVE."
+                    )
+                effective_spec: SelectorSpec = SelectorSpec(
+                    kind=kind,
+                    selector=fn,
+                    output_serializer=output_serializer,
+                )
+            else:
+                effective_spec = spec
             self.register_selector_tool(
                 name=name,
                 spec=effective_spec,
@@ -418,6 +467,7 @@ class MCPServer:
                 argument_binding=argument_binding,
                 unknown_arguments=unknown_arguments,
                 always_listed=always_listed,
+                spec_kwargs_provides=spec_kwargs_provides,
             )
             return fn
 
@@ -427,6 +477,7 @@ class MCPServer:
         self,
         *,
         uri_template: str,
+        kind: SelectorKind | None = None,
         name: str | None = None,
         spec: SelectorSpec | None = None,
         description: str | None = None,
@@ -445,12 +496,27 @@ class MCPServer:
         the keyword arguments. The original function is returned unchanged
         so it remains callable from Python without going through the MCP
         transport.
+
+        ``kind`` is required when ``spec`` is omitted; otherwise it
+        comes from ``spec.kind`` and any value passed here is ignored.
         """
 
         def wrap(fn: Callable[..., Any]) -> Callable[..., Any]:
-            effective_spec: SelectorSpec = spec or SelectorSpec(
-                selector=fn, output_serializer=output_serializer
-            )
+            if spec is None:
+                if kind is None:
+                    raise TypeError(
+                        f"@resource {(name or getattr(fn, '__name__', 'resource'))!r}: "
+                        "``kind`` is required when ``spec`` is omitted — the "
+                        "decorator auto-constructs a SelectorSpec and the spec's "
+                        "own ``kind`` field is mandatory. Pass "
+                        "kind=SelectorKind.RETRIEVE (typical for URI templates) or "
+                        "kind=SelectorKind.LIST."
+                    )
+                effective_spec: SelectorSpec = SelectorSpec(
+                    kind=kind, selector=fn, output_serializer=output_serializer
+                )
+            else:
+                effective_spec = spec
             self.register_resource(
                 name=name or getattr(fn, "__name__", "resource"),
                 uri_template=uri_template,

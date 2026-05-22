@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from django.http import HttpRequest
+from rest_framework_services.types.selector_kind import SelectorKind
 from rest_framework_services.types.service_spec import ServiceSpec
 
 from rest_framework_mcp.auth.types.token_info import TokenInfo
@@ -115,6 +116,7 @@ def test_resources_read_returns_rate_limited_envelope() -> None:
             uri_template="r://",
             description=None,
             selector=lambda: {},
+            kind=SelectorKind.LIST,
             rate_limits=(_AlwaysDeny(retry=7),),
         )
     )
@@ -130,6 +132,7 @@ async def test_async_resources_read_returns_rate_limited_envelope() -> None:
             uri_template="r://",
             description=None,
             selector=lambda: {},
+            kind=SelectorKind.LIST,
             rate_limits=(_AlwaysDeny(retry=9),),
         )
     )

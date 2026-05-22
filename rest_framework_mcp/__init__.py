@@ -3,11 +3,11 @@
 # ``djangorestframework-services`` is mandatory anyway, so this is purely an
 # ergonomic convenience.
 from rest_framework_services.selectors.list_selector import ListSelector
-from rest_framework_services.selectors.output_selector import OutputSelector
 from rest_framework_services.selectors.retrieve_selector import RetrieveSelector
 from rest_framework_services.services.create_service import CreateService
 from rest_framework_services.services.delete_service import DeleteService
 from rest_framework_services.services.update_service import UpdateService
+from rest_framework_services.types.selector_kind import SelectorKind
 from rest_framework_services.types.selector_spec import SelectorSpec
 from rest_framework_services.types.service_spec import ServiceSpec
 from rest_framework_services.types.service_view import ServiceView
@@ -60,7 +60,6 @@ __all__ = [
     "MCPServer",
     "MCPServiceView",
     "OutputFormat",
-    "OutputSelector",
     "PromptArgument",
     "PromptMessage",
     "PromptRegistry",
@@ -70,6 +69,7 @@ __all__ = [
     "SSEReplayBuffer",
     "ScopeRequired",
     "SelectorDefaults",
+    "SelectorKind",
     "SelectorSpec",
     "ServiceDefaults",
     "ServiceSpec",

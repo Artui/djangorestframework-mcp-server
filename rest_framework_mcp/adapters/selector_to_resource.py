@@ -63,6 +63,7 @@ def selector_to_resource(
         description=description,
         title=title,
         selector=resolved_callable,
+        kind=selector.kind,
         output_serializer=output_serializer,
         mime_type=mime_type,
         permissions=effective_perms,

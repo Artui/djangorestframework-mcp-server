@@ -4,6 +4,7 @@ from typing import Any
 
 from rest_framework_services.types.service_spec import ServiceSpec
 
+from rest_framework_mcp.adapters.utils import validate_input_serializer_against_callable
 from rest_framework_mcp.auth.permissions.wrap_spec_permissions import wrap_spec_permissions
 from rest_framework_mcp.constants import ArgumentBinding, OutputFormat, UnknownArguments
 from rest_framework_mcp.registry.types.tool_binding import ToolBinding
@@ -24,6 +25,7 @@ def service_spec_to_tool(
     argument_binding: ArgumentBinding = ArgumentBinding.DATA_ONLY,
     unknown_arguments: UnknownArguments = UnknownArguments.REJECT,
     always_listed: bool = False,
+    spec_kwargs_provides: tuple[str, ...] = (),
 ) -> ToolBinding:
     """Lift a ``ServiceSpec`` into a :class:`ToolBinding`.
 
@@ -37,6 +39,13 @@ def service_spec_to_tool(
     contracts on the spec run before transport-level ``MCPPermission``
     instances, AND-combined.
     """
+    validate_input_serializer_against_callable(
+        label=f"service tool {name!r}",
+        input_serializer=spec.input_serializer,
+        callable_=spec.service,
+        argument_binding=argument_binding,
+        spec_kwargs_provides=frozenset(spec_kwargs_provides),
+    )
     spec_perms: tuple[Any, ...] = wrap_spec_permissions(spec.permission_classes, label=name)
     effective_perms: tuple[Any, ...] = spec_perms + tuple(permissions)
     return ToolBinding(

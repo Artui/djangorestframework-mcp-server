@@ -13,6 +13,7 @@ from typing import Any
 import pytest
 from django.http import HttpRequest
 from rest_framework.request import Request as DRFRequest
+from rest_framework_services.types.selector_kind import SelectorKind
 from rest_framework_services.types.selector_spec import SelectorSpec
 from rest_framework_services.types.service_spec import ServiceSpec
 
@@ -134,11 +135,11 @@ def test_register_resource_accepts_selector_spec() -> None:
     def get_invoice(*, pk: str) -> dict:
         return {"pk": pk, "via": "spec"}
 
-    spec = SelectorSpec(selector=get_invoice)
+    spec = SelectorSpec(kind=SelectorKind.RETRIEVE, selector=get_invoice)
     binding = server.register_resource(
         name="invoice",
         uri_template="invoices://{pk}",
-        selector=spec,  # type: ignore[arg-type]
+        selector=spec,  # type: ignore[arg-type],
     )
     assert binding.selector is get_invoice
     assert binding.kwargs_provider is None  # spec had no kwargs
@@ -156,7 +157,7 @@ def test_selector_spec_with_none_selector_is_rejected() -> None:
         server.register_resource(
             name="empty",
             uri_template="x://",
-            selector=SelectorSpec(selector=None),  # type: ignore[arg-type]
+            selector=SelectorSpec(kind=SelectorKind.LIST, selector=None),  # type: ignore[arg-type],
         )
 
 
@@ -173,11 +174,13 @@ def test_selector_spec_output_serializer_used_when_caller_omits() -> None:
     server = MCPServer(
         name="t", auth_backend=AllowAnyBackend(), session_store=InMemorySessionStore()
     )
-    spec = SelectorSpec(selector=lambda *, pk: {"pk": pk}, output_serializer=OutSer)
+    spec = SelectorSpec(
+        kind=SelectorKind.RETRIEVE, selector=lambda *, pk: {"pk": pk}, output_serializer=OutSer
+    )
     binding = server.register_resource(
         name="r",
         uri_template="r://{pk}",
-        selector=spec,  # type: ignore[arg-type]
+        selector=spec,  # type: ignore[arg-type],
     )
     assert binding.output_serializer is OutSer
 
@@ -198,11 +201,11 @@ def test_selector_spec_caller_output_serializer_wins() -> None:
     server = MCPServer(
         name="t", auth_backend=AllowAnyBackend(), session_store=InMemorySessionStore()
     )
-    spec = SelectorSpec(selector=lambda: {}, output_serializer=FromSpec)
+    spec = SelectorSpec(kind=SelectorKind.LIST, selector=lambda: {}, output_serializer=FromSpec)
     binding = server.register_resource(
         name="r",
         uri_template="r://",
-        selector=spec,  # type: ignore[arg-type]
+        selector=spec,  # type: ignore[arg-type],
         output_serializer=FromCaller,
     )
     assert binding.output_serializer is FromCaller
@@ -232,6 +235,7 @@ def test_selector_spec_kwargs_provider_invoked_on_read() -> None:
             uri_template="r://{pk}",
             description=None,
             selector=selector,
+            kind=SelectorKind.RETRIEVE,
             kwargs_provider=provider,
         )
     )
@@ -258,6 +262,7 @@ async def test_async_selector_spec_kwargs_provider_invoked_on_read() -> None:
             uri_template="r://{pk}",
             description=None,
             selector=selector,
+            kind=SelectorKind.RETRIEVE,
             kwargs_provider=provider,
         )
     )

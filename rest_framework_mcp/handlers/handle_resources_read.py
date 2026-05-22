@@ -3,6 +3,7 @@ from __future__ import annotations
 from typing import Any
 
 from rest_framework_services.selectors.utils import run_selector
+from rest_framework_services.types.selector_kind import SelectorKind
 from rest_framework_services.views.utils import resolve_callable_kwargs
 
 from rest_framework_mcp._compat.tracing import span
@@ -91,7 +92,7 @@ def handle_resources_read(
 
         payload: Any
         if binding.output_serializer is not None:
-            payload = binding.output_serializer(raw, many=isinstance(raw, list)).data
+            payload = binding.output_serializer(raw, many=binding.kind is SelectorKind.LIST).data
         else:
             payload = raw
 

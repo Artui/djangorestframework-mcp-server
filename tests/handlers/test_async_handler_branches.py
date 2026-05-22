@@ -7,6 +7,8 @@ from typing import Any
 from django.http import HttpRequest
 from rest_framework import serializers as drf_serializers
 from rest_framework_services.exceptions.service_validation_error import ServiceValidationError
+from rest_framework_services.types.selector_kind import SelectorKind
+from rest_framework_services.types.selector_spec import SelectorSpec
 from rest_framework_services.types.service_spec import ServiceSpec
 
 from rest_framework_mcp.auth.types.token_info import TokenInfo
@@ -169,7 +171,11 @@ async def test_async_tools_call_with_async_output_selector() -> None:
         ToolBinding(
             name="t",
             description=None,
-            spec=ServiceSpec(service=svc, output_selector=shape, atomic=False),
+            spec=ServiceSpec(
+                service=svc,
+                output_selector_spec=SelectorSpec(kind=SelectorKind.RETRIEVE, selector=shape),
+                atomic=False,
+            ),
         )
     )
     out = await handle_tools_call_async({"name": "t", "arguments": {}}, _ctx(tools))
@@ -206,6 +212,7 @@ async def test_async_resources_read_denied_by_permission() -> None:
             uri_template="r://",
             description=None,
             selector=selector,
+            kind=SelectorKind.LIST,
             permissions=(_DenyEveryone(),),
         )
     )
@@ -219,7 +226,13 @@ async def test_async_resources_read_passes_through_when_no_serializer() -> None:
 
     resources = ResourceRegistry()
     resources.register(
-        ResourceBinding(name="r", uri_template="r://{pk}", description=None, selector=selector)
+        ResourceBinding(
+            name="r",
+            uri_template="r://{pk}",
+            description=None,
+            selector=selector,
+            kind=SelectorKind.RETRIEVE,
+        )
     )
     out = await handle_resources_read_async({"uri": "r://7"}, _ctx(ToolRegistry(), resources))
     assert isinstance(out, dict)
@@ -253,7 +266,13 @@ async def test_async_resources_read_runs_async_selector_natively() -> None:
 
     resources = ResourceRegistry()
     resources.register(
-        ResourceBinding(name="r", uri_template="r://{pk}", description=None, selector=aselector)
+        ResourceBinding(
+            name="r",
+            uri_template="r://{pk}",
+            description=None,
+            selector=aselector,
+            kind=SelectorKind.RETRIEVE,
+        )
     )
     out = await handle_resources_read_async({"uri": "r://9"}, _ctx(ToolRegistry(), resources))
     assert isinstance(out, dict)
@@ -338,8 +357,11 @@ async def test_async_output_serializer_context_flows_into_render() -> None:
             description=None,
             spec=ServiceSpec(
                 service=svc,
-                output_serializer=_Out,
-                output_serializer_context=ctx_provider,
+                output_selector_spec=SelectorSpec(
+                    kind=SelectorKind.RETRIEVE,
+                    output_serializer=_Out,
+                    output_serializer_context=ctx_provider,
+                ),
                 atomic=False,
             ),
         )

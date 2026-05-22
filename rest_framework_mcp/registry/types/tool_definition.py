@@ -62,6 +62,15 @@ class ToolDefinition:
     # binding. ``None`` means "use the registration default" (which is
     # ``False``); ``True``/``False`` force the behaviour.
     always_listed: bool | None = None
+    # Explicit opt-in declaring that ``spec.kwargs(view, request)``
+    # supplies these required callable parameters at dispatch time.
+    # Trust must be declared per-transport because ``spec.kwargs`` is a
+    # runtime callable whose output depends on the view context (URL
+    # path params in DRF, URI template vars in MCP resources, neither
+    # in MCP tools). ``None`` means "no kwargs provider opt-in"; supply
+    # a sequence to acknowledge that the provider is the static source
+    # for those names.
+    spec_kwargs_provides: Sequence[str] | None = None
 
     @classmethod
     def service(
@@ -80,6 +89,7 @@ class ToolDefinition:
         argument_binding: ArgumentBinding | None = None,
         unknown_arguments: UnknownArguments | None = None,
         always_listed: bool | None = None,
+        spec_kwargs_provides: Sequence[str] | None = None,
     ) -> ToolDefinition:
         """Typed entry point for service-tool definitions."""
         return cls(
@@ -97,6 +107,7 @@ class ToolDefinition:
             argument_binding=argument_binding,
             unknown_arguments=unknown_arguments,
             always_listed=always_listed,
+            spec_kwargs_provides=spec_kwargs_provides,
         )
 
     @classmethod
@@ -120,8 +131,15 @@ class ToolDefinition:
         argument_binding: ArgumentBinding | None = None,
         unknown_arguments: UnknownArguments | None = None,
         always_listed: bool | None = None,
+        spec_kwargs_provides: Sequence[str] | None = None,
     ) -> ToolDefinition:
-        """Typed entry point for selector-tool definitions."""
+        """Typed entry point for selector-tool definitions.
+
+        The selector's ``LIST`` / ``RETRIEVE`` shape lives on the spec
+        (``SelectorSpec.kind``, required in
+        ``djangorestframework-services`` 0.13+), not here — the bulk
+        registration loop reads it from there.
+        """
         return cls(
             kind=ToolKind.SELECTOR,
             name=name,
@@ -141,6 +159,7 @@ class ToolDefinition:
             argument_binding=argument_binding,
             unknown_arguments=unknown_arguments,
             always_listed=always_listed,
+            spec_kwargs_provides=spec_kwargs_provides,
         )
 
 

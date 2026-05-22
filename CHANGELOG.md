@@ -7,6 +7,113 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed (breaking)
+
+- **Bumped `djangorestframework-services` to `==0.13.0`.** 0.13.0
+  ships its own `SelectorKind` enum (required on `SelectorSpec`) and
+  collapses `ServiceSpec`'s flat output pipeline into a single nested
+  `output_selector_spec: SelectorSpec | None`. Both changes are
+  visible across this package's public surface.
+
+- **Adopted upstream `SelectorKind`.** The local enum added earlier
+  in this release cycle is gone — `rest_framework_mcp` now re-exports
+  `rest_framework_services.types.selector_kind.SelectorKind`. The
+  values (`LIST` / `RETRIEVE`) and semantics are unchanged.
+
+- **The `kind` kwarg is gone from the imperative registration API.**
+  `MCPServer.register_selector_tool(...)` and
+  `MCPServer.register_resource(...)` now read the selector shape from
+  `spec.kind` (which `djangorestframework-services >= 0.13` makes a
+  required field on `SelectorSpec`). The same is true for the
+  underlying adapters (`selector_spec_to_tool`, `selector_to_resource`)
+  and for `ToolDefinition.selector` (the `selector_kind=` argument is
+  removed). Decorator forms `@server.selector_tool(...)` and
+  `@server.resource(...)` still accept `kind=` because they construct
+  a `SelectorSpec` from the wrapped function — but the value is only
+  consulted when `spec=` is omitted; an explicit spec wins.
+
+- **`SelectorToolBinding.kind` is now a derived property** that reads
+  through to `binding.spec.kind`. The dataclass no longer stores its
+  own copy. Cross-knob validation (`filter_set` / `ordering_fields` /
+  `paginate` rejected when `spec.kind == RETRIEVE`) still runs in
+  `__post_init__`.
+
+- **`ServiceSpec` output pipeline now lives on a nested
+  `output_selector_spec`.** The `@server.service_tool` decorator
+  builds the nested spec automatically when `output_serializer=` /
+  `output_selector=` is passed; the dispatch handlers
+  (`handle_tools_call`, `handle_tools_call_async`, `handle_tools_list`)
+  read every output-side field through it.
+
+- **Dropped the `OutputSelector` Protocol re-export.** Sister-repo
+  0.13 removed the Protocol — the post-mutation re-fetch selector is
+  structurally a `RetrieveSelector` nested under
+  `ServiceSpec.output_selector_spec`. Replace any
+  `from rest_framework_mcp import OutputSelector` with
+  `RetrieveSelector` (or drop the import — the structural shape was
+  rarely needed at type-check time).
+
+  **Migration**:
+  - Every `SelectorSpec(...)` call must now pass `kind=SelectorKind.LIST`
+    or `kind=SelectorKind.RETRIEVE`. The mechanical translation is
+    "this is a list-shaped selector → `LIST`; this returns a single
+    instance → `RETRIEVE`."
+  - Every `ServiceSpec(output_serializer=..., output_selector=..., ...)`
+    becomes `ServiceSpec(output_selector_spec=SelectorSpec(
+    kind=SelectorKind.RETRIEVE, selector=..., output_serializer=..., ...))`.
+  - Drop `kind=` from `register_selector_tool` /
+    `register_resource` / `ToolDefinition.selector` (drop
+    `selector_kind=`) calls — the value now travels on the spec.
+
+### Added
+
+- **Registration-time check that `input_serializer` fields actually
+  reach the callable.** Both `selector_spec_to_tool` and
+  `service_spec_to_tool` now raise `ImproperlyConfigured` at
+  registration when:
+  - `argument_binding=DATA_ONLY` but the callable doesn't declare a
+    `data` parameter (nor accept `**kwargs`) — the validated payload
+    would be silently dropped on dispatch.
+  - `argument_binding=MERGE` / `REPLACE` and the serializer declares
+    a field name the callable doesn't accept (and the callable has no
+    `**kwargs` catch-all, *and* no `data` bundle parameter).
+  Reserved pool-seed names (`request` / `user` / `data`) and selector
+  post-fetch keys (`ordering` / `page` / `limit`) are exempted because
+  the dispatch pipeline strips them from the spread before invoking
+  the callable. Previously, mismatches would surface at the first
+  client call with no observable error — fields were silently dropped
+  by `resolve_callable_kwargs`.
+
+- **Registration-time check that every required callable parameter
+  has a static source on the MCP transport.** The reverse direction
+  of the above. When an `input_serializer` is declared (i.e. you're
+  opting *in* to a static input contract), every required parameter
+  on the dispatched callable must be reachable from one of:
+  - an `input_serializer` field (in `MERGE` / `REPLACE` mode);
+  - a reserved pool seed (`request` / `user` / `data`);
+  - the new `spec_kwargs_provides=(...)` opt-in declaring that
+    `spec.kwargs(view, request)` will supply the value.
+
+  Parameters with defaults, `**kwargs` callables, and `data`-bundle
+  callables are exempt. `input_serializer=None` is "trust mode" —
+  client args spread verbatim and the static check is skipped (only
+  pool seeds and the opt-in still apply).
+
+  Rationale: a `SelectorSpec` can be reused across DRF API views and
+  MCP transports, but `spec.kwargs(...)` is a runtime callable whose
+  output depends on the view context (URL path params on the API
+  side, URI template variables on MCP resources, neither on MCP
+  tools). Trusting `spec.kwargs` to satisfy a required parameter on
+  the MCP side is therefore *opt-in* — list the parameter names in
+  `spec_kwargs_provides=` at registration to make that trust visible
+  at the transport boundary.
+
+  `spec_kwargs_provides: tuple[str, ...]` is now accepted by
+  `register_selector_tool`, `register_service_tool`, the
+  `@server.selector_tool` / `@server.service_tool` decorators,
+  `selector_spec_to_tool`, `service_spec_to_tool`, and
+  `ToolDefinition.selector` / `ToolDefinition.service`.
+
 ## [0.4.0] — 2026-05-20
 
 ### Changed

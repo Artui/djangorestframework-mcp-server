@@ -19,6 +19,7 @@ from rest_framework_mcp import (
     ArgumentBinding,
     MCPServer,
     SelectorDefaults,
+    SelectorKind,
     ServiceDefaults,
     ToolDefinition,
     UnknownArguments,
@@ -90,14 +91,14 @@ def build_conformance_server() -> MCPServer:
     # 10b — unknown-args REJECT on a strict-known selector.
     server.register_selector_tool(
         name="conformance.reject_unknown",
-        spec=SelectorSpec(selector=_project_scoped_selector),
+        spec=SelectorSpec(kind=SelectorKind.LIST, selector=_project_scoped_selector),
         input_serializer=_ProjectScopedArgs,
         unknown_arguments=UnknownArguments.REJECT,
     )
     # 10b — unknown-args PASSTHROUGH sibling.
     server.register_selector_tool(
         name="conformance.passthrough_unknown",
-        spec=SelectorSpec(selector=_project_scoped_selector),
+        spec=SelectorSpec(kind=SelectorKind.LIST, selector=_project_scoped_selector),
         input_serializer=_ProjectScopedArgs,
         unknown_arguments=UnknownArguments.PASSTHROUGH,
     )
@@ -108,7 +109,7 @@ def build_conformance_server() -> MCPServer:
         definitions=[
             ToolDefinition.selector(
                 name="conformance.bulk_listed",
-                spec=SelectorSpec(selector=_bulk_list),
+                spec=SelectorSpec(kind=SelectorKind.LIST, selector=_bulk_list),
                 description="Registered via register_tools()",
             ),
             ToolDefinition.service(

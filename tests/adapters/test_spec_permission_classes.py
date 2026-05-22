@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import pytest
 from rest_framework.permissions import BasePermission, IsAuthenticated
+from rest_framework_services.types.selector_kind import SelectorKind
 from rest_framework_services.types.selector_spec import SelectorSpec
 from rest_framework_services.types.service_spec import ServiceSpec
 
@@ -89,7 +90,9 @@ def test_service_spec_instance_in_permission_classes_raises() -> None:
 
 
 def test_selector_spec_permission_classes_wrap_into_binding() -> None:
-    spec: SelectorSpec = SelectorSpec(selector=_sel, permission_classes=[IsAuthenticated])
+    spec: SelectorSpec = SelectorSpec(
+        kind=SelectorKind.LIST, selector=_sel, permission_classes=[IsAuthenticated]
+    )
     binding = selector_spec_to_tool(name="t", spec=spec)
     assert len(binding.permissions) == 1
     assert isinstance(binding.permissions[0], DRFPermissionAdapter)
@@ -97,7 +100,9 @@ def test_selector_spec_permission_classes_wrap_into_binding() -> None:
 
 
 def test_selector_to_resource_permission_classes_wrap_into_binding() -> None:
-    spec: SelectorSpec = SelectorSpec(selector=_sel, permission_classes=[IsAuthenticated])
+    spec: SelectorSpec = SelectorSpec(
+        kind=SelectorKind.LIST, selector=_sel, permission_classes=[IsAuthenticated]
+    )
     binding = selector_to_resource(name="r", uri_template="r://x", selector=spec)
     assert len(binding.permissions) == 1
     assert isinstance(binding.permissions[0], DRFPermissionAdapter)

@@ -21,6 +21,7 @@ from django.db import models
 from django.http import HttpRequest
 from rest_framework import serializers as drf_serializers
 from rest_framework.request import Request
+from rest_framework_services.types.selector_kind import SelectorKind
 from rest_framework_services.types.selector_spec import SelectorSpec
 from rest_framework_services.types.service_spec import ServiceSpec
 
@@ -64,6 +65,7 @@ def test_selector_spec_empty_shaping_is_noop() -> None:
     server.register_selector_tool(
         name="invoices.list",
         spec=SelectorSpec(
+            kind=SelectorKind.LIST,
             selector=_list_all_invoices,
             output_serializer=InvoiceOutputSerializer,
             select_related=(),
@@ -93,6 +95,7 @@ def test_selector_spec_annotations_attach_to_each_row() -> None:
     server.register_selector_tool(
         name="invoices.list",
         spec=SelectorSpec(
+            kind=SelectorKind.LIST,
             selector=_list_all_invoices,
             output_serializer=_Out,
             annotations={"annotated_double": models.F("amount_cents") * 2},
@@ -123,6 +126,7 @@ def test_selector_spec_extend_queryset_runs_last() -> None:
     server.register_selector_tool(
         name="invoices.list",
         spec=SelectorSpec(
+            kind=SelectorKind.LIST,
             selector=_list_all_invoices,
             output_serializer=InvoiceOutputSerializer,
             extend_queryset=_narrow,
@@ -152,6 +156,7 @@ def test_selector_spec_prefetch_related_applies() -> None:
     server.register_selector_tool(
         name="invoices.list",
         spec=SelectorSpec(
+            kind=SelectorKind.LIST,
             selector=_list_all_invoices,
             output_serializer=InvoiceOutputSerializer,
             prefetch_related=("bogus_relation_not_evaluated",),
@@ -176,6 +181,7 @@ def test_selector_spec_select_related_lookups_recorded() -> None:
     server.register_selector_tool(
         name="invoices.list",
         spec=SelectorSpec(
+            kind=SelectorKind.LIST,
             selector=_list_all_invoices,
             output_serializer=InvoiceOutputSerializer,
             select_related=("invalid_fk",),
@@ -198,6 +204,7 @@ def test_selector_spec_shaping_skipped_for_list_returns() -> None:
     server.register_selector_tool(
         name="static.list",
         spec=SelectorSpec(
+            kind=SelectorKind.LIST,
             selector=_return_list,
             # Shaping fields declared but inapplicable; must not raise.
             select_related=("ignored",),
@@ -234,6 +241,7 @@ def test_selector_spec_output_serializer_context_flows_into_render() -> None:
     server.register_selector_tool(
         name="invoices.list",
         spec=SelectorSpec(
+            kind=SelectorKind.LIST,
             selector=_list_all_invoices,
             output_serializer=_ContextProbeSerializer,
             output_serializer_context=_ctx_provider,
@@ -297,8 +305,11 @@ def test_service_spec_output_serializer_context_flows_into_render() -> None:
         name="t",
         spec=ServiceSpec(
             service=_svc,
-            output_serializer=_Out,
-            output_serializer_context=_ctx_provider,
+            output_selector_spec=SelectorSpec(
+                kind=SelectorKind.RETRIEVE,
+                output_serializer=_Out,
+                output_serializer_context=_ctx_provider,
+            ),
             atomic=False,
         ),
     )

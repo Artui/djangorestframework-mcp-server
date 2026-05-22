@@ -60,19 +60,26 @@ def _render_output(
     *,
     context: Mapping[str, Any] | None = None,
 ) -> Any:
-    """Convert ``result`` to a JSON-shaped payload using ``spec.output_serializer``.
+    """Convert ``result`` to a JSON-shaped payload using the spec's output serializer.
 
-    Falls back to the raw value if no output serializer is declared. ``None``
-    becomes ``{}`` so MCP clients always receive a JSON object as
-    ``structuredContent``. ``context`` is forwarded to the serializer when
-    set so sister-repo's ``output_serializer_context`` participates in
-    field rendering.
+    Sister-repo 0.13+ collapsed the previously-flat output fields
+    (``output_serializer`` / ``output_selector`` /
+    ``output_serializer_context``) into a single nested
+    ``output_selector_spec: SelectorSpec | None``. We read the
+    serializer from there; an absent or serializer-less nested spec
+    falls back to passthrough. ``None`` becomes ``{}`` so MCP clients
+    always receive a JSON object as ``structuredContent``. ``context``
+    is forwarded to the serializer when set so sister-repo's
+    ``output_serializer_context`` participates in field rendering.
     """
-    if spec.output_serializer is None:
+    output_serializer = (
+        spec.output_selector_spec.output_serializer if spec.output_selector_spec else None
+    )
+    if output_serializer is None:
         return {} if result is None else result
     if context is None:
-        return spec.output_serializer(result).data
-    return spec.output_serializer(result, context=dict(context)).data
+        return output_serializer(result).data
+    return output_serializer(result, context=dict(context)).data
 
 
 def handle_tools_call(
@@ -189,24 +196,26 @@ def handle_tools_call(
                 otel_span.record_exception(exc)
             return JsonRpcError(JsonRpcErrorCode.SERVER_ERROR, exc.message)
 
-        if binding.spec.output_selector is not None:
+        # Sister-repo 0.13+ moved the output pipeline under
+        # ``spec.output_selector_spec``: an optional nested ``SelectorSpec``
+        # whose ``.selector`` (if set) re-fetches the just-mutated row and
+        # whose ``.output_serializer_context`` callable (if set) contributes
+        # serializer context. The flat fields no longer exist.
+        out_spec = binding.spec.output_selector_spec
+        if out_spec is not None and out_spec.selector is not None:
             sel_pool: dict[str, Any] = {
                 "request": drf_request,
                 "user": context.token.user,
                 "instance": result,
                 "result": result,
             }
-            sel_kwargs: dict[str, Any] = resolve_callable_kwargs(
-                binding.spec.output_selector, sel_pool
-            )
-            result = run_selector(binding.spec.output_selector, sel_kwargs)
+            sel_kwargs: dict[str, Any] = resolve_callable_kwargs(out_spec.selector, sel_pool)
+            result = run_selector(out_spec.selector, sel_kwargs)
 
         output_context: Mapping[str, Any] | None = None
-        if binding.spec.output_serializer_context is not None:
+        if out_spec is not None and out_spec.output_serializer_context is not None:
             output_context_view = MCPServiceView(request=drf_request, action=binding.name)
-            output_context = binding.spec.output_serializer_context(
-                output_context_view, drf_request
-            )
+            output_context = out_spec.output_serializer_context(output_context_view, drf_request)
         payload: Any = _render_output(result, binding.spec, context=output_context)
         output_format: OutputFormat = OutputFormat.coerce(
             params.get("outputFormat") or binding.output_format

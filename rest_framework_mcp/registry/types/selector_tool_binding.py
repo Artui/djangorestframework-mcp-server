@@ -5,6 +5,7 @@ from dataclasses import dataclass, field
 from typing import Any, Generic, TypeVar
 
 from django.core.exceptions import ImproperlyConfigured
+from rest_framework_services.types.selector_kind import SelectorKind
 from rest_framework_services.types.selector_spec import SelectorSpec
 
 from rest_framework_mcp.constants import ArgumentBinding, OutputFormat, UnknownArguments
@@ -18,7 +19,10 @@ class SelectorToolBinding(Generic[ResultT, ExtraT]):
     """All wiring for a single MCP **read-shaped** tool, derived from a ``SelectorSpec``.
 
     Mirrors :class:`ToolBinding` (which wraps a ``ServiceSpec`` for
-    mutations), but the dispatch pipeline is read-shaped:
+    mutations), but the dispatch pipeline is read-shaped. The shape is
+    chosen by :attr:`kind`:
+
+    ``kind=LIST`` runs the full pipeline:
 
     .. code-block:: text
 
@@ -29,10 +33,17 @@ class SelectorToolBinding(Generic[ResultT, ExtraT]):
                   → output_serializer(many=True)
                   → ToolResult
 
-    Selectors return raw, unscoped querysets — the tool layer owns the
-    post-fetch pipeline. A binding with none of ``filter_set`` /
-    ``ordering_fields`` / ``paginate`` set behaves like a plain RPC read
-    that calls the selector and renders its return value verbatim.
+    ``kind=RETRIEVE`` skips the post-fetch pipeline entirely — the
+    selector's single-instance return goes straight to
+    ``output_serializer(many=False)``. Combining ``RETRIEVE`` with
+    ``filter_set`` / ``ordering_fields`` / ``paginate`` is rejected at
+    construction (those knobs only make sense on a collection).
+
+    Selectors return raw, unscoped data (a queryset for ``LIST``, a
+    single instance for ``RETRIEVE``) — the tool layer owns shape
+    decisions. A ``LIST`` binding with none of ``filter_set`` /
+    ``ordering_fields`` / ``paginate`` set behaves like a plain RPC
+    read that calls the selector and renders its return value verbatim.
 
     The ``Generic[InputT, ResultT, ExtraT]`` parameters mirror
     ``SelectorSpec``'s generics and are purely informational for type
@@ -104,6 +115,34 @@ class SelectorToolBinding(Generic[ResultT, ExtraT]):
                 "requires that any tool advertising outputSchema also return "
                 "conforming structuredContent. Set one of them differently."
             )
+        if self.kind is SelectorKind.RETRIEVE:
+            list_only: list[str] = []
+            if self.filter_set is not None:
+                list_only.append("filter_set")
+            if self.ordering_fields:
+                list_only.append("ordering_fields")
+            if self.paginate:
+                list_only.append("paginate")
+            if list_only:
+                raise ImproperlyConfigured(
+                    f"Selector tool {self.name!r}: spec.kind=RETRIEVE is incompatible "
+                    f"with list-shaped pipeline knob(s) {sorted(list_only)!r}. A "
+                    "retrieve selector returns a single instance — there is no "
+                    "queryset to filter, order, or paginate. Either drop the "
+                    "knob(s) or set the spec's kind to LIST."
+                )
+
+    @property
+    def kind(self) -> SelectorKind:
+        """Shape discriminator — derived from the spec's required ``kind`` field.
+
+        Sister-repo 0.13+ made ``kind`` a required field on
+        :class:`SelectorSpec`, so the binding doesn't store an
+        independent copy — it would only be a chance for the two to
+        drift. Exposed as a property so the dispatch layer can keep
+        reading ``binding.kind`` unchanged.
+        """
+        return self.spec.kind
 
     @property
     def selector(self) -> Callable[..., ResultT]:

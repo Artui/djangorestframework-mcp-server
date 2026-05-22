@@ -103,8 +103,9 @@ Replace the custom view with a single `MCPServer` instance:
 
 ```python
 # After — wired through MCPServer
-from rest_framework_services.types.service_spec import ServiceSpec
+from rest_framework_services.types.selector_kind import SelectorKind
 from rest_framework_services.types.selector_spec import SelectorSpec
+from rest_framework_services.types.service_spec import ServiceSpec
 from rest_framework_mcp import MCPServer
 
 server = MCPServer(name="invoicing")
@@ -114,14 +115,21 @@ server.register_service_tool(
     spec=ServiceSpec(
         service=create_invoice,
         input_serializer=InvoiceInput,
-        output_serializer=InvoiceOutput,
+        output_selector_spec=SelectorSpec(
+            kind=SelectorKind.RETRIEVE,
+            output_serializer=InvoiceOutput,
+        ),
     ),
     description="Create a new invoice.",
 )
 
 server.register_selector_tool(
     name="invoices.list",
-    spec=SelectorSpec(selector=list_invoices, output_serializer=InvoiceOutput),
+    spec=SelectorSpec(
+        kind=SelectorKind.LIST,
+        selector=list_invoices,
+        output_serializer=InvoiceOutput,
+    ),
     paginate=True,
 )
 ```
@@ -158,7 +166,7 @@ mechanical because both packages think in terms of "callable + schema":
 |------------------------------------------------------------|------------------------------------------------------------------------|
 | `@mcp.tool` on a FastAPI handler                           | `register_service_tool(...)` or `@server.service_tool`                  |
 | Pydantic input model                                       | DRF `Serializer` (or `@dataclass` — the package generates the schema)   |
-| Pydantic output model                                      | DRF `Serializer` on `ServiceSpec.output_serializer`                     |
+| Pydantic output model                                      | DRF `Serializer` on `ServiceSpec.output_selector_spec.output_serializer` |
 | `@mcp.resource("uri://{var}")`                             | `register_resource(uri_template="uri://{var}", selector=SelectorSpec(...))` |
 | `@mcp.prompt`                                              | `register_prompt(name=..., render=...)`                                 |
 | FastAPI's dependency injection (`request`, `db`, etc.)     | The kwarg pool — declare the kwargs you need on the callable; `resolve_callable_kwargs` handles the rest |
@@ -189,7 +197,10 @@ server.register_service_tool(
     spec=ServiceSpec(
         service=create_invoice,
         input_serializer=InvoiceInput,
-        output_serializer=InvoiceOutput,
+        output_selector_spec=SelectorSpec(
+            kind=SelectorKind.RETRIEVE,
+            output_serializer=InvoiceOutput,
+        ),
     ),
 )
 ```

@@ -75,14 +75,23 @@ def handle_tools_list(
             include_structured_content_override=binding.include_structured_content,
             binding_name=binding.name,
         )
+        # Sister-repo 0.13+: a service tool's response serializer lives
+        # at ``ServiceSpec.output_selector_spec.output_serializer``; a
+        # selector tool's still lives flat on the ``SelectorSpec``.
+        if isinstance(binding, SelectorToolBinding):
+            output_serializer = binding.spec.output_serializer
+        else:
+            output_serializer = (
+                binding.spec.output_selector_spec.output_serializer
+                if binding.spec.output_selector_spec
+                else None
+            )
         tool = Tool(
             name=binding.name,
             description=binding.description,
             title=binding.title,
             input_schema=input_schema,
-            output_schema=(
-                build_output_schema(binding.spec.output_serializer) if emit_output_schema else None
-            ),
+            output_schema=(build_output_schema(output_serializer) if emit_output_schema else None),
             annotations=dict(binding.annotations) or None,
         )
         tools.append(tool.to_dict())

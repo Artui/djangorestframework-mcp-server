@@ -1,6 +1,8 @@
 """Selector-tool dispatch — sync + async paths to the read pipeline.
 
-The pipeline (any subset of which is optional, gated by binding flags):
+Two shapes, gated by ``binding.kind``:
+
+``LIST`` (subset of steps optional, gated by binding flags):
 
 .. code-block:: text
 
@@ -12,9 +14,21 @@ The pipeline (any subset of which is optional, gated by binding flags):
               → output_serializer(many=True)
               → ToolResult
 
-The post-fetch pipeline (filter / order / paginate) is the differentiator
-from service-tool dispatch and is owned by the **tool layer**, not the
-selector. Selectors return raw, unscoped querysets.
+``RETRIEVE`` short-circuits the post-fetch pipeline (the binding
+rejects ``filter_set`` / ``ordering_fields`` / ``paginate`` at
+construction) and renders the single result:
+
+.. code-block:: text
+
+    arguments → permission check → rate limit → validate(input_serializer)
+              → run_selector
+              → output_serializer(many=False)
+              → ToolResult
+
+The post-fetch pipeline is the differentiator from service-tool
+dispatch and is owned by the **tool layer**, not the selector.
+Selectors return raw, unscoped data (queryset for ``LIST``,
+single instance for ``RETRIEVE``).
 """
 
 from __future__ import annotations
@@ -26,6 +40,7 @@ from rest_framework import serializers as drf_serializers
 from rest_framework_services.exceptions.service_error import ServiceError
 from rest_framework_services.exceptions.service_validation_error import ServiceValidationError
 from rest_framework_services.selectors.utils import run_selector
+from rest_framework_services.types.selector_kind import SelectorKind
 from rest_framework_services.views.utils import resolve_callable_kwargs
 
 from rest_framework_mcp._compat.acall import acall
@@ -250,7 +265,31 @@ def _post_fetch_and_render(
     arguments_raw: dict[str, Any],
     params: dict[str, Any],
 ) -> dict[str, Any]:
-    """Apply shaping → filter → order → paginate, then render via output_serializer."""
+    """Apply shaping → filter → order → paginate, then render via output_serializer.
+
+    ``kind=RETRIEVE`` short-circuits all list-shaped steps and goes
+    straight to single-instance rendering — the binding rejects
+    ``filter_set`` / ``ordering_fields`` / ``paginate`` at construction
+    so there is nothing to skip dynamically here.
+    """
+    output_format: OutputFormat = OutputFormat.coerce(
+        params.get("outputFormat") or binding.output_format
+    )
+    _emit_output_schema, emit_structured_content = resolve_structured_output(
+        include_output_schema_override=binding.include_output_schema,
+        include_structured_content_override=binding.include_structured_content,
+        binding_name=binding.name,
+    )
+
+    if binding.kind is SelectorKind.RETRIEVE:
+        context: Mapping[str, Any] | None = _resolve_output_context(binding, drf_request)
+        payload: Any = _render_single(result, binding, context=context)
+        return build_tool_result(
+            payload,
+            output_format=output_format,
+            include_structured_content=emit_structured_content,
+        ).to_dict()
+
     qs: Any = result
 
     # Per-spec QuerySet shaping (sister-repo 0.12+): runs *before* FilterSet
@@ -272,30 +311,21 @@ def _post_fetch_and_render(
     # Output-serializer context (sister-repo 0.12+): the spec callable
     # receives the synthesised view + request and contributes context keys
     # to the ``many=True`` serializer. ``None`` from the spec → no context.
-    context: Mapping[str, Any] | None = _resolve_output_context(binding, drf_request)
+    context = _resolve_output_context(binding, drf_request)
 
     # Pagination — wraps the response in ``{items, page, totalPages, hasNext}``.
     if binding.paginate:
         page_no, limit, page_items, total = _slice_for_pagination(qs, arguments_raw)
         rendered_items = _render_collection(page_items, binding, context=context)
         total_pages: int = max(1, -(-total // limit))  # ceil divide
-        payload: dict[str, Any] = {
+        payload = {
             "items": rendered_items,
             "page": page_no,
             "totalPages": total_pages,
             "hasNext": page_no < total_pages,
         }
     else:
-        payload = _render_collection(qs, binding, context=context)  # type: ignore[assignment]
-
-    output_format: OutputFormat = OutputFormat.coerce(
-        params.get("outputFormat") or binding.output_format
-    )
-    _emit_output_schema, emit_structured_content = resolve_structured_output(
-        include_output_schema_override=binding.include_output_schema,
-        include_structured_content_override=binding.include_structured_content,
-        binding_name=binding.name,
-    )
+        payload = _render_collection(qs, binding, context=context)
     return build_tool_result(
         payload,
         output_format=output_format,
@@ -390,6 +420,27 @@ def _render_collection(
     if context is None:
         return output_serializer(items, many=True).data
     return output_serializer(items, many=True, context=dict(context)).data
+
+
+def _render_single(
+    instance: Any,
+    binding: SelectorToolBinding,
+    *,
+    context: Mapping[str, Any] | None = None,
+) -> Any:
+    """Render a single instance through the binding's output serializer.
+
+    Used for ``kind=RETRIEVE``. Falls back to passing ``instance``
+    through unchanged when no serializer is declared — the JSON encoder
+    then handles primitives / dicts directly. ``context`` follows the
+    same sister-repo contract as :func:`_render_collection`.
+    """
+    output_serializer: type | None = binding.spec.output_serializer
+    if output_serializer is None:
+        return instance
+    if context is None:
+        return output_serializer(instance, many=False).data
+    return output_serializer(instance, many=False, context=dict(context)).data
 
 
 def _apply_spec_shaping(binding: SelectorToolBinding, qs: Any, drf_request: Any) -> Any:
