@@ -17,6 +17,7 @@ from rest_framework_mcp._compat.utils import (
 from rest_framework_mcp.conf import get_setting
 from rest_framework_mcp.constants import JsonRpcErrorCode, OutputFormat
 from rest_framework_mcp.handlers.build_call_pool import build_call_pool
+from rest_framework_mcp.handlers.chain_tool_dispatch import dispatch_chain_tool_async
 from rest_framework_mcp.handlers.handle_tools_call import (
     _render_output,
     _span_attrs,
@@ -34,6 +35,7 @@ from rest_framework_mcp.handlers.utils import (
 from rest_framework_mcp.output.resolve_structured_output import resolve_structured_output
 from rest_framework_mcp.output.tool_result import build_tool_result
 from rest_framework_mcp.protocol.types.json_rpc_error import JsonRpcError
+from rest_framework_mcp.registry.types.chain_tool_binding import ChainToolBinding
 from rest_framework_mcp.registry.types.selector_tool_binding import SelectorToolBinding
 from rest_framework_mcp.server.types.mcp_service_view import MCPServiceView
 
@@ -71,9 +73,14 @@ async def handle_tools_call_async(
         return JsonRpcError(JsonRpcErrorCode.INVALID_PARAMS, "'arguments' must be an object")
 
     with span("mcp.tools.call", attributes=_span_attrs(binding.name, context)) as otel_span:
-        # Read-shaped tools route through the selector-tool dispatch
-        # helper (filter / order / paginate). Mutation tools fall
-        # through to the existing service-tool path below.
+        # Chain tools run an ordered sequence of specs; read-shaped tools
+        # route through the selector-tool dispatch helper (filter / order /
+        # paginate). Mutation tools fall through to the service-tool path
+        # below.
+        if isinstance(binding, ChainToolBinding):
+            return await dispatch_chain_tool_async(
+                binding, params, arguments_raw, context, otel_span
+            )
         if isinstance(binding, SelectorToolBinding):
             return await dispatch_selector_tool_async(
                 binding, params, arguments_raw, context, otel_span

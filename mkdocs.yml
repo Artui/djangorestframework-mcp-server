@@ -92,6 +92,7 @@ nav:
       - Resume SSE with Last-Event-ID: recipes/sse-replay-buffer.md
       - Honor drf-spectacular annotations: recipes/drf-spectacular.md
       - Selector tool with FilterSet: recipes/selector-tool-with-filterset.md
+      - Chain specs into one tool: recipes/chain-tools.md
       - Migrate from fastapi-mcp / hand-rolled: recipes/migrating.md
   - Reference:
       - reference/index.md

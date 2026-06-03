@@ -9,6 +9,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **Chain tools (`MCPServer.register_chain_tool`).** Sequence several
+  `ServiceSpec` / `SelectorSpec` steps behind a single MCP tool, where later
+  steps read earlier outputs — `retrieve x → write y → write z` with `z`
+  derived from both `x` and `y`. Each `ChainStep` binds its result to an
+  alias readable via `ctx[alias]`; an optional `inputs(ctx)` callable maps
+  the validated tool arguments (`ctx.args`) and prior outputs to that step's
+  kwargs. `atomic=True` (default) runs the whole sequence in one
+  `transaction.atomic()` — any step raising `ServiceError` /
+  `ServiceValidationError` rolls back every prior write and the JSON-RPC
+  error carries `failedStep`. The advertised `inputSchema` is the chain's
+  explicit `input_serializer` or the first step's (the first-step fallback);
+  the response is the `output_alias` step (default: last) or `{alias:
+  rendered}` for every serializer-bearing step under `output_all=True`. Each
+  step's `spec.permission_classes` are AND-combined with chain-level
+  `permissions` and checked up front. Sync + async. New public exports:
+  `ChainStep`, `ChainContext`.
 - **Resolved-data output serializer context (sister-repo 0.15+).** Output
   context providers may now declare a keyword for the data about to be
   serialized — `result` (service tool), `instance` (selector RETRIEVE), or

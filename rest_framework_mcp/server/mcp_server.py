@@ -10,6 +10,7 @@ from rest_framework_services.types.selector_kind import SelectorKind
 from rest_framework_services.types.selector_spec import SelectorSpec
 from rest_framework_services.types.service_spec import ServiceSpec
 
+from rest_framework_mcp.adapters.chain_to_tool import chain_steps_to_tool
 from rest_framework_mcp.adapters.selector_to_resource import selector_to_resource
 from rest_framework_mcp.adapters.selector_to_tool import selector_spec_to_tool
 from rest_framework_mcp.adapters.service_to_tool import service_spec_to_tool
@@ -21,6 +22,8 @@ from rest_framework_mcp.protocol.types.prompt_argument import PromptArgument
 from rest_framework_mcp.registry.prompt_registry import PromptRegistry
 from rest_framework_mcp.registry.resource_registry import ResourceRegistry
 from rest_framework_mcp.registry.tool_registry import ToolRegistry
+from rest_framework_mcp.registry.types.chain_step import ChainStep
+from rest_framework_mcp.registry.types.chain_tool_binding import ChainToolBinding
 from rest_framework_mcp.registry.types.prompt_binding import PromptBinding
 from rest_framework_mcp.registry.types.resource_binding import ResourceBinding
 from rest_framework_mcp.registry.types.selector_tool_binding import SelectorToolBinding
@@ -234,6 +237,76 @@ class MCPServer:
             unknown_arguments=unknown_arguments,
             always_listed=always_listed,
             spec_kwargs_provides=spec_kwargs_provides,
+        )
+        self._tools.register(binding)
+        return binding
+
+    def register_chain_tool(
+        self,
+        *,
+        name: str,
+        steps: list[ChainStep] | tuple[ChainStep, ...],
+        description: str | None = None,
+        title: str | None = None,
+        input_serializer: type | None = None,
+        atomic: bool = True,
+        output_alias: str | None = None,
+        output_all: bool = False,
+        output_format: OutputFormat | str = OutputFormat.JSON,
+        permissions: list[Any] | None = None,
+        rate_limits: list[Any] | None = None,
+        annotations: dict[str, Any] | None = None,
+        include_structured_content: bool | None = None,
+        include_output_schema: bool | None = None,
+        unknown_arguments: UnknownArguments = UnknownArguments.REJECT,
+        always_listed: bool = False,
+    ) -> ChainToolBinding:
+        """Register an ordered sequence of specs as a single MCP tool.
+
+        Each :class:`~rest_framework_mcp.registry.types.chain_step.ChainStep`
+        wraps a ``ServiceSpec`` (write) or ``SelectorSpec`` (read) and binds
+        its result to an alias. A step's ``inputs`` callable reads the
+        validated tool arguments (``ctx.args``) and any prior step's output
+        (``ctx[alias]``) to build that step's call kwargs — so one tool call
+        can express ``retrieve x → write y → write z`` with ``z`` derived
+        from both ``x`` and ``y``.
+
+        ``atomic=True`` (the default) runs the whole sequence inside one
+        ``transaction.atomic()``: any step raising a
+        ``ServiceError`` / ``ServiceValidationError`` rolls back every prior
+        write and the JSON-RPC error carries ``failedStep``.
+
+        The advertised ``inputSchema`` is ``input_serializer`` when set,
+        otherwise the first step's serializer (the first-step fallback). The
+        response is the ``output_alias`` step's rendered output (default: the
+        last step), or ``{alias: rendered}`` for every serializer-bearing
+        step when ``output_all=True``.
+
+        Each step's ``spec.permission_classes`` are AND-combined with the
+        chain-level ``permissions`` and evaluated up front — a failing step
+        permission blocks the whole chain before any step runs.
+
+        Chains deliberately do not run the selector post-fetch pipeline
+        (filter / order / paginate); for that, expose the selector as its
+        own :meth:`register_selector_tool`.
+        """
+        binding = chain_steps_to_tool(
+            name=name,
+            steps=tuple(steps),
+            description=description,
+            title=title,
+            input_serializer=input_serializer,
+            atomic=atomic,
+            output_alias=output_alias,
+            output_all=output_all,
+            output_format=OutputFormat.coerce(output_format),
+            permissions=tuple(permissions or ()),
+            rate_limits=tuple(rate_limits or ()),
+            annotations=annotations,
+            include_structured_content=include_structured_content,
+            include_output_schema=include_output_schema,
+            unknown_arguments=unknown_arguments,
+            always_listed=always_listed,
         )
         self._tools.register(binding)
         return binding

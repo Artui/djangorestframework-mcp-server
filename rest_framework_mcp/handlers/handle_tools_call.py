@@ -15,6 +15,7 @@ from rest_framework_mcp._compat.tracing import span
 from rest_framework_mcp.conf import get_setting
 from rest_framework_mcp.constants import JsonRpcErrorCode, OutputFormat, UnknownArguments
 from rest_framework_mcp.handlers.build_call_pool import build_call_pool
+from rest_framework_mcp.handlers.chain_tool_dispatch import dispatch_chain_tool
 from rest_framework_mcp.handlers.selector_tool_dispatch import dispatch_selector_tool
 from rest_framework_mcp.handlers.types.context import MCPCallContext
 from rest_framework_mcp.handlers.utils import (
@@ -28,6 +29,7 @@ from rest_framework_mcp.handlers.utils import (
 from rest_framework_mcp.output.resolve_structured_output import resolve_structured_output
 from rest_framework_mcp.output.tool_result import build_tool_result
 from rest_framework_mcp.protocol.types.json_rpc_error import JsonRpcError
+from rest_framework_mcp.registry.types.chain_tool_binding import ChainToolBinding
 from rest_framework_mcp.registry.types.selector_tool_binding import SelectorToolBinding
 from rest_framework_mcp.server.types.mcp_service_view import MCPServiceView
 
@@ -118,10 +120,12 @@ def handle_tools_call(
         "mcp.tools.call",
         attributes=_span_attrs(binding.name, context),
     ) as otel_span:
-        # Selector tools (read-shaped) own the post-fetch pipeline
-        # (filter / order / paginate) and route through a different
-        # dispatch helper. Service tools fall through to the existing
-        # mutation-shaped path below.
+        # Chain tools run an ordered sequence of specs; selector tools
+        # (read-shaped) own the post-fetch pipeline (filter / order /
+        # paginate). Both route through dedicated dispatch helpers. Service
+        # tools fall through to the existing mutation-shaped path below.
+        if isinstance(binding, ChainToolBinding):
+            return dispatch_chain_tool(binding, params, arguments_raw, context, otel_span)
         if isinstance(binding, SelectorToolBinding):
             return dispatch_selector_tool(binding, params, arguments_raw, context, otel_span)
 
