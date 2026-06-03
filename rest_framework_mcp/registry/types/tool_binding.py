@@ -34,6 +34,12 @@ class ToolBinding(Generic[InputT, ResultT, ExtraT]):
     name: str
     description: str | None
     spec: ServiceSpec[InputT, ResultT, ExtraT]
+    # Consumer-only display metadata — never emitted on the MCP wire
+    # (``tools/list`` ignores them). Provided so a downstream library can
+    # render a richer label / blurb than the protocol ``title`` /
+    # ``description``. ``None`` means "unset".
+    display_name: str | None = None
+    display_description: str | None = None
     output_format: OutputFormat = OutputFormat.JSON
     permissions: tuple[Any, ...] = ()
     rate_limits: tuple[Any, ...] = ()

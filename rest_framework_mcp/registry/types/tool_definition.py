@@ -43,6 +43,11 @@ class ToolDefinition:
     spec: ServiceSpec | SelectorSpec
     description: str | None = None
     title: str | None = None
+    # Consumer-only display metadata — never emitted on the MCP wire. Carried
+    # onto the resulting binding so a downstream library can render a richer
+    # label / blurb than the protocol ``title`` / ``description``.
+    display_name: str | None = None
+    display_description: str | None = None
     # Both kinds:
     output_format: OutputFormat | None = None
     permissions: Sequence[Any] | None = None
@@ -80,6 +85,8 @@ class ToolDefinition:
         spec: ServiceSpec,
         description: str | None = None,
         title: str | None = None,
+        display_name: str | None = None,
+        display_description: str | None = None,
         output_format: OutputFormat | None = None,
         permissions: Sequence[Any] | None = None,
         rate_limits: Sequence[Any] | None = None,
@@ -98,6 +105,8 @@ class ToolDefinition:
             spec=spec,
             description=description,
             title=title,
+            display_name=display_name,
+            display_description=display_description,
             output_format=output_format,
             permissions=permissions,
             rate_limits=rate_limits,
@@ -118,6 +127,8 @@ class ToolDefinition:
         spec: SelectorSpec,
         description: str | None = None,
         title: str | None = None,
+        display_name: str | None = None,
+        display_description: str | None = None,
         input_serializer: type | None = None,
         output_format: OutputFormat | None = None,
         permissions: Sequence[Any] | None = None,
@@ -146,6 +157,8 @@ class ToolDefinition:
             spec=spec,
             description=description,
             title=title,
+            display_name=display_name,
+            display_description=display_description,
             input_serializer=input_serializer,
             output_format=output_format,
             permissions=permissions,

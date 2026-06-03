@@ -47,6 +47,12 @@ class ChainToolBinding:
     name: str
     description: str | None
     steps: tuple[ChainStep, ...]
+    # Consumer-only display metadata — never emitted on the MCP wire
+    # (``tools/list`` ignores them). Provided so a downstream library can
+    # render a richer label / blurb than the protocol ``title`` /
+    # ``description``. ``None`` means "unset".
+    display_name: str | None = None
+    display_description: str | None = None
     input_serializer: type | None = None
     atomic: bool = True
     output_alias: str | None = None
