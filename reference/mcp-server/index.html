@@ -513,6 +513,8 @@
       
         
       
+        
+      
     
     
     
@@ -856,6 +858,34 @@
   
   
     <li class="md-nav__item">
+      <a href="../../recipes/chain-tools/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Chain specs into one tool
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
       <a href="../../recipes/migrating/" class="md-nav__link">
         
   
@@ -1079,6 +1109,17 @@
     <span class="md-ellipsis">
       
         register_selector_tool
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#rest_framework_mcp.server.mcp_server.MCPServer.register_chain_tool" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        register_chain_tool
       
     </span>
   </a>
@@ -1393,6 +1434,17 @@
     <span class="md-ellipsis">
       
         register_selector_tool
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#rest_framework_mcp.server.mcp_server.MCPServer.register_chain_tool" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        register_chain_tool
       
     </span>
   </a>
@@ -1756,6 +1808,66 @@ post-fetch pipeline (<code>filter_set</code> / <code>ordering_fields</code> /
 <code>paginate</code>) and renders with <code>many=True</code>; <code>RETRIEVE</code>
 rejects those pipeline knobs at registration and renders the
 result with <code>many=False</code>.</p>
+
+
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-function">
+
+
+<h3 id="rest_framework_mcp.server.mcp_server.MCPServer.register_chain_tool" class="doc doc-heading">
+            <span class="doc doc-object-name doc-function-name">register_chain_tool</span>
+
+
+<a href="#rest_framework_mcp.server.mcp_server.MCPServer.register_chain_tool" class="headerlink" title="Permanent link">&para;</a></h3>
+<div class="language-python doc-signature highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="nf">register_chain_tool</span><span class="p">(</span>
+</span><span id="__span-0-2"><a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a>    <span class="o">*</span><span class="p">,</span>
+</span><span id="__span-0-3"><a id="__codelineno-0-3" name="__codelineno-0-3" href="#__codelineno-0-3"></a>    <span class="n">name</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span>
+</span><span id="__span-0-4"><a id="__codelineno-0-4" name="__codelineno-0-4" href="#__codelineno-0-4"></a>    <span class="n">steps</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="n">ChainStep</span><span class="p">]</span> <span class="o">|</span> <span class="nb">tuple</span><span class="p">[</span><span class="n">ChainStep</span><span class="p">,</span> <span class="o">...</span><span class="p">],</span>
+</span><span id="__span-0-5"><a id="__codelineno-0-5" name="__codelineno-0-5" href="#__codelineno-0-5"></a>    <span class="n">description</span><span class="p">:</span> <span class="nb">str</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+</span><span id="__span-0-6"><a id="__codelineno-0-6" name="__codelineno-0-6" href="#__codelineno-0-6"></a>    <span class="n">title</span><span class="p">:</span> <span class="nb">str</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+</span><span id="__span-0-7"><a id="__codelineno-0-7" name="__codelineno-0-7" href="#__codelineno-0-7"></a>    <span class="n">input_serializer</span><span class="p">:</span> <span class="nb">type</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+</span><span id="__span-0-8"><a id="__codelineno-0-8" name="__codelineno-0-8" href="#__codelineno-0-8"></a>    <span class="n">atomic</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">True</span><span class="p">,</span>
+</span><span id="__span-0-9"><a id="__codelineno-0-9" name="__codelineno-0-9" href="#__codelineno-0-9"></a>    <span class="n">output_alias</span><span class="p">:</span> <span class="nb">str</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+</span><span id="__span-0-10"><a id="__codelineno-0-10" name="__codelineno-0-10" href="#__codelineno-0-10"></a>    <span class="n">output_all</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">,</span>
+</span><span id="__span-0-11"><a id="__codelineno-0-11" name="__codelineno-0-11" href="#__codelineno-0-11"></a>    <span class="n">output_format</span><span class="p">:</span> <span class="n">OutputFormat</span> <span class="o">|</span> <span class="nb">str</span> <span class="o">=</span> <span class="n">OutputFormat</span><span class="o">.</span><span class="n">JSON</span><span class="p">,</span>
+</span><span id="__span-0-12"><a id="__codelineno-0-12" name="__codelineno-0-12" href="#__codelineno-0-12"></a>    <span class="n">permissions</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="n">Any</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+</span><span id="__span-0-13"><a id="__codelineno-0-13" name="__codelineno-0-13" href="#__codelineno-0-13"></a>    <span class="n">rate_limits</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="n">Any</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+</span><span id="__span-0-14"><a id="__codelineno-0-14" name="__codelineno-0-14" href="#__codelineno-0-14"></a>    <span class="n">annotations</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+</span><span id="__span-0-15"><a id="__codelineno-0-15" name="__codelineno-0-15" href="#__codelineno-0-15"></a>    <span class="n">include_structured_content</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+</span><span id="__span-0-16"><a id="__codelineno-0-16" name="__codelineno-0-16" href="#__codelineno-0-16"></a>    <span class="n">include_output_schema</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+</span><span id="__span-0-17"><a id="__codelineno-0-17" name="__codelineno-0-17" href="#__codelineno-0-17"></a>    <span class="n">unknown_arguments</span><span class="p">:</span> <span class="n">UnknownArguments</span> <span class="o">=</span> <span class="n">UnknownArguments</span><span class="o">.</span><span class="n">REJECT</span><span class="p">,</span>
+</span><span id="__span-0-18"><a id="__codelineno-0-18" name="__codelineno-0-18" href="#__codelineno-0-18"></a>    <span class="n">always_listed</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">,</span>
+</span><span id="__span-0-19"><a id="__codelineno-0-19" name="__codelineno-0-19" href="#__codelineno-0-19"></a><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">ChainToolBinding</span>
+</span></code></pre></div>
+
+    <div class="doc doc-contents ">
+
+        <p>Register an ordered sequence of specs as a single MCP tool.</p>
+<p>Each :class:<code>~rest_framework_mcp.registry.types.chain_step.ChainStep</code>
+wraps a <code>ServiceSpec</code> (write) or <code>SelectorSpec</code> (read) and binds
+its result to an alias. A step's <code>inputs</code> callable reads the
+validated tool arguments (<code>ctx.args</code>) and any prior step's output
+(<code>ctx[alias]</code>) to build that step's call kwargs — so one tool call
+can express <code>retrieve x → write y → write z</code> with <code>z</code> derived
+from both <code>x</code> and <code>y</code>.</p>
+<p><code>atomic=True</code> (the default) runs the whole sequence inside one
+<code>transaction.atomic()</code>: any step raising a
+<code>ServiceError</code> / <code>ServiceValidationError</code> rolls back every prior
+write and the JSON-RPC error carries <code>failedStep</code>.</p>
+<p>The advertised <code>inputSchema</code> is <code>input_serializer</code> when set,
+otherwise the first step's serializer (the first-step fallback). The
+response is the <code>output_alias</code> step's rendered output (default: the
+last step), or <code>{alias: rendered}</code> for every serializer-bearing
+step when <code>output_all=True</code>.</p>
+<p>Each step's <code>spec.permission_classes</code> are AND-combined with the
+chain-level <code>permissions</code> and evaluated up front — a failing step
+permission blocks the whole chain before any step runs.</p>
+<p>Chains deliberately do not run the selector post-fetch pipeline
+(filter / order / paginate); for that, expose the selector as its
+own :meth:<code>register_selector_tool</code>.</p>
 
 
     </div>

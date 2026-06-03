@@ -10,13 +10,13 @@
       
       
       
-        <link rel="canonical" href="https://artui.github.io/djangorestframework-mcp-server/recipes/custom-permission/">
+        <link rel="canonical" href="https://artui.github.io/djangorestframework-mcp-server/recipes/chain-tools/">
       
       
-        <link rel="prev" href="../toon-output/">
+        <link rel="prev" href="../selector-tool-with-filterset/">
       
       
-        <link rel="next" href="../async-auth-backend/">
+        <link rel="next" href="../migrating/">
       
       
         
@@ -27,7 +27,7 @@
     
     
       
-        <title>Add a custom permission - djangorestframework-mcp-server</title>
+        <title>Chain specs into one tool - djangorestframework-mcp-server</title>
       
     
     
@@ -80,7 +80,7 @@
     <div data-md-component="skip">
       
         
-        <a href="#add-a-custom-permission" class="md-skip">
+        <a href="#chain-several-specs-into-one-tool" class="md-skip">
           Skip to content
         </a>
       
@@ -116,7 +116,7 @@
         <div class="md-header__topic" data-md-component="header-topic">
           <span class="md-ellipsis">
             
-              Add a custom permission
+              Chain specs into one tool
             
           </span>
         </div>
@@ -659,37 +659,10 @@
                 
   
   
-    
   
   
-  
-    <li class="md-nav__item md-nav__item--active">
-      
-      <input class="md-nav__toggle md-toggle" type="checkbox" id="__toc">
-      
-      
-        
-      
-      
-        <label class="md-nav__link md-nav__link--active" for="__toc">
-          
-  
-  
-  <span class="md-ellipsis">
-    
-  
-    Add a custom permission
-  
-
-    
-  </span>
-  
-  
-
-          <span class="md-nav__icon md-icon"></span>
-        </label>
-      
-      <a href="./" class="md-nav__link md-nav__link--active">
+    <li class="md-nav__item">
+      <a href="../custom-permission/" class="md-nav__link">
         
   
   
@@ -705,48 +678,6 @@
   
 
       </a>
-      
-        
-
-<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
-  
-  
-  
-    
-  
-  
-    <label class="md-nav__title" for="__toc">
-      <span class="md-nav__icon md-icon"></span>
-      Table of contents
-    </label>
-    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
-      
-        <li class="md-nav__item">
-  <a href="#example-tenant-scoped-access" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Example: tenant-scoped access
-      
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#tips" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Tips
-      
-    </span>
-  </a>
-  
-</li>
-      
-    </ul>
-  
-</nav>
-      
     </li>
   
 
@@ -924,10 +855,37 @@
                 
   
   
+    
   
   
-    <li class="md-nav__item">
-      <a href="../chain-tools/" class="md-nav__link">
+  
+    <li class="md-nav__item md-nav__item--active">
+      
+      <input class="md-nav__toggle md-toggle" type="checkbox" id="__toc">
+      
+      
+        
+      
+      
+        <label class="md-nav__link md-nav__link--active" for="__toc">
+          
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Chain specs into one tool
+  
+
+    
+  </span>
+  
+  
+
+          <span class="md-nav__icon md-icon"></span>
+        </label>
+      
+      <a href="./" class="md-nav__link md-nav__link--active">
         
   
   
@@ -943,6 +901,81 @@
   
 
       </a>
+      
+        
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#define-the-steps" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Define the steps
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#atomicity-and-errors" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Atomicity and errors
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#what-the-tool-returns" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        What the tool returns
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#permissions" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Permissions
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#scope" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Scope
+      
+    </span>
+  </a>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+      
     </li>
   
 
@@ -1236,10 +1269,10 @@
     <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
       
         <li class="md-nav__item">
-  <a href="#example-tenant-scoped-access" class="md-nav__link">
+  <a href="#define-the-steps" class="md-nav__link">
     <span class="md-ellipsis">
       
-        Example: tenant-scoped access
+        Define the steps
       
     </span>
   </a>
@@ -1247,10 +1280,43 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#tips" class="md-nav__link">
+  <a href="#atomicity-and-errors" class="md-nav__link">
     <span class="md-ellipsis">
       
-        Tips
+        Atomicity and errors
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#what-the-tool-returns" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        What the tool returns
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#permissions" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Permissions
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#scope" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Scope
       
     </span>
   </a>
@@ -1274,7 +1340,7 @@
 
 
   
-    <a href="https://github.com/Artui/djangorestframework-mcp-server/edit/main/docs/recipes/custom-permission.md" title="Edit this page" class="md-content__button md-icon" rel="edit">
+    <a href="https://github.com/Artui/djangorestframework-mcp-server/edit/main/docs/recipes/chain-tools.md" title="Edit this page" class="md-content__button md-icon" rel="edit">
       
       <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M10 20H6V4h7v5h5v3.1l2-2V8l-6-6H6c-1.1 0-2 .9-2 2v16c0 1.1.9 2 2 2h4zm10.2-7c.1 0 .3.1.4.2l1.3 1.3c.2.2.2.6 0 .8l-1 1-2.1-2.1 1-1c.1-.1.2-.2.4-.2m0 3.9L14.1 23H12v-2.1l6.1-6.1z"/></svg>
     </a>
@@ -1282,56 +1348,86 @@
   
 
 
-<h1 id="add-a-custom-permission">Add a custom permission<a class="headerlink" href="#add-a-custom-permission" title="Permanent link">&para;</a></h1>
-<p>Permissions are a Protocol — anything with <code>has_permission(request, token)</code> and
-<code>required_scopes()</code> qualifies. They're AND-combined per binding, evaluated
-after authentication, and any <code>required_scopes()</code> from a denying class are
-surfaced in the <code>WWW-Authenticate</code> header.</p>
-<h2 id="example-tenant-scoped-access">Example: tenant-scoped access<a class="headerlink" href="#example-tenant-scoped-access" title="Permanent link">&para;</a></h2>
-<p>A multi-tenant app might want to gate every tool by the requesting user's
-tenant matching a configured value:</p>
-<div class="language-python highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="kn">from</span><span class="w"> </span><span class="nn">django.http</span><span class="w"> </span><span class="kn">import</span> <span class="n">HttpRequest</span>
-</span><span id="__span-0-2"><a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a>
-</span><span id="__span-0-3"><a id="__codelineno-0-3" name="__codelineno-0-3" href="#__codelineno-0-3"></a><span class="kn">from</span><span class="w"> </span><span class="nn">rest_framework_mcp</span><span class="w"> </span><span class="kn">import</span> <span class="n">TokenInfo</span>
-</span><span id="__span-0-4"><a id="__codelineno-0-4" name="__codelineno-0-4" href="#__codelineno-0-4"></a>
-</span><span id="__span-0-5"><a id="__codelineno-0-5" name="__codelineno-0-5" href="#__codelineno-0-5"></a>
-</span><span id="__span-0-6"><a id="__codelineno-0-6" name="__codelineno-0-6" href="#__codelineno-0-6"></a><span class="k">class</span><span class="w"> </span><span class="nc">TenantMatches</span><span class="p">:</span>
-</span><span id="__span-0-7"><a id="__codelineno-0-7" name="__codelineno-0-7" href="#__codelineno-0-7"></a>    <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">tenant_id</span><span class="p">:</span> <span class="nb">int</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
-</span><span id="__span-0-8"><a id="__codelineno-0-8" name="__codelineno-0-8" href="#__codelineno-0-8"></a>        <span class="bp">self</span><span class="o">.</span><span class="n">_tenant_id</span> <span class="o">=</span> <span class="n">tenant_id</span>
-</span><span id="__span-0-9"><a id="__codelineno-0-9" name="__codelineno-0-9" href="#__codelineno-0-9"></a>
-</span><span id="__span-0-10"><a id="__codelineno-0-10" name="__codelineno-0-10" href="#__codelineno-0-10"></a>    <span class="k">def</span><span class="w"> </span><span class="nf">has_permission</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">request</span><span class="p">:</span> <span class="n">HttpRequest</span><span class="p">,</span> <span class="n">token</span><span class="p">:</span> <span class="n">TokenInfo</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">bool</span><span class="p">:</span>
-</span><span id="__span-0-11"><a id="__codelineno-0-11" name="__codelineno-0-11" href="#__codelineno-0-11"></a>        <span class="k">return</span> <span class="nb">getattr</span><span class="p">(</span><span class="n">token</span><span class="o">.</span><span class="n">user</span><span class="p">,</span> <span class="s2">&quot;tenant_id&quot;</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span> <span class="o">==</span> <span class="bp">self</span><span class="o">.</span><span class="n">_tenant_id</span>
-</span><span id="__span-0-12"><a id="__codelineno-0-12" name="__codelineno-0-12" href="#__codelineno-0-12"></a>
-</span><span id="__span-0-13"><a id="__codelineno-0-13" name="__codelineno-0-13" href="#__codelineno-0-13"></a>    <span class="k">def</span><span class="w"> </span><span class="nf">required_scopes</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">list</span><span class="p">[</span><span class="nb">str</span><span class="p">]:</span>
-</span><span id="__span-0-14"><a id="__codelineno-0-14" name="__codelineno-0-14" href="#__codelineno-0-14"></a>        <span class="k">return</span> <span class="p">[]</span>
+<h1 id="chain-several-specs-into-one-tool">Chain several specs into one tool<a class="headerlink" href="#chain-several-specs-into-one-tool" title="Permanent link">&para;</a></h1>
+<p>A single MCP tool usually wraps one spec. Sometimes a meaningful
+operation is a <em>sequence</em>: retrieve a record, write a related one, then
+write a third that depends on both. Doing that as three separate tool
+calls pushes orchestration onto the client and leaves three chances to
+end up with half-written state.</p>
+<p><code>register_chain_tool</code> runs an ordered list of steps as one tool. Each
+step binds its result to an alias; later steps read earlier outputs
+through <code>ctx[alias]</code>. The whole sequence runs in one transaction by
+default.</p>
+<div class="language-text highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a>arguments → validate(input_serializer or first step&#39;s)   → ctx.args
+</span><span id="__span-0-2"><a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a>          → step &quot;acct&quot;  (selector)  → ctx[&quot;acct&quot;]
+</span><span id="__span-0-3"><a id="__codelineno-0-3" name="__codelineno-0-3" href="#__codelineno-0-3"></a>          → step &quot;sub&quot;   (service)   → ctx[&quot;sub&quot;]
+</span><span id="__span-0-4"><a id="__codelineno-0-4" name="__codelineno-0-4" href="#__codelineno-0-4"></a>          → step &quot;welcome&quot; (service, reads acct + sub)
+</span><span id="__span-0-5"><a id="__codelineno-0-5" name="__codelineno-0-5" href="#__codelineno-0-5"></a>          → render the output step
+</span><span id="__span-0-6"><a id="__codelineno-0-6" name="__codelineno-0-6" href="#__codelineno-0-6"></a>          → ToolResult
+</span><span id="__span-0-7"><a id="__codelineno-0-7" name="__codelineno-0-7" href="#__codelineno-0-7"></a>        (all inside transaction.atomic() when atomic=True)
 </span></code></pre></div>
-<p>Stack with <code>ScopeRequired</code> to keep both surfaces honest. The <code>tenant_id</code> is
-captured at registration time — read it from settings or any other
-process-wide source, never from a <code>request</code> (no request exists during
-registration):</p>
-<div class="language-python highlight"><pre><span></span><code><span id="__span-1-1"><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a><span class="kn">from</span><span class="w"> </span><span class="nn">django.conf</span><span class="w"> </span><span class="kn">import</span> <span class="n">settings</span>
+<h2 id="define-the-steps">Define the steps<a class="headerlink" href="#define-the-steps" title="Permanent link">&para;</a></h2>
+<p>Each <code>ChainStep</code> is an alias, a <code>ServiceSpec</code> / <code>SelectorSpec</code>, and an
+optional <code>inputs(ctx)</code> callable that builds that step's kwargs from the
+validated arguments (<code>ctx.args</code>) and any prior output (<code>ctx[alias]</code>):</p>
+<div class="language-python highlight"><pre><span></span><code><span id="__span-1-1"><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a><span class="kn">from</span><span class="w"> </span><span class="nn">rest_framework_mcp</span><span class="w"> </span><span class="kn">import</span> <span class="n">ChainStep</span><span class="p">,</span> <span class="n">MCPServer</span><span class="p">,</span> <span class="n">SelectorKind</span><span class="p">,</span> <span class="n">SelectorSpec</span><span class="p">,</span> <span class="n">ServiceSpec</span>
 </span><span id="__span-1-2"><a id="__codelineno-1-2" name="__codelineno-1-2" href="#__codelineno-1-2"></a>
-</span><span id="__span-1-3"><a id="__codelineno-1-3" name="__codelineno-1-3" href="#__codelineno-1-3"></a><span class="n">server</span><span class="o">.</span><span class="n">register_service_tool</span><span class="p">(</span>
-</span><span id="__span-1-4"><a id="__codelineno-1-4" name="__codelineno-1-4" href="#__codelineno-1-4"></a>    <span class="n">name</span><span class="o">=</span><span class="s2">&quot;invoices.refund&quot;</span><span class="p">,</span>
-</span><span id="__span-1-5"><a id="__codelineno-1-5" name="__codelineno-1-5" href="#__codelineno-1-5"></a>    <span class="n">spec</span><span class="o">=</span><span class="n">ServiceSpec</span><span class="p">(</span><span class="n">service</span><span class="o">=</span><span class="n">refund_invoice</span><span class="p">),</span>
-</span><span id="__span-1-6"><a id="__codelineno-1-6" name="__codelineno-1-6" href="#__codelineno-1-6"></a>    <span class="n">permissions</span><span class="o">=</span><span class="p">[</span>
-</span><span id="__span-1-7"><a id="__codelineno-1-7" name="__codelineno-1-7" href="#__codelineno-1-7"></a>        <span class="n">ScopeRequired</span><span class="p">([</span><span class="s2">&quot;invoices:write&quot;</span><span class="p">]),</span>
-</span><span id="__span-1-8"><a id="__codelineno-1-8" name="__codelineno-1-8" href="#__codelineno-1-8"></a>        <span class="n">TenantMatches</span><span class="p">(</span><span class="n">tenant_id</span><span class="o">=</span><span class="n">settings</span><span class="o">.</span><span class="n">ACTIVE_TENANT_ID</span><span class="p">),</span>
-</span><span id="__span-1-9"><a id="__codelineno-1-9" name="__codelineno-1-9" href="#__codelineno-1-9"></a>    <span class="p">],</span>
-</span><span id="__span-1-10"><a id="__codelineno-1-10" name="__codelineno-1-10" href="#__codelineno-1-10"></a><span class="p">)</span>
+</span><span id="__span-1-3"><a id="__codelineno-1-3" name="__codelineno-1-3" href="#__codelineno-1-3"></a><span class="n">server</span><span class="o">.</span><span class="n">register_chain_tool</span><span class="p">(</span>
+</span><span id="__span-1-4"><a id="__codelineno-1-4" name="__codelineno-1-4" href="#__codelineno-1-4"></a>    <span class="n">name</span><span class="o">=</span><span class="s2">&quot;onboard_account&quot;</span><span class="p">,</span>
+</span><span id="__span-1-5"><a id="__codelineno-1-5" name="__codelineno-1-5" href="#__codelineno-1-5"></a>    <span class="n">input_serializer</span><span class="o">=</span><span class="n">OnboardInput</span><span class="p">,</span>          <span class="c1"># or omit → first step&#39;s schema</span>
+</span><span id="__span-1-6"><a id="__codelineno-1-6" name="__codelineno-1-6" href="#__codelineno-1-6"></a>    <span class="n">steps</span><span class="o">=</span><span class="p">[</span>
+</span><span id="__span-1-7"><a id="__codelineno-1-7" name="__codelineno-1-7" href="#__codelineno-1-7"></a>        <span class="n">ChainStep</span><span class="p">(</span>
+</span><span id="__span-1-8"><a id="__codelineno-1-8" name="__codelineno-1-8" href="#__codelineno-1-8"></a>            <span class="s2">&quot;acct&quot;</span><span class="p">,</span>
+</span><span id="__span-1-9"><a id="__codelineno-1-9" name="__codelineno-1-9" href="#__codelineno-1-9"></a>            <span class="n">SelectorSpec</span><span class="p">(</span><span class="n">kind</span><span class="o">=</span><span class="n">SelectorKind</span><span class="o">.</span><span class="n">RETRIEVE</span><span class="p">,</span> <span class="n">selector</span><span class="o">=</span><span class="n">get_account</span><span class="p">),</span>
+</span><span id="__span-1-10"><a id="__codelineno-1-10" name="__codelineno-1-10" href="#__codelineno-1-10"></a>            <span class="n">inputs</span><span class="o">=</span><span class="k">lambda</span> <span class="n">ctx</span><span class="p">:</span> <span class="p">{</span><span class="s2">&quot;pk&quot;</span><span class="p">:</span> <span class="n">ctx</span><span class="o">.</span><span class="n">args</span><span class="p">[</span><span class="s2">&quot;account_id&quot;</span><span class="p">]},</span>
+</span><span id="__span-1-11"><a id="__codelineno-1-11" name="__codelineno-1-11" href="#__codelineno-1-11"></a>        <span class="p">),</span>
+</span><span id="__span-1-12"><a id="__codelineno-1-12" name="__codelineno-1-12" href="#__codelineno-1-12"></a>        <span class="n">ChainStep</span><span class="p">(</span>
+</span><span id="__span-1-13"><a id="__codelineno-1-13" name="__codelineno-1-13" href="#__codelineno-1-13"></a>            <span class="s2">&quot;sub&quot;</span><span class="p">,</span>
+</span><span id="__span-1-14"><a id="__codelineno-1-14" name="__codelineno-1-14" href="#__codelineno-1-14"></a>            <span class="n">ServiceSpec</span><span class="p">(</span><span class="n">service</span><span class="o">=</span><span class="n">create_subscription</span><span class="p">,</span> <span class="n">output_selector_spec</span><span class="o">=</span><span class="n">SUB_OUT</span><span class="p">),</span>
+</span><span id="__span-1-15"><a id="__codelineno-1-15" name="__codelineno-1-15" href="#__codelineno-1-15"></a>            <span class="n">inputs</span><span class="o">=</span><span class="k">lambda</span> <span class="n">ctx</span><span class="p">:</span> <span class="p">{</span><span class="s2">&quot;account&quot;</span><span class="p">:</span> <span class="n">ctx</span><span class="p">[</span><span class="s2">&quot;acct&quot;</span><span class="p">],</span> <span class="s2">&quot;plan&quot;</span><span class="p">:</span> <span class="n">ctx</span><span class="o">.</span><span class="n">args</span><span class="p">[</span><span class="s2">&quot;plan&quot;</span><span class="p">]},</span>
+</span><span id="__span-1-16"><a id="__codelineno-1-16" name="__codelineno-1-16" href="#__codelineno-1-16"></a>        <span class="p">),</span>
+</span><span id="__span-1-17"><a id="__codelineno-1-17" name="__codelineno-1-17" href="#__codelineno-1-17"></a>        <span class="n">ChainStep</span><span class="p">(</span>
+</span><span id="__span-1-18"><a id="__codelineno-1-18" name="__codelineno-1-18" href="#__codelineno-1-18"></a>            <span class="s2">&quot;welcome&quot;</span><span class="p">,</span>
+</span><span id="__span-1-19"><a id="__codelineno-1-19" name="__codelineno-1-19" href="#__codelineno-1-19"></a>            <span class="n">ServiceSpec</span><span class="p">(</span><span class="n">service</span><span class="o">=</span><span class="n">send_welcome</span><span class="p">,</span> <span class="n">output_selector_spec</span><span class="o">=</span><span class="n">WELCOME_OUT</span><span class="p">),</span>
+</span><span id="__span-1-20"><a id="__codelineno-1-20" name="__codelineno-1-20" href="#__codelineno-1-20"></a>            <span class="c1"># derives from BOTH prior steps</span>
+</span><span id="__span-1-21"><a id="__codelineno-1-21" name="__codelineno-1-21" href="#__codelineno-1-21"></a>            <span class="n">inputs</span><span class="o">=</span><span class="k">lambda</span> <span class="n">ctx</span><span class="p">:</span> <span class="p">{</span><span class="s2">&quot;account&quot;</span><span class="p">:</span> <span class="n">ctx</span><span class="p">[</span><span class="s2">&quot;acct&quot;</span><span class="p">],</span> <span class="s2">&quot;subscription&quot;</span><span class="p">:</span> <span class="n">ctx</span><span class="p">[</span><span class="s2">&quot;sub&quot;</span><span class="p">]},</span>
+</span><span id="__span-1-22"><a id="__codelineno-1-22" name="__codelineno-1-22" href="#__codelineno-1-22"></a>        <span class="p">),</span>
+</span><span id="__span-1-23"><a id="__codelineno-1-23" name="__codelineno-1-23" href="#__codelineno-1-23"></a>    <span class="p">],</span>
+</span><span id="__span-1-24"><a id="__codelineno-1-24" name="__codelineno-1-24" href="#__codelineno-1-24"></a>    <span class="n">output_alias</span><span class="o">=</span><span class="s2">&quot;welcome&quot;</span><span class="p">,</span>   <span class="c1"># default: the last step</span>
+</span><span id="__span-1-25"><a id="__codelineno-1-25" name="__codelineno-1-25" href="#__codelineno-1-25"></a><span class="p">)</span>
 </span></code></pre></div>
-<h2 id="tips">Tips<a class="headerlink" href="#tips" title="Permanent link">&para;</a></h2>
+<p><code>inputs</code> is optional. When omitted, a step receives
+<code>{"data": ctx.args}</code> (plus <code>request</code> / <code>user</code>), which suits a first
+service step whose callable takes the validated input as <code>data</code>.</p>
+<h2 id="atomicity-and-errors">Atomicity and errors<a class="headerlink" href="#atomicity-and-errors" title="Permanent link">&para;</a></h2>
+<p><code>atomic=True</code> (the default) wraps every step in a single
+<code>transaction.atomic()</code>. If any step raises <code>ServiceError</code> or
+<code>ServiceValidationError</code>, every prior write rolls back and the client
+gets a JSON-RPC error whose <code>data</code> names the failing step:</p>
+<div class="language-json highlight"><pre><span></span><code><span id="__span-2-1"><a id="__codelineno-2-1" name="__codelineno-2-1" href="#__codelineno-2-1"></a><span class="p">{</span><span class="nt">&quot;code&quot;</span><span class="p">:</span><span class="w"> </span><span class="mi">-32000</span><span class="p">,</span><span class="w"> </span><span class="nt">&quot;message&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;…&quot;</span><span class="p">,</span><span class="w"> </span><span class="nt">&quot;data&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">{</span><span class="nt">&quot;failedStep&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;sub&quot;</span><span class="p">}}</span>
+</span></code></pre></div>
+<p>Set <code>atomic=False</code> to let each step commit independently (no rollback).</p>
+<h2 id="what-the-tool-returns">What the tool returns<a class="headerlink" href="#what-the-tool-returns" title="Permanent link">&para;</a></h2>
 <ul>
-<li><strong>Cheap to construct, side-effect-free at evaluation.</strong> Permissions get
-  instantiated once per binding at registration time, so any expensive lookup
-  belongs in <code>has_permission</code> (and even then, cache it).</li>
-<li><strong>Don't read mutable settings inside <code>has_permission</code>.</strong> Any per-process
-  changes (test settings overrides, etc.) won't be observed if you snapshot at
-  <code>__init__</code>. Read settings each call when you need them.</li>
-<li><strong>Surface scopes only when they're actually scope-shaped.</strong> For row-level
-  rules like <code>TenantMatches</code>, return <code>[]</code> — the failing client can't fix it by
-  obtaining a different scope.</li>
+<li>Default: the <strong>last</strong> step's rendered output.</li>
+<li><code>output_alias="acct"</code>: render a specific step instead.</li>
+<li><code>output_all=True</code>: return <code>{alias: rendered}</code> for every step that
+  declares an output serializer.</li>
 </ul>
+<p>A step is rendered through its serializer — <code>ServiceSpec.
+output_selector_spec.output_serializer</code> or
+<code>SelectorSpec.output_serializer</code> — and its output-context provider sees
+the resolved data (<code>result</code> / <code>instance</code> / <code>page</code>), exactly as a
+single-spec tool does.</p>
+<h2 id="permissions">Permissions<a class="headerlink" href="#permissions" title="Permanent link">&para;</a></h2>
+<p>Each step's <code>spec.permission_classes</code> are AND-combined with the
+chain-level <code>permissions=</code> and evaluated up front: a failing step
+permission blocks the whole chain before any step runs.</p>
+<h2 id="scope">Scope<a class="headerlink" href="#scope" title="Permanent link">&para;</a></h2>
+<p>Chains deliberately do <strong>not</strong> run the selector post-fetch pipeline
+(filter / order / paginate) — that belongs on a single
+<a href="../selector-tool-with-filterset/"><code>register_selector_tool</code></a>. A selector
+step's result is used as-is (rendered <code>many=True</code> for <code>kind=LIST</code>).</p>
 
 
 
