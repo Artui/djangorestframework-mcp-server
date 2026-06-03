@@ -1,8 +1,9 @@
 from __future__ import annotations
 
 import dataclasses
+import inspect
 import json
-from collections.abc import Mapping
+from collections.abc import Callable, Mapping
 from typing import Any, cast
 
 from django.http import HttpRequest
@@ -203,10 +204,45 @@ def validation_error_data(detail: Any, value: Any) -> dict[str, Any]:
     return payload
 
 
+def invoke_context_provider(
+    provider: Callable[..., Mapping[str, Any]],
+    view: Any,
+    request: Request,
+    *,
+    extras: Mapping[str, Any],
+) -> Mapping[str, Any]:
+    """Call a serializer-context ``provider(view, request, **declared)``.
+
+    ``view`` / ``request`` are forwarded positionally and unconditionally;
+    each entry in ``extras`` — the resolved data about to be serialized
+    (``result`` / ``instance`` / ``page``) — is passed by keyword **only**
+    when ``provider`` declares a parameter of that name or accepts
+    ``**kwargs``.
+
+    This mirrors sister-repo 0.15's ``output_serializer_context`` contract
+    (the library's private ``views.utils._invoke_with_extras``) so the same
+    provider works identically whether dispatched through a DRF view or
+    through MCP tool dispatch. Reproduced locally rather than importing the
+    private helper, matching the package's "transport-shaped equivalents"
+    rule for kwarg-pool / validation / rendering.
+
+    A legacy ``(view, request)`` provider declares neither extra and is
+    therefore called as ``provider(view, request)`` exactly as before —
+    regardless of how it names those two positional parameters.
+    """
+    params = inspect.signature(provider).parameters
+    accepts_var_keyword = any(p.kind == inspect.Parameter.VAR_KEYWORD for p in params.values())
+    declared: dict[str, Any] = {
+        name: value for name, value in extras.items() if accepts_var_keyword or name in params
+    }
+    return provider(view, request, **declared)
+
+
 __all__ = [
     "build_internal_drf_request",
     "check_permissions",
     "consume_rate_limits",
+    "invoke_context_provider",
     "validate_input_against_serializer",
     "validation_error_data",
 ]

@@ -28,6 +28,7 @@ from rest_framework_mcp.handlers.utils import (
     build_internal_drf_request,
     check_permissions,
     consume_rate_limits,
+    invoke_context_provider,
     validation_error_data,
 )
 from rest_framework_mcp.output.resolve_structured_output import resolve_structured_output
@@ -165,7 +166,15 @@ async def handle_tools_call_async(
         output_context: Mapping[str, Any] | None = None
         if out_spec is not None and out_spec.output_serializer_context is not None:
             output_context_view = MCPServiceView(request=drf_request, action=binding.name)
-            output_context = out_spec.output_serializer_context(output_context_view, drf_request)
+            # Forward the final (post-output-selector) ``result`` so a
+            # provider declaring it can run a single batched query against the
+            # exact value being serialized — sister-repo 0.15 parity.
+            output_context = invoke_context_provider(
+                out_spec.output_serializer_context,
+                output_context_view,
+                drf_request,
+                extras={"result": result},
+            )
         payload: Any = _render_output(result, binding.spec, context=output_context)
         output_format: OutputFormat = OutputFormat.coerce(
             params.get("outputFormat") or binding.output_format

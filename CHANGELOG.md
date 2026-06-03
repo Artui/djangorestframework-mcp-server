@@ -7,6 +7,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- **Resolved-data output serializer context (sister-repo 0.15+).** Output
+  context providers may now declare a keyword for the data about to be
+  serialized — `result` (service tool), `instance` (selector RETRIEVE), or
+  `page` (selector LIST) — and the value is forwarded through tool dispatch
+  (sync + async). This lets a provider run a single batched query against
+  the exact objects being rendered instead of re-fetching. `view` /
+  `request` stay positional, so existing `(view, request)` providers are
+  unaffected. For the LIST path the context is resolved *after* the page is
+  materialized and the provider receives the same object the renderer
+  iterates, so an id-keyed batched query reuses the queryset's result
+  cache.
+
+### Changed
+
+- **Bumped `djangorestframework-services` to `==0.15.0`** (additive — the
+  resolved-data output-context feature above).
+
 ## [0.5.1] — 2026-05-31
 
 ### Changed

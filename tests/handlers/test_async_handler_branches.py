@@ -42,6 +42,43 @@ def _ctx(tools: ToolRegistry, resources: ResourceRegistry | None = None) -> MCPC
 # ---------- tools/call async ----------
 
 
+async def test_async_service_tool_provider_receives_result_extra() -> None:
+    """Async service-tool dispatch forwards the ``result`` extra to the
+    output-context provider, mirroring the sync path."""
+
+    class _Out(drf_serializers.Serializer):
+        echoed = drf_serializers.SerializerMethodField()
+
+        def get_echoed(self, _: Any) -> int:
+            return self.context["seen"]
+
+    def _svc() -> dict[str, int]:
+        return {"raw": 5}
+
+    def _ctx_provider(view: Any, request: Any, *, result: Any) -> dict[str, Any]:  # noqa: ARG001
+        return {"seen": result["raw"]}
+
+    tools = ToolRegistry()
+    tools.register(
+        ToolBinding(
+            name="t",
+            description=None,
+            spec=ServiceSpec(
+                service=_svc,
+                output_selector_spec=SelectorSpec(
+                    kind=SelectorKind.RETRIEVE,
+                    output_serializer=_Out,
+                    output_serializer_context=_ctx_provider,
+                ),
+                atomic=False,
+            ),
+        )
+    )
+    out = await handle_tools_call_async({"name": "t", "arguments": {}}, _ctx(tools))
+    assert isinstance(out, dict)
+    assert out["structuredContent"] == {"echoed": 5}
+
+
 async def test_async_tools_call_rejects_non_dict_params() -> None:
     out = await handle_tools_call_async(None, _ctx(ToolRegistry()))
     assert isinstance(out, JsonRpcError) and out.code == -32602

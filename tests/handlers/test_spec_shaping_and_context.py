@@ -316,3 +316,205 @@ def test_service_spec_output_serializer_context_flows_into_render() -> None:
     out = handle_tools_call({"name": "t", "arguments": {}}, _ctx(server))
     assert isinstance(out, dict)
     assert out["structuredContent"] == {"tag": "rendered"}
+
+
+# ---------- Resolved-data extras (sister-repo 0.15+) ----------
+#
+# A provider may declare ``result`` (service tool), ``instance`` (selector
+# RETRIEVE), or ``page`` (selector LIST) and receive the exact value being
+# serialised — passed only when declared. ``invoice_pk`` below reads off
+# the resolved data to prove it is the real object, not a placeholder.
+
+
+@pytest.mark.django_db
+def test_service_tool_provider_receives_result_extra() -> None:
+    seen: dict[str, Any] = {}
+
+    class _Out(drf_serializers.ModelSerializer):
+        echoed = drf_serializers.SerializerMethodField()
+
+        class Meta:
+            model = Invoice
+            fields = ["id", "number", "echoed"]
+
+        def get_echoed(self, _: Invoice) -> int:
+            return self.context["seen_pk"]
+
+    def _create() -> Invoice:
+        return Invoice.objects.create(number="NEW", amount_cents=1)
+
+    def _ctx_provider(view: Any, request: Any, *, result: Any) -> Mapping[str, Any]:  # noqa: ARG001
+        seen["result"] = result
+        return {"seen_pk": result.pk}
+
+    server = _server()
+    server.register_service_tool(
+        name="invoices.create",
+        spec=ServiceSpec(
+            service=_create,
+            output_selector_spec=SelectorSpec(
+                kind=SelectorKind.RETRIEVE,
+                output_serializer=_Out,
+                output_serializer_context=_ctx_provider,
+            ),
+            atomic=False,
+        ),
+    )
+    out = handle_tools_call({"name": "invoices.create", "arguments": {}}, _ctx(server))
+    assert isinstance(out, dict)
+    assert isinstance(seen["result"], Invoice)
+    assert out["structuredContent"]["echoed"] == seen["result"].pk
+
+
+@pytest.mark.django_db
+def test_service_tool_result_is_post_output_selector_instance() -> None:
+    """With an output selector, the provider sees the re-fetched row."""
+    raw = Invoice.objects.create(number="RAW", amount_cents=1)
+    seen: dict[str, Any] = {}
+
+    def _svc() -> Invoice:
+        return raw
+
+    def _refetch(*, result: Invoice) -> Any:
+        # The MCP output-selector contract returns the final value directly
+        # (no queryset .first() materialisation), so re-fetch the instance.
+        return Invoice.objects.get(pk=result.pk)
+
+    def _ctx_provider(view: Any, request: Any, *, result: Any) -> Mapping[str, Any]:  # noqa: ARG001
+        seen["is_raw"] = result is raw
+        seen["pk"] = result.pk
+        return {}
+
+    server = _server()
+    server.register_service_tool(
+        name="t",
+        spec=ServiceSpec(
+            service=_svc,
+            output_selector_spec=SelectorSpec(
+                kind=SelectorKind.RETRIEVE,
+                selector=_refetch,
+                output_serializer=InvoiceOutputSerializer,
+                output_serializer_context=_ctx_provider,
+            ),
+            atomic=False,
+        ),
+    )
+    handle_tools_call({"name": "t", "arguments": {}}, _ctx(server))
+    assert seen["is_raw"] is False  # re-fetched → distinct instance
+    assert seen["pk"] == raw.pk
+
+
+@pytest.mark.django_db
+def test_selector_retrieve_tool_provider_receives_instance_extra() -> None:
+    invoice = Invoice.objects.create(number="ONE", amount_cents=1)
+    seen: dict[str, Any] = {}
+
+    def _get_one() -> Invoice:
+        return Invoice.objects.get(number="ONE")
+
+    def _ctx_provider(view: Any, request: Any, *, instance: Any) -> Mapping[str, Any]:  # noqa: ARG001
+        seen["instance"] = instance
+        return {}
+
+    server = _server()
+    server.register_selector_tool(
+        name="invoices.get",
+        spec=SelectorSpec(
+            kind=SelectorKind.RETRIEVE,
+            selector=_get_one,
+            output_serializer=InvoiceOutputSerializer,
+            output_serializer_context=_ctx_provider,
+        ),
+    )
+    handle_tools_call({"name": "invoices.get", "arguments": {}}, _ctx(server))
+    assert isinstance(seen["instance"], Invoice)
+    assert seen["instance"].pk == invoice.pk
+
+
+@pytest.mark.django_db
+def test_selector_list_tool_unpaginated_provider_receives_full_result() -> None:
+    for i in range(3):
+        Invoice.objects.create(number=f"INV-{i}", amount_cents=i)
+    seen: dict[str, Any] = {}
+
+    def _ctx_provider(view: Any, request: Any, *, page: Any) -> Mapping[str, Any]:  # noqa: ARG001
+        seen["count"] = len(list(page))
+        return {}
+
+    server = _server()
+    server.register_selector_tool(
+        name="invoices.list",
+        spec=SelectorSpec(
+            kind=SelectorKind.LIST,
+            selector=_list_all_invoices,
+            output_serializer=InvoiceOutputSerializer,
+            output_serializer_context=_ctx_provider,
+        ),
+    )
+    handle_tools_call({"name": "invoices.list", "arguments": {}}, _ctx(server))
+    assert seen["count"] == 3
+
+
+@pytest.mark.django_db
+def test_selector_list_tool_paginated_provider_receives_page_slice() -> None:
+    for i in range(5):
+        Invoice.objects.create(number=f"INV-{i}", amount_cents=i)
+    seen: dict[str, Any] = {}
+
+    def _ctx_provider(view: Any, request: Any, *, page: Any) -> Mapping[str, Any]:  # noqa: ARG001
+        seen["page_numbers"] = [inv.number for inv in page]
+        return {}
+
+    server = _server()
+    server.register_selector_tool(
+        name="invoices.list",
+        spec=SelectorSpec(
+            kind=SelectorKind.LIST,
+            selector=_list_all_invoices,
+            output_serializer=InvoiceOutputSerializer,
+            output_serializer_context=_ctx_provider,
+        ),
+        ordering_fields=["amount_cents"],
+        paginate=True,
+    )
+    handle_tools_call(
+        {"name": "invoices.list", "arguments": {"ordering": "amount_cents", "page": 1, "limit": 2}},
+        _ctx(server),
+    )
+    # Provider saw only the 2-row page, not all 5 rows.
+    assert seen["page_numbers"] == ["INV-0", "INV-1"]
+
+
+@pytest.mark.django_db
+def test_paginated_page_read_is_a_single_query(django_assert_num_queries: Any) -> None:
+    """Reading ids off ``page`` reuses the queryset's result cache — the
+    renderer iterates the same object, so no second query is issued."""
+    for i in range(5):
+        Invoice.objects.create(number=f"INV-{i}", amount_cents=i)
+
+    def _ctx_provider(view: Any, request: Any, *, page: Any) -> Mapping[str, Any]:  # noqa: ARG001
+        # One batched query keyed on the page's ids.
+        ids = [inv.pk for inv in page]
+        return {"ids": list(Invoice.objects.filter(pk__in=ids).values_list("pk", flat=True))}
+
+    class _Out(drf_serializers.ModelSerializer):
+        class Meta:
+            model = Invoice
+            fields = ["id", "number"]
+
+    server = _server()
+    server.register_selector_tool(
+        name="invoices.list",
+        spec=SelectorSpec(
+            kind=SelectorKind.LIST,
+            selector=_list_all_invoices,
+            output_serializer=_Out,
+            output_serializer_context=_ctx_provider,
+        ),
+        paginate=True,
+    )
+    # count(1) + page fetch(1) + provider's batched query(1) = 3.
+    with django_assert_num_queries(3):
+        handle_tools_call(
+            {"name": "invoices.list", "arguments": {"page": 1, "limit": 2}}, _ctx(server)
+        )
