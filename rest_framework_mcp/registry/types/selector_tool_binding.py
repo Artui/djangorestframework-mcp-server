@@ -53,6 +53,12 @@ class SelectorToolBinding(Generic[ResultT, ExtraT]):
     name: str
     description: str | None
     spec: SelectorSpec[ResultT, ExtraT]
+    # Consumer-only display metadata — never emitted on the MCP wire
+    # (``tools/list`` ignores them). Provided so a downstream library can
+    # render a richer label / blurb than the protocol ``title`` /
+    # ``description``. ``None`` means "unset".
+    display_name: str | None = None
+    display_description: str | None = None
     # ``SelectorSpec`` from the sister repo doesn't carry an input
     # serializer (selectors only describe how to fetch; the HTTP transport
     # validates the URL/query separately). For MCP, where every tool call

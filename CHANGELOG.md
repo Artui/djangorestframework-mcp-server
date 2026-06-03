@@ -7,6 +7,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.6.1] — 2026-06-03
+
+### Added
+
+- **`display_name` / `display_description` on tool definitions and bindings.**
+  Optional consumer-only metadata, accepted by `register_service_tool` /
+  `register_selector_tool` / `register_chain_tool`, by
+  `ToolDefinition.service()` / `.selector()` (and forwarded through
+  `register_tools`), and carried onto the resulting `ToolBinding` /
+  `SelectorToolBinding` / `ChainToolBinding`. The MCP server **never** emits
+  them on the wire (`tools/list` ignores them) — they exist so a downstream
+  library can render a richer label / blurb than the protocol `title` /
+  `description`. Both default to `None`.
+
 ## [0.6.0] — 2026-06-03
 
 ### Added
@@ -770,7 +784,8 @@ Pinned to `djangorestframework-services==0.6.0`.
 - 100% line + branch coverage enforced by pytest (**451 tests** at
   release).
 
-[Unreleased]: https://github.com/Artui/djangorestframework-mcp-server/compare/v0.6.0...HEAD
+[Unreleased]: https://github.com/Artui/djangorestframework-mcp-server/compare/v0.6.1...HEAD
+[0.6.1]: https://github.com/Artui/djangorestframework-mcp-server/compare/v0.6.0...v0.6.1
 [0.6.0]: https://github.com/Artui/djangorestframework-mcp-server/compare/v0.5.1...v0.6.0
 [0.5.1]: https://github.com/Artui/djangorestframework-mcp-server/compare/v0.5.0...v0.5.1
 [0.5.0]: https://github.com/Artui/djangorestframework-mcp-server/compare/v0.4.0...v0.5.0
