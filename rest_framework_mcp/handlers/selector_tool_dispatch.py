@@ -373,13 +373,30 @@ def _is_valid_ordering(value: str, allowed: tuple[str, ...]) -> bool:
 def _slice_for_pagination(qs: Any, arguments_raw: dict[str, Any]) -> tuple[int, int, Any, int]:
     """Return ``(page, limit, page_slice, total)``.
 
-    ``total`` uses ``.count()`` for queryset shapes and ``len(...)`` for
-    everything else. ``page`` / ``limit`` default to 1 / 100; non-positive
-    values are clamped to 1.
+    ``total`` uses ``.count()`` for QuerySet shapes and ``len(...)`` for
+    plain sequences (lists / tuples). ``page`` / ``limit`` default to 1 /
+    100; non-positive values are clamped to 1.
+
+    The shape is discriminated with :func:`_is_queryset_like`, **not**
+    ``hasattr(qs, "count")``: ``list`` / ``tuple`` also expose ``.count`` —
+    but it's ``.count(value)`` (counts occurrences) and needs an argument,
+    so the old guard turned a list-returning paginated selector into an
+    opaque ``count() takes exactly one argument (0 given)``. A selector
+    that returns neither a QuerySet nor a sized, sliceable sequence (e.g. a
+    generator or a scalar) raises a clear error instead.
     """
     page_no: int = max(1, _coerce_int(arguments_raw.get("page"), default=1))
     limit: int = max(1, _coerce_int(arguments_raw.get("limit"), default=100))
-    total = qs.count() if hasattr(qs, "count") else len(qs)
+    if _is_queryset_like(qs):
+        total: int = qs.count()
+    elif hasattr(qs, "__len__") and hasattr(qs, "__getitem__"):
+        total = len(qs)  # plain sequence — paginate it in-memory
+    else:
+        raise TypeError(
+            "A paginated LIST selector tool must return a QuerySet or a sized, "
+            f"sliceable sequence (list / tuple); got {type(qs).__name__}. Set "
+            "paginate=False or return a sliceable collection."
+        )
     start: int = (page_no - 1) * limit
     page_items: Any = qs[start : start + limit]
     return page_no, limit, page_items, total

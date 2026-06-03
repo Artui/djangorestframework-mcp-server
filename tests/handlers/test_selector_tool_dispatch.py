@@ -799,3 +799,59 @@ def test_retrieve_kind_forwards_output_serializer_context() -> None:
     out = handle_tools_call({"name": "invoices.retrieve", "arguments": {}}, _ctx(server))
     assert isinstance(out, dict)
     assert out["structuredContent"] == {"number": "A", "extra": "via-spec"}
+
+
+# ---------- Pagination type guard (kind=LIST) ----------
+
+
+@pytest.mark.django_db
+def test_pagination_over_list_returning_selector_paginates_in_memory() -> None:
+    """A LIST selector returning a plain list paginates via len()+slice —
+    not the opaque ``list.count()`` crash the old hasattr guard produced."""
+    for i in range(5):
+        Invoice.objects.create(number=f"INV-{i}", amount_cents=i)
+
+    def _as_list() -> list[Invoice]:
+        return list(Invoice.objects.all().order_by("amount_cents"))
+
+    server = _server()
+    server.register_selector_tool(
+        name="invoices.list",
+        spec=SelectorSpec(
+            kind=SelectorKind.LIST,
+            selector=_as_list,
+            output_serializer=InvoiceOutputSerializer,
+        ),
+        paginate=True,
+    )
+    out = handle_tools_call(
+        {"name": "invoices.list", "arguments": {"page": 2, "limit": 2}}, _ctx(server)
+    )
+    assert isinstance(out, dict)
+    payload = out["structuredContent"]
+    assert payload["page"] == 2
+    assert payload["totalPages"] == 3  # ceil(5/2)
+    assert payload["hasNext"] is True
+    assert [item["number"] for item in payload["items"]] == ["INV-2", "INV-3"]
+
+
+@pytest.mark.django_db
+def test_pagination_over_non_sized_return_raises_clear_error() -> None:
+    """A non-QuerySet, non-sequence return (a generator) raises a precise
+    error instead of an opaque ``count()`` / slice failure."""
+
+    def _generator() -> Any:
+        yield from ()
+
+    server = _server()
+    server.register_selector_tool(
+        name="invoices.list",
+        spec=SelectorSpec(
+            kind=SelectorKind.LIST,
+            selector=_generator,
+            output_serializer=InvoiceOutputSerializer,
+        ),
+        paginate=True,
+    )
+    with pytest.raises(TypeError, match="must return a QuerySet or a sized"):
+        handle_tools_call({"name": "invoices.list", "arguments": {}}, _ctx(server))

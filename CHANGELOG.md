@@ -26,6 +26,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Bumped `djangorestframework-services` to `==0.15.0`** (additive — the
   resolved-data output-context feature above).
 
+### Fixed
+
+- **`kind=LIST` pagination now handles non-QuerySet selector returns.** A
+  paginated LIST selector that returned a plain `list` / `tuple` previously
+  hit `list.count()` (which takes an argument) and failed with the opaque
+  `count() takes exactly one argument (0 given)`. Pagination now
+  discriminates QuerySet vs sequence with `_is_queryset_like`: QuerySets
+  count via `.count()`, sequences paginate in-memory via `len()` + slice,
+  and a non-sized/non-sliceable return (e.g. a generator) raises a clear
+  "must return a QuerySet or a sized, sliceable sequence" error.
+
 ## [0.5.1] — 2026-05-31
 
 ### Changed
