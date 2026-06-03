@@ -57,6 +57,7 @@ from rest_framework_mcp.handlers.utils import (
     build_internal_drf_request,
     check_permissions,
     consume_rate_limits,
+    invoke_context_provider,
     validate_input_against_serializer,
     validation_error_data,
 )
@@ -282,7 +283,9 @@ def _post_fetch_and_render(
     )
 
     if binding.kind is SelectorKind.RETRIEVE:
-        context: Mapping[str, Any] | None = _resolve_output_context(binding, drf_request)
+        context: Mapping[str, Any] | None = _resolve_output_context(
+            binding, drf_request, extras={"instance": result}
+        )
         payload: Any = _render_single(result, binding, context=context)
         return build_tool_result(
             payload,
@@ -308,14 +311,17 @@ def _post_fetch_and_render(
         if isinstance(ordering, str) and _is_valid_ordering(ordering, binding.ordering_fields):
             qs = qs.order_by(ordering)
 
-    # Output-serializer context (sister-repo 0.12+): the spec callable
-    # receives the synthesised view + request and contributes context keys
-    # to the ``many=True`` serializer. ``None`` from the spec → no context.
-    context = _resolve_output_context(binding, drf_request)
-
+    # Output-serializer context (sister-repo 0.12+; resolved-data extras in
+    # 0.15+). Resolved *after* the page is materialised so a provider
+    # declaring ``page`` receives the exact objects being serialised — and
+    # the same object the renderer iterates, so an id-keyed batched query
+    # reuses the queryset's result cache instead of issuing a second query.
+    # ``None`` from the spec → no context.
+    #
     # Pagination — wraps the response in ``{items, page, totalPages, hasNext}``.
     if binding.paginate:
         page_no, limit, page_items, total = _slice_for_pagination(qs, arguments_raw)
+        context = _resolve_output_context(binding, drf_request, extras={"page": page_items})
         rendered_items = _render_collection(page_items, binding, context=context)
         total_pages: int = max(1, -(-total // limit))  # ceil divide
         payload = {
@@ -325,6 +331,7 @@ def _post_fetch_and_render(
             "hasNext": page_no < total_pages,
         }
     else:
+        context = _resolve_output_context(binding, drf_request, extras={"page": qs})
         payload = _render_collection(qs, binding, context=context)
     return build_tool_result(
         payload,
@@ -366,13 +373,30 @@ def _is_valid_ordering(value: str, allowed: tuple[str, ...]) -> bool:
 def _slice_for_pagination(qs: Any, arguments_raw: dict[str, Any]) -> tuple[int, int, Any, int]:
     """Return ``(page, limit, page_slice, total)``.
 
-    ``total`` uses ``.count()`` for queryset shapes and ``len(...)`` for
-    everything else. ``page`` / ``limit`` default to 1 / 100; non-positive
-    values are clamped to 1.
+    ``total`` uses ``.count()`` for QuerySet shapes and ``len(...)`` for
+    plain sequences (lists / tuples). ``page`` / ``limit`` default to 1 /
+    100; non-positive values are clamped to 1.
+
+    The shape is discriminated with :func:`_is_queryset_like`, **not**
+    ``hasattr(qs, "count")``: ``list`` / ``tuple`` also expose ``.count`` —
+    but it's ``.count(value)`` (counts occurrences) and needs an argument,
+    so the old guard turned a list-returning paginated selector into an
+    opaque ``count() takes exactly one argument (0 given)``. A selector
+    that returns neither a QuerySet nor a sized, sliceable sequence (e.g. a
+    generator or a scalar) raises a clear error instead.
     """
     page_no: int = max(1, _coerce_int(arguments_raw.get("page"), default=1))
     limit: int = max(1, _coerce_int(arguments_raw.get("limit"), default=100))
-    total = qs.count() if hasattr(qs, "count") else len(qs)
+    if _is_queryset_like(qs):
+        total: int = qs.count()
+    elif hasattr(qs, "__len__") and hasattr(qs, "__getitem__"):
+        total = len(qs)  # plain sequence — paginate it in-memory
+    else:
+        raise TypeError(
+            "A paginated LIST selector tool must return a QuerySet or a sized, "
+            f"sliceable sequence (list / tuple); got {type(qs).__name__}. Set "
+            "paginate=False or return a sliceable collection."
+        )
     start: int = (page_no - 1) * limit
     page_items: Any = qs[start : start + limit]
     return page_no, limit, page_items, total
@@ -472,14 +496,24 @@ def _apply_spec_shaping(binding: SelectorToolBinding, qs: Any, drf_request: Any)
 
 
 def _resolve_output_context(
-    binding: SelectorToolBinding, drf_request: Any
+    binding: SelectorToolBinding,
+    drf_request: Any,
+    *,
+    extras: Mapping[str, Any],
 ) -> Mapping[str, Any] | None:
-    """Invoke ``spec.output_serializer_context(view, request)`` if declared."""
+    """Invoke ``spec.output_serializer_context(view, request[, **extras])`` if declared.
+
+    ``extras`` carries the resolved data about to be serialised — the
+    ``instance`` for a RETRIEVE tool, the ``page`` for a LIST tool. The
+    provider receives only the names it declares; legacy ``(view, request)``
+    providers are unaffected. See
+    :func:`rest_framework_mcp.handlers.utils.invoke_context_provider`.
+    """
     spec = binding.spec
     if spec.output_serializer_context is None:
         return None
     view = MCPServiceView(request=drf_request, action=binding.name)
-    return spec.output_serializer_context(view, drf_request)
+    return invoke_context_provider(spec.output_serializer_context, view, drf_request, extras=extras)
 
 
 __all__ = ["dispatch_selector_tool", "dispatch_selector_tool_async"]

@@ -10,7 +10,9 @@ from rest_framework_mcp.handlers.types.context import MCPCallContext
 from rest_framework_mcp.output.resolve_structured_output import resolve_structured_output
 from rest_framework_mcp.protocol.types.json_rpc_error import JsonRpcError
 from rest_framework_mcp.protocol.types.tool import Tool
+from rest_framework_mcp.registry.types.chain_tool_binding import ChainToolBinding
 from rest_framework_mcp.registry.types.selector_tool_binding import SelectorToolBinding
+from rest_framework_mcp.schema.chain_tool_schema import build_chain_tool_input_schema
 from rest_framework_mcp.schema.input_schema import build_input_schema
 from rest_framework_mcp.schema.output_schema import build_output_schema
 from rest_framework_mcp.schema.selector_tool_schema import build_selector_tool_input_schema
@@ -49,10 +51,13 @@ def handle_tools_list(
 
     tools: list[dict[str, Any]] = []
     for binding in page:
-        # Selector tools merge filter / ordering / pagination args into
-        # their inputSchema; service tools just expose the input
-        # serializer's schema verbatim.
-        if isinstance(binding, SelectorToolBinding):
+        # Chain tools advertise their resolved input serializer (explicit or
+        # first-step fallback); selector tools merge filter / ordering /
+        # pagination args into their inputSchema; service tools just expose
+        # the input serializer's schema verbatim.
+        if isinstance(binding, ChainToolBinding):
+            input_schema = build_chain_tool_input_schema(binding)
+        elif isinstance(binding, SelectorToolBinding):
             input_schema = build_selector_tool_input_schema(binding)
         else:
             input_schema = build_input_schema(binding.spec.input_serializer)
@@ -77,8 +82,12 @@ def handle_tools_list(
         )
         # Sister-repo 0.13+: a service tool's response serializer lives
         # at ``ServiceSpec.output_selector_spec.output_serializer``; a
-        # selector tool's still lives flat on the ``SelectorSpec``.
-        if isinstance(binding, SelectorToolBinding):
+        # selector tool's still lives flat on the ``SelectorSpec``; a chain
+        # tool exposes its output step's serializer (``None`` under
+        # ``output_all``).
+        if isinstance(binding, ChainToolBinding):
+            output_serializer = binding.output_serializer
+        elif isinstance(binding, SelectorToolBinding):
             output_serializer = binding.spec.output_serializer
         else:
             output_serializer = (

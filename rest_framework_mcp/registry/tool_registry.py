@@ -1,14 +1,15 @@
 from __future__ import annotations
 
+from rest_framework_mcp.registry.types.chain_tool_binding import ChainToolBinding
 from rest_framework_mcp.registry.types.selector_tool_binding import SelectorToolBinding
 from rest_framework_mcp.registry.types.tool_binding import ToolBinding
 
-# Either binding type counts as a "tool" on the wire — ``tools/list`` and
+# Each binding type counts as a "tool" on the wire — ``tools/list`` and
 # ``tools/call`` discriminate at dispatch time. We deliberately do NOT
 # define a shared base class so each binding stays a frozen dataclass with
 # its own structure; the union here is enough for type checkers and runtime
 # isinstance() checks.
-ToolBindingLike = ToolBinding | SelectorToolBinding
+ToolBindingLike = ToolBinding | SelectorToolBinding | ChainToolBinding
 
 
 class ToolRegistry:

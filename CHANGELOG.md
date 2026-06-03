@@ -7,6 +7,54 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.6.0] — 2026-06-03
+
+### Added
+
+- **Chain tools (`MCPServer.register_chain_tool`).** Sequence several
+  `ServiceSpec` / `SelectorSpec` steps behind a single MCP tool, where later
+  steps read earlier outputs — `retrieve x → write y → write z` with `z`
+  derived from both `x` and `y`. Each `ChainStep` binds its result to an
+  alias readable via `ctx[alias]`; an optional `inputs(ctx)` callable maps
+  the validated tool arguments (`ctx.args`) and prior outputs to that step's
+  kwargs. `atomic=True` (default) runs the whole sequence in one
+  `transaction.atomic()` — any step raising `ServiceError` /
+  `ServiceValidationError` rolls back every prior write and the JSON-RPC
+  error carries `failedStep`. The advertised `inputSchema` is the chain's
+  explicit `input_serializer` or the first step's (the first-step fallback);
+  the response is the `output_alias` step (default: last) or `{alias:
+  rendered}` for every serializer-bearing step under `output_all=True`. Each
+  step's `spec.permission_classes` are AND-combined with chain-level
+  `permissions` and checked up front. Sync + async. New public exports:
+  `ChainStep`, `ChainContext`.
+- **Resolved-data output serializer context (sister-repo 0.15+).** Output
+  context providers may now declare a keyword for the data about to be
+  serialized — `result` (service tool), `instance` (selector RETRIEVE), or
+  `page` (selector LIST) — and the value is forwarded through tool dispatch
+  (sync + async). This lets a provider run a single batched query against
+  the exact objects being rendered instead of re-fetching. `view` /
+  `request` stay positional, so existing `(view, request)` providers are
+  unaffected. For the LIST path the context is resolved *after* the page is
+  materialized and the provider receives the same object the renderer
+  iterates, so an id-keyed batched query reuses the queryset's result
+  cache.
+
+### Changed
+
+- **Bumped `djangorestframework-services` to `==0.15.0`** (additive — the
+  resolved-data output-context feature above).
+
+### Fixed
+
+- **`kind=LIST` pagination now handles non-QuerySet selector returns.** A
+  paginated LIST selector that returned a plain `list` / `tuple` previously
+  hit `list.count()` (which takes an argument) and failed with the opaque
+  `count() takes exactly one argument (0 given)`. Pagination now
+  discriminates QuerySet vs sequence with `_is_queryset_like`: QuerySets
+  count via `.count()`, sequences paginate in-memory via `len()` + slice,
+  and a non-sized/non-sliceable return (e.g. a generator) raises a clear
+  "must return a QuerySet or a sized, sliceable sequence" error.
+
 ## [0.5.1] — 2026-05-31
 
 ### Changed
@@ -722,7 +770,8 @@ Pinned to `djangorestframework-services==0.6.0`.
 - 100% line + branch coverage enforced by pytest (**451 tests** at
   release).
 
-[Unreleased]: https://github.com/Artui/djangorestframework-mcp-server/compare/v0.5.1...HEAD
+[Unreleased]: https://github.com/Artui/djangorestframework-mcp-server/compare/v0.6.0...HEAD
+[0.6.0]: https://github.com/Artui/djangorestframework-mcp-server/compare/v0.5.1...v0.6.0
 [0.5.1]: https://github.com/Artui/djangorestframework-mcp-server/compare/v0.5.0...v0.5.1
 [0.5.0]: https://github.com/Artui/djangorestframework-mcp-server/compare/v0.4.0...v0.5.0
 [0.4.0]: https://github.com/Artui/djangorestframework-mcp-server/compare/v0.3.0...v0.4.0

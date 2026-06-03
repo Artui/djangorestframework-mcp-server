@@ -30,6 +30,8 @@ from rest_framework_mcp.registry.prompt_registry import PromptRegistry
 from rest_framework_mcp.registry.register_tools import register_tools
 from rest_framework_mcp.registry.resource_registry import ResourceRegistry
 from rest_framework_mcp.registry.tool_registry import ToolRegistry
+from rest_framework_mcp.registry.types.chain_context import ChainContext
+from rest_framework_mcp.registry.types.chain_step import ChainStep
 from rest_framework_mcp.registry.types.selector_defaults import SelectorDefaults
 from rest_framework_mcp.registry.types.service_defaults import ServiceDefaults
 from rest_framework_mcp.registry.types.tool_definition import ToolDefinition
@@ -46,6 +48,8 @@ from rest_framework_mcp.version import __version__
 
 __all__ = [
     "ArgumentBinding",
+    "ChainContext",
+    "ChainStep",
     "CreateService",
     "DRFPermissionAdapter",
     "DeleteService",

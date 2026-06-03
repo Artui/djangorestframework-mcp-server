@@ -17,6 +17,7 @@ from rest_framework_mcp._compat.utils import (
 from rest_framework_mcp.conf import get_setting
 from rest_framework_mcp.constants import JsonRpcErrorCode, OutputFormat
 from rest_framework_mcp.handlers.build_call_pool import build_call_pool
+from rest_framework_mcp.handlers.chain_tool_dispatch import dispatch_chain_tool_async
 from rest_framework_mcp.handlers.handle_tools_call import (
     _render_output,
     _span_attrs,
@@ -28,11 +29,13 @@ from rest_framework_mcp.handlers.utils import (
     build_internal_drf_request,
     check_permissions,
     consume_rate_limits,
+    invoke_context_provider,
     validation_error_data,
 )
 from rest_framework_mcp.output.resolve_structured_output import resolve_structured_output
 from rest_framework_mcp.output.tool_result import build_tool_result
 from rest_framework_mcp.protocol.types.json_rpc_error import JsonRpcError
+from rest_framework_mcp.registry.types.chain_tool_binding import ChainToolBinding
 from rest_framework_mcp.registry.types.selector_tool_binding import SelectorToolBinding
 from rest_framework_mcp.server.types.mcp_service_view import MCPServiceView
 
@@ -70,9 +73,14 @@ async def handle_tools_call_async(
         return JsonRpcError(JsonRpcErrorCode.INVALID_PARAMS, "'arguments' must be an object")
 
     with span("mcp.tools.call", attributes=_span_attrs(binding.name, context)) as otel_span:
-        # Read-shaped tools route through the selector-tool dispatch
-        # helper (filter / order / paginate). Mutation tools fall
-        # through to the existing service-tool path below.
+        # Chain tools run an ordered sequence of specs; read-shaped tools
+        # route through the selector-tool dispatch helper (filter / order /
+        # paginate). Mutation tools fall through to the service-tool path
+        # below.
+        if isinstance(binding, ChainToolBinding):
+            return await dispatch_chain_tool_async(
+                binding, params, arguments_raw, context, otel_span
+            )
         if isinstance(binding, SelectorToolBinding):
             return await dispatch_selector_tool_async(
                 binding, params, arguments_raw, context, otel_span
@@ -165,7 +173,15 @@ async def handle_tools_call_async(
         output_context: Mapping[str, Any] | None = None
         if out_spec is not None and out_spec.output_serializer_context is not None:
             output_context_view = MCPServiceView(request=drf_request, action=binding.name)
-            output_context = out_spec.output_serializer_context(output_context_view, drf_request)
+            # Forward the final (post-output-selector) ``result`` so a
+            # provider declaring it can run a single batched query against the
+            # exact value being serialized — sister-repo 0.15 parity.
+            output_context = invoke_context_provider(
+                out_spec.output_serializer_context,
+                output_context_view,
+                drf_request,
+                extras={"result": result},
+            )
         payload: Any = _render_output(result, binding.spec, context=output_context)
         output_format: OutputFormat = OutputFormat.coerce(
             params.get("outputFormat") or binding.output_format

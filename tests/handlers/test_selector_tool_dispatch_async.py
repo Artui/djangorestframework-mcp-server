@@ -194,3 +194,39 @@ async def test_async_denies_on_permission() -> None:
     out = await handle_tools_call_async({"name": "x", "arguments": {}}, _ctx(server))
     assert isinstance(out, JsonRpcError)
     assert out.code == -32002
+
+
+@pytest.mark.django_db(transaction=True)
+async def test_async_selector_provider_receives_resolved_data_extra() -> None:
+    """Async dispatch forwards the resolved-data extra (``page``) to the
+    output-context provider just like the sync path."""
+    from asgiref.sync import sync_to_async
+
+    @sync_to_async
+    def _setup() -> None:
+        for i in range(3):
+            Invoice.objects.create(number=f"INV-{i}", amount_cents=i)
+
+    await _setup()
+    seen: dict[str, Any] = {}
+
+    def _list() -> Any:
+        return Invoice.objects.all().order_by("amount_cents")
+
+    def _ctx_provider(view: Any, request: Any, *, page: Any) -> dict[str, Any]:  # noqa: ARG001
+        seen["numbers"] = [inv.number for inv in page]
+        return {}
+
+    server = _server()
+    server.register_selector_tool(
+        name="invoices.list",
+        spec=SelectorSpec(
+            kind=SelectorKind.LIST,
+            selector=_list,
+            output_serializer=InvoiceOutputSerializer,
+            output_serializer_context=_ctx_provider,
+        ),
+    )
+    out = await handle_tools_call_async({"name": "invoices.list", "arguments": {}}, _ctx(server))
+    assert isinstance(out, dict)
+    assert seen["numbers"] == ["INV-0", "INV-1", "INV-2"]
