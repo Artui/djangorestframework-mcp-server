@@ -7,6 +7,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.6.2] — 2026-06-04
+
+### Changed
+
+- Bumped the pinned `djangorestframework-services` dependency to **0.15.1**.
+- The selector-tool dispatch path now discriminates queryset shapes with the
+  sister package's centralized `is_queryset()` predicate
+  (`rest_framework_services.selectors.utils`) instead of a local
+  `_is_queryset_like` duck-typing helper that probed for
+  `.filter` / `.order_by` / `.count`. This is a precise `isinstance` check
+  against `QuerySet` / `Manager`, so a domain object that merely exposes those
+  method names is no longer mistaken for a queryset and routed through the
+  FilterSet / ordering / `.count()` shaping path. Plain lists and tuples still
+  paginate in-memory via `len()` + slice exactly as before. No public API or
+  behavioral change for the documented queryset / list selector shapes.
+
 ## [0.6.1] — 2026-06-03
 
 ### Added
@@ -784,7 +800,8 @@ Pinned to `djangorestframework-services==0.6.0`.
 - 100% line + branch coverage enforced by pytest (**451 tests** at
   release).
 
-[Unreleased]: https://github.com/Artui/djangorestframework-mcp-server/compare/v0.6.1...HEAD
+[Unreleased]: https://github.com/Artui/djangorestframework-mcp-server/compare/v0.6.2...HEAD
+[0.6.2]: https://github.com/Artui/djangorestframework-mcp-server/compare/v0.6.1...v0.6.2
 [0.6.1]: https://github.com/Artui/djangorestframework-mcp-server/compare/v0.6.0...v0.6.1
 [0.6.0]: https://github.com/Artui/djangorestframework-mcp-server/compare/v0.5.1...v0.6.0
 [0.5.1]: https://github.com/Artui/djangorestframework-mcp-server/compare/v0.5.0...v0.5.1

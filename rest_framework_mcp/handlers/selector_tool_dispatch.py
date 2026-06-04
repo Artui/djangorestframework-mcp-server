@@ -39,7 +39,7 @@ from typing import Any
 from rest_framework import serializers as drf_serializers
 from rest_framework_services.exceptions.service_error import ServiceError
 from rest_framework_services.exceptions.service_validation_error import ServiceValidationError
-from rest_framework_services.selectors.utils import run_selector
+from rest_framework_services.selectors.utils import is_queryset, run_selector
 from rest_framework_services.types.selector_kind import SelectorKind
 from rest_framework_services.views.utils import resolve_callable_kwargs
 
@@ -302,11 +302,11 @@ def _post_fetch_and_render(
 
     # Filter — only when both binding and the QS-shape support it. Plain
     # lists / scalars fall through unchanged.
-    if binding.filter_set is not None and _is_queryset_like(qs):
+    if binding.filter_set is not None and is_queryset(qs):
         qs = _apply_filter_set(binding.filter_set, qs, arguments_raw)
 
     # Ordering — only on QS-shapes that support ``.order_by()``.
-    if binding.ordering_fields and _is_queryset_like(qs):
+    if binding.ordering_fields and is_queryset(qs):
         ordering: Any = arguments_raw.get("ordering")
         if isinstance(ordering, str) and _is_valid_ordering(ordering, binding.ordering_fields):
             qs = qs.order_by(ordering)
@@ -340,15 +340,6 @@ def _post_fetch_and_render(
     ).to_dict()
 
 
-def _is_queryset_like(value: Any) -> bool:
-    """Cheap check for queryset-shape (``.filter``, ``.order_by``, ``.count``).
-
-    Avoids importing Django's ``QuerySet`` directly so that a selector can
-    return a list-shaped collection without breaking dispatch.
-    """
-    return all(hasattr(value, attr) for attr in ("filter", "order_by", "count"))
-
-
 def _apply_filter_set(filter_set_class: Any, qs: Any, arguments_raw: dict[str, Any]) -> Any:
     """Run the FilterSet against the args and return the filtered queryset.
 
@@ -377,8 +368,9 @@ def _slice_for_pagination(qs: Any, arguments_raw: dict[str, Any]) -> tuple[int, 
     plain sequences (lists / tuples). ``page`` / ``limit`` default to 1 /
     100; non-positive values are clamped to 1.
 
-    The shape is discriminated with :func:`_is_queryset_like`, **not**
-    ``hasattr(qs, "count")``: ``list`` / ``tuple`` also expose ``.count`` —
+    The shape is discriminated with the sister-repo's :func:`is_queryset`
+    predicate, **not** ``hasattr(qs, "count")``: ``list`` / ``tuple`` also
+    expose ``.count`` —
     but it's ``.count(value)`` (counts occurrences) and needs an argument,
     so the old guard turned a list-returning paginated selector into an
     opaque ``count() takes exactly one argument (0 given)``. A selector
@@ -387,7 +379,7 @@ def _slice_for_pagination(qs: Any, arguments_raw: dict[str, Any]) -> tuple[int, 
     """
     page_no: int = max(1, _coerce_int(arguments_raw.get("page"), default=1))
     limit: int = max(1, _coerce_int(arguments_raw.get("limit"), default=100))
-    if _is_queryset_like(qs):
+    if is_queryset(qs):
         total: int = qs.count()
     elif hasattr(qs, "__len__") and hasattr(qs, "__getitem__"):
         total = len(qs)  # plain sequence — paginate it in-memory
@@ -481,7 +473,7 @@ def _apply_spec_shaping(binding: SelectorToolBinding, qs: Any, drf_request: Any)
     ordering in ``dispatch_selector_for_spec``.
     """
     spec = binding.spec
-    if not _is_queryset_like(qs):
+    if not is_queryset(qs):
         return qs
     if spec.select_related:
         qs = qs.select_related(*spec.select_related)
