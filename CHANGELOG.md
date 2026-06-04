@@ -7,6 +7,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- Bumped the pinned `djangorestframework-services` dependency to **0.15.1**.
+- The selector-tool dispatch path now discriminates queryset shapes with the
+  sister package's centralized `is_queryset()` predicate
+  (`rest_framework_services.selectors.utils`) instead of a local
+  `_is_queryset_like` duck-typing helper that probed for
+  `.filter` / `.order_by` / `.count`. This is a precise `isinstance` check
+  against `QuerySet` / `Manager`, so a domain object that merely exposes those
+  method names is no longer mistaken for a queryset and routed through the
+  FilterSet / ordering / `.count()` shaping path. Plain lists and tuples still
+  paginate in-memory via `len()` + slice exactly as before. No public API or
+  behavioral change for the documented queryset / list selector shapes.
+
 ## [0.6.1] — 2026-06-03
 
 ### Added
