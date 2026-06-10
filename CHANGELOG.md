@@ -719,8 +719,8 @@ No code changes.
 
 ### Fixed
 
-- README and docs linked to `github.com/arturveres/djangorestframework-services`
-  (404). The sister repo lives at `github.com/Artui/djangorestframework-services` —
+- README and docs linked to a stale owner for the sister repo
+  (404). It lives at `github.com/Artui/djangorestframework-services` —
   links corrected in `README.md`, `docs/index.md`, and both `ServiceSpec` /
   `SelectorSpec` source links in `docs/concepts.md`. Re-released so the
   PyPI project description picks up the fix.
