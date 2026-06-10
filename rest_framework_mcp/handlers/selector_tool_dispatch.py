@@ -36,6 +36,7 @@ from __future__ import annotations
 from collections.abc import Mapping
 from typing import Any
 
+from django.core.exceptions import ObjectDoesNotExist
 from rest_framework import serializers as drf_serializers
 from rest_framework_services.exceptions.service_error import ServiceError
 from rest_framework_services.exceptions.service_validation_error import ServiceValidationError
@@ -61,6 +62,7 @@ from rest_framework_mcp.handlers.utils import (
     validate_input_against_serializer,
     validation_error_data,
 )
+from rest_framework_mcp.output.error_tool_result import build_error_tool_result
 from rest_framework_mcp.output.resolve_structured_output import resolve_structured_output
 from rest_framework_mcp.output.tool_result import build_tool_result
 from rest_framework_mcp.protocol.types.json_rpc_error import JsonRpcError
@@ -97,15 +99,25 @@ def dispatch_selector_tool(
         kwargs: dict[str, Any] = resolve_callable_kwargs(binding.selector, pool)
         result: Any = run_selector(binding.selector, kwargs)
     except ServiceValidationError as exc:
-        return JsonRpcError(
-            JsonRpcErrorCode.INVALID_PARAMS,
+        # Tool-level failure → ``isError`` result the model can read and
+        # self-correct from; JSON-RPC errors stay reserved for protocol
+        # faults (bad params shape, unknown tool, auth, rate limits).
+        return build_error_tool_result(
             exc.message,
-            data=validation_error_data(exc.detail, arguments_raw),
-        )
+            error_type="validation_error",
+            detail=validation_error_data(exc.detail, arguments_raw),
+        ).to_dict()
     except ServiceError as exc:
         if get_setting("RECORD_SERVICE_EXCEPTIONS"):
             otel_span.record_exception(exc)
-        return JsonRpcError(JsonRpcErrorCode.SERVER_ERROR, exc.message)
+        return build_error_tool_result(exc.message, error_type="service_error").to_dict()
+    except ObjectDoesNotExist:
+        # A strict ``.get()``-style RETRIEVE selector — mirror sister-repo
+        # HTTP dispatch: missing row → not-found (or ``null`` when the spec
+        # opts into the nullable-resource contract via ``allow_none``).
+        if binding.kind is SelectorKind.RETRIEVE:
+            return _render_missing_instance(binding, params)
+        raise
 
     return _post_fetch_and_render(binding, result, drf_request, arguments_raw, params)
 
@@ -155,15 +167,21 @@ async def dispatch_selector_tool_async(
         kwargs: dict[str, Any] = resolve_callable_kwargs(binding.selector, pool)
         result: Any = await arun_selector_sync_safe(binding.selector, kwargs)
     except ServiceValidationError as exc:
-        return JsonRpcError(
-            JsonRpcErrorCode.INVALID_PARAMS,
+        # See the sync sibling for the protocol-vs-tool error boundary.
+        return build_error_tool_result(
             exc.message,
-            data=validation_error_data(exc.detail, arguments_raw),
-        )
+            error_type="validation_error",
+            detail=validation_error_data(exc.detail, arguments_raw),
+        ).to_dict()
     except ServiceError as exc:
         if get_setting("RECORD_SERVICE_EXCEPTIONS"):
             otel_span.record_exception(exc)
-        return JsonRpcError(JsonRpcErrorCode.SERVER_ERROR, exc.message)
+        return build_error_tool_result(exc.message, error_type="service_error").to_dict()
+    except ObjectDoesNotExist:
+        # See the sync sibling — RETRIEVE missing-row parity.
+        if binding.kind is SelectorKind.RETRIEVE:
+            return _render_missing_instance(binding, params)
+        raise
 
     return await _post_fetch_and_render_async(binding, result, drf_request, arguments_raw, params)
 
@@ -283,6 +301,15 @@ def _post_fetch_and_render(
     )
 
     if binding.kind is SelectorKind.RETRIEVE:
+        # Sister-repo 0.16 parity: materialize a QuerySet return via
+        # ``.first()`` (``selector=lambda *, pk: Model.objects.filter(pk=pk)``
+        # works identically over MCP and HTTP), and route the missing-row
+        # case through the not-found / nullable contract instead of
+        # serializing ``None``.
+        if is_queryset(result):
+            result = result.first()
+        if result is None:
+            return _render_missing_instance(binding, params)
         context: Mapping[str, Any] | None = _resolve_output_context(
             binding, drf_request, extras={"instance": result}
         )
@@ -337,6 +364,36 @@ def _post_fetch_and_render(
         payload,
         output_format=output_format,
         include_structured_content=emit_structured_content,
+    ).to_dict()
+
+
+def _render_missing_instance(
+    binding: SelectorToolBinding, params: dict[str, Any]
+) -> dict[str, Any]:
+    """Render the RETRIEVE missing-row case per the spec's ``allow_none``.
+
+    ``allow_none=True`` (sister-repo 0.16's nullable-resource contract)
+    yields a successful ``null`` result — the MCP analogue of the HTTP
+    200-with-``null``-body rendering. The default yields a tool-level
+    not-found ``isError`` result the model can read and self-correct from.
+    """
+    if binding.spec.allow_none:
+        output_format: OutputFormat = OutputFormat.coerce(
+            params.get("outputFormat") or binding.output_format
+        )
+        _emit_output_schema, emit_structured_content = resolve_structured_output(
+            include_output_schema_override=binding.include_output_schema,
+            include_structured_content_override=binding.include_structured_content,
+            binding_name=binding.name,
+        )
+        return build_tool_result(
+            None,
+            output_format=output_format,
+            include_structured_content=emit_structured_content,
+        ).to_dict()
+    return build_error_tool_result(
+        f"{binding.name}: no matching instance found",
+        error_type="not_found",
     ).to_dict()
 
 

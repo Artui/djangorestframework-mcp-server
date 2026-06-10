@@ -25,6 +25,7 @@ from rest_framework_mcp.registry.tool_registry import ToolRegistry
 from rest_framework_mcp.transport.negotiate_protocol_version import negotiate_protocol_version
 from rest_framework_mcp.transport.origin_validation import is_origin_allowed
 from rest_framework_mcp.transport.types.session_store import SessionStore
+from rest_framework_mcp.transport.utils import principal_for_token
 
 _SESSION_HEADER: str = "Mcp-Session-Id"
 _VERSION_HEADER: str = "Mcp-Protocol-Version"
@@ -122,26 +123,27 @@ class StreamableHttpViewSet(ViewSet):
             )
         protocol_version: str = negotiated
 
+        # Authentication runs *before* the session lookup: an unauthenticated
+        # caller always sees 401 regardless of session validity, so session
+        # ids cannot be probed via a 404-vs-401 oracle. Origin / size /
+        # protocol-version checks above are not principal-revealing.
+        token = self._authenticate(http_request)
+        if token is None:
+            return self._unauthenticated_response()
+
+        # A session is bound to the principal it was minted for at
+        # ``initialize``; a wrong-principal presentation renders the same
+        # 404 as an unknown id (no fresh ownership oracle).
         store = self._require_session_store()
         session_id: str | None = http_request.headers.get(_SESSION_HEADER)
-        if not is_initialize and (not session_id or not store.exists(session_id)):
+        principal: str = principal_for_token(token)
+        if not is_initialize and (not session_id or store.owner(session_id) != principal):
             return _error_response(
                 code=JsonRpcErrorCode.INVALID_REQUEST,
                 message="Unknown or missing MCP-Session-Id",
                 status=404,
                 request_id=getattr(message, "id", None),
             )
-
-        backend = self._require_auth_backend()
-        token = backend.authenticate(http_request)
-        if token is None:
-            challenge: str = backend.www_authenticate_challenge(error="invalid_token")
-            response = JsonResponse(
-                {"error": "unauthorized", "error_description": "Authentication required."},
-                status=401,
-            )
-            response["WWW-Authenticate"] = challenge
-            return response
 
         context = MCPCallContext(
             http_request=http_request,
@@ -170,30 +172,66 @@ class StreamableHttpViewSet(ViewSet):
         http_response = JsonResponse(response_body, status=200)
 
         if is_initialize and not isinstance(result, JsonRpcError):
-            new_session: str = store.create()
+            new_session: str = store.create(principal_id=principal)
             http_response[_SESSION_HEADER] = new_session
         return http_response
 
     def handle_get(self, request: Request) -> HttpResponse:
-        """GET action: SSE-from-server isn't implemented in v1; 405 per spec."""
+        """GET action: SSE-from-server isn't implemented in v1; 405 per spec.
+
+        Authentication still runs first so the endpoint never reveals
+        anything (even its 405) to unauthenticated callers — parity with
+        the async sibling's SSE stream.
+        """
         http_request = request._request  # noqa: SLF001
         guard: HttpResponse | None = self._check_origin(http_request)
         if guard is not None:
             return guard
+        if self._authenticate(http_request) is None:
+            return self._unauthenticated_response()
         return HttpResponse(status=405)
 
     def terminate_session(self, request: Request) -> HttpResponse:
-        """DELETE action: end the session named by ``MCP-Session-Id``."""
+        """DELETE action: end the session named by ``MCP-Session-Id``.
+
+        Requires authentication, and only the principal a session was
+        minted for can destroy it — a wrong-principal (or unknown) id
+        renders 404 without touching the session.
+        """
         http_request = request._request  # noqa: SLF001
         guard: HttpResponse | None = self._check_origin(http_request)
         if guard is not None:
             return guard
+        token = self._authenticate(http_request)
+        if token is None:
+            return self._unauthenticated_response()
         session_id: str | None = http_request.headers.get(_SESSION_HEADER)
         if session_id:
-            self._require_session_store().destroy(session_id)
+            store = self._require_session_store()
+            if store.owner(session_id) != principal_for_token(token):
+                return _error_response(
+                    code=JsonRpcErrorCode.INVALID_REQUEST,
+                    message="Unknown or missing MCP-Session-Id",
+                    status=404,
+                )
+            store.destroy(session_id)
         return HttpResponse(status=204)
 
     # ----- collaborator accessors -----
+
+    def _authenticate(self, http_request: Any) -> Any:
+        return self._require_auth_backend().authenticate(http_request)
+
+    def _unauthenticated_response(self) -> JsonResponse:
+        challenge: str = self._require_auth_backend().www_authenticate_challenge(
+            error="invalid_token"
+        )
+        response = JsonResponse(
+            {"error": "unauthorized", "error_description": "Authentication required."},
+            status=401,
+        )
+        response["WWW-Authenticate"] = challenge
+        return response
 
     def _check_origin(self, request: Any) -> HttpResponse | None:
         origin: str | None = request.headers.get("Origin")

@@ -28,6 +28,7 @@ from rest_framework_mcp.registry.types.prompt_binding import PromptBinding
 from rest_framework_mcp.registry.types.resource_binding import ResourceBinding
 from rest_framework_mcp.registry.types.selector_tool_binding import SelectorToolBinding
 from rest_framework_mcp.registry.types.tool_binding import ToolBinding
+from rest_framework_mcp.server.utils import check_tool_permissions_declared
 from rest_framework_mcp.transport.async_streamable_http_viewset import (
     ASYNC_STREAMABLE_HTTP_ACTION_MAP,
     AsyncStreamableHttpViewSet,
@@ -164,6 +165,7 @@ class MCPServer:
             always_listed=always_listed,
             spec_kwargs_provides=spec_kwargs_provides,
         )
+        check_tool_permissions_declared(binding.name, binding.permissions)
         self._tools.register(binding)
         return binding
 
@@ -246,6 +248,7 @@ class MCPServer:
             always_listed=always_listed,
             spec_kwargs_provides=spec_kwargs_provides,
         )
+        check_tool_permissions_declared(binding.name, binding.permissions)
         self._tools.register(binding)
         return binding
 
@@ -320,6 +323,7 @@ class MCPServer:
             unknown_arguments=unknown_arguments,
             always_listed=always_listed,
         )
+        check_tool_permissions_declared(binding.name, binding.permissions)
         self._tools.register(binding)
         return binding
 

@@ -60,7 +60,12 @@ def handle_tools_list(
         elif isinstance(binding, SelectorToolBinding):
             input_schema = build_selector_tool_input_schema(binding)
         else:
-            input_schema = build_input_schema(binding.spec.input_serializer)
+            # ``spec.partial is True`` (sister-repo 0.16) relaxes validation
+            # to partial, so the advertised schema must drop ``required``.
+            input_schema = build_input_schema(
+                binding.spec.input_serializer,
+                partial=binding.spec.partial is True,
+            )
         # Stamp ``additionalProperties`` per the binding's unknown-argument
         # policy. ``REJECT`` declares the schema as closed; ``PASSTHROUGH``
         # and ``IGNORE`` keep it open. ``build_input_schema`` and
@@ -85,12 +90,19 @@ def handle_tools_list(
         # selector tool's still lives flat on the ``SelectorSpec``; a chain
         # tool exposes its output step's serializer (``None`` under
         # ``output_all``).
+        # ``outputSchema`` must match the payload shape the dispatch
+        # pipeline actually emits — a LIST tool returns a bare array
+        # (or the pagination envelope), so its schema is kind-aware.
         if isinstance(binding, ChainToolBinding):
-            output_serializer = binding.output_serializer
+            output_schema = build_output_schema(binding.output_serializer)
         elif isinstance(binding, SelectorToolBinding):
-            output_serializer = binding.spec.output_serializer
+            output_schema = build_output_schema(
+                binding.spec.output_serializer,
+                kind=binding.kind,
+                paginate=binding.paginate,
+            )
         else:
-            output_serializer = (
+            output_schema = build_output_schema(
                 binding.spec.output_selector_spec.output_serializer
                 if binding.spec.output_selector_spec
                 else None
@@ -100,7 +112,7 @@ def handle_tools_list(
             description=binding.description,
             title=binding.title,
             input_schema=input_schema,
-            output_schema=(build_output_schema(output_serializer) if emit_output_schema else None),
+            output_schema=(output_schema if emit_output_schema else None),
             annotations=dict(binding.annotations) or None,
         )
         tools.append(tool.to_dict())

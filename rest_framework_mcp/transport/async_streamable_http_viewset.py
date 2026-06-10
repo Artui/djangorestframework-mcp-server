@@ -31,6 +31,7 @@ from rest_framework_mcp.transport.sse_response import build_sse_response
 from rest_framework_mcp.transport.types.session_store import SessionStore
 from rest_framework_mcp.transport.types.sse_broker import SSEBroker
 from rest_framework_mcp.transport.types.sse_replay_buffer import SSEReplayBuffer
+from rest_framework_mcp.transport.utils import principal_for_token
 
 _SESSION_HEADER: str = "Mcp-Session-Id"
 _VERSION_HEADER: str = "Mcp-Protocol-Version"
@@ -208,26 +209,29 @@ class AsyncStreamableHttpViewSet(ViewSet):
             )
         protocol_version: str = negotiated
 
+        # Authentication runs *before* the session lookup: an unauthenticated
+        # caller always sees 401 regardless of session validity, so session
+        # ids cannot be probed via a 404-vs-401 oracle. Origin / size /
+        # protocol-version checks above are not principal-revealing.
+        token = await self._authenticate(http_request)
+        if token is None:
+            return self._unauthenticated_response()
+
+        # A session is bound to the principal it was minted for at
+        # ``initialize``; a wrong-principal presentation renders the same
+        # 404 as an unknown id (no fresh ownership oracle).
         store = self._require_session_store()
         session_id: str | None = http_request.headers.get(_SESSION_HEADER)
-        if not is_initialize and (not session_id or not await acall(store.exists, session_id)):
+        principal: str = principal_for_token(token)
+        if not is_initialize and (
+            not session_id or await acall(store.owner, session_id) != principal
+        ):
             return _error_response(
                 code=JsonRpcErrorCode.INVALID_REQUEST,
                 message="Unknown or missing MCP-Session-Id",
                 status=404,
                 request_id=getattr(message, "id", None),
             )
-
-        backend = self._require_auth_backend()
-        token = await acall(backend.authenticate, http_request)
-        if token is None:
-            challenge: str = backend.www_authenticate_challenge(error="invalid_token")
-            response = JsonResponse(
-                {"error": "unauthorized", "error_description": "Authentication required."},
-                status=401,
-            )
-            response["WWW-Authenticate"] = challenge
-            return response
 
         context = MCPCallContext(
             http_request=http_request,
@@ -256,7 +260,7 @@ class AsyncStreamableHttpViewSet(ViewSet):
         http_response = JsonResponse(response_body, status=200)
 
         if is_initialize and not isinstance(result, JsonRpcError):
-            new_session: str = await acall(store.create)
+            new_session: str = await acall(store.create, principal_id=principal)
             http_response[_SESSION_HEADER] = new_session
         return http_response
 
@@ -265,11 +269,15 @@ class AsyncStreamableHttpViewSet(ViewSet):
 
         Spec compliance:
 
+        - 401 if the caller cannot authenticate — the stream carries
+          server-pushed payloads for a session, so it is gated exactly
+          like POST.
         - 405 if no broker is configured (server has nothing to push).
         - 400 if the protocol-version header is missing/unsupported
           (parity with POST — the spec is silent on GET version handling,
           but consistent enforcement avoids surprising behaviour).
-        - 404 if the supplied session id is unknown.
+        - 404 if the supplied session id is unknown **or owned by a
+          different principal** (indistinguishable on purpose).
         - Otherwise: ``text/event-stream`` with idle keep-alives and any
           payloads ``MCPServer.notify`` enqueues.
         """
@@ -277,6 +285,10 @@ class AsyncStreamableHttpViewSet(ViewSet):
         guard: HttpResponse | None = self._check_origin(http_request)
         if guard is not None:
             return guard
+
+        token = await self._authenticate(http_request)
+        if token is None:
+            return self._unauthenticated_response()
 
         if self.sse_broker is None:
             return HttpResponse(status=405)
@@ -290,7 +302,7 @@ class AsyncStreamableHttpViewSet(ViewSet):
 
         session_id: str | None = http_request.headers.get(_SESSION_HEADER)
         store = self._require_session_store()
-        if not session_id or not await acall(store.exists, session_id):
+        if not session_id or await acall(store.owner, session_id) != principal_for_token(token):
             return _error_response(
                 code=JsonRpcErrorCode.INVALID_REQUEST,
                 message="Unknown or missing MCP-Session-Id",
@@ -312,20 +324,51 @@ class AsyncStreamableHttpViewSet(ViewSet):
         )
 
     async def terminate_session(self, request: Request) -> HttpResponse:
+        """DELETE action: end the session named by ``MCP-Session-Id``.
+
+        Requires authentication, and only the principal a session was
+        minted for can destroy it — a wrong-principal (or unknown) id
+        renders 404 without touching the session.
+        """
         http_request = request._request  # noqa: SLF001
         guard: HttpResponse | None = self._check_origin(http_request)
         if guard is not None:
             return guard
+        token = await self._authenticate(http_request)
+        if token is None:
+            return self._unauthenticated_response()
         session_id: str | None = http_request.headers.get(_SESSION_HEADER)
         if session_id:
+            store = self._require_session_store()
+            if await acall(store.owner, session_id) != principal_for_token(token):
+                return _error_response(
+                    code=JsonRpcErrorCode.INVALID_REQUEST,
+                    message="Unknown or missing MCP-Session-Id",
+                    status=404,
+                )
             # Drop replay history first; the session is going away and any
             # buffered events would never be delivered.
             if self.sse_replay_buffer is not None:
                 await self.sse_replay_buffer.forget(session_id)
-            await acall(self._require_session_store().destroy, session_id)
+            await acall(store.destroy, session_id)
         return HttpResponse(status=204)
 
     # ----- collaborator accessors -----
+
+    async def _authenticate(self, http_request: Any) -> Any:
+        backend = self._require_auth_backend()
+        return await acall(backend.authenticate, http_request)
+
+    def _unauthenticated_response(self) -> JsonResponse:
+        challenge: str = self._require_auth_backend().www_authenticate_challenge(
+            error="invalid_token"
+        )
+        response = JsonResponse(
+            {"error": "unauthorized", "error_description": "Authentication required."},
+            status=401,
+        )
+        response["WWW-Authenticate"] = challenge
+        return response
 
     def _check_origin(self, request: Any) -> HttpResponse | None:
         origin: str | None = request.headers.get("Origin")

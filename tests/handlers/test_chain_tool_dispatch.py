@@ -30,6 +30,7 @@ from rest_framework_mcp.protocol.types.json_rpc_error import JsonRpcError
 from rest_framework_mcp.transport.in_memory_session_store import InMemorySessionStore
 from tests.testapp.models import Invoice
 from tests.testapp.serializers import InvoiceInputSerializer, InvoiceOutputSerializer
+from tests.utils import tool_error
 
 
 def _server() -> MCPServer:
@@ -340,9 +341,9 @@ def test_atomic_rollback_on_service_error() -> None:
         ],
     )
     out = _call(server, {})
-    assert isinstance(out, JsonRpcError)
-    assert out.code == JsonRpcErrorCode.SERVER_ERROR
-    assert out.data == {"failedStep": "second"}
+    error = tool_error(out)
+    assert error["type"] == "service_error"
+    assert error["failedStep"] == "second"
     # first step's write rolled back
     assert Invoice.objects.count() == 0
 
@@ -367,8 +368,7 @@ def test_non_atomic_chain_does_not_roll_back() -> None:
         ],
     )
     out = _call(server, {})
-    assert isinstance(out, JsonRpcError)
-    assert out.code == JsonRpcErrorCode.SERVER_ERROR
+    assert tool_error(out)["type"] == "service_error"
     # No chain transaction → the first write persists.
     assert Invoice.objects.count() == 1
 
@@ -385,9 +385,9 @@ def test_step_service_validation_error_maps_to_invalid_params() -> None:
         steps=[ChainStep("s", ServiceSpec(service=_bad, atomic=False))],
     )
     out = _call(server, {})
-    assert isinstance(out, JsonRpcError)
-    assert out.code == JsonRpcErrorCode.INVALID_PARAMS
-    assert out.data["failedStep"] == "s"
+    error = tool_error(out)
+    assert error["type"] == "validation_error"
+    assert error["failedStep"] == "s"
 
 
 @pytest.mark.django_db
@@ -403,8 +403,7 @@ def test_records_service_error_when_setting_enabled(settings: Any) -> None:
         steps=[ChainStep("s", ServiceSpec(service=_boom, atomic=False))],
     )
     out = _call(server, {})
-    assert isinstance(out, JsonRpcError)
-    assert out.code == JsonRpcErrorCode.SERVER_ERROR
+    assert tool_error(out)["type"] == "service_error"
 
 
 @pytest.mark.django_db

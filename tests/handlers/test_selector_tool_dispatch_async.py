@@ -23,6 +23,7 @@ from rest_framework_mcp.protocol.types.json_rpc_error import JsonRpcError
 from rest_framework_mcp.transport.in_memory_session_store import InMemorySessionStore
 from tests.testapp.models import Invoice
 from tests.testapp.serializers import InvoiceOutputSerializer
+from tests.utils import tool_error
 
 
 def _server() -> MCPServer:
@@ -108,9 +109,9 @@ async def test_async_translates_service_validation_error() -> None:
         spec=SelectorSpec(kind=SelectorKind.LIST, selector=selector),
     )
     out = await handle_tools_call_async({"name": "x", "arguments": {}}, _ctx(server))
-    assert isinstance(out, JsonRpcError)
-    assert out.code == -32602
-    assert out.data == {"detail": {"f": ["bad"]}}
+    error = tool_error(out)
+    assert error["type"] == "validation_error"
+    assert error["detail"] == {"f": ["bad"]}
 
 
 async def test_async_translates_service_error_with_recording(settings) -> None:
@@ -128,8 +129,7 @@ async def test_async_translates_service_error_with_recording(settings) -> None:
         spec=SelectorSpec(kind=SelectorKind.LIST, selector=selector),
     )
     out = await handle_tools_call_async({"name": "x", "arguments": {}}, _ctx(server))
-    assert isinstance(out, JsonRpcError)
-    assert out.code == -32000
+    assert tool_error(out)["type"] == "service_error"
 
 
 async def test_async_translates_service_error_without_recording() -> None:
@@ -146,8 +146,9 @@ async def test_async_translates_service_error_without_recording() -> None:
         spec=SelectorSpec(kind=SelectorKind.LIST, selector=selector),
     )
     out = await handle_tools_call_async({"name": "x", "arguments": {}}, _ctx(server))
-    assert isinstance(out, JsonRpcError)
-    assert out.code == -32000
+    error = tool_error(out)
+    assert error["type"] == "service_error"
+    assert error["message"] == "nope"
 
 
 async def test_async_input_serializer_rejects_invalid() -> None:

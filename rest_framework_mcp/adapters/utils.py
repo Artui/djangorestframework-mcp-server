@@ -32,6 +32,7 @@ def validate_input_serializer_against_callable(
     callable_: Any,
     argument_binding: ArgumentBinding,
     spec_kwargs_provides: frozenset[str] = frozenset(),
+    provides_instance: bool = False,
 ) -> None:
     """Fail-fast at registration time when input shape doesn't match the callable.
 
@@ -95,6 +96,7 @@ def validate_input_serializer_against_callable(
         input_serializer=input_serializer,
         argument_binding=argument_binding,
         spec_kwargs_provides=spec_kwargs_provides,
+        provides_instance=provides_instance,
     )
 
 
@@ -111,11 +113,16 @@ def _validate_data_only(label: str, sig: inspect.Signature) -> None:
         return
     if "data" in sig.parameters:
         return
+    if "serializer" in sig.parameters:
+        # Sister-repo 0.16: the bound, validated serializer is a pool seed —
+        # a callable that owns persistence via ``serializer.save()`` receives
+        # the payload through it and needs no ``data`` parameter.
+        return
     raise ImproperlyConfigured(
         f"{label}: argument_binding=DATA_ONLY requires the callable to declare a "
-        "`data` parameter (or accept `**kwargs`) — the validated input payload "
-        "is forwarded under that name. The callable does not declare it, so the "
-        "payload would be silently dropped at dispatch time."
+        "`data` parameter (or `serializer`, or accept `**kwargs`) — the validated "
+        "input payload is forwarded under those names. The callable declares "
+        "none of them, so the payload would be silently dropped at dispatch time."
     )
 
 
@@ -160,6 +167,7 @@ def _validate_required_params_have_sources(
     input_serializer: type | None,
     argument_binding: ArgumentBinding,
     spec_kwargs_provides: frozenset[str],
+    provides_instance: bool,
 ) -> None:
     """Every required callable parameter must have a static source.
 
@@ -168,7 +176,10 @@ def _validate_required_params_have_sources(
     - ``request`` / ``user`` / ``data`` — always in the pool (transport
       seeds). In ``MERGE`` / ``REPLACE`` mode the validated payload
       also lands as ``data=`` in the pool, so a callable declaring
-      ``data`` always gets it regardless of mode.
+      ``data`` always gets it regardless of mode. ``instance`` counts
+      only when the spec resolves one (``provides_instance``) and
+      ``serializer`` only when an ``input_serializer`` is declared —
+      sister-repo 0.16's conditional seeds.
     - ``input_serializer`` fields — only count as sources in
       ``MERGE`` / ``REPLACE`` mode, where the validated dict is
       spread into the pool. In ``DATA_ONLY`` mode the fields are
@@ -205,7 +216,15 @@ def _validate_required_params_have_sources(
         )
         and param.default is inspect.Parameter.empty
     )
-    sources: set[str] = set(RESERVED_POOL_SEEDS)
+    # Conditional pool seeds: ``instance`` only exists when the spec
+    # carries an ``instance_selector_spec`` with a selector, ``serializer``
+    # only when an ``input_serializer`` produces a bound instance. The
+    # unconditional seeds are ``request`` / ``user`` / ``data``.
+    sources: set[str] = {"request", "user", "data"}
+    if provides_instance:
+        sources.add("instance")
+    if input_serializer is not None:
+        sources.add("serializer")
     sources.update(spec_kwargs_provides)
     if argument_binding is not ArgumentBinding.DATA_ONLY:
         if input_serializer is not None:

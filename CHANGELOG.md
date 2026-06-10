@@ -7,6 +7,96 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.7.0] — 2026-06-10
+
+### Security
+
+- **GET (SSE) and DELETE now authenticate.** Previously only the POST path
+  called `backend.authenticate`; the SSE stream and session termination were
+  reachable with no credential. Both viewsets now 401 (with the backend's
+  `WWW-Authenticate` challenge) on unauthenticated GET and DELETE.
+- **Authentication runs before the session lookup on POST.** The old order
+  (session existence → 404, then auth → 401) let an unauthenticated caller
+  probe whether a session id was live. An unauthenticated request now always
+  sees 401 regardless of session validity.
+- **Sessions are bound to a principal.** `SessionStore.create` takes a
+  required keyword-only `principal_id` (derived from the authenticated
+  token; anonymous principals share `"anonymous"`), and every subsequent
+  POST / GET / DELETE asserts the presented session belongs to the caller.
+  A wrong-principal presentation renders the same 404 as an unknown id —
+  deliberately indistinguishable, so ownership cannot be probed. DELETE
+  only destroys sessions the caller owns.
+
+### Changed
+
+- **Breaking — `SessionStore` Protocol.** Custom stores must add a
+  keyword-only `principal_id: str` parameter to `create` and implement
+  `owner(session_id) -> str | None` returning the stored principal.
+  Sessions written by pre-0.7 `DjangoCacheSessionStore` (which cached
+  `True`) report no owner; clients transparently re-initialize.
+- **Breaking — business failures are now `isError` tool results, not
+  JSON-RPC errors.** Per the MCP spec, *execution* failures should be
+  results the model can read and self-correct from. `ServiceError` and
+  `ServiceValidationError` raised from a tool's service/selector (and from
+  chain steps, which add `failedStep`) now return `isError: true` results
+  with a JSON `{"error": {"type", "message", "detail"?}}` payload in
+  `content[0]` and no `structuredContent`. JSON-RPC errors remain for
+  protocol faults: the input serializer rejecting the arguments *shape*
+  stays `-32602`, unknown tool / auth / rate-limit codes are unchanged.
+  Clients matching on `-32000` for business failures must read the result's
+  `isError` flag instead.
+- **Breaking-ish — RETRIEVE selector tools handle missing rows.** A
+  RETRIEVE selector returning `None` (or raising `Model.DoesNotExist`) now
+  yields a `not_found` `isError` result instead of serializing `None`
+  (previously a confusing near-empty object or an unhandled 500). QuerySet
+  returns are materialized via `.first()`, matching sister-repo HTTP
+  dispatch. Opt into the nullable-resource contract with sister-repo 0.16's
+  `SelectorSpec(allow_none=True)` — a missing row then renders a successful
+  `null` result.
+- **LIST `outputSchema` now matches the payload.** `tools/list` previously
+  advertised the single-item object schema for LIST tools while the call
+  returned a bare array (or the pagination envelope) — strict clients
+  validating `structuredContent` against `outputSchema` rejected every
+  result. The schema is now kind-aware: `{type: array, items: …}`
+  unpaginated, the `{items, page, totalPages, hasNext}` envelope with
+  `paginate=True`. (For a fully spec-compliant *object*-shaped
+  `structuredContent` on LIST tools, enable `paginate=True`.)
+- Relaxed the exact `djangorestframework-services==0.15.1` pin to
+  `>=0.16,<0.17` — an exact pin in a library dependency forced unresolvable
+  conflicts on any host tracking a different version.
+
+### Added
+
+- **Adopted drf-services 0.16 (spec self-containment) over MCP:**
+  - `ServiceSpec.instance_selector_spec` — update-shaped tools resolve
+    their target row from the spec: the nested RETRIEVE selector runs
+    against `{request, user}` + the raw arguments (the MCP analogue of URL
+    kwargs) + the nested spec's `kwargs` provider, with queryset shaping
+    and `.first()` materialization. The resolved instance is threaded into
+    input validation (DRF-style `serializer(instance, data=…, partial=…)`,
+    so instance-dependent `validate()` works identically over MCP and
+    HTTP) and seeded into the service kwarg pool as `instance`. A missing
+    row is a clean `not_found` tool-level error, not a 500.
+  - `ServiceSpec.partial` — partial validation without an HTTP method to
+    derive it from (`partial=True` accepts omitted fields; the generated
+    `inputSchema` drops its `required` list so schema-strict clients stay
+    in sync). The identifier the instance selector consumes must be part
+    of the tool's input — a serializer field or spread argument — exactly
+    like the URL kwarg on HTTP.
+  - Bound, validated input serializer seeded into the service kwarg pool
+    under `serializer` (opt-in declare-to-receive) — `serializer.save()`
+    performs a DRF-correct create/update for serializer-owned persistence.
+    `instance` and `serializer` joined the reserved pool seeds (clients
+    cannot poison them via arguments); registration-time signature
+    validation knows both as conditional sources, and `DATA_ONLY` tools
+    may consume the payload via `serializer` instead of `data`.
+- **`UnguardedToolWarning` on permissionless registration.** DRF
+  viewset-level / `REST_FRAMEWORK`-default permissions do **not** apply
+  over MCP; a tool registered with neither `spec.permission_classes` nor
+  per-binding `permissions=[...]` now warns at registration. Set
+  `REST_FRAMEWORK_MCP["REQUIRE_TOOL_PERMISSIONS"] = True` to refuse such
+  registrations with `ImproperlyConfigured`.
+
 ## [0.6.2] — 2026-06-04
 
 ### Changed
@@ -800,7 +890,8 @@ Pinned to `djangorestframework-services==0.6.0`.
 - 100% line + branch coverage enforced by pytest (**451 tests** at
   release).
 
-[Unreleased]: https://github.com/Artui/djangorestframework-mcp-server/compare/v0.6.2...HEAD
+[Unreleased]: https://github.com/Artui/djangorestframework-mcp-server/compare/v0.7.0...HEAD
+[0.7.0]: https://github.com/Artui/djangorestframework-mcp-server/compare/v0.6.2...v0.7.0
 [0.6.2]: https://github.com/Artui/djangorestframework-mcp-server/compare/v0.6.1...v0.6.2
 [0.6.1]: https://github.com/Artui/djangorestframework-mcp-server/compare/v0.6.0...v0.6.1
 [0.6.0]: https://github.com/Artui/djangorestframework-mcp-server/compare/v0.5.1...v0.6.0

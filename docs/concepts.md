@@ -260,25 +260,53 @@ The MCP package owns its own dispatch flow. It does **not** import
 1. Look up the `ToolBinding` by name; reject unknown.
 2. Evaluate per-binding `MCPPermission` classes (AND-combined). Denial → 403
    with `WWW-Authenticate` carrying any required scopes.
-3. Validate `arguments` via `spec.input_serializer` (DRF `Serializer`,
+3. If `spec.instance_selector_spec` is set (sister-repo 0.16), resolve
+   the mutation target first: the nested RETRIEVE selector runs against
+   `{request, user}` + the raw arguments (the MCP analogue of URL kwargs)
+   + the nested spec's own `kwargs` provider; queryset shaping applies
+   and a QuerySet return is materialized via `.first()`. A missing row
+   short-circuits to an `isError: true` tool result (`type: "not_found"`).
+4. Validate `arguments` via `spec.input_serializer` (DRF `Serializer`,
    bare `@dataclass` auto-wrapped in `DataclassSerializer`, or `None`).
-4. Build a kwarg pool: `{request, user, data}`.
-5. `resolve_callable_kwargs(spec.service, pool)` →
+   `spec.partial=True` validates partially (and drops `required` from the
+   advertised `inputSchema`); the resolved instance is threaded into the
+   serializer DRF-style so instance-dependent `validate()` sees
+   `self.instance`.
+5. Build a kwarg pool: `{request, user, data}` plus — when present — the
+   resolved `instance` and the bound, validated `serializer` (both
+   reserved seeds clients cannot poison; services opt in by declaring
+   the parameter, e.g. to call `serializer.save()`).
+6. `resolve_callable_kwargs(spec.service, pool)` →
    `run_service(spec.service, kwargs, atomic=spec.atomic)`.
-6. Map `ServiceValidationError` → `-32602` and `ServiceError` → `-32000`.
-   Validation errors carry `data.detail` (per-field DRF detail). Setting
+7. Map failures along the MCP protocol-vs-tool boundary. The serializer
+   rejecting the arguments *shape* stays a JSON-RPC `-32602`. A service
+   raising on well-shaped input — `ServiceValidationError` or
+   `ServiceError` — returns an **`isError: true` tool result** the model
+   can read and self-correct from, with a JSON `{"error": {"type":
+   "validation_error" | "service_error", "message": ..., "detail": ...}}`
+   payload in `content[0]` (and no `structuredContent`, which is tied to
+   the success schema). Chain steps add `failedStep`. Setting
    `REST_FRAMEWORK_MCP["INCLUDE_VALIDATION_VALUE"] = True` additionally
-   echoes the offending `arguments` dict back as `data.value` — handy for
+   echoes the offending `arguments` dict back under `value` — handy for
    debugging schema mismatches against opaque client SDKs, off by default
    because the dict can carry sensitive payloads.
-7. If `spec.output_selector_spec` is set, run its post-call pipeline:
+8. If `spec.output_selector_spec` is set, run its post-call pipeline:
    optionally re-fetch via `output_selector_spec.selector` (same
    kwarg-pool dispatch), then render through
    `output_selector_spec.output_serializer` with `many=` driven by
    `output_selector_spec.kind`. If `output_selector_spec` is `None`,
    the service's return value is passed through unchanged.
-8. Wrap as a `ToolResult` with `OutputFormat`-driven encoding for the human-
+9. Wrap as a `ToolResult` with `OutputFormat`-driven encoding for the human-
    readable `content[0]` block. `structuredContent` is always JSON.
+
+RETRIEVE selector tools mirror the sister repo's read semantics: a
+QuerySet return is materialized via `.first()`, and a missing row is a
+`not_found` `isError` result — unless the spec sets `allow_none=True`
+(the nullable-resource contract), which renders a successful `null`
+result instead. LIST tools advertise a kind-aware `outputSchema`: a bare
+array schema unpaginated, the `{items, page, totalPages, hasNext}`
+envelope with `paginate=True` (enable pagination for a fully
+spec-compliant *object*-shaped `structuredContent`).
 
 `resources/read`:
 
@@ -302,15 +330,24 @@ The MCP 2025-11-25 transport requires:
   unsupported version is still rejected either way.
 - **`MCP-Session-Id`** — issued by the server in the response to `initialize`.
   Required on every subsequent call. Unknown id → 404 (forces the client to
-  re-initialize). Sessions are stored in a pluggable
-  [`SessionStore`](reference/registries.md) — by default the Django cache.
+  re-initialize). Since 0.7 every session is **bound to the authenticated
+  principal** that initialized it: a session presented by a different
+  principal renders the same 404 as an unknown id (deliberately
+  indistinguishable, so ownership cannot be probed). Sessions are stored in
+  a pluggable [`SessionStore`](reference/registries.md) — by default the
+  Django cache.
 - **`Origin`** — strict allowlist. Empty allowlist means "no cross-origin
   requests"; an empty `Origin` header is treated as same-origin and allowed.
   Configure via `REST_FRAMEWORK_MCP["ALLOWED_ORIGINS"]`. Use `["*"]` only for
   dev.
 
-`DELETE /mcp/` with a session id terminates that session immediately. `GET
-/mcp/` opens a server-initiated SSE stream — available on `async_urls` only
+All three verbs authenticate through the configured `MCPAuthBackend`
+**before** any session lookup, so an unauthenticated caller always sees
+401 — session validity is never revealed without a credential.
+
+`DELETE /mcp/` with a session id terminates that session immediately —
+only for the principal that owns it. `GET /mcp/` opens a server-initiated
+SSE stream for the caller's own session — available on `async_urls` only
 (WSGI's `server.urls` returns 405 on GET because SSE requires the event
 loop). See [Async deployment](async.md) for the wire details and
 `MCPServer.notify(...)` for pushing frames.
