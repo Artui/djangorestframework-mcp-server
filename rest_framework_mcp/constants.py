@@ -204,15 +204,20 @@ dispatched selector, or the selector would receive surprise kwargs it
 never declared.
 """
 
-RESERVED_POOL_SEEDS: frozenset[str] = frozenset({"request", "user", "data"})
+RESERVED_POOL_SEEDS: frozenset[str] = frozenset(
+    {"request", "user", "data", "instance", "serializer"}
+)
 """Keys carrying transport-controlled pool seeds.
 
 A client-supplied argument with one of these names would override the
 transport's authoritative values (a credential-spoofing footgun). The
 spread silently drops them so the pool seeds always win. The dispatched
 callable is free to *declare* parameters named ``request`` / ``user`` /
-``data``; those receive the pool seeds, which is the documented
-sister-repo idiom.
+``data`` / ``instance`` / ``serializer``; those receive the pool seeds,
+which is the documented sister-repo idiom. ``instance`` (the row resolved
+by ``spec.instance_selector_spec``) and ``serializer`` (the bound,
+validated input serializer) joined the reserved set with the sister-repo
+0.16 adoption.
 """
 
 

@@ -28,6 +28,7 @@ from rest_framework_mcp.protocol.types.json_rpc_error import JsonRpcError
 from rest_framework_mcp.transport.in_memory_session_store import InMemorySessionStore
 from tests.testapp.models import Invoice
 from tests.testapp.serializers import InvoiceOutputSerializer
+from tests.utils import tool_error
 
 # ---------- Fixtures + helpers ----------
 
@@ -601,9 +602,9 @@ def test_selector_tool_translates_service_validation_error() -> None:
         spec=SelectorSpec(kind=SelectorKind.LIST, selector=selector),
     )
     out = handle_tools_call({"name": "x", "arguments": {}}, _ctx(server))
-    assert isinstance(out, JsonRpcError)
-    assert out.code == -32602
-    assert out.data == {"detail": {"f": ["bad"]}}
+    error = tool_error(out)
+    assert error["type"] == "validation_error"
+    assert error["detail"] == {"f": ["bad"]}
 
 
 def test_selector_tool_translates_service_error() -> None:
@@ -617,8 +618,9 @@ def test_selector_tool_translates_service_error() -> None:
         spec=SelectorSpec(kind=SelectorKind.LIST, selector=selector),
     )
     out = handle_tools_call({"name": "x", "arguments": {}}, _ctx(server))
-    assert isinstance(out, JsonRpcError)
-    assert out.code == -32000
+    error = tool_error(out)
+    assert error["type"] == "service_error"
+    assert error["message"] == "nope"
 
 
 def test_selector_tool_records_service_error_when_setting_enabled(settings) -> None:
@@ -634,8 +636,7 @@ def test_selector_tool_records_service_error_when_setting_enabled(settings) -> N
         spec=SelectorSpec(kind=SelectorKind.LIST, selector=selector),
     )
     out = handle_tools_call({"name": "x", "arguments": {}}, _ctx(server))
-    assert isinstance(out, JsonRpcError)
-    assert out.code == -32000
+    assert tool_error(out)["type"] == "service_error"
 
 
 def test_selector_tool_kwargs_provider_merges_into_pool() -> None:

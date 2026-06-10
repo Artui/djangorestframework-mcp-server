@@ -29,6 +29,7 @@ from rest_framework_mcp.registry.resource_registry import ResourceRegistry
 from rest_framework_mcp.registry.tool_registry import ToolRegistry
 from rest_framework_mcp.registry.types.tool_binding import ToolBinding
 from rest_framework_mcp.transport.in_memory_session_store import InMemorySessionStore
+from tests.utils import tool_error
 
 
 @dataclass
@@ -118,15 +119,13 @@ async def test_async_tools_call_drf_validation_echo(settings) -> None:
 def test_sync_tools_call_service_validation_default_omits_value(settings) -> None:
     settings.REST_FRAMEWORK_MCP = {}
     out = handle_tools_call({"name": "t", "arguments": {}}, _ctx(_tools_raising_validation()))
-    assert isinstance(out, JsonRpcError)
-    assert "value" not in out.data
+    assert "value" not in tool_error(out)
 
 
 def test_sync_tools_call_service_validation_echo(settings) -> None:
     settings.REST_FRAMEWORK_MCP = {"INCLUDE_VALIDATION_VALUE": True}
     out = handle_tools_call({"name": "t", "arguments": {"x": 1}}, _ctx(_tools_raising_validation()))
-    assert isinstance(out, JsonRpcError)
-    assert out.data["value"] == {"x": 1}
+    assert tool_error(out)["value"] == {"x": 1}
 
 
 async def test_async_tools_call_service_validation_default_omits_value(settings) -> None:
@@ -134,8 +133,7 @@ async def test_async_tools_call_service_validation_default_omits_value(settings)
     out = await handle_tools_call_async(
         {"name": "t", "arguments": {}}, _ctx(_tools_raising_validation())
     )
-    assert isinstance(out, JsonRpcError)
-    assert "value" not in out.data
+    assert "value" not in tool_error(out)
 
 
 async def test_async_tools_call_service_validation_echo(settings) -> None:
@@ -143,8 +141,7 @@ async def test_async_tools_call_service_validation_echo(settings) -> None:
     out = await handle_tools_call_async(
         {"name": "t", "arguments": {"x": 1}}, _ctx(_tools_raising_validation())
     )
-    assert isinstance(out, JsonRpcError)
-    assert out.data["value"] == {"x": 1}
+    assert tool_error(out)["value"] == {"x": 1}
 
 
 # ---------- prompts/get missing required args ----------

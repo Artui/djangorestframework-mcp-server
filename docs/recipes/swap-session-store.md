@@ -24,10 +24,14 @@ forbids module/class-level mutable state — see CLAUDE.md.)
 
 ## In production: a custom store
 
-Implement the `SessionStore` Protocol (three methods, no other contract):
+Implement the `SessionStore` Protocol (four methods, no other contract).
+Since 0.7 every session is bound to the principal that initialized it:
+`create` receives a keyword-only `principal_id` and `owner` returns it —
+the transport compares it on every POST / GET / DELETE and treats a
+wrong-principal presentation exactly like an unknown session (404):
 
 ```python
-from rest_framework_mcp.transport.session_store import SessionStore
+from rest_framework_mcp.transport.types.session_store import SessionStore
 
 
 class RedisSessionStore:
@@ -35,14 +39,18 @@ class RedisSessionStore:
         self._redis = redis_client
         self._ttl = ttl_seconds
 
-    def create(self) -> str:
+    def create(self, *, principal_id: str) -> str:
         import secrets
         token = secrets.token_urlsafe(24)
-        self._redis.set(f"mcp:session:{token}", "1", ex=self._ttl)
+        self._redis.set(f"mcp:session:{token}", principal_id, ex=self._ttl)
         return token
 
     def exists(self, session_id: str) -> bool:
         return self._redis.exists(f"mcp:session:{session_id}") == 1
+
+    def owner(self, session_id: str) -> str | None:
+        value = self._redis.get(f"mcp:session:{session_id}")
+        return value.decode() if value is not None else None
 
     def destroy(self, session_id: str) -> None:
         self._redis.delete(f"mcp:session:{session_id}")

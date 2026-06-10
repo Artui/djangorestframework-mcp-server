@@ -84,7 +84,7 @@ def test_reserved_post_fetch_keys_shape() -> None:
 
 
 def test_reserved_pool_seeds_shape() -> None:
-    assert frozenset({"request", "user", "data"}) == RESERVED_POOL_SEEDS
+    assert frozenset({"request", "user", "data", "instance", "serializer"}) == RESERVED_POOL_SEEDS
 
 
 def test_reserved_sets_are_disjoint() -> None:

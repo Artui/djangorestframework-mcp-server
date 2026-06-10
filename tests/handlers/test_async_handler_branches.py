@@ -21,6 +21,7 @@ from rest_framework_mcp.registry.resource_registry import ResourceRegistry
 from rest_framework_mcp.registry.tool_registry import ToolRegistry
 from rest_framework_mcp.registry.types.resource_binding import ResourceBinding
 from rest_framework_mcp.registry.types.tool_binding import ToolBinding
+from tests.utils import tool_error
 
 
 @dataclass
@@ -138,8 +139,9 @@ async def test_async_tools_call_translates_service_validation_error() -> None:
         ToolBinding(name="t", description=None, spec=ServiceSpec(service=svc, atomic=False))
     )
     out = await handle_tools_call_async({"name": "t", "arguments": {}}, _ctx(tools))
-    assert isinstance(out, JsonRpcError) and out.code == -32602
-    assert out.data == {"detail": {"f": ["bad"]}}
+    error = tool_error(out)
+    assert error["type"] == "validation_error"
+    assert error["detail"] == {"f": ["bad"]}
 
 
 async def test_async_tools_call_translates_service_error() -> None:
@@ -153,7 +155,9 @@ async def test_async_tools_call_translates_service_error() -> None:
         ToolBinding(name="t", description=None, spec=ServiceSpec(service=svc, atomic=False))
     )
     out = await handle_tools_call_async({"name": "t", "arguments": {}}, _ctx(tools))
-    assert isinstance(out, JsonRpcError) and out.code == -32000
+    error = tool_error(out)
+    assert error["type"] == "service_error"
+    assert error["message"] == "nope"
 
 
 class _DenyEveryone:

@@ -20,12 +20,14 @@ from rest_framework_mcp.handlers.selector_tool_dispatch import dispatch_selector
 from rest_framework_mcp.handlers.types.context import MCPCallContext
 from rest_framework_mcp.handlers.utils import (
     build_internal_drf_request,
+    build_validated_input_serializer,
     check_permissions,
     consume_rate_limits,
     invoke_context_provider,
-    validate_input_against_serializer,
+    resolve_spec_instance,
     validation_error_data,
 )
+from rest_framework_mcp.output.error_tool_result import build_error_tool_result
 from rest_framework_mcp.output.resolve_structured_output import resolve_structured_output
 from rest_framework_mcp.output.tool_result import build_tool_result
 from rest_framework_mcp.protocol.types.json_rpc_error import JsonRpcError
@@ -40,20 +42,29 @@ def _validate_input(
     *,
     context: Mapping[str, Any] | None = None,
     unknown_arguments: UnknownArguments = UnknownArguments.REJECT,
-) -> Any:
-    """Thin wrapper that validates against ``spec.input_serializer``.
+    instance: Any = None,
+) -> tuple[Any, Any]:
+    """Validate against ``spec.input_serializer``; return ``(validated, serializer)``.
 
     The actual logic lives in
-    :func:`rest_framework_mcp.handlers.utils.validate_input_against_serializer`
+    :func:`rest_framework_mcp.handlers.utils.build_validated_input_serializer`
     so selector-tool dispatch can share it without a circular import.
     ``context`` carries ``spec.input_serializer_context``'s output when set;
     ``unknown_arguments`` carries the binding's unknown-key policy.
+
+    Sister-repo 0.16 adoption: ``spec.partial`` drives partial validation
+    (``None`` keeps the historical non-partial behaviour — MCP has no HTTP
+    method to derive the flag from), and ``instance`` (the row resolved by
+    ``spec.instance_selector_spec``) is threaded into the serializer so
+    instance-dependent validation works identically over MCP and HTTP.
     """
-    return validate_input_against_serializer(
+    return build_validated_input_serializer(
         arguments,
         spec.input_serializer,
         context=context,
         unknown_arguments=unknown_arguments,
+        partial=spec.partial or False,
+        instance=instance,
     )
 
 
@@ -161,12 +172,34 @@ def handle_tools_call(
             input_context_view = MCPServiceView(request=drf_request, action=binding.name)
             input_context = binding.spec.input_serializer_context(input_context_view, drf_request)
 
+        # Sister-repo 0.16 ``instance_selector_spec``: resolve the mutation
+        # target *before* validation (the serializer sees ``self.instance``).
+        # The raw arguments fill the role URL kwargs play on HTTP. A missing
+        # row is a tool-level failure — the model can read it and correct
+        # the identifier — not a protocol error.
+        instance: Any = None
+        instance_spec = binding.spec.instance_selector_spec
+        if instance_spec is not None and instance_spec.selector is not None:
+            found, instance = resolve_spec_instance(
+                binding.spec,
+                drf_request=drf_request,
+                user=context.token.user,
+                arguments_raw=arguments_raw,
+                binding_name=binding.name,
+            )
+            if not found:
+                return build_error_tool_result(
+                    f"{binding.name}: no matching instance found",
+                    error_type="not_found",
+                ).to_dict()
+
         try:
-            validated: Any = _validate_input(
+            validated, serializer = _validate_input(
                 arguments_raw,
                 binding.spec,
                 context=input_context,
                 unknown_arguments=binding.unknown_arguments,
+                instance=instance,
             )
         except drf_serializers.ValidationError as exc:
             return JsonRpcError(
@@ -182,16 +215,28 @@ def handle_tools_call(
             validated=validated,
             arguments_raw=arguments_raw,
         )
+        # Reserved seeds (clients can't reach these names through the
+        # spread): the resolved mutation target and the bound, validated
+        # serializer — sister-repo 0.16's opt-in declare-to-receive kwargs.
+        if instance is not None:
+            pool["instance"] = instance
+        if serializer is not None:
+            pool["serializer"] = serializer
 
         try:
             kwargs: dict[str, Any] = resolve_callable_kwargs(binding.spec.service, pool)
             result: Any = run_service(binding.spec.service, kwargs, atomic=binding.spec.atomic)
         except ServiceValidationError as exc:
-            return JsonRpcError(
-                JsonRpcErrorCode.INVALID_PARAMS,
+            # Business validation on well-shaped input is a *tool-level*
+            # failure per the MCP spec — return an ``isError`` result the
+            # model can read and self-correct from. JSON-RPC errors are
+            # reserved for protocol faults (the serializer rejecting the
+            # arguments *shape* above stays ``-32602``).
+            return build_error_tool_result(
                 exc.message,
-                data=validation_error_data(exc.detail, arguments_raw),
-            )
+                error_type="validation_error",
+                detail=validation_error_data(exc.detail, arguments_raw),
+            ).to_dict()
         except ServiceError as exc:
             # ``ServiceError`` is the "real failure" channel — record it on
             # the active span when the consumer has opted in. ``ServiceValidationError``
@@ -199,7 +244,7 @@ def handle_tools_call(
             # server fault, and would clutter alerting pipelines.
             if get_setting("RECORD_SERVICE_EXCEPTIONS"):
                 otel_span.record_exception(exc)
-            return JsonRpcError(JsonRpcErrorCode.SERVER_ERROR, exc.message)
+            return build_error_tool_result(exc.message, error_type="service_error").to_dict()
 
         # Sister-repo 0.13+ moved the output pipeline under
         # ``spec.output_selector_spec``: an optional nested ``SelectorSpec``

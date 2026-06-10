@@ -106,6 +106,15 @@ DEFAULTS: dict[str, Any] = {
     # opts a binding back into the listing even when the caller can't
     # invoke it — useful as a discovery aid for admin tools etc.
     "FILTER_LISTINGS_BY_PERMISSIONS": False,
+    # When True, registering a tool with no permissions at all (neither
+    # ``spec.permission_classes`` nor a per-binding ``permissions=[...]``)
+    # raises ``ImproperlyConfigured`` instead of emitting the default
+    # ``UnguardedToolWarning``. The warning exists because the most common
+    # DRF habit — guarding the *viewset* (or relying on the
+    # ``REST_FRAMEWORK`` default permission classes) — has no effect over
+    # MCP: this package deliberately bypasses DRF's view-layer pipeline,
+    # so a spec that looks guarded over HTTP ships as an unguarded tool.
+    "REQUIRE_TOOL_PERMISSIONS": False,
 }
 
 

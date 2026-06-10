@@ -21,6 +21,7 @@ from rest_framework_mcp.registry.resource_registry import ResourceRegistry
 from rest_framework_mcp.registry.tool_registry import ToolRegistry
 from rest_framework_mcp.registry.types.resource_binding import ResourceBinding
 from rest_framework_mcp.registry.types.tool_binding import ToolBinding
+from tests.utils import tool_error
 
 
 @dataclass
@@ -83,9 +84,9 @@ def test_tools_call_translates_service_validation_error() -> None:
         ToolBinding(name="t", description=None, spec=ServiceSpec(service=svc, atomic=False))
     )
     out = handle_tools_call({"name": "t", "arguments": {}}, _ctx(tools))
-    assert isinstance(out, JsonRpcError)
-    assert out.code == -32602
-    assert out.data == {"detail": {"field": ["bad"]}}
+    error = tool_error(out)
+    assert error["type"] == "validation_error"
+    assert error["detail"] == {"field": ["bad"]}
 
 
 class _DenyEveryone:

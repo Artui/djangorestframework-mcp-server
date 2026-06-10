@@ -93,6 +93,16 @@ The `SERVER_INFO` keys flow into both:
 
 ## `MCPPermission` classes
 
+!!! warning "DRF viewset permissions do not apply over MCP"
+    This package deliberately bypasses DRF's view-layer pipeline, so
+    viewset-level `permission_classes` and the `REST_FRAMEWORK` default
+    permission classes have **no effect** on MCP tool calls. Only
+    `spec.permission_classes` (wrapped via `DRFPermissionAdapter`) and the
+    per-binding `permissions=[...]` below gate a tool. Registering a tool
+    with neither emits an `UnguardedToolWarning`; set
+    `REST_FRAMEWORK_MCP["REQUIRE_TOOL_PERMISSIONS"] = True` to refuse such
+    registrations outright.
+
 Per-binding permissions are AND-combined. Two ship in v1:
 
 - `ScopeRequired(["a", "b"])` — token must carry every listed OAuth scope.

@@ -52,6 +52,7 @@ from rest_framework_mcp.handlers.utils import (
     validate_input_against_serializer,
     validation_error_data,
 )
+from rest_framework_mcp.output.error_tool_result import build_error_tool_result
 from rest_framework_mcp.output.resolve_structured_output import resolve_structured_output
 from rest_framework_mcp.output.tool_result import build_tool_result
 from rest_framework_mcp.protocol.types.json_rpc_error import JsonRpcError
@@ -62,13 +63,13 @@ from rest_framework_mcp.server.types.mcp_service_view import MCPServiceView
 
 
 class _ChainAbort(Exception):
-    """Carry a step's mapped JSON-RPC error out of ``transaction.atomic()``.
+    """Carry a step's mapped tool-level error out of ``transaction.atomic()``.
 
     Raising forces the surrounding atomic block to roll back; the caller
-    catches it and returns the wrapped error.
+    catches it and returns the wrapped ``isError`` tool-result dict.
     """
 
-    def __init__(self, error: JsonRpcError) -> None:
+    def __init__(self, error: dict[str, Any]) -> None:
         super().__init__()
         self.error = error
 
@@ -162,7 +163,9 @@ async def dispatch_chain_tool_async(
     return result
 
 
-def _run_chain(binding: ChainToolBinding, ctx: ChainContext, otel_span: Any) -> JsonRpcError | None:
+def _run_chain(
+    binding: ChainToolBinding, ctx: ChainContext, otel_span: Any
+) -> dict[str, Any] | None:
     """Run every step in order, optionally inside one transaction."""
     if binding.atomic:
         try:
@@ -176,7 +179,9 @@ def _run_chain(binding: ChainToolBinding, ctx: ChainContext, otel_span: Any) -> 
     return _run_steps(binding, ctx, otel_span)
 
 
-def _run_steps(binding: ChainToolBinding, ctx: ChainContext, otel_span: Any) -> JsonRpcError | None:
+def _run_steps(
+    binding: ChainToolBinding, ctx: ChainContext, otel_span: Any
+) -> dict[str, Any] | None:
     for step in binding.steps:
         error = _run_step(step, ctx, otel_span)
         if error is not None:
@@ -184,7 +189,7 @@ def _run_steps(binding: ChainToolBinding, ctx: ChainContext, otel_span: Any) -> 
     return None
 
 
-def _run_step(step: ChainStep, ctx: ChainContext, otel_span: Any) -> JsonRpcError | None:
+def _run_step(step: ChainStep, ctx: ChainContext, otel_span: Any) -> dict[str, Any] | None:
     """Run one step and store its result under ``step.alias``.
 
     The pool is ``{request, user}`` plus the step's ``inputs(ctx)`` mapping
@@ -201,17 +206,23 @@ def _run_step(step: ChainStep, ctx: ChainContext, otel_span: Any) -> JsonRpcErro
         else:
             result = _run_selector_step(step.spec, pool)
     except ServiceValidationError as exc:
-        return JsonRpcError(
-            JsonRpcErrorCode.INVALID_PARAMS,
+        # Tool-level failure -> ``isError`` result carrying ``failedStep``;
+        # the surrounding ``transaction.atomic()`` (when ``binding.atomic``)
+        # still rolls back via ``_ChainAbort``. JSON-RPC errors stay
+        # reserved for protocol faults.
+        return build_error_tool_result(
             exc.message,
-            data={"failedStep": step.alias, **validation_error_data(exc.detail, {})},
-        )
+            error_type="validation_error",
+            detail={"failedStep": step.alias, **validation_error_data(exc.detail, {})},
+        ).to_dict()
     except ServiceError as exc:
         if get_setting("RECORD_SERVICE_EXCEPTIONS"):
             otel_span.record_exception(exc)
-        return JsonRpcError(
-            JsonRpcErrorCode.SERVER_ERROR, exc.message, data={"failedStep": step.alias}
-        )
+        return build_error_tool_result(
+            exc.message,
+            error_type="service_error",
+            detail={"failedStep": step.alias},
+        ).to_dict()
     ctx.outputs[step.alias] = result
     return None
 

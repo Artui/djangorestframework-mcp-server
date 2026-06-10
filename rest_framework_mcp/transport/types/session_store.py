@@ -7,19 +7,30 @@ from typing import Protocol, runtime_checkable
 class SessionStore(Protocol):
     """Pluggable persistence for ``MCP-Session-Id`` lifecycle.
 
-    The transport calls :meth:`create` after a successful ``initialize`` and
-    :meth:`exists` on every subsequent request to enforce that clients
-    re-initialize after a server restart. :meth:`destroy` is invoked on
-    HTTP DELETE.
+    The transport calls :meth:`create` after a successful ``initialize`` —
+    binding the new session to the authenticated principal — and
+    :meth:`owner` on every subsequent request to enforce both that clients
+    re-initialize after a server restart and that a session minted under
+    one principal cannot be presented by another. :meth:`destroy` is
+    invoked on HTTP DELETE (after the same ownership check).
 
-    Stores need not retain rich state today (the MCP spec only demands the
-    ID is recognised), but the interface leaves room for future extension
-    such as protocol-version pinning per session.
+    ``principal_id`` is an opaque string the transport derives from the
+    authenticated token (see
+    :func:`rest_framework_mcp.transport.utils.principal_for_token`);
+    stores persist and return it verbatim.
+
+    .. versionchanged:: 0.7
+       :meth:`create` takes a required keyword-only ``principal_id`` and
+       :meth:`owner` joined the protocol. Custom store implementations
+       must add both; storing the principal alongside the session id is
+       the only new obligation.
     """
 
-    def create(self) -> str: ...
+    def create(self, *, principal_id: str) -> str: ...
 
     def exists(self, session_id: str) -> bool: ...
+
+    def owner(self, session_id: str) -> str | None: ...
 
     def destroy(self, session_id: str) -> None: ...
 

@@ -70,7 +70,7 @@ async def test_published_payload_reaches_open_stream() -> None:
     """
     broker = InMemorySSEBroker()
     store = InMemorySessionStore()
-    sid = store.create()
+    sid = store.create(principal_id="anonymous")
 
     factory = RequestFactory()
     request = factory.get(
@@ -118,7 +118,7 @@ async def test_resume_replays_buffered_events_then_live() -> None:
     broker = InMemorySSEBroker()
     buffer = InMemorySSEReplayBuffer()
     store = InMemorySessionStore()
-    sid = store.create()
+    sid = store.create(principal_id="anonymous")
 
     # Pre-record three events; the client claims to have seen the first.
     first = await buffer.record(sid, {"n": 1})
@@ -164,7 +164,7 @@ async def test_delete_purges_replay_buffer() -> None:
     broker = InMemorySSEBroker()
     buffer = InMemorySSEReplayBuffer()
     store = InMemorySessionStore()
-    sid = store.create()
+    sid = store.create(principal_id="anonymous")
     await buffer.record(sid, {"n": 1})
 
     factory = RequestFactory()

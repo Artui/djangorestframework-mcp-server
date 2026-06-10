@@ -127,7 +127,10 @@ def test_handle_tools_call_translates_service_error(jsonrpc, initialized_session
             session_id=initialized_session,
         )
         body = response.json()
-        assert body["error"]["code"] == -32000
+        # Business failures are tool-level: the JSON-RPC envelope succeeds
+        # and the result carries ``isError: true``.
+        assert "error" not in body
+        assert body["result"]["isError"] is True
     finally:
         # Best-effort cleanup so other tests don't see the duplicate name.
         # (ToolRegistry has no public unregister; the test ordering tolerates this

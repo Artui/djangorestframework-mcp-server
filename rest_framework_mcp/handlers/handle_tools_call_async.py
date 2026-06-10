@@ -30,8 +30,10 @@ from rest_framework_mcp.handlers.utils import (
     check_permissions,
     consume_rate_limits,
     invoke_context_provider,
+    resolve_spec_instance,
     validation_error_data,
 )
+from rest_framework_mcp.output.error_tool_result import build_error_tool_result
 from rest_framework_mcp.output.resolve_structured_output import resolve_structured_output
 from rest_framework_mcp.output.tool_result import build_tool_result
 from rest_framework_mcp.protocol.types.json_rpc_error import JsonRpcError
@@ -115,12 +117,33 @@ async def handle_tools_call_async(
             input_context_view = MCPServiceView(request=drf_request, action=binding.name)
             input_context = binding.spec.input_serializer_context(input_context_view, drf_request)
 
+        # Sister-repo 0.16 ``instance_selector_spec`` — see the sync sibling.
+        # The resolver is sync (ORM lookup); ``acall`` bridges it off the
+        # event loop. ``run_selector`` inside handles async-native selectors.
+        instance: Any = None
+        instance_spec = binding.spec.instance_selector_spec
+        if instance_spec is not None and instance_spec.selector is not None:
+            found, instance = await acall(
+                resolve_spec_instance,
+                binding.spec,
+                drf_request=drf_request,
+                user=context.token.user,
+                arguments_raw=arguments_raw,
+                binding_name=binding.name,
+            )
+            if not found:
+                return build_error_tool_result(
+                    f"{binding.name}: no matching instance found",
+                    error_type="not_found",
+                ).to_dict()
+
         try:
-            validated: Any = _validate_input(
+            validated, serializer = _validate_input(
                 arguments_raw,
                 binding.spec,
                 context=input_context,
                 unknown_arguments=binding.unknown_arguments,
+                instance=instance,
             )
         except drf_serializers.ValidationError as exc:
             return JsonRpcError(
@@ -136,6 +159,11 @@ async def handle_tools_call_async(
             validated=validated,
             arguments_raw=arguments_raw,
         )
+        # Reserved seeds — see the sync sibling.
+        if instance is not None:
+            pool["instance"] = instance
+        if serializer is not None:
+            pool["serializer"] = serializer
 
         try:
             kwargs: dict[str, Any] = resolve_callable_kwargs(binding.spec.service, pool)
@@ -143,18 +171,20 @@ async def handle_tools_call_async(
                 binding.spec.service, kwargs, atomic=binding.spec.atomic
             )
         except ServiceValidationError as exc:
-            return JsonRpcError(
-                JsonRpcErrorCode.INVALID_PARAMS,
+            # Tool-level failure → ``isError`` result; see the sync sibling
+            # for the protocol-vs-tool error boundary.
+            return build_error_tool_result(
                 exc.message,
-                data=validation_error_data(exc.detail, arguments_raw),
-            )
+                error_type="validation_error",
+                detail=validation_error_data(exc.detail, arguments_raw),
+            ).to_dict()
         except ServiceError as exc:
             # See sync sibling — recording is opt-in via
             # ``RECORD_SERVICE_EXCEPTIONS`` so routine business-rule denials
             # don't flood error pipelines.
             if get_setting("RECORD_SERVICE_EXCEPTIONS"):
                 otel_span.record_exception(exc)
-            return JsonRpcError(JsonRpcErrorCode.SERVER_ERROR, exc.message)
+            return build_error_tool_result(exc.message, error_type="service_error").to_dict()
 
         # Sister-repo 0.13+ moved the output pipeline under
         # ``spec.output_selector_spec`` — see the sync sibling for the

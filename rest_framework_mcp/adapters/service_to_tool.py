@@ -47,6 +47,10 @@ def service_spec_to_tool(
         callable_=spec.service,
         argument_binding=argument_binding,
         spec_kwargs_provides=frozenset(spec_kwargs_provides),
+        provides_instance=(
+            spec.instance_selector_spec is not None
+            and spec.instance_selector_spec.selector is not None
+        ),
     )
     spec_perms: tuple[Any, ...] = wrap_spec_permissions(spec.permission_classes, label=name)
     effective_perms: tuple[Any, ...] = spec_perms + tuple(permissions)
