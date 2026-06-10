@@ -1625,6 +1625,17 @@ backend module imports cleanly even without <code>oauth2_provider</code> install
   any required scopes, and the <code>error="invalid_token"</code> code on auth failure.</li>
 </ul>
 <h2 id="mcppermission-classes"><code>MCPPermission</code> classes<a class="headerlink" href="#mcppermission-classes" title="Permanent link">&para;</a></h2>
+<div class="admonition warning">
+<p class="admonition-title">DRF viewset permissions do not apply over MCP</p>
+<p>This package deliberately bypasses DRF's view-layer pipeline, so
+viewset-level <code>permission_classes</code> and the <code>REST_FRAMEWORK</code> default
+permission classes have <strong>no effect</strong> on MCP tool calls. Only
+<code>spec.permission_classes</code> (wrapped via <code>DRFPermissionAdapter</code>) and the
+per-binding <code>permissions=[...]</code> below gate a tool. Registering a tool
+with neither emits an <code>UnguardedToolWarning</code>; set
+<code>REST_FRAMEWORK_MCP["REQUIRE_TOOL_PERMISSIONS"] = True</code> to refuse such
+registrations outright.</p>
+</div>
 <p>Per-binding permissions are AND-combined. Two ship in v1:</p>
 <ul>
 <li><code>ScopeRequired(["a", "b"])</code> — token must carry every listed OAuth scope.</li>

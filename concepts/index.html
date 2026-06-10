@@ -1822,15 +1822,34 @@ appear in <code>resources/templates/list</code> so clients can fill them in.</p>
 <li>Look up the <code>ToolBinding</code> by name; reject unknown.</li>
 <li>Evaluate per-binding <code>MCPPermission</code> classes (AND-combined). Denial → 403
    with <code>WWW-Authenticate</code> carrying any required scopes.</li>
+<li>If <code>spec.instance_selector_spec</code> is set (sister-repo 0.16), resolve
+   the mutation target first: the nested RETRIEVE selector runs against
+   <code>{request, user}</code> + the raw arguments (the MCP analogue of URL kwargs)</li>
+<li>the nested spec's own <code>kwargs</code> provider; queryset shaping applies
+   and a QuerySet return is materialized via <code>.first()</code>. A missing row
+   short-circuits to an <code>isError: true</code> tool result (<code>type: "not_found"</code>).</li>
 <li>Validate <code>arguments</code> via <code>spec.input_serializer</code> (DRF <code>Serializer</code>,
-   bare <code>@dataclass</code> auto-wrapped in <code>DataclassSerializer</code>, or <code>None</code>).</li>
-<li>Build a kwarg pool: <code>{request, user, data}</code>.</li>
+   bare <code>@dataclass</code> auto-wrapped in <code>DataclassSerializer</code>, or <code>None</code>).
+   <code>spec.partial=True</code> validates partially (and drops <code>required</code> from the
+   advertised <code>inputSchema</code>); the resolved instance is threaded into the
+   serializer DRF-style so instance-dependent <code>validate()</code> sees
+   <code>self.instance</code>.</li>
+<li>Build a kwarg pool: <code>{request, user, data}</code> plus — when present — the
+   resolved <code>instance</code> and the bound, validated <code>serializer</code> (both
+   reserved seeds clients cannot poison; services opt in by declaring
+   the parameter, e.g. to call <code>serializer.save()</code>).</li>
 <li><code>resolve_callable_kwargs(spec.service, pool)</code> →
    <code>run_service(spec.service, kwargs, atomic=spec.atomic)</code>.</li>
-<li>Map <code>ServiceValidationError</code> → <code>-32602</code> and <code>ServiceError</code> → <code>-32000</code>.
-   Validation errors carry <code>data.detail</code> (per-field DRF detail). Setting
+<li>Map failures along the MCP protocol-vs-tool boundary. The serializer
+   rejecting the arguments <em>shape</em> stays a JSON-RPC <code>-32602</code>. A service
+   raising on well-shaped input — <code>ServiceValidationError</code> or
+   <code>ServiceError</code> — returns an <strong><code>isError: true</code> tool result</strong> the model
+   can read and self-correct from, with a JSON <code>{"error": {"type":
+   "validation_error" | "service_error", "message": ..., "detail": ...}}</code>
+   payload in <code>content[0]</code> (and no <code>structuredContent</code>, which is tied to
+   the success schema). Chain steps add <code>failedStep</code>. Setting
    <code>REST_FRAMEWORK_MCP["INCLUDE_VALIDATION_VALUE"] = True</code> additionally
-   echoes the offending <code>arguments</code> dict back as <code>data.value</code> — handy for
+   echoes the offending <code>arguments</code> dict back under <code>value</code> — handy for
    debugging schema mismatches against opaque client SDKs, off by default
    because the dict can carry sensitive payloads.</li>
 <li>If <code>spec.output_selector_spec</code> is set, run its post-call pipeline:
@@ -1842,6 +1861,14 @@ appear in <code>resources/templates/list</code> so clients can fill them in.</p>
 <li>Wrap as a <code>ToolResult</code> with <code>OutputFormat</code>-driven encoding for the human-
    readable <code>content[0]</code> block. <code>structuredContent</code> is always JSON.</li>
 </ol>
+<p>RETRIEVE selector tools mirror the sister repo's read semantics: a
+QuerySet return is materialized via <code>.first()</code>, and a missing row is a
+<code>not_found</code> <code>isError</code> result — unless the spec sets <code>allow_none=True</code>
+(the nullable-resource contract), which renders a successful <code>null</code>
+result instead. LIST tools advertise a kind-aware <code>outputSchema</code>: a bare
+array schema unpaginated, the <code>{items, page, totalPages, hasNext}</code>
+envelope with <code>paginate=True</code> (enable pagination for a fully
+spec-compliant <em>object</em>-shaped <code>structuredContent</code>).</p>
 <p><code>resources/read</code>:</p>
 <ol>
 <li>Resolve URI through <code>ResourceRegistry</code> (returns binding + URI-template
@@ -1863,15 +1890,23 @@ appear in <code>resources/templates/list</code> so clients can fill them in.</p>
   unsupported version is still rejected either way.</li>
 <li><strong><code>MCP-Session-Id</code></strong> — issued by the server in the response to <code>initialize</code>.
   Required on every subsequent call. Unknown id → 404 (forces the client to
-  re-initialize). Sessions are stored in a pluggable
-  <a href="../reference/registries/"><code>SessionStore</code></a> — by default the Django cache.</li>
+  re-initialize). Since 0.7 every session is <strong>bound to the authenticated
+  principal</strong> that initialized it: a session presented by a different
+  principal renders the same 404 as an unknown id (deliberately
+  indistinguishable, so ownership cannot be probed). Sessions are stored in
+  a pluggable <a href="../reference/registries/"><code>SessionStore</code></a> — by default the
+  Django cache.</li>
 <li><strong><code>Origin</code></strong> — strict allowlist. Empty allowlist means "no cross-origin
   requests"; an empty <code>Origin</code> header is treated as same-origin and allowed.
   Configure via <code>REST_FRAMEWORK_MCP["ALLOWED_ORIGINS"]</code>. Use <code>["*"]</code> only for
   dev.</li>
 </ul>
-<p><code>DELETE /mcp/</code> with a session id terminates that session immediately. <code>GET
-/mcp/</code> opens a server-initiated SSE stream — available on <code>async_urls</code> only
+<p>All three verbs authenticate through the configured <code>MCPAuthBackend</code>
+<strong>before</strong> any session lookup, so an unauthenticated caller always sees
+401 — session validity is never revealed without a credential.</p>
+<p><code>DELETE /mcp/</code> with a session id terminates that session immediately —
+only for the principal that owns it. <code>GET /mcp/</code> opens a server-initiated
+SSE stream for the caller's own session — available on <code>async_urls</code> only
 (WSGI's <code>server.urls</code> returns 405 on GET because SSE requires the event
 loop). See <a href="../async/">Async deployment</a> for the wire details and
 <code>MCPServer.notify(...)</code> for pushing frames.</p>

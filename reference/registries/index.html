@@ -3289,13 +3289,21 @@ least one required field exists.</p>
 
 
         <p>Pluggable persistence for <code>MCP-Session-Id</code> lifecycle.</p>
-<p>The transport calls :meth:<code>create</code> after a successful <code>initialize</code> and
-:meth:<code>exists</code> on every subsequent request to enforce that clients
-re-initialize after a server restart. :meth:<code>destroy</code> is invoked on
-HTTP DELETE.</p>
-<p>Stores need not retain rich state today (the MCP spec only demands the
-ID is recognised), but the interface leaves room for future extension
-such as protocol-version pinning per session.</p>
+<p>The transport calls :meth:<code>create</code> after a successful <code>initialize</code> —
+binding the new session to the authenticated principal — and
+:meth:<code>owner</code> on every subsequent request to enforce both that clients
+re-initialize after a server restart and that a session minted under
+one principal cannot be presented by another. :meth:<code>destroy</code> is
+invoked on HTTP DELETE (after the same ownership check).</p>
+<p><code>principal_id</code> is an opaque string the transport derives from the
+authenticated token (see
+:func:<code>rest_framework_mcp.transport.utils.principal_for_token</code>);
+stores persist and return it verbatim.</p>
+<p>.. versionchanged:: 0.7
+   :meth:<code>create</code> takes a required keyword-only <code>principal_id</code> and
+   :meth:<code>owner</code> joined the protocol. Custom store implementations
+   must add both; storing the principal alongside the session id is
+   the only new obligation.</p>
 
 
 
@@ -3394,6 +3402,10 @@ class will not see sessions created in another process.</p>
 <p>Works across processes — the production-suitable default. TTL is fixed
 at 24 hours; for stricter pinning, projects can subclass and override
 :meth:<code>create</code>.</p>
+<p>The cached value is the owning principal id, so :meth:<code>owner</code> is a
+single cache read. Sessions written by pre-0.7 versions stored <code>True</code>
+instead of a principal — those fail the ownership comparison and the
+client transparently re-initializes.</p>
 
 
 
