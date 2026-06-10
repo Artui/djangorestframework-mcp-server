@@ -38,11 +38,10 @@ from typing import Any
 
 from django.core.exceptions import ObjectDoesNotExist
 from rest_framework import serializers as drf_serializers
+from rest_framework_services import is_queryset, resolve_callable_kwargs, run_selector
 from rest_framework_services.exceptions.service_error import ServiceError
 from rest_framework_services.exceptions.service_validation_error import ServiceValidationError
-from rest_framework_services.selectors.utils import is_queryset, run_selector
 from rest_framework_services.types.selector_kind import SelectorKind
-from rest_framework_services.views.utils import resolve_callable_kwargs
 
 from rest_framework_mcp._compat.acall import acall
 from rest_framework_mcp._compat.utils import arun_selector_sync_safe
