@@ -12,13 +12,13 @@ from rest_framework import serializers as drf_serializers
 from rest_framework.parsers import JSONParser
 from rest_framework.request import Request
 from rest_framework_dataclasses.serializers import DataclassSerializer
-from rest_framework_services.selectors.utils import (
+from rest_framework_services import (
     apply_queryset_shaping,
     is_queryset,
+    resolve_callable_kwargs,
     run_selector,
 )
 from rest_framework_services.types.service_spec import ServiceSpec
-from rest_framework_services.views.utils import resolve_callable_kwargs
 
 from rest_framework_mcp.auth.permissions.types.mcp_permission import MCPPermission
 from rest_framework_mcp.auth.rate_limits.types.mcp_rate_limit import MCPRateLimit

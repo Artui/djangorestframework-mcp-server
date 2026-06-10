@@ -2,9 +2,8 @@ from __future__ import annotations
 
 from typing import Any
 
-from rest_framework_services.selectors.utils import run_selector
+from rest_framework_services import resolve_callable_kwargs, run_selector
 from rest_framework_services.types.selector_kind import SelectorKind
-from rest_framework_services.views.utils import resolve_callable_kwargs
 
 from rest_framework_mcp._compat.tracing import span
 from rest_framework_mcp.constants import JsonRpcErrorCode

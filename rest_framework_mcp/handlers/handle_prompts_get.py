@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from rest_framework_services.views.utils import resolve_callable_kwargs
+from rest_framework_services import resolve_callable_kwargs
 
 from rest_framework_mcp._compat.tracing import span
 from rest_framework_mcp.conf import get_setting

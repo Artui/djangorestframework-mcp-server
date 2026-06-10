@@ -4,12 +4,10 @@ from collections.abc import Mapping
 from typing import Any
 
 from rest_framework import serializers as drf_serializers
-from rest_framework_services._compat.run_service import run_service
+from rest_framework_services import resolve_callable_kwargs, run_selector, run_service
 from rest_framework_services.exceptions.service_error import ServiceError
 from rest_framework_services.exceptions.service_validation_error import ServiceValidationError
-from rest_framework_services.selectors.utils import run_selector
 from rest_framework_services.types.service_spec import ServiceSpec
-from rest_framework_services.views.utils import resolve_callable_kwargs
 
 from rest_framework_mcp._compat.tracing import span
 from rest_framework_mcp.conf import get_setting

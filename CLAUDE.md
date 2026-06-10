@@ -106,17 +106,20 @@ The MCP layer is an alternate transport over `djangorestframework-services` prim
 Import these — do not parallel them:
 
 - `rest_framework_services.types.service_spec.ServiceSpec` — the unit of registration.
-- `rest_framework_services.views.utils.resolve_callable_kwargs` — kwarg-pool dispatch.
-  Picks the subset of a kwarg pool matching the callable's declared parameters; if the
-  callable declares `**kwargs` the entire pool is passed.
-- `rest_framework_services.selectors.utils.run_selector` / `arun_selector` — selector
-  dispatch with sync/async transparency.
-- `rest_framework_services._compat.run_service.run_service` / `arun_service` — service
-  dispatch with optional `transaction.atomic()`.
+- `resolve_callable_kwargs` — kwarg-pool dispatch. Picks the subset of a kwarg pool
+  matching the callable's declared parameters; if the callable declares `**kwargs` the
+  entire pool is passed.
+- `run_selector` / `arun_selector` — selector dispatch with sync/async transparency.
+- `run_service` / `arun_service` — service dispatch with optional `transaction.atomic()`.
+- `is_async`, `is_queryset`, `apply_queryset_shaping` — the remaining dispatch leaves.
 - `rest_framework_services.exceptions.service_error.ServiceError` and
   `service_validation_error.ServiceValidationError` — caught at the MCP boundary and
   mapped to JSON-RPC error responses (`-32602` for `ServiceValidationError`, `-32000`
   for `ServiceError`).
+
+The dispatch leaves are **top-level exports** of `rest_framework_services` (its
+documented "stable dispatch surface", 0.17+) — import them from the package root,
+never from internal `utils` / `_compat` paths (`_compat` was removed in 0.17).
 
 Validation, output-serializer rendering, and kwarg-pool construction are reproduced
 locally in the `handlers/` layer — small, transport-shaped equivalents without

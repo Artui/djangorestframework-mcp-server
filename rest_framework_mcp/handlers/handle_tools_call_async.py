@@ -4,9 +4,9 @@ from collections.abc import Mapping
 from typing import Any
 
 from rest_framework import serializers as drf_serializers
+from rest_framework_services import resolve_callable_kwargs
 from rest_framework_services.exceptions.service_error import ServiceError
 from rest_framework_services.exceptions.service_validation_error import ServiceValidationError
-from rest_framework_services.views.utils import resolve_callable_kwargs
 
 from rest_framework_mcp._compat.acall import acall
 from rest_framework_mcp._compat.tracing import span

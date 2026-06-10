@@ -7,6 +7,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.7.1] — 2026-06-10
+
+### Changed
+
+- **Adopted drf-services' stable dispatch surface** (the sister repo's
+  SURF-1 / 0.17). All dispatch-leaf imports — `run_service`,
+  `arun_service`, `is_async`, `resolve_callable_kwargs`, `run_selector`,
+  `arun_selector`, `is_queryset`, `apply_queryset_shaping` — now come from
+  the `rest_framework_services` package root (the documented, semver-stable
+  surface) instead of private `_compat` modules and internal `utils` paths.
+  No behaviour change.
+- Dependency range bumped to `djangorestframework-services>=0.17,<0.18` —
+  required, since 0.17 removed the private `_compat` package this package
+  previously imported from.
+
 ## [0.7.0] — 2026-06-10
 
 ### Security
@@ -890,7 +905,8 @@ Pinned to `djangorestframework-services==0.6.0`.
 - 100% line + branch coverage enforced by pytest (**451 tests** at
   release).
 
-[Unreleased]: https://github.com/Artui/djangorestframework-mcp-server/compare/v0.7.0...HEAD
+[Unreleased]: https://github.com/Artui/djangorestframework-mcp-server/compare/v0.7.1...HEAD
+[0.7.1]: https://github.com/Artui/djangorestframework-mcp-server/compare/v0.7.0...v0.7.1
 [0.7.0]: https://github.com/Artui/djangorestframework-mcp-server/compare/v0.6.2...v0.7.0
 [0.6.2]: https://github.com/Artui/djangorestframework-mcp-server/compare/v0.6.1...v0.6.2
 [0.6.1]: https://github.com/Artui/djangorestframework-mcp-server/compare/v0.6.0...v0.6.1

@@ -3,10 +3,7 @@ from __future__ import annotations
 from collections.abc import Callable
 from typing import Any
 
-from rest_framework_services._compat.arun_service import arun_service
-from rest_framework_services._compat.is_async import is_async
-from rest_framework_services._compat.run_service import run_service
-from rest_framework_services.selectors.utils import arun_selector, run_selector
+from rest_framework_services import arun_selector, arun_service, is_async, run_selector, run_service
 
 from rest_framework_mcp._compat.acall import acall
 
