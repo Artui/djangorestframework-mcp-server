@@ -9,20 +9,40 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **Service & selector tool dispatch now routes through drf-services'
+  `dispatch_spec`** (pins `djangorestframework-services` 0.20). The wire handlers
+  (`handle_tools_call` / `handle_tools_call_async`) and the selector pipeline
+  hand off the spec-execution core — instance resolution, `input_serializer`
+  validation, the kwarg pool (per the binding's `argument_binding` /
+  `unknown_arguments`), the service / selector run, queryset shaping +
+  `filter_set`, and the output-selector re-fetch — to the neutral core, keeping
+  only the transport shell (MCP permissions / rate limits, ordering, pagination,
+  output format, `structuredContent`). Two capabilities come for free by routing
+  through the path that already composes them:
+  - **bulk mutations over MCP** — `spec.many` (list payload), a
+    `collection_selector_spec` target, and list-shaped output;
+  - **object-level permissions over MCP** — `spec.permission_classes` now run via
+    the `on_target_resolved=enforce_permissions` hook, so a `has_object_permission`
+    rule denies over MCP (previously only `has_permission` was checked).
+
+  The reproduced dispatch code is deleted: the local kwarg-pool builder
+  (`build_call_pool`), the input-validation/instance-resolution helpers, and the
+  output-selector re-fetch.
 - **`MCPServer.call_tool(name, arguments, *, user, request=None)`** — a blessed,
   transport-neutral way to invoke a spec-backed tool off the HTTP / JSON-RPC
   path, returning the same `ToolResult` the wire handlers build. It is built on
-  the sister repo's `dispatch_spec` / `render_spec_output` / `enforce_permissions`
-  (drf-services 0.19), so the spec-execution core — instance resolution, input
-  validation, the service / selector run, the output-selector re-fetch, queryset
-  shaping incl. `filter_set`, and the retrieve nullability contract — is shared
-  rather than re-implemented. An in-process consumer (a bridge, a Pydantic-AI
-  toolset, a management command) calls this instead of reaching into handler
-  internals. Scope note: this is the spec core — the HTTP transport's pagination,
-  ordering, `unknown_arguments` policy, `argument_binding` modes, and a selector
-  binding's MCP-only `input_serializer` are not layered on here, and the spec's
-  `permission_classes` are enforced (not the transport-level MCP permissions /
-  rate limits). Chain tools are unsupported (they orchestrate several specs).
+  the sister repo's `dispatch_spec` / `render_spec_output` / `enforce_permissions`,
+  so the spec-execution core — instance resolution, input validation, the service
+  / selector run, the output-selector re-fetch, queryset shaping incl.
+  `filter_set`, and the retrieve nullability contract — is shared rather than
+  re-implemented. An in-process consumer (a bridge, a Pydantic-AI toolset, a
+  management command) calls this instead of reaching into handler internals. It
+  honours the binding's `argument_binding` / `unknown_arguments` policies and the
+  spec's `permission_classes` (object-level checks included, via the
+  `on_target_resolved=enforce_permissions` hook); the read-shaped transport extras
+  (pagination, ordering, a selector binding's MCP-only `input_serializer`) and the
+  transport-level MCP permissions / rate limits stay with the wire handlers. Chain
+  tools are unsupported (they orchestrate several specs).
 - **Tools auto-advertise MCP `ToolAnnotations` hints.** Every tool now
   carries the standard hints derived from its mutation profile: selector
   tools → `readOnlyHint: true`; service tools → `readOnlyHint: false` +
@@ -36,6 +56,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- **`ArgumentBinding` is re-exported from drf-services, with renamed members
+  (breaking).** `dispatch_spec` owns the argument-binding policy, so MCP
+  consumes its enum rather than a parallel copy. The members are renamed to the
+  neutral-core names — `DATA_ONLY` → `BUNDLE`, `MERGE` → `SPREAD_AUTHOR_WINS`,
+  `REPLACE` → `SPREAD_CALLER_WINS` (and `AUTO` is now available). Update
+  `register_*_tool(argument_binding=...)` call sites accordingly. Defaults are
+  unchanged in effect (service tools `BUNDLE`, selector tools
+  `SPREAD_AUTHOR_WINS`); the import path (`rest_framework_mcp.constants`) and
+  `UnknownArguments` (`REJECT` / `PASSTHROUGH` / `IGNORE`) are unchanged.
+- **Selector tools adopt drf-services' selector contract (two visible
+  changes).** Routing selectors through `dispatch_spec` means: (1) validated
+  args **spread** to the selector's declared parameters (coerced via the
+  binding's `input_serializer`) rather than arriving as one `data` bundle —
+  selectors are reads; a selector should declare its params (`def list(*,
+  project_id, ...)`), not `def list(*, data)`. (2) A selector configured with
+  queryset shaping / `filter_set` must **return a `QuerySet`**; a non-queryset
+  return now raises `ImproperlyConfigured` (a loud developer-facing config
+  error) instead of silently skipping the shaping.
 - **JSON-Schema generation now delegates to drf-services.** MCP's
   `inputSchema` / `outputSchema` generation — serializer / dataclass / FilterSet
   → JSON Schema, including drf-spectacular `@extend_schema_field` /
