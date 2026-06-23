@@ -480,6 +480,23 @@
     </span>
   </a>
   
+    <nav class="md-nav" aria-label="Transport-neutral invocation: call_tool">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#full-in-process-transport-acall_tool-list_tools" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Full in-process transport: acall_tool / list_tools
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
 </li>
       
         <li class="md-nav__item">
@@ -1494,6 +1511,23 @@
     </span>
   </a>
   
+    <nav class="md-nav" aria-label="Transport-neutral invocation: call_tool">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#full-in-process-transport-acall_tool-list_tools" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Full in-process transport: acall_tool / list_tools
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
 </li>
       
         <li class="md-nav__item">
@@ -1854,6 +1888,37 @@ Chain tools are unsupported — they orchestrate several specs and raise
 <code>TypeError</code>. A service raising <code>ServiceValidationError</code> / <code>ServiceError</code> and a
 missing required instance come back as <code>isError</code> results; a denied permission
 or malformed input raises, for the caller to map.</p>
+<h3 id="full-in-process-transport-acall_tool-list_tools">Full in-process transport: <code>acall_tool</code> / <code>list_tools</code><a class="headerlink" href="#full-in-process-transport-acall_tool-list_tools" title="Permanent link">&para;</a></h3>
+<p><code>call_tool</code> is the spec <strong>core</strong>. When an in-process consumer needs the <em>whole</em>
+transport — exactly what a remote MCP client sees — <code>MCPServer</code> exposes two
+async-friendly siblings that route through the same wire handlers:</p>
+<div class="language-python highlight"><pre><span></span><code><span id="__span-6-1"><a id="__codelineno-6-1" name="__codelineno-6-1" href="#__codelineno-6-1"></a><span class="n">page</span> <span class="o">=</span> <span class="n">server</span><span class="o">.</span><span class="n">list_tools</span><span class="p">(</span><span class="n">user</span><span class="o">=</span><span class="n">request</span><span class="o">.</span><span class="n">user</span><span class="p">,</span> <span class="n">request</span><span class="o">=</span><span class="n">request</span><span class="p">)</span>   <span class="c1"># one tools/list page</span>
+</span><span id="__span-6-2"><a id="__codelineno-6-2" name="__codelineno-6-2" href="#__codelineno-6-2"></a><span class="n">page</span><span class="p">[</span><span class="s2">&quot;tools&quot;</span><span class="p">]</span>        <span class="c1"># merged inputSchema per tool</span>
+</span><span id="__span-6-3"><a id="__codelineno-6-3" name="__codelineno-6-3" href="#__codelineno-6-3"></a><span class="n">page</span><span class="p">[</span><span class="s2">&quot;nextCursor&quot;</span><span class="p">]</span>   <span class="c1"># pass back to list_tools(cursor, ...) to paginate</span>
+</span><span id="__span-6-4"><a id="__codelineno-6-4" name="__codelineno-6-4" href="#__codelineno-6-4"></a>
+</span><span id="__span-6-5"><a id="__codelineno-6-5" name="__codelineno-6-5" href="#__codelineno-6-5"></a><span class="n">result</span> <span class="o">=</span> <span class="k">await</span> <span class="n">server</span><span class="o">.</span><span class="n">acall_tool</span><span class="p">(</span><span class="s2">&quot;invoices.list&quot;</span><span class="p">,</span> <span class="p">{</span><span class="s2">&quot;ordering&quot;</span><span class="p">:</span> <span class="s2">&quot;-amount&quot;</span><span class="p">,</span> <span class="s2">&quot;page&quot;</span><span class="p">:</span> <span class="mi">1</span><span class="p">},</span>
+</span><span id="__span-6-6"><a id="__codelineno-6-6" name="__codelineno-6-6" href="#__codelineno-6-6"></a>                                 <span class="n">user</span><span class="o">=</span><span class="n">request</span><span class="o">.</span><span class="n">user</span><span class="p">,</span> <span class="n">request</span><span class="o">=</span><span class="n">request</span><span class="p">)</span>
+</span><span id="__span-6-7"><a id="__codelineno-6-7" name="__codelineno-6-7" href="#__codelineno-6-7"></a><span class="n">result</span><span class="p">[</span><span class="s2">&quot;structuredContent&quot;</span><span class="p">]</span>   <span class="c1"># the wire&#39;s result payload (dict, not ToolResult)</span>
+</span></code></pre></div>
+<ul>
+<li><code>list_tools(cursor=None, *, user, request=None)</code> returns one page of the tool
+  catalog with the same merged <code>inputSchema</code> (serializer fields <strong>plus</strong> a
+  selector tool's filter / ordering / pagination arguments and the
+  <code>additionalProperties</code> policy), the same <code>FILTER_LISTINGS_BY_PERMISSIONS</code>
+  per-caller filter, and the same opaque-cursor pagination the HTTP transport uses.</li>
+<li><code>acall_tool(name, arguments=None, *, user, request=None)</code> invokes a tool with
+  the <strong>full</strong> transport applied: the transport-level MCP permissions and rate
+  limits, the selector post-fetch pipeline (filter / order / paginate), a selector
+  binding's MCP-only <code>input_serializer</code>, chain tools, and the output format —
+  everything <code>call_tool</code> deliberately omits. It returns the wire's <code>dict</code> payload
+  (<code>content</code> / <code>structuredContent</code> / <code>isError</code>) or a <code>JsonRpcError</code> for a protocol
+  fault (unknown tool, malformed <code>arguments</code> shape, denied permission).</li>
+</ul>
+<p>Both build the call context internally from <code>user</code> + <code>request</code> (a minimal request
+is synthesised when <code>request</code> is <code>None</code>). <code>JsonRpcError</code> and <code>JsonRpcErrorCode</code>
+are re-exported from the package root so a consumer can branch on faults. This is
+the surface the <code>django-ag-ui</code> bridge consumes to run drf-mcp tools in-process
+with HTTP-equivalent semantics.</p>
 <h2 id="tools-vs-resources">Tools vs resources<a class="headerlink" href="#tools-vs-resources" title="Permanent link">&para;</a></h2>
 <table>
 <thead>
@@ -1903,15 +1968,15 @@ over time.</p>
 <h2 id="uri-templates">URI templates<a class="headerlink" href="#uri-templates" title="Permanent link">&para;</a></h2>
 <p>Resource URIs follow a small subset of <a href="https://www.rfc-editor.org/rfc/rfc6570">RFC 6570</a>.
 Each <code>{var}</code> placeholder becomes a kwarg in the selector's signature:</p>
-<div class="language-python highlight"><pre><span></span><code><span id="__span-6-1"><a id="__codelineno-6-1" name="__codelineno-6-1" href="#__codelineno-6-1"></a><span class="n">server</span><span class="o">.</span><span class="n">register_resource</span><span class="p">(</span>
-</span><span id="__span-6-2"><a id="__codelineno-6-2" name="__codelineno-6-2" href="#__codelineno-6-2"></a>    <span class="n">name</span><span class="o">=</span><span class="s2">&quot;invoice&quot;</span><span class="p">,</span>
-</span><span id="__span-6-3"><a id="__codelineno-6-3" name="__codelineno-6-3" href="#__codelineno-6-3"></a>    <span class="n">uri_template</span><span class="o">=</span><span class="s2">&quot;invoices://</span><span class="si">{pk}</span><span class="s2">&quot;</span><span class="p">,</span>
-</span><span id="__span-6-4"><a id="__codelineno-6-4" name="__codelineno-6-4" href="#__codelineno-6-4"></a>    <span class="n">selector</span><span class="o">=</span><span class="n">SelectorSpec</span><span class="p">(</span>
-</span><span id="__span-6-5"><a id="__codelineno-6-5" name="__codelineno-6-5" href="#__codelineno-6-5"></a>        <span class="n">kind</span><span class="o">=</span><span class="n">SelectorKind</span><span class="o">.</span><span class="n">RETRIEVE</span><span class="p">,</span>
-</span><span id="__span-6-6"><a id="__codelineno-6-6" name="__codelineno-6-6" href="#__codelineno-6-6"></a>        <span class="n">selector</span><span class="o">=</span><span class="n">get_invoice</span><span class="p">,</span>             <span class="c1"># def get_invoice(*, pk): ...</span>
-</span><span id="__span-6-7"><a id="__codelineno-6-7" name="__codelineno-6-7" href="#__codelineno-6-7"></a>        <span class="n">output_serializer</span><span class="o">=</span><span class="n">InvoiceOutputSerializer</span><span class="p">,</span>
-</span><span id="__span-6-8"><a id="__codelineno-6-8" name="__codelineno-6-8" href="#__codelineno-6-8"></a>    <span class="p">),</span>
-</span><span id="__span-6-9"><a id="__codelineno-6-9" name="__codelineno-6-9" href="#__codelineno-6-9"></a><span class="p">)</span>
+<div class="language-python highlight"><pre><span></span><code><span id="__span-7-1"><a id="__codelineno-7-1" name="__codelineno-7-1" href="#__codelineno-7-1"></a><span class="n">server</span><span class="o">.</span><span class="n">register_resource</span><span class="p">(</span>
+</span><span id="__span-7-2"><a id="__codelineno-7-2" name="__codelineno-7-2" href="#__codelineno-7-2"></a>    <span class="n">name</span><span class="o">=</span><span class="s2">&quot;invoice&quot;</span><span class="p">,</span>
+</span><span id="__span-7-3"><a id="__codelineno-7-3" name="__codelineno-7-3" href="#__codelineno-7-3"></a>    <span class="n">uri_template</span><span class="o">=</span><span class="s2">&quot;invoices://</span><span class="si">{pk}</span><span class="s2">&quot;</span><span class="p">,</span>
+</span><span id="__span-7-4"><a id="__codelineno-7-4" name="__codelineno-7-4" href="#__codelineno-7-4"></a>    <span class="n">selector</span><span class="o">=</span><span class="n">SelectorSpec</span><span class="p">(</span>
+</span><span id="__span-7-5"><a id="__codelineno-7-5" name="__codelineno-7-5" href="#__codelineno-7-5"></a>        <span class="n">kind</span><span class="o">=</span><span class="n">SelectorKind</span><span class="o">.</span><span class="n">RETRIEVE</span><span class="p">,</span>
+</span><span id="__span-7-6"><a id="__codelineno-7-6" name="__codelineno-7-6" href="#__codelineno-7-6"></a>        <span class="n">selector</span><span class="o">=</span><span class="n">get_invoice</span><span class="p">,</span>             <span class="c1"># def get_invoice(*, pk): ...</span>
+</span><span id="__span-7-7"><a id="__codelineno-7-7" name="__codelineno-7-7" href="#__codelineno-7-7"></a>        <span class="n">output_serializer</span><span class="o">=</span><span class="n">InvoiceOutputSerializer</span><span class="p">,</span>
+</span><span id="__span-7-8"><a id="__codelineno-7-8" name="__codelineno-7-8" href="#__codelineno-7-8"></a>    <span class="p">),</span>
+</span><span id="__span-7-9"><a id="__codelineno-7-9" name="__codelineno-7-9" href="#__codelineno-7-9"></a><span class="p">)</span>
 </span></code></pre></div>
 <p>Concrete URIs (no placeholders) appear in <code>resources/list</code>; templated ones
 appear in <code>resources/templates/list</code> so clients can fill them in.</p>
@@ -2018,19 +2083,19 @@ optional <code>structuredContent</code>:</p>
 <li><code>structuredContent</code> is always JSON-shaped — clients parse it directly.</li>
 <li><code>content[0]</code> is a text block whose payload is encoded per <code>OutputFormat</code>.</li>
 </ul>
-<div class="language-python highlight"><pre><span></span><code><span id="__span-7-1"><a id="__codelineno-7-1" name="__codelineno-7-1" href="#__codelineno-7-1"></a><span class="kn">from</span><span class="w"> </span><span class="nn">rest_framework_mcp</span><span class="w"> </span><span class="kn">import</span> <span class="n">OutputFormat</span>
-</span><span id="__span-7-2"><a id="__codelineno-7-2" name="__codelineno-7-2" href="#__codelineno-7-2"></a>
-</span><span id="__span-7-3"><a id="__codelineno-7-3" name="__codelineno-7-3" href="#__codelineno-7-3"></a><span class="n">server</span><span class="o">.</span><span class="n">register_service_tool</span><span class="p">(</span>
-</span><span id="__span-7-4"><a id="__codelineno-7-4" name="__codelineno-7-4" href="#__codelineno-7-4"></a>    <span class="n">name</span><span class="o">=</span><span class="s2">&quot;invoices.list&quot;</span><span class="p">,</span>
-</span><span id="__span-7-5"><a id="__codelineno-7-5" name="__codelineno-7-5" href="#__codelineno-7-5"></a>    <span class="n">spec</span><span class="o">=</span><span class="n">ServiceSpec</span><span class="p">(</span>
-</span><span id="__span-7-6"><a id="__codelineno-7-6" name="__codelineno-7-6" href="#__codelineno-7-6"></a>        <span class="n">service</span><span class="o">=</span><span class="n">list_invoices</span><span class="p">,</span>
-</span><span id="__span-7-7"><a id="__codelineno-7-7" name="__codelineno-7-7" href="#__codelineno-7-7"></a>        <span class="n">output_selector_spec</span><span class="o">=</span><span class="n">SelectorSpec</span><span class="p">(</span>
-</span><span id="__span-7-8"><a id="__codelineno-7-8" name="__codelineno-7-8" href="#__codelineno-7-8"></a>            <span class="n">kind</span><span class="o">=</span><span class="n">SelectorKind</span><span class="o">.</span><span class="n">LIST</span><span class="p">,</span>
-</span><span id="__span-7-9"><a id="__codelineno-7-9" name="__codelineno-7-9" href="#__codelineno-7-9"></a>            <span class="n">output_serializer</span><span class="o">=</span><span class="n">InvoiceOutputSerializer</span><span class="p">,</span>
-</span><span id="__span-7-10"><a id="__codelineno-7-10" name="__codelineno-7-10" href="#__codelineno-7-10"></a>        <span class="p">),</span>
-</span><span id="__span-7-11"><a id="__codelineno-7-11" name="__codelineno-7-11" href="#__codelineno-7-11"></a>    <span class="p">),</span>
-</span><span id="__span-7-12"><a id="__codelineno-7-12" name="__codelineno-7-12" href="#__codelineno-7-12"></a>    <span class="n">output_format</span><span class="o">=</span><span class="n">OutputFormat</span><span class="o">.</span><span class="n">AUTO</span><span class="p">,</span>   <span class="c1"># JSON, TOON, or AUTO</span>
-</span><span id="__span-7-13"><a id="__codelineno-7-13" name="__codelineno-7-13" href="#__codelineno-7-13"></a><span class="p">)</span>
+<div class="language-python highlight"><pre><span></span><code><span id="__span-8-1"><a id="__codelineno-8-1" name="__codelineno-8-1" href="#__codelineno-8-1"></a><span class="kn">from</span><span class="w"> </span><span class="nn">rest_framework_mcp</span><span class="w"> </span><span class="kn">import</span> <span class="n">OutputFormat</span>
+</span><span id="__span-8-2"><a id="__codelineno-8-2" name="__codelineno-8-2" href="#__codelineno-8-2"></a>
+</span><span id="__span-8-3"><a id="__codelineno-8-3" name="__codelineno-8-3" href="#__codelineno-8-3"></a><span class="n">server</span><span class="o">.</span><span class="n">register_service_tool</span><span class="p">(</span>
+</span><span id="__span-8-4"><a id="__codelineno-8-4" name="__codelineno-8-4" href="#__codelineno-8-4"></a>    <span class="n">name</span><span class="o">=</span><span class="s2">&quot;invoices.list&quot;</span><span class="p">,</span>
+</span><span id="__span-8-5"><a id="__codelineno-8-5" name="__codelineno-8-5" href="#__codelineno-8-5"></a>    <span class="n">spec</span><span class="o">=</span><span class="n">ServiceSpec</span><span class="p">(</span>
+</span><span id="__span-8-6"><a id="__codelineno-8-6" name="__codelineno-8-6" href="#__codelineno-8-6"></a>        <span class="n">service</span><span class="o">=</span><span class="n">list_invoices</span><span class="p">,</span>
+</span><span id="__span-8-7"><a id="__codelineno-8-7" name="__codelineno-8-7" href="#__codelineno-8-7"></a>        <span class="n">output_selector_spec</span><span class="o">=</span><span class="n">SelectorSpec</span><span class="p">(</span>
+</span><span id="__span-8-8"><a id="__codelineno-8-8" name="__codelineno-8-8" href="#__codelineno-8-8"></a>            <span class="n">kind</span><span class="o">=</span><span class="n">SelectorKind</span><span class="o">.</span><span class="n">LIST</span><span class="p">,</span>
+</span><span id="__span-8-9"><a id="__codelineno-8-9" name="__codelineno-8-9" href="#__codelineno-8-9"></a>            <span class="n">output_serializer</span><span class="o">=</span><span class="n">InvoiceOutputSerializer</span><span class="p">,</span>
+</span><span id="__span-8-10"><a id="__codelineno-8-10" name="__codelineno-8-10" href="#__codelineno-8-10"></a>        <span class="p">),</span>
+</span><span id="__span-8-11"><a id="__codelineno-8-11" name="__codelineno-8-11" href="#__codelineno-8-11"></a>    <span class="p">),</span>
+</span><span id="__span-8-12"><a id="__codelineno-8-12" name="__codelineno-8-12" href="#__codelineno-8-12"></a>    <span class="n">output_format</span><span class="o">=</span><span class="n">OutputFormat</span><span class="o">.</span><span class="n">AUTO</span><span class="p">,</span>   <span class="c1"># JSON, TOON, or AUTO</span>
+</span><span id="__span-8-13"><a id="__codelineno-8-13" name="__codelineno-8-13" href="#__codelineno-8-13"></a><span class="p">)</span>
 </span></code></pre></div>
 <p><code>AUTO</code> picks per-payload — TOON for uniform list-of-objects, JSON otherwise.
 TOON is wrapped in a fenced <code>```toon</code> block with a leading <code># format: toon</code>
