@@ -53,9 +53,11 @@ register a spec once and both surfaces get the same shape:
 - **`SelectorSpec.kind`** — required `SelectorKind` discriminator
   (`LIST` or `RETRIEVE`). It drives the `many=` flag on the output
   serializer and gates which post-fetch knobs the registration
-  accepts (a `RETRIEVE` spec rejects `filter_set` / `ordering_fields`
-  / `paginate`). `SelectorKind` is re-exported from
-  `rest_framework_mcp` for convenience.
+  accepts (a `RETRIEVE` spec rejects the collection-only
+  `ordering_fields` / `paginate`, but `filter_set` is allowed — it is
+  shaped + applied before the single-instance `.first()`).
+  `SelectorKind` is re-exported from `rest_framework_mcp` for
+  convenience.
 - **`ServiceSpec.output_selector_spec`** — a nested
   `SelectorSpec | None` describing the post-call render pipeline
   (optional re-fetch via its `selector`, then `output_serializer`

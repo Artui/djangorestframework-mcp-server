@@ -36,16 +36,15 @@ def test_allows_schema_off_with_content_on() -> None:
     assert binding.include_structured_content is True
 
 
-def test_retrieve_kind_rejects_filter_set() -> None:
-    with pytest.raises(ImproperlyConfigured) as excinfo:
-        SelectorToolBinding(
-            name="r",
-            description=None,
-            # filter_set lives on the spec now; any truthy value triggers the guard.
-            spec=SelectorSpec(kind=SelectorKind.RETRIEVE, selector=_sel, filter_set=object),
-        )
-    assert "spec.kind=RETRIEVE" in str(excinfo.value)
-    assert "filter_set" in str(excinfo.value)
+def test_retrieve_kind_allows_filter_set() -> None:
+    # filter_set is shaped + applied before .first() on retrieve (sister-repo
+    # parity), so a retrieve spec carrying one constructs cleanly.
+    binding = SelectorToolBinding(
+        name="r",
+        description=None,
+        spec=SelectorSpec(kind=SelectorKind.RETRIEVE, selector=_sel, filter_set=object),
+    )
+    assert binding.filter_set is object
 
 
 def test_retrieve_kind_rejects_ordering_fields() -> None:
@@ -71,7 +70,11 @@ def test_retrieve_kind_rejects_paginate() -> None:
 
 
 def test_retrieve_kind_lists_every_offending_knob() -> None:
-    """When multiple list-only knobs are set together, the error names all of them."""
+    """When multiple list-only knobs are set together, the error names all of them.
+
+    ``filter_set`` is allowed on retrieve (it's shaped + applied before
+    ``.first()``), so even alongside it only ordering / pagination are flagged.
+    """
     with pytest.raises(ImproperlyConfigured) as excinfo:
         SelectorToolBinding(
             name="r",
@@ -81,7 +84,8 @@ def test_retrieve_kind_lists_every_offending_knob() -> None:
             paginate=True,
         )
     msg = str(excinfo.value)
-    assert "filter_set" in msg and "ordering_fields" in msg and "paginate" in msg
+    assert "ordering_fields" in msg and "paginate" in msg
+    assert "filter_set" not in msg
 
 
 def test_retrieve_kind_without_list_knobs_constructs_cleanly() -> None:

@@ -33,11 +33,13 @@ class SelectorToolBinding(Generic[ResultT, ExtraT]):
                   → output_serializer(many=True)
                   → ToolResult
 
-    ``kind=RETRIEVE`` skips the post-fetch pipeline entirely — the
-    selector's single-instance return goes straight to
-    ``output_serializer(many=False)``. Combining ``RETRIEVE`` with
-    ``filter_set`` / ``ordering_fields`` / ``paginate`` is rejected at
-    construction (those knobs only make sense on a collection).
+    ``kind=RETRIEVE`` skips ordering / pagination but still applies
+    queryset shaping + ``spec.filter_set`` before materializing the
+    single instance via ``.first()`` (so a "stats from a filtered set"
+    retrieve works, matching the sister repo's ``dispatch_spec``), then
+    renders ``output_serializer(many=False)``. Combining ``RETRIEVE``
+    with ``ordering_fields`` / ``paginate`` is rejected at construction
+    (those knobs only make sense on a collection).
 
     Selectors return raw, unscoped data (a queryset for ``LIST``, a
     single instance for ``RETRIEVE``) — the tool layer owns shape
@@ -120,9 +122,10 @@ class SelectorToolBinding(Generic[ResultT, ExtraT]):
                 "conforming structuredContent. Set one of them differently."
             )
         if self.kind is SelectorKind.RETRIEVE:
+            # ``filter_set`` is *allowed* on RETRIEVE — the dispatcher shapes +
+            # filters the queryset before ``.first()`` (sister-repo parity).
+            # Ordering / pagination still only make sense on a collection.
             list_only: list[str] = []
-            if self.filter_set is not None:
-                list_only.append("filter_set")
             if self.ordering_fields:
                 list_only.append("ordering_fields")
             if self.paginate:
@@ -132,8 +135,8 @@ class SelectorToolBinding(Generic[ResultT, ExtraT]):
                     f"Selector tool {self.name!r}: spec.kind=RETRIEVE is incompatible "
                     f"with list-shaped pipeline knob(s) {sorted(list_only)!r}. A "
                     "retrieve selector returns a single instance — there is no "
-                    "queryset to filter, order, or paginate. Either drop the "
-                    "knob(s) or set the spec's kind to LIST."
+                    "collection to order or paginate. Either drop the knob(s) or "
+                    "set the spec's kind to LIST."
                 )
 
     @property

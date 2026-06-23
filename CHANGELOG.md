@@ -36,6 +36,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- **Retrieve selectors now shape + filter before `.first()`.** A
+  `kind=RETRIEVE` selector tool now applies queryset shaping
+  (`select_related` … `extend_queryset`) and `spec.filter_set` to its
+  queryset before materializing the single instance — so a "stats from a
+  filtered set" retrieve works over MCP, matching the sister repo's
+  `dispatch_spec`. `filter_set` on a retrieve spec is no longer rejected at
+  registration (ordering / pagination remain collection-only). Internally,
+  the selector dispatcher now delegates shaping + filtering to
+  drf-services' blessed `apply_queryset_shaping` leaf instead of
+  re-implementing it (the local `_apply_filter_set` / `_apply_spec_shaping`
+  helpers are gone); non-queryset selector returns still pass through
+  unfiltered.
 - **Selector filtering is declared on the spec.** A selector tool now
   reads its `FilterSet` from `SelectorSpec.filter_set`
   (`djangorestframework-services` 0.18+) rather than a separate

@@ -199,6 +199,28 @@ def test_no_filter_set_means_no_filtering() -> None:
     assert len(out["structuredContent"]) == 2
 
 
+@pytest.mark.django_db
+def test_retrieve_applies_filter_set_before_first() -> None:
+    """A RETRIEVE selector shapes + filters its queryset before ``.first()``."""
+    Invoice.objects.create(number="A", amount_cents=100, sent=True)
+    Invoice.objects.create(number="B", amount_cents=200, sent=False)
+
+    server = _server()
+    server.register_selector_tool(
+        name="invoices.get",
+        spec=SelectorSpec(
+            kind=SelectorKind.RETRIEVE,
+            selector=lambda **_: Invoice.objects.all(),
+            output_serializer=InvoiceOutputSerializer,
+            filter_set=InvoiceFilterSet,
+        ),
+    )
+    # Filtering to sent=False selects B, not the first row (A).
+    out = handle_tools_call({"name": "invoices.get", "arguments": {"sent": False}}, _ctx(server))
+    assert isinstance(out, dict)
+    assert out["structuredContent"]["number"] == "B"
+
+
 # ---------- Ordering ----------
 
 

@@ -14,14 +14,16 @@ Two shapes, gated by ``binding.kind``:
               → output_serializer(many=True)
               → ToolResult
 
-``RETRIEVE`` short-circuits the post-fetch pipeline (the binding
-rejects ``filter_set`` / ``ordering_fields`` / ``paginate`` at
-construction) and renders the single result:
+``RETRIEVE`` skips ordering / pagination (the binding rejects those
+knobs at construction) but still applies queryset shaping + ``filter_set``
+before the single-instance ``.first()``, then renders:
 
 .. code-block:: text
 
     arguments → permission check → rate limit → validate(input_serializer)
               → run_selector
+              → shape + FilterSet(data=…).qs            (if a queryset)
+              → .first()
               → output_serializer(many=False)
               → ToolResult
 
@@ -38,7 +40,12 @@ from typing import Any
 
 from django.core.exceptions import ObjectDoesNotExist
 from rest_framework import serializers as drf_serializers
-from rest_framework_services import is_queryset, resolve_callable_kwargs, run_selector
+from rest_framework_services import (
+    apply_queryset_shaping,
+    is_queryset,
+    resolve_callable_kwargs,
+    run_selector,
+)
 from rest_framework_services.exceptions.service_error import ServiceError
 from rest_framework_services.exceptions.service_validation_error import ServiceValidationError
 from rest_framework_services.types.selector_kind import SelectorKind
@@ -285,10 +292,11 @@ def _post_fetch_and_render(
 ) -> dict[str, Any]:
     """Apply shaping → filter → order → paginate, then render via output_serializer.
 
-    ``kind=RETRIEVE`` short-circuits all list-shaped steps and goes
-    straight to single-instance rendering — the binding rejects
-    ``filter_set`` / ``ordering_fields`` / ``paginate`` at construction
-    so there is nothing to skip dynamically here.
+    ``kind=RETRIEVE`` skips ordering / pagination (the binding rejects those
+    knobs at construction) but still applies queryset shaping + ``filter_set``
+    before the single-instance ``.first()`` materialization, exactly as the
+    sister repo's ``dispatch_spec`` does for a retrieve selector — so a
+    "stats from a filtered set" retrieve works over MCP too.
     """
     output_format: OutputFormat = OutputFormat.coerce(
         params.get("outputFormat") or binding.output_format
@@ -300,11 +308,13 @@ def _post_fetch_and_render(
     )
 
     if binding.kind is SelectorKind.RETRIEVE:
-        # Sister-repo 0.16 parity: materialize a QuerySet return via
-        # ``.first()`` (``selector=lambda *, pk: Model.objects.filter(pk=pk)``
-        # works identically over MCP and HTTP), and route the missing-row
-        # case through the not-found / nullable contract instead of
-        # serializing ``None``.
+        # Shape + filter the queryset (``select_related`` … ``filter_set``)
+        # before materializing via ``.first()``
+        # (``selector=lambda *, pk: Model.objects.filter(pk=pk)`` works
+        # identically over MCP and HTTP), then route the missing-row case
+        # through the not-found / nullable contract instead of serializing
+        # ``None``.
+        result = _shape_and_filter(binding, result, drf_request, arguments_raw)
         if is_queryset(result):
             result = result.first()
         if result is None:
@@ -319,17 +329,10 @@ def _post_fetch_and_render(
             include_structured_content=emit_structured_content,
         ).to_dict()
 
-    qs: Any = result
-
-    # Per-spec QuerySet shaping (sister-repo 0.12+): runs *before* FilterSet
-    # so the filter sees an already-shaped queryset. Skips non-queryset
-    # selector returns silently — matches sister-repo's contract.
-    qs = _apply_spec_shaping(binding, qs, drf_request)
-
-    # Filter — only when both binding and the QS-shape support it. Plain
+    # Per-spec QuerySet shaping (``select_related`` … ``extend_queryset``) and
+    # ``filter_set`` via the blessed ``apply_queryset_shaping`` leaf. Plain
     # lists / scalars fall through unchanged.
-    if binding.filter_set is not None and is_queryset(qs):
-        qs = _apply_filter_set(binding.filter_set, qs, arguments_raw)
+    qs: Any = _shape_and_filter(binding, result, drf_request, arguments_raw)
 
     # Ordering — only on QS-shapes that support ``.order_by()``.
     if binding.ordering_fields and is_queryset(qs):
@@ -396,20 +399,44 @@ def _render_missing_instance(
     ).to_dict()
 
 
-def _apply_filter_set(filter_set_class: Any, qs: Any, arguments_raw: dict[str, Any]) -> Any:
-    """Run the FilterSet against the args and return the filtered queryset.
+def _shape_and_filter(
+    binding: SelectorToolBinding, qs: Any, drf_request: Any, arguments_raw: dict[str, Any]
+) -> Any:
+    """Apply spec shaping + ``filter_set`` through the blessed dispatch leaf.
 
-    Skips reserved keys (``ordering`` / ``page`` / ``limit``) and any
-    value that's ``None`` so optional filter args don't accidentally
-    narrow the queryset.
+    Delegates to ``rest_framework_services.apply_queryset_shaping`` — the same
+    ``select_related`` … ``extend_queryset`` → ``filter_set`` pipeline (and order)
+    the sister repo's ``dispatch_spec`` runs — instead of re-implementing it.
+    Used by both the LIST and RETRIEVE paths.
+
+    Non-queryset selector returns (plain lists / scalars) pass through
+    unchanged: the MCP read pipeline is lenient there (filter / shaping simply
+    don't apply), so the call is guarded by :func:`is_queryset` rather than
+    letting the leaf raise on a non-queryset. Reserved post-fetch keys
+    (``ordering`` / ``page`` / ``limit``) and ``None`` values are stripped from
+    the FilterSet data so optional filter args don't accidentally narrow the set.
     """
+    if not is_queryset(qs):
+        return qs
+    spec = binding.spec
     filter_data: dict[str, Any] = {
         k: v
         for k, v in arguments_raw.items()
         if k not in RESERVED_POST_FETCH_KEYS and v is not None
     }
-    fs = filter_set_class(data=filter_data, queryset=qs)
-    return fs.qs
+    view = MCPServiceView(request=drf_request, action=binding.name)
+    return apply_queryset_shaping(
+        qs,
+        view,
+        drf_request,
+        select_related=spec.select_related,
+        prefetch_related=spec.prefetch_related,
+        annotations=spec.annotations,
+        extend_queryset=spec.extend_queryset,
+        filter_set=spec.filter_set,
+        filter_data=filter_data,
+        source_label="SelectorSpec.selector",
+    )
 
 
 def _is_valid_ordering(value: str, allowed: tuple[str, ...]) -> bool:
@@ -513,34 +540,6 @@ def _render_single(
     if context is None:
         return output_serializer(instance, many=False).data
     return output_serializer(instance, many=False, context=dict(context)).data
-
-
-def _apply_spec_shaping(binding: SelectorToolBinding, qs: Any, drf_request: Any) -> Any:
-    """Apply ``spec.{select_related,prefetch_related,annotations,extend_queryset}``.
-
-    Sister-repo 0.12+ ``SelectorSpec`` carries the four shaping fields. They
-    only make sense on a Django ``QuerySet`` — selectors that return lists
-    or scalars are passed through unchanged (matches sister-repo's "shaping
-    only applies to QuerySets" contract; raising would break the otherwise-
-    legal "return a list" shape).
-
-    ``extend_queryset`` runs *last* so it always sees the fully statically-
-    shaped queryset (declarative fields applied first), matching sister-repo's
-    ordering in ``dispatch_selector_for_spec``.
-    """
-    spec = binding.spec
-    if not is_queryset(qs):
-        return qs
-    if spec.select_related:
-        qs = qs.select_related(*spec.select_related)
-    if spec.prefetch_related:
-        qs = qs.prefetch_related(*spec.prefetch_related)
-    if spec.annotations:
-        qs = qs.annotate(**spec.annotations)
-    if spec.extend_queryset is not None:
-        view = MCPServiceView(request=drf_request, action=binding.name)
-        qs = spec.extend_queryset(qs, view, drf_request)
-    return qs
 
 
 def _resolve_output_context(
