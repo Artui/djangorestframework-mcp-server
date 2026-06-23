@@ -6,19 +6,18 @@ import json
 from collections.abc import Callable, Mapping
 from typing import Any, cast
 
-from django.core.exceptions import ObjectDoesNotExist
 from django.http import HttpRequest
 from rest_framework import serializers as drf_serializers
 from rest_framework.parsers import JSONParser
 from rest_framework.request import Request
 from rest_framework_dataclasses.serializers import DataclassSerializer
-from rest_framework_services import (
-    apply_queryset_shaping,
-    is_queryset,
-    resolve_callable_kwargs,
-    run_selector,
+from rest_framework_services.types.argument_binding import (
+    ArgumentBinding as ServicesArgumentBinding,
 )
 from rest_framework_services.types.service_spec import ServiceSpec
+from rest_framework_services.types.unknown_arguments import (
+    UnknownArguments as ServicesUnknownArguments,
+)
 
 from rest_framework_mcp.auth.permissions.types.mcp_permission import MCPPermission
 from rest_framework_mcp.auth.rate_limits.types.mcp_rate_limit import MCPRateLimit
@@ -27,9 +26,52 @@ from rest_framework_mcp.conf import get_setting
 from rest_framework_mcp.constants import (
     RESERVED_POOL_SEEDS,
     RESERVED_POST_FETCH_KEYS,
+    ArgumentBinding,
     UnknownArguments,
 )
-from rest_framework_mcp.server.types.mcp_service_view import MCPServiceView
+
+# Map MCP's transport-vocabulary binding enums onto drf-services' neutral-core
+# enums (which ``dispatch_spec`` accepts). This bridge goes away once drf-mcp
+# re-exports the drf-services enums directly and ``build_call_pool`` is deleted.
+_TO_SERVICES_ARGUMENT_BINDING: dict[ArgumentBinding, ServicesArgumentBinding] = {
+    ArgumentBinding.DATA_ONLY: ServicesArgumentBinding.BUNDLE,
+    ArgumentBinding.MERGE: ServicesArgumentBinding.SPREAD_AUTHOR_WINS,
+    ArgumentBinding.REPLACE: ServicesArgumentBinding.SPREAD_CALLER_WINS,
+}
+_SPREAD_BINDINGS = frozenset(
+    {ServicesArgumentBinding.SPREAD_AUTHOR_WINS, ServicesArgumentBinding.SPREAD_CALLER_WINS}
+)
+
+
+def services_dispatch_policies(
+    binding: Any,
+) -> tuple[ServicesArgumentBinding, ServicesUnknownArguments]:
+    """Translate a binding's MCP dispatch knobs to ``dispatch_spec``'s policies.
+
+    Returns the ``(argument_binding, unknown_arguments)`` pair to pass to
+    ``dispatch_spec``. Two subtleties preserve MCP's historical behaviour:
+
+    - A **service with no ``input_serializer``** has an empty declared set, so
+      MCP's old "unknown-args policy short-circuits, raw args spread under
+      MERGE/REPLACE" maps to ``PASSTHROUGH`` when spreading (raw args still reach
+      the callable) and ``IGNORE`` when bundling (raw args drop, ``data`` stays
+      ``None``) — never a rejection against an empty declared set.
+    - Otherwise the binding's own ``unknown_arguments`` carries over verbatim
+      (the member names match drf-services').
+    """
+    argument_binding = _TO_SERVICES_ARGUMENT_BINDING[binding.argument_binding]
+    no_service_serializer = (
+        isinstance(binding.spec, ServiceSpec) and binding.spec.input_serializer is None
+    )
+    if no_service_serializer:
+        unknown = (
+            ServicesUnknownArguments.PASSTHROUGH
+            if argument_binding in _SPREAD_BINDINGS
+            else ServicesUnknownArguments.IGNORE
+        )
+    else:
+        unknown = ServicesUnknownArguments[binding.unknown_arguments.name]
+    return argument_binding, unknown
 
 
 def build_internal_drf_request(
@@ -112,19 +154,17 @@ def build_validated_input_serializer(
     arguments: dict[str, Any],
     input_serializer: type | None,
     *,
-    context: Mapping[str, Any] | None = None,
     unknown_arguments: UnknownArguments = UnknownArguments.REJECT,
     additional_known_keys: frozenset[str] = frozenset(),
     partial: bool = False,
-    instance: Any = None,
 ) -> tuple[Any, drf_serializers.Serializer | None]:
     """Validate ``arguments``; return ``(validated, bound_serializer)``.
 
-    The serializer half of the pair backs the sister-repo 0.16
-    ``serializer``-in-pool contract: services that declare a ``serializer``
-    parameter receive the bound, validated instance (e.g. to call
-    ``.save()`` when persistence lives on the serializer). ``None`` when
-    ``input_serializer`` is unset.
+    The validator for the **read-shaped** transport paths (selector tools and
+    chain steps), where the input is a flat, instance-free, context-free arg
+    map. Service-tool validation now flows through drf-services'
+    ``dispatch_spec`` (instance resolution, ``input_serializer_context``, the
+    bundle/spread pool), so the instance- and context-aware variants live there.
 
     ``validated`` is:
       - the dataclass instance produced by a ``DataclassSerializer`` (when
@@ -132,13 +172,10 @@ def build_validated_input_serializer(
       - the ``validated_data`` dict for a plain DRF ``Serializer``,
       - ``None`` when ``input_serializer`` is ``None``.
 
-    Raises :class:`drf_serializers.ValidationError` on invalid input. Lifted
-    out of the ``handle_tools_call`` module so service-tool and selector-
-    tool dispatch can share it without a circular import.
+    Raises :class:`drf_serializers.ValidationError` on invalid input.
 
-    ``context`` is forwarded to the serializer's ``context=`` dict when
-    supplied — this is how sister-repo's ``spec.input_serializer_context``
-    flows in. ``None`` keeps the DRF default (empty context).
+    ``partial`` relaxes required-field validation; the read paths default to
+    full validation (``False``).
 
     ``partial`` mirrors sister-repo 0.16's ``spec.partial``: MCP has no
     HTTP method to derive partiality from, so ``False`` (full validation)
@@ -168,10 +205,6 @@ def build_validated_input_serializer(
     if dataclasses.is_dataclass(target) and not isinstance(target, type):  # pragma: no cover
         raise TypeError("input_serializer must be a class")
     serializer_kwargs: dict[str, Any] = {"data": arguments, "partial": partial}
-    if instance is not None:
-        serializer_kwargs["instance"] = instance
-    if context is not None:
-        serializer_kwargs["context"] = dict(context)
     if isinstance(target, type) and dataclasses.is_dataclass(target):
         wrapper_cls: type[drf_serializers.Serializer] = type(
             f"{target.__name__}Serializer",
@@ -220,7 +253,6 @@ def validate_input_against_serializer(
     arguments: dict[str, Any],
     input_serializer: type | None,
     *,
-    context: Mapping[str, Any] | None = None,
     unknown_arguments: UnknownArguments = UnknownArguments.REJECT,
     additional_known_keys: frozenset[str] = frozenset(),
 ) -> Any:
@@ -233,7 +265,6 @@ def validate_input_against_serializer(
     validated, _serializer = build_validated_input_serializer(
         arguments,
         input_serializer,
-        context=context,
         unknown_arguments=unknown_arguments,
         additional_known_keys=additional_known_keys,
     )
@@ -290,83 +321,13 @@ def invoke_context_provider(
     return provider(view, request, **declared)
 
 
-def resolve_spec_instance(
-    spec: ServiceSpec,
-    *,
-    drf_request: Request,
-    user: Any,
-    arguments_raw: dict[str, Any],
-    binding_name: str,
-) -> tuple[bool, Any]:
-    """Resolve ``spec.instance_selector_spec`` for an update-shaped tool.
-
-    Returns ``(found, instance)``. ``(True, None)`` is never produced: a
-    ``None`` / missing resolution returns ``(False, None)`` regardless of
-    the nested spec's ``allow_none`` flag (a mutation against a missing row
-    is a tool-level not-found failure, mirroring sister-repo HTTP
-    semantics where the flag is equally ignored for instance resolution).
-
-    Resolution happens *before* input validation — the instance feeds the
-    input serializer (sister-repo 0.16's instance-aware validation), so the
-    lookup pool is built from the **raw** arguments (minus the reserved
-    transport keys), filling the role URL kwargs play on HTTP:
-
-    - ``request`` / ``user`` — transport-controlled seeds (always win),
-    - the raw spread arguments (the tool author's contract is that the
-      identifier the selector consumes is part of the tool's input),
-    - the nested spec's own ``kwargs(view, request)`` provider, merged
-      last so author-scoped keys (e.g. a tenant filter) cannot be
-      overridden by the client.
-
-    Queryset shaping on the nested spec applies, and a QuerySet return is
-    materialized via ``.first()`` — so
-    ``selector=lambda *, pk: Project.objects.filter(pk=pk)`` resolves
-    identically over MCP and HTTP. ``Model.DoesNotExist`` from the
-    selector is treated as not-found, mirroring HTTP dispatch.
-
-    Callers must check ``spec.instance_selector_spec`` /
-    ``instance_spec.selector`` are non-``None`` before calling.
-    """
-    instance_spec = spec.instance_selector_spec
-    assert instance_spec is not None  # noqa: S101 — caller guarantees this
-    selector = instance_spec.selector
-    assert selector is not None  # noqa: S101 — caller guarantees this
-    excluded: frozenset[str] = RESERVED_POOL_SEEDS | RESERVED_POST_FETCH_KEYS
-    pool: dict[str, Any] = {
-        **{k: v for k, v in arguments_raw.items() if k not in excluded},
-        "request": drf_request,
-        "user": user,
-    }
-    view = MCPServiceView(request=drf_request, action=binding_name)
-    if instance_spec.kwargs is not None:
-        pool.update(instance_spec.kwargs(view, drf_request))
-    try:
-        result: Any = run_selector(selector, resolve_callable_kwargs(selector, pool))
-        result = apply_queryset_shaping(
-            result,
-            view,
-            drf_request,
-            select_related=instance_spec.select_related,
-            prefetch_related=instance_spec.prefetch_related,
-            annotations=instance_spec.annotations,
-            extend_queryset=instance_spec.extend_queryset,
-            source_label="ServiceSpec.instance_selector_spec.selector",
-        )
-    except ObjectDoesNotExist:
-        return False, None
-    instance: Any = result.first() if is_queryset(result) else result
-    if instance is None:
-        return False, None
-    return True, instance
-
-
 __all__ = [
     "build_internal_drf_request",
     "build_validated_input_serializer",
     "check_permissions",
     "consume_rate_limits",
     "invoke_context_provider",
-    "resolve_spec_instance",
+    "services_dispatch_policies",
     "validate_input_against_serializer",
     "validation_error_data",
 ]

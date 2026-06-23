@@ -10,12 +10,14 @@ dispatch.
 
 This is deliberately the **spec core**: it resolves the instance, validates the
 spec's ``input_serializer``, runs the service / selector, re-fetches through the
-output selector, shapes + filters the queryset, and renders. It does *not* layer
-on the HTTP transport's extras — pagination, ordering, the ``unknown_arguments``
-policy, ``argument_binding`` modes, and a selector binding's MCP-only
-``input_serializer`` stay with the wire handlers. ``enforce_permissions`` runs
-the spec's ``permission_classes``; the transport-level MCP permissions / rate
-limits are a wire concern and are not consulted here.
+output selector, shapes + filters the queryset, and renders — honouring the
+binding's ``argument_binding`` / ``unknown_arguments`` policies (mapped onto
+``dispatch_spec``'s) and its ``permission_classes`` via the
+``on_target_resolved=enforce_permissions`` hook (object-level checks included).
+It does *not* layer on the read-shaped transport extras — pagination, ordering,
+and a selector binding's MCP-only ``input_serializer`` stay with the wire
+handlers. The transport-level MCP permissions / rate limits are a wire concern
+and are not consulted here.
 """
 
 from __future__ import annotations
@@ -31,7 +33,7 @@ from rest_framework_services import (
 from rest_framework_services.exceptions.service_error import ServiceError
 from rest_framework_services.exceptions.service_validation_error import ServiceValidationError
 
-from rest_framework_mcp.handlers.utils import validation_error_data
+from rest_framework_mcp.handlers.utils import services_dispatch_policies, validation_error_data
 from rest_framework_mcp.output.error_tool_result import build_error_tool_result
 from rest_framework_mcp.output.resolve_structured_output import resolve_structured_output
 from rest_framework_mcp.output.tool_result import build_tool_result
@@ -70,10 +72,17 @@ def call_spec_tool(
         )
     spec = binding.spec
     context = build_offline_context(user, arguments, http_request=request, action=binding.name)
-    enforce_permissions(spec, context)
+    argument_binding, unknown_arguments = services_dispatch_policies(binding)
     try:
         result = dispatch_spec(
-            spec, user=user, params=arguments, request=context.request, view=context.view
+            spec,
+            user=user,
+            params=arguments,
+            request=context.request,
+            view=context.view,
+            argument_binding=argument_binding,
+            unknown_arguments=unknown_arguments,
+            on_target_resolved=enforce_permissions,
         )
     except ServiceValidationError as exc:
         return build_error_tool_result(

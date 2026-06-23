@@ -1,36 +1,25 @@
 from __future__ import annotations
 
-from collections.abc import Mapping
 from typing import Any
 
 from rest_framework import serializers as drf_serializers
-from rest_framework_services import resolve_callable_kwargs
+from rest_framework.exceptions import PermissionDenied
+from rest_framework_services import adispatch_spec, build_offline_context, enforce_permissions
 from rest_framework_services.exceptions.service_error import ServiceError
 from rest_framework_services.exceptions.service_validation_error import ServiceValidationError
 
 from rest_framework_mcp._compat.acall import acall
 from rest_framework_mcp._compat.tracing import span
-from rest_framework_mcp._compat.utils import (
-    arun_selector_sync_safe,
-    arun_service_sync_safe,
-)
 from rest_framework_mcp.conf import get_setting
 from rest_framework_mcp.constants import JsonRpcErrorCode, OutputFormat
-from rest_framework_mcp.handlers.build_call_pool import build_call_pool
 from rest_framework_mcp.handlers.chain_tool_dispatch import dispatch_chain_tool_async
-from rest_framework_mcp.handlers.handle_tools_call import (
-    _render_output,
-    _span_attrs,
-    _validate_input,
-)
+from rest_framework_mcp.handlers.handle_tools_call import _render, _span_attrs
 from rest_framework_mcp.handlers.selector_tool_dispatch import dispatch_selector_tool_async
 from rest_framework_mcp.handlers.types.context import MCPCallContext
 from rest_framework_mcp.handlers.utils import (
-    build_internal_drf_request,
     check_permissions,
     consume_rate_limits,
-    invoke_context_provider,
-    resolve_spec_instance,
+    services_dispatch_policies,
     validation_error_data,
 )
 from rest_framework_mcp.output.error_tool_result import build_error_tool_result
@@ -39,7 +28,6 @@ from rest_framework_mcp.output.tool_result import build_tool_result
 from rest_framework_mcp.protocol.types.json_rpc_error import JsonRpcError
 from rest_framework_mcp.registry.types.chain_tool_binding import ChainToolBinding
 from rest_framework_mcp.registry.types.selector_tool_binding import SelectorToolBinding
-from rest_framework_mcp.server.types.mcp_service_view import MCPServiceView
 
 
 async def handle_tools_call_async(
@@ -48,14 +36,12 @@ async def handle_tools_call_async(
 ) -> dict[str, Any] | JsonRpcError:
     """Async sibling of :func:`handle_tools_call`.
 
-    Same dispatch flow — input validation, permission check, service
-    invocation, optional output selector, output rendering — but routes the
-    service / selector calls through :mod:`rest_framework_mcp._compat.utils`
-    so genuinely async callables run native (no thread hop) while sync
-    callables are bridged via ``sync_to_async``.
-
-    Validation, schema introspection, and output rendering are CPU-only and
-    run inline; they don't block the event loop noticeably.
+    Service tools dispatch through :func:`~rest_framework_services.adispatch_spec`,
+    which awaits async-native callables and bridges sync ones (validation,
+    instance resolution, the ``enforce_permissions`` guard) off the event loop.
+    The transport shell — MCP permissions / rate limits, output format,
+    ``structuredContent`` — stays here; output rendering runs through
+    :func:`acall` so a lazy list result is materialised off-loop.
     """
     if not isinstance(params, dict):
         return JsonRpcError(JsonRpcErrorCode.INVALID_PARAMS, "tools/call params must be an object")
@@ -75,10 +61,9 @@ async def handle_tools_call_async(
         return JsonRpcError(JsonRpcErrorCode.INVALID_PARAMS, "'arguments' must be an object")
 
     with span("mcp.tools.call", attributes=_span_attrs(binding.name, context)) as otel_span:
-        # Chain tools run an ordered sequence of specs; read-shaped tools
-        # route through the selector-tool dispatch helper (filter / order /
-        # paginate). Mutation tools fall through to the service-tool path
-        # below.
+        # Chain tools run an ordered sequence of specs; read-shaped tools route
+        # through the selector-tool dispatch helper (filter / order / paginate).
+        # Mutation tools fall through to the service-tool path below.
         if isinstance(binding, ChainToolBinding):
             return await dispatch_chain_tool_async(
                 binding, params, arguments_raw, context, otel_span
@@ -108,42 +93,23 @@ async def handle_tools_call_async(
                 data={"retryAfter": retry_after},
             )
 
-        drf_request = build_internal_drf_request(
-            context.http_request, user=context.token.user, data=arguments_raw
+        offline = build_offline_context(
+            context.token.user,
+            arguments_raw,
+            http_request=context.http_request,
+            action=binding.name,
         )
-
-        input_context: Mapping[str, Any] | None = None
-        if binding.spec.input_serializer_context is not None:
-            input_context_view = MCPServiceView(request=drf_request, action=binding.name)
-            input_context = binding.spec.input_serializer_context(input_context_view, drf_request)
-
-        # Sister-repo 0.16 ``instance_selector_spec`` — see the sync sibling.
-        # The resolver is sync (ORM lookup); ``acall`` bridges it off the
-        # event loop. ``run_selector`` inside handles async-native selectors.
-        instance: Any = None
-        instance_spec = binding.spec.instance_selector_spec
-        if instance_spec is not None and instance_spec.selector is not None:
-            found, instance = await acall(
-                resolve_spec_instance,
-                binding.spec,
-                drf_request=drf_request,
-                user=context.token.user,
-                arguments_raw=arguments_raw,
-                binding_name=binding.name,
-            )
-            if not found:
-                return build_error_tool_result(
-                    f"{binding.name}: no matching instance found",
-                    error_type="not_found",
-                ).to_dict()
-
+        argument_binding, unknown_arguments = services_dispatch_policies(binding)
         try:
-            validated, serializer = _validate_input(
-                arguments_raw,
+            result = await adispatch_spec(
                 binding.spec,
-                context=input_context,
-                unknown_arguments=binding.unknown_arguments,
-                instance=instance,
+                user=context.token.user,
+                params=arguments_raw,
+                request=offline.request,
+                view=offline.view,
+                argument_binding=argument_binding,
+                unknown_arguments=unknown_arguments,
+                on_target_resolved=enforce_permissions,
             )
         except drf_serializers.ValidationError as exc:
             return JsonRpcError(
@@ -151,68 +117,26 @@ async def handle_tools_call_async(
                 "Invalid arguments",
                 data=validation_error_data(exc.detail, arguments_raw),
             )
-
-        pool: dict[str, Any] = build_call_pool(
-            binding,
-            drf_request=drf_request,
-            user=context.token.user,
-            validated=validated,
-            arguments_raw=arguments_raw,
-        )
-        # Reserved seeds — see the sync sibling.
-        if instance is not None:
-            pool["instance"] = instance
-        if serializer is not None:
-            pool["serializer"] = serializer
-
-        try:
-            kwargs: dict[str, Any] = resolve_callable_kwargs(binding.spec.service, pool)
-            result: Any = await arun_service_sync_safe(
-                binding.spec.service, kwargs, atomic=binding.spec.atomic
-            )
+        except PermissionDenied:
+            return JsonRpcError(JsonRpcErrorCode.FORBIDDEN, "Insufficient permission")
         except ServiceValidationError as exc:
-            # Tool-level failure → ``isError`` result; see the sync sibling
-            # for the protocol-vs-tool error boundary.
             return build_error_tool_result(
                 exc.message,
                 error_type="validation_error",
                 detail=validation_error_data(exc.detail, arguments_raw),
             ).to_dict()
         except ServiceError as exc:
-            # See sync sibling — recording is opt-in via
-            # ``RECORD_SERVICE_EXCEPTIONS`` so routine business-rule denials
-            # don't flood error pipelines.
             if get_setting("RECORD_SERVICE_EXCEPTIONS"):
                 otel_span.record_exception(exc)
             return build_error_tool_result(exc.message, error_type="service_error").to_dict()
 
-        # Sister-repo 0.13+ moved the output pipeline under
-        # ``spec.output_selector_spec`` — see the sync sibling for the
-        # rationale; this branch mirrors that shape.
-        out_spec = binding.spec.output_selector_spec
-        if out_spec is not None and out_spec.selector is not None:
-            sel_pool: dict[str, Any] = {
-                "request": drf_request,
-                "user": context.token.user,
-                "instance": result,
-                "result": result,
-            }
-            sel_kwargs: dict[str, Any] = resolve_callable_kwargs(out_spec.selector, sel_pool)
-            result = await arun_selector_sync_safe(out_spec.selector, sel_kwargs)
+        if result.kind == "not_found":
+            return build_error_tool_result(
+                f"{binding.name}: no matching instance found", error_type="not_found"
+            ).to_dict()
 
-        output_context: Mapping[str, Any] | None = None
-        if out_spec is not None and out_spec.output_serializer_context is not None:
-            output_context_view = MCPServiceView(request=drf_request, action=binding.name)
-            # Forward the final (post-output-selector) ``result`` so a
-            # provider declaring it can run a single batched query against the
-            # exact value being serialized — sister-repo 0.15 parity.
-            output_context = invoke_context_provider(
-                out_spec.output_serializer_context,
-                output_context_view,
-                drf_request,
-                extras={"result": result},
-            )
-        payload: Any = _render_output(result, binding.spec, context=output_context)
+        # Rendering may evaluate a lazy list queryset → run it off the event loop.
+        payload: Any = await acall(_render, binding, result, offline)
         output_format: OutputFormat = OutputFormat.coerce(
             params.get("outputFormat") or binding.output_format
         )

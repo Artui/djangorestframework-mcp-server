@@ -4,6 +4,7 @@ from dataclasses import dataclass
 from typing import Any
 
 from django.http import HttpRequest
+from rest_framework.permissions import BasePermission
 from rest_framework_services.exceptions.service_validation_error import ServiceValidationError
 from rest_framework_services.types.selector_kind import SelectorKind
 from rest_framework_services.types.selector_spec import SelectorSpec
@@ -12,6 +13,7 @@ from rest_framework_services.types.service_spec import ServiceSpec
 from rest_framework_mcp.auth.types.token_info import TokenInfo
 from rest_framework_mcp.handlers.handle_resources_read import handle_resources_read
 from rest_framework_mcp.handlers.handle_tools_call import handle_tools_call
+from rest_framework_mcp.handlers.handle_tools_call_async import handle_tools_call_async
 from rest_framework_mcp.handlers.handle_tools_list import handle_tools_list
 from rest_framework_mcp.handlers.types.context import MCPCallContext
 from rest_framework_mcp.handlers.utils import check_permissions
@@ -114,6 +116,49 @@ def test_tools_call_denied_by_permission() -> None:
     assert isinstance(out, JsonRpcError)
     assert out.code == -32002
     assert out.data == {"requiredScopes": ["scope:x"]}
+
+
+class _DenySpecPermission(BasePermission):
+    """A DRF permission (``spec.permission_classes``) that denies every request."""
+
+    def has_permission(self, request: Any, view: Any) -> bool:
+        return False
+
+
+def test_tools_call_denied_by_spec_permission_is_forbidden() -> None:
+    """``spec.permission_classes`` now runs over MCP via the dispatch hook."""
+
+    def svc() -> None:
+        return None
+
+    tools = ToolRegistry()
+    tools.register(
+        ToolBinding(
+            name="t",
+            description=None,
+            spec=ServiceSpec(service=svc, atomic=False, permission_classes=[_DenySpecPermission]),
+        )
+    )
+    out = handle_tools_call({"name": "t", "arguments": {}}, _ctx(tools))
+    assert isinstance(out, JsonRpcError)
+    assert out.code == -32002
+
+
+async def test_async_tools_call_denied_by_spec_permission_is_forbidden() -> None:
+    def svc() -> None:
+        return None
+
+    tools = ToolRegistry()
+    tools.register(
+        ToolBinding(
+            name="t",
+            description=None,
+            spec=ServiceSpec(service=svc, atomic=False, permission_classes=[_DenySpecPermission]),
+        )
+    )
+    out = await handle_tools_call_async({"name": "t", "arguments": {}}, _ctx(tools))
+    assert isinstance(out, JsonRpcError)
+    assert out.code == -32002
 
 
 def test_tools_call_with_output_selector() -> None:
