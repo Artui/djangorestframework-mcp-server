@@ -36,11 +36,13 @@ bindings in input order.
 
 ## Selector-tool schema
 
-Helpers that build the merged `inputSchema` for selector tools — exposed
-for projects that want to introspect filter / ordering / pagination
-property generation outside of the registration flow.
+Builds the merged `inputSchema` for selector tools — exposed for projects
+that want to introspect filter / ordering / pagination property generation
+outside of the registration flow. The FilterSet → JSON-Schema mapping is
+delegated to `djangorestframework-services`'
+[`filterset_to_json_schema`](https://github.com/Artui/djangorestframework-services),
+so the filterable shape is described the same way across transports.
 
-::: rest_framework_mcp.schema.filterset_schema.filterset_to_schema_properties
 ::: rest_framework_mcp.schema.selector_tool_schema.build_selector_tool_input_schema
 
 ## Session stores

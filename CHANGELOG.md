@@ -36,6 +36,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- **JSON-Schema generation now delegates to drf-services.** MCP's
+  `inputSchema` / `outputSchema` generation — serializer / dataclass / FilterSet
+  → JSON Schema, including drf-spectacular `@extend_schema_field` /
+  `@extend_schema_serializer` overrides and the LIST pagination envelope — now
+  routes through the sister repo's `serializer_to_json_schema` /
+  `output_to_json_schema` / `filterset_to_json_schema` (drf-services 0.19)
+  instead of MCP-local copies. The emitted schemas are unchanged; the duplicated
+  converters (`schema/utils.py`, `schema/spectacular_overrides.py`, and the
+  `schema/filterset_schema.py` introspection) are deleted. MCP keeps the
+  wrappers that stamp its transport-specific concerns (`additionalProperties`
+  per `unknown_arguments`, the `ordering` enum, and `page` / `limit`).
 - **Retrieve selectors now shape + filter before `.first()`.** A
   `kind=RETRIEVE` selector tool now applies queryset shaping
   (`select_related` … `extend_queryset`) and `spec.filter_set` to its

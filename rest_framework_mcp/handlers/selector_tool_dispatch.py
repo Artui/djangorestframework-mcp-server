@@ -42,6 +42,7 @@ from django.core.exceptions import ObjectDoesNotExist
 from rest_framework import serializers as drf_serializers
 from rest_framework_services import (
     apply_queryset_shaping,
+    filterset_to_json_schema,
     is_queryset,
     resolve_callable_kwargs,
     run_selector,
@@ -73,7 +74,6 @@ from rest_framework_mcp.output.resolve_structured_output import resolve_structur
 from rest_framework_mcp.output.tool_result import build_tool_result
 from rest_framework_mcp.protocol.types.json_rpc_error import JsonRpcError
 from rest_framework_mcp.registry.types.selector_tool_binding import SelectorToolBinding
-from rest_framework_mcp.schema.filterset_schema import filterset_to_schema_properties
 from rest_framework_mcp.server.types.mcp_service_view import MCPServiceView
 
 
@@ -263,7 +263,7 @@ def _selector_tool_additional_known_keys(binding: SelectorToolBinding) -> frozen
     ``input_serializer``. Surfacing them here lets the unknown-argument
     policy treat them as "known" without forcing every selector binding to
     restate them on its serializer. Filter-set property names come from
-    :func:`filterset_to_schema_properties` so an arbitrary
+    ``rest_framework_services.filterset_to_json_schema`` so an arbitrary
     ``django-filter`` shape is supported.
 
     Returns a ``frozenset`` for cheap union with the serializer's
@@ -274,7 +274,7 @@ def _selector_tool_additional_known_keys(binding: SelectorToolBinding) -> frozen
         # Same helper that drives ``inputSchema`` generation, so the
         # validation-side known set and the wire-side advertised schema
         # never drift.
-        known.update(filterset_to_schema_properties(binding.filter_set).keys())
+        known.update(filterset_to_json_schema(binding.filter_set).keys())
     if binding.ordering_fields:
         known.add("ordering")
     if binding.paginate:
