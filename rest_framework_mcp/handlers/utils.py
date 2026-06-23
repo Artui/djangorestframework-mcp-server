@@ -11,13 +11,7 @@ from rest_framework import serializers as drf_serializers
 from rest_framework.parsers import JSONParser
 from rest_framework.request import Request
 from rest_framework_dataclasses.serializers import DataclassSerializer
-from rest_framework_services.types.argument_binding import (
-    ArgumentBinding as ServicesArgumentBinding,
-)
 from rest_framework_services.types.service_spec import ServiceSpec
-from rest_framework_services.types.unknown_arguments import (
-    UnknownArguments as ServicesUnknownArguments,
-)
 
 from rest_framework_mcp.auth.permissions.types.mcp_permission import MCPPermission
 from rest_framework_mcp.auth.rate_limits.types.mcp_rate_limit import MCPRateLimit
@@ -30,26 +24,17 @@ from rest_framework_mcp.constants import (
     UnknownArguments,
 )
 
-# Map MCP's transport-vocabulary binding enums onto drf-services' neutral-core
-# enums (which ``dispatch_spec`` accepts). This bridge goes away once drf-mcp
-# re-exports the drf-services enums directly and ``build_call_pool`` is deleted.
-_TO_SERVICES_ARGUMENT_BINDING: dict[ArgumentBinding, ServicesArgumentBinding] = {
-    ArgumentBinding.DATA_ONLY: ServicesArgumentBinding.BUNDLE,
-    ArgumentBinding.MERGE: ServicesArgumentBinding.SPREAD_AUTHOR_WINS,
-    ArgumentBinding.REPLACE: ServicesArgumentBinding.SPREAD_CALLER_WINS,
-}
 _SPREAD_BINDINGS = frozenset(
-    {ServicesArgumentBinding.SPREAD_AUTHOR_WINS, ServicesArgumentBinding.SPREAD_CALLER_WINS}
+    {ArgumentBinding.SPREAD_AUTHOR_WINS, ArgumentBinding.SPREAD_CALLER_WINS}
 )
 
 
-def services_dispatch_policies(
-    binding: Any,
-) -> tuple[ServicesArgumentBinding, ServicesUnknownArguments]:
-    """Translate a binding's MCP dispatch knobs to ``dispatch_spec``'s policies.
+def services_dispatch_policies(binding: Any) -> tuple[ArgumentBinding, UnknownArguments]:
+    """The ``(argument_binding, unknown_arguments)`` to pass ``dispatch_spec``.
 
-    Returns the ``(argument_binding, unknown_arguments)`` pair to pass to
-    ``dispatch_spec``. Three subtleties preserve MCP's historical behaviour:
+    The binding's enums are drf-services' own (re-exported), so the binding
+    value passes straight through; only the ``unknown_arguments`` choice is
+    refined to preserve MCP's historical behaviour:
 
     - A **selector** is validated by the MCP layer against its own
       ``inputSchema`` (the binding's ``input_serializer`` + filter-set fields +
@@ -57,24 +42,23 @@ def services_dispatch_policies(
       re-reject: its declared set is only the selector signature, which excludes
       filter / ordering / pagination args. Always ``IGNORE``.
     - A **service with no ``input_serializer``** has an empty declared set, so
-      MCP's old "unknown-args policy short-circuits, raw args spread under
-      MERGE/REPLACE" maps to ``PASSTHROUGH`` when spreading (raw args still reach
-      the callable) and ``IGNORE`` when bundling (raw args drop, ``data`` stays
-      ``None``) — never a rejection against an empty declared set.
-    - Otherwise the service binding's own ``unknown_arguments`` carries over
-      verbatim (the member names match drf-services').
+      MCP's old "unknown-args policy short-circuits, raw args spread when
+      spreading" maps to ``PASSTHROUGH`` under the ``SPREAD_*`` bindings (raw
+      args still reach the callable) and ``IGNORE`` under ``BUNDLE`` (raw args
+      drop, ``data`` stays ``None``) — never a rejection against an empty set.
+    - Otherwise the service binding's own ``unknown_arguments`` carries over.
     """
-    argument_binding = _TO_SERVICES_ARGUMENT_BINDING[binding.argument_binding]
+    argument_binding = binding.argument_binding
     if not isinstance(binding.spec, ServiceSpec):
-        return argument_binding, ServicesUnknownArguments.IGNORE
+        return argument_binding, UnknownArguments.IGNORE
     if binding.spec.input_serializer is None:
         unknown = (
-            ServicesUnknownArguments.PASSTHROUGH
+            UnknownArguments.PASSTHROUGH
             if argument_binding in _SPREAD_BINDINGS
-            else ServicesUnknownArguments.IGNORE
+            else UnknownArguments.IGNORE
         )
     else:
-        unknown = ServicesUnknownArguments[binding.unknown_arguments.name]
+        unknown = binding.unknown_arguments
     return argument_binding, unknown
 
 

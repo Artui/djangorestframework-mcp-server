@@ -27,7 +27,7 @@ def service_spec_to_tool(
     annotations: dict[str, Any] | None = None,
     include_structured_content: bool | None = None,
     include_output_schema: bool | None = None,
-    argument_binding: ArgumentBinding = ArgumentBinding.DATA_ONLY,
+    argument_binding: ArgumentBinding = ArgumentBinding.BUNDLE,
     unknown_arguments: UnknownArguments = UnknownArguments.REJECT,
     always_listed: bool = False,
     spec_kwargs_provides: tuple[str, ...] = (),

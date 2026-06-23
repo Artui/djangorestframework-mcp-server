@@ -444,7 +444,7 @@ def test_tools_list_emits_output_schema_when_structured_content_enabled() -> Non
 
 
 def test_service_tool_with_merge_binding_spreads_args_to_callable_params() -> None:
-    """``ArgumentBinding.MERGE`` lets a service declare individual params."""
+    """``ArgumentBinding.SPREAD_AUTHOR_WINS`` lets a service declare individual params."""
     from rest_framework_mcp.constants import ArgumentBinding
 
     def svc(*, project_id: str, expand: bool = False) -> dict[str, Any]:
@@ -456,7 +456,7 @@ def test_service_tool_with_merge_binding_spreads_args_to_callable_params() -> No
             name="t",
             description=None,
             spec=ServiceSpec(service=svc, atomic=False),
-            argument_binding=ArgumentBinding.MERGE,
+            argument_binding=ArgumentBinding.SPREAD_AUTHOR_WINS,
         )
     )
     out = handle_tools_call(
@@ -481,7 +481,7 @@ def test_service_tool_with_replace_binding_lets_client_override_provider() -> No
             name="t",
             description=None,
             spec=ServiceSpec(service=svc, atomic=False, kwargs=provider),
-            argument_binding=ArgumentBinding.REPLACE,
+            argument_binding=ArgumentBinding.SPREAD_CALLER_WINS,
         )
     )
     out = handle_tools_call({"name": "t", "arguments": {"page_size": 200}}, _ctx(tools))
@@ -506,7 +506,7 @@ def test_service_tool_merge_pool_seeds_cannot_be_overridden_by_client() -> None:
             name="t",
             description=None,
             spec=ServiceSpec(service=svc, atomic=False),
-            argument_binding=ArgumentBinding.MERGE,
+            argument_binding=ArgumentBinding.SPREAD_AUTHOR_WINS,
         )
     )
     handle_tools_call({"name": "t", "arguments": {"user": "evil", "ok": 1}}, _ctx(tools))

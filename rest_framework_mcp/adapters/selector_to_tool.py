@@ -30,7 +30,7 @@ def selector_spec_to_tool(
     paginate: bool = False,
     include_structured_content: bool | None = None,
     include_output_schema: bool | None = None,
-    argument_binding: ArgumentBinding = ArgumentBinding.MERGE,
+    argument_binding: ArgumentBinding = ArgumentBinding.SPREAD_AUTHOR_WINS,
     unknown_arguments: UnknownArguments = UnknownArguments.REJECT,
     always_listed: bool = False,
     spec_kwargs_provides: tuple[str, ...] = (),

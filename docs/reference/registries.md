@@ -31,8 +31,13 @@ bindings in input order.
 ::: rest_framework_mcp.registry.types.service_defaults.ServiceDefaults
 ::: rest_framework_mcp.registry.types.selector_defaults.SelectorDefaults
 ::: rest_framework_mcp.constants.ToolKind
-::: rest_framework_mcp.constants.UnknownArguments
-::: rest_framework_mcp.constants.ArgumentBinding
+
+`ArgumentBinding` and `UnknownArguments` are re-exported from
+`djangorestframework-services` (the transport-neutral `dispatch_spec` owns
+these dispatch policies); import them from `rest_framework_mcp.constants`.
+
+::: rest_framework_services.types.unknown_arguments.UnknownArguments
+::: rest_framework_services.types.argument_binding.ArgumentBinding
 
 ## Selector-tool schema
 

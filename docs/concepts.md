@@ -145,16 +145,21 @@ Beyond `permissions=`, `output_format=`, and `include_structured_content=`,
 forms) accept three behavior knobs:
 
 - **`argument_binding=`** — how the validated `arguments` flow into the
-  callable's kwarg pool.
-  - `ArgumentBinding.DATA_ONLY` (default for service tools) — only
+  callable's kwarg pool. The enum is re-exported from
+  `djangorestframework-services` (the transport-neutral `dispatch_spec` owns
+  these policies).
+  - `ArgumentBinding.BUNDLE` (default for service tools) — only
     `data=<validated>` enters the pool.
-  - `ArgumentBinding.MERGE` (default for selector tools) — every key from
-    the validated arguments is spread into the pool as a top-level kwarg,
-    so selectors can declare individual parameters
+  - `ArgumentBinding.SPREAD_AUTHOR_WINS` (default for selector tools) — every
+    key from the validated arguments is spread into the pool as a top-level
+    kwarg, so selectors can declare individual parameters
     (`def list_drafts(*, project_id, page=1)`). `spec.kwargs(...)` wins
     on conflict so author-declared invariants beat client input.
-  - `ArgumentBinding.REPLACE` — like `MERGE` but the spread wins on
-    conflict, so `spec.kwargs(...)` supplies client-overridable defaults.
+  - `ArgumentBinding.SPREAD_CALLER_WINS` — like `SPREAD_AUTHOR_WINS` but the
+    spread wins on conflict, so `spec.kwargs(...)` supplies client-overridable
+    defaults.
+  - `ArgumentBinding.AUTO` — resolve per spec type (service → `BUNDLE`,
+    selector → `SPREAD_AUTHOR_WINS`).
 
   Reserved transport-pool seeds (`request` / `user` / `data`) and the
   selector pipeline keys (`ordering` / `page` / `limit`) are stripped
@@ -266,15 +271,16 @@ service / selector run, the output-selector re-fetch, queryset shaping
 including `filter_set`, and the retrieve nullability contract) is shared
 with the HTTP transport rather than reproduced.
 
-It is the **spec core** only. The HTTP transport's pagination, ordering,
-`unknown_arguments` policy, `argument_binding` modes, and a selector
-binding's MCP-only `input_serializer` are not applied; the spec's
-`permission_classes` are enforced (not the transport-level MCP
-permissions / rate limits). Chain tools are unsupported — they orchestrate
-several specs and raise `TypeError`. A service raising
-`ServiceValidationError` / `ServiceError` and a missing required instance
-come back as `isError` results; a denied permission or malformed input
-raises, for the caller to map.
+It honours the binding's `argument_binding` / `unknown_arguments` policies
+(mapped onto `dispatch_spec`'s) and the spec's `permission_classes` via the
+`on_target_resolved=enforce_permissions` hook — object-level checks included.
+It does **not** layer on the read-shaped transport extras (pagination,
+ordering, a selector binding's MCP-only `input_serializer`); those stay with
+the wire handlers, as do the transport-level MCP permissions / rate limits.
+Chain tools are unsupported — they orchestrate several specs and raise
+`TypeError`. A service raising `ServiceValidationError` / `ServiceError` and a
+missing required instance come back as `isError` results; a denied permission
+or malformed input raises, for the caller to map.
 
 ## Tools vs resources
 

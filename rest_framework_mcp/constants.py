@@ -16,6 +16,12 @@ from __future__ import annotations
 
 from enum import Enum, IntEnum
 
+# ``ArgumentBinding`` / ``UnknownArguments`` are re-exported from drf-services:
+# ``dispatch_spec`` is the single dispatch core and owns these neutral-core
+# policies, so MCP consumes them rather than maintaining a parallel copy. The
+# stable import path (``rest_framework_mcp.constants``) is preserved.
+from rest_framework_services import ArgumentBinding, UnknownArguments
+
 # ---------- JSON-RPC envelope ----------
 
 JSONRPC_VERSION: str = "2.0"
@@ -87,88 +93,15 @@ class OutputFormat(str, Enum):
         return cls(value)
 
 
-# ---------- Argument binding ----------
-
-
-class ArgumentBinding(Enum):
-    """How MCP ``arguments`` flow into the kwarg pool of the dispatched callable.
-
-    The pool always carries ``request`` and ``user``. This enum controls
-    whether MCP ``arguments`` show up as a single ``data=`` key (the
-    historical behavior, well-suited to mutation-shaped services that take
-    an ``input_serializer``-validated dict) or are spread as top-level
-    pool keys so the callable can declare them as individual parameters
-    (the natural shape for selectors and parametric reads).
-
-    Members:
-
-    - ``DATA_ONLY`` — MCP ``arguments`` enter the pool only as
-      ``data=<validated-or-raw>``. Default for :class:`ToolBinding`
-      (service tools), since mutation services typically take a single
-      validated ``data`` payload.
-    - ``MERGE`` — every key from the validated MCP arguments (or, when
-      no ``input_serializer`` is declared, the raw arguments minus the
-      pipeline-reserved keys ``ordering`` / ``page`` / ``limit``) is
-      added to the pool. ``spec.kwargs(...)`` output *overrides* on
-      conflict — author-declared kwargs win over client-supplied ones, a
-      critical invariant for project-scoping selectors. Default for
-      :class:`SelectorToolBinding` (selector tools).
-    - ``REPLACE`` — like ``MERGE``, but ``spec.kwargs(...)`` *loses* on
-      conflict. Useful only when the kwargs provider supplies defaults
-      the client is allowed to override.
-
-    The value is internal — never appears on the wire, never coerced
-    from a string. ``ArgumentBinding`` is a plain :class:`Enum` (not
-    ``str, Enum``); pass the member directly when registering tools.
-    """
-
-    DATA_ONLY = "data_only"
-    MERGE = "merge"
-    REPLACE = "replace"
-
-
-# ---------- Unknown-argument policy ----------
-
-
-class UnknownArguments(Enum):
-    """How a binding handles MCP ``arguments`` keys not declared in its ``inputSchema``.
-
-    Decouples "fields I want strictly validated" from "fields the client
-    may pass through anyway". Built on top of ``input_serializer``, not as
-    a replacement — DRF validation still runs on the declared fields in
-    every mode.
-
-    Members:
-
-    - ``REJECT`` (default) — the merged ``inputSchema`` advertises
-      ``"additionalProperties": false`` and the validator rejects any key
-      that isn't part of the binding's known field set. Failure surfaces
-      as ``-32602`` with the offending key names in
-      ``data.detail["non_field_errors"]``.
-    - ``PASSTHROUGH`` — the merged ``inputSchema`` advertises
-      ``"additionalProperties": true``; unknown keys survive validation
-      and are merged onto the validated dict before binding to the
-      callable. Useful when the client sends evolving query args
-      (``q`` / ``cursor`` / ``since``) that the spec author wants to
-      forward to the callable without restating each in the serializer.
-    - ``IGNORE`` — the merged ``inputSchema`` advertises
-      ``"additionalProperties": true``, but unknown keys are dropped
-      after validation. Forward-compatibility mode: older clients can
-      still send fields newer servers haven't formalised yet, and the
-      server silently accepts and ignores them.
-
-    Reserved transport-controlled keys (``request`` / ``user`` / ``data``)
-    and selector-tool post-fetch keys (``ordering`` / ``page`` /
-    ``limit``) are never considered "unknown" in any mode — they're
-    handled by the dispatch pipeline, not the validator.
-
-    Plain :class:`Enum`, same discipline as :class:`ArgumentBinding`:
-    internal-only value, no string coercion at API boundaries.
-    """
-
-    REJECT = "reject"
-    PASSTHROUGH = "passthrough"
-    IGNORE = "ignore"
+# ---------- Argument binding / unknown-argument policy ----------
+#
+# ``ArgumentBinding`` (``AUTO`` / ``BUNDLE`` / ``SPREAD_AUTHOR_WINS`` /
+# ``SPREAD_CALLER_WINS``) and ``UnknownArguments`` (``IGNORE`` / ``REJECT`` /
+# ``PASSTHROUGH``) are imported at the top of this module from drf-services.
+# ``dispatch_spec`` owns them as neutral-core policies; MCP service- and
+# selector-tool dispatch routes through it and passes the binding's choice.
+# Service tools default to ``BUNDLE`` (one validated ``data`` payload) and
+# selector tools to ``SPREAD_AUTHOR_WINS`` (spread, ``spec.kwargs`` wins).
 
 
 # ---------- Tool kind discriminator ----------

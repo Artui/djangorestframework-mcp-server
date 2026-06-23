@@ -63,7 +63,7 @@ class ToolBinding(Generic[InputT, ResultT, ExtraT]):
     # a single ``input_serializer``-validated ``data`` payload, so
     # spreading the dict as top-level kwargs would conflict with that
     # historical shape.
-    argument_binding: ArgumentBinding = ArgumentBinding.DATA_ONLY
+    argument_binding: ArgumentBinding = ArgumentBinding.BUNDLE
     # How unknown ``arguments`` keys are handled relative to the binding's
     # ``inputSchema``. ``REJECT`` (default) advertises
     # ``additionalProperties: false`` and rejects unknown keys with

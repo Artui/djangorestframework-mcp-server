@@ -67,7 +67,10 @@ def _register_rename(server: MCPServer, **spec_overrides: Any) -> None:
         **spec_overrides,
     )
     server.register_service_tool(
-        name="invoices.rename", spec=spec, argument_binding=ArgumentBinding.MERGE, permissions=[]
+        name="invoices.rename",
+        spec=spec,
+        argument_binding=ArgumentBinding.SPREAD_AUTHOR_WINS,
+        permissions=[],
     )
 
 
@@ -135,7 +138,10 @@ def test_does_not_exist_from_instance_selector_is_not_found() -> None:
         atomic=False,
     )
     server.register_service_tool(
-        name="invoices.rename", spec=spec, argument_binding=ArgumentBinding.MERGE, permissions=[]
+        name="invoices.rename",
+        spec=spec,
+        argument_binding=ArgumentBinding.SPREAD_AUTHOR_WINS,
+        permissions=[],
     )
     out = handle_tools_call(
         {"name": "invoices.rename", "arguments": {"pk": 99999, "number": "new"}},
@@ -158,7 +164,10 @@ def test_non_queryset_instance_selector_return_is_used_directly() -> None:
         atomic=False,
     )
     server.register_service_tool(
-        name="invoices.rename", spec=spec, argument_binding=ArgumentBinding.MERGE, permissions=[]
+        name="invoices.rename",
+        spec=spec,
+        argument_binding=ArgumentBinding.SPREAD_AUTHOR_WINS,
+        permissions=[],
     )
     out = handle_tools_call(
         {"name": "invoices.rename", "arguments": {"pk": invoice.pk, "number": "new"}},
@@ -188,7 +197,10 @@ def test_queryset_shaping_applies_to_instance_lookup() -> None:
         atomic=False,
     )
     server.register_service_tool(
-        name="invoices.touch", spec=spec, argument_binding=ArgumentBinding.MERGE, permissions=[]
+        name="invoices.touch",
+        spec=spec,
+        argument_binding=ArgumentBinding.SPREAD_AUTHOR_WINS,
+        permissions=[],
     )
     out = handle_tools_call(
         {"name": "invoices.touch", "arguments": {"pk": invoice.pk}}, _ctx(server)
@@ -216,7 +228,10 @@ def test_nested_spec_kwargs_provider_feeds_lookup_pool() -> None:
         atomic=False,
     )
     server.register_service_tool(
-        name="invoices.rename", spec=spec, argument_binding=ArgumentBinding.MERGE, permissions=[]
+        name="invoices.rename",
+        spec=spec,
+        argument_binding=ArgumentBinding.SPREAD_AUTHOR_WINS,
+        permissions=[],
     )
     out = handle_tools_call(
         {"name": "invoices.rename", "arguments": {"pk": unsent.pk, "number": "new"}},
@@ -247,7 +262,10 @@ def test_input_serializer_sees_resolved_instance() -> None:
         atomic=False,
     )
     server.register_service_tool(
-        name="invoices.rename", spec=spec, argument_binding=ArgumentBinding.MERGE, permissions=[]
+        name="invoices.rename",
+        spec=spec,
+        argument_binding=ArgumentBinding.SPREAD_AUTHOR_WINS,
+        permissions=[],
     )
     out = handle_tools_call(
         {"name": "invoices.rename", "arguments": {"pk": invoice.pk, "number": "new"}},
@@ -305,7 +323,7 @@ def test_reserved_seeds_cannot_be_poisoned_from_arguments() -> None:
     server.register_service_tool(
         name="invoices.touch",
         spec=spec,
-        argument_binding=ArgumentBinding.MERGE,
+        argument_binding=ArgumentBinding.SPREAD_AUTHOR_WINS,
         permissions=[],
     )
     # ``instance`` / ``serializer`` keys in the client arguments are reserved

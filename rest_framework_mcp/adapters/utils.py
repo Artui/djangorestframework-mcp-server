@@ -88,7 +88,7 @@ def validate_input_serializer_against_callable(
         # raising on something the framework can't introspect.
         return
 
-    if argument_binding is ArgumentBinding.DATA_ONLY:
+    if argument_binding is ArgumentBinding.BUNDLE:
         if input_serializer is not None:
             _validate_data_only(label, sig)
     else:
@@ -231,7 +231,7 @@ def _validate_required_params_have_sources(
     if input_serializer is not None:
         sources.add("serializer")
     sources.update(spec_kwargs_provides)
-    if argument_binding is not ArgumentBinding.DATA_ONLY:
+    if argument_binding is not ArgumentBinding.BUNDLE:
         if input_serializer is not None:
             sources.update(_serializer_field_names(input_serializer))
         else:

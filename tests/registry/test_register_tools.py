@@ -88,13 +88,13 @@ def test_service_defaults_apply_when_definition_unset() -> None:
         ],
         service_defaults=ServiceDefaults(
             output_format=OutputFormat.TOON,
-            argument_binding=ArgumentBinding.MERGE,
+            argument_binding=ArgumentBinding.SPREAD_AUTHOR_WINS,
         ),
     )
     binding = bindings[0]
     assert isinstance(binding, ToolBinding)
     assert binding.output_format is OutputFormat.TOON
-    assert binding.argument_binding is ArgumentBinding.MERGE
+    assert binding.argument_binding is ArgumentBinding.SPREAD_AUTHOR_WINS
 
 
 def test_definition_wins_over_defaults_on_conflict() -> None:
@@ -163,7 +163,7 @@ def test_register_tools_matches_imperative_field_for_field() -> None:
         name="t",
         spec=ServiceSpec(service=_svc, atomic=False),
         output_format=OutputFormat.TOON,
-        argument_binding=ArgumentBinding.MERGE,
+        argument_binding=ArgumentBinding.SPREAD_AUTHOR_WINS,
         unknown_arguments=UnknownArguments.IGNORE,
     )
 
@@ -175,7 +175,7 @@ def test_register_tools_matches_imperative_field_for_field() -> None:
                 name="t",
                 spec=ServiceSpec(service=_svc, atomic=False),
                 output_format=OutputFormat.TOON,
-                argument_binding=ArgumentBinding.MERGE,
+                argument_binding=ArgumentBinding.SPREAD_AUTHOR_WINS,
                 unknown_arguments=UnknownArguments.IGNORE,
             ),
         ],
@@ -206,7 +206,7 @@ def test_no_defaults_uses_registration_method_defaults() -> None:
     assert isinstance(binding, ToolBinding)
     # Inherits ``register_service_tool``'s own defaults.
     assert binding.output_format is OutputFormat.JSON
-    assert binding.argument_binding is ArgumentBinding.DATA_ONLY
+    assert binding.argument_binding is ArgumentBinding.BUNDLE
     assert binding.unknown_arguments is UnknownArguments.REJECT
 
 

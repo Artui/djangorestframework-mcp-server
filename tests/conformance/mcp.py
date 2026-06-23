@@ -85,7 +85,7 @@ def build_conformance_server() -> MCPServer:
     server.register_service_tool(
         name="conformance.merge",
         spec=ServiceSpec(service=_merge_service, atomic=False),
-        argument_binding=ArgumentBinding.MERGE,
+        argument_binding=ArgumentBinding.SPREAD_AUTHOR_WINS,
     )
 
     # 10b — unknown-args REJECT on a strict-known selector.

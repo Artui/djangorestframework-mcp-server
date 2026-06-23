@@ -102,7 +102,7 @@ class SelectorToolBinding(Generic[ResultT, ExtraT]):
     # query parameters as individual function arguments
     # (``def list_drafts(*, project_id, page=1, limit=10)``), so the
     # MCP layer spreads the validated/raw arguments across the pool.
-    argument_binding: ArgumentBinding = ArgumentBinding.MERGE
+    argument_binding: ArgumentBinding = ArgumentBinding.SPREAD_AUTHOR_WINS
     # How unknown ``arguments`` keys are handled relative to the binding's
     # merged ``inputSchema`` (input_serializer fields + filter_set
     # properties + ordering + pagination). ``REJECT`` (default) rejects
