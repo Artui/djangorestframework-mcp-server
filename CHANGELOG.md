@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.8.0] — 2026-06-23
+
 ### Added
 
 - **Service & selector tool dispatch now routes through drf-services'
@@ -106,7 +108,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `paginate` stay on the registration call — they are MCP pipeline
   mechanics with no spec analogue. Schema generation and dispatch are
   unchanged; `binding.filter_set` now delegates to the spec.
-- Dependency range bumped to `djangorestframework-services>=0.19,<0.20`.
+- Dependency range bumped to `djangorestframework-services>=0.20,<0.21`.
 
 ### Removed
 
@@ -1014,7 +1016,8 @@ Pinned to `djangorestframework-services==0.6.0`.
 - 100% line + branch coverage enforced by pytest (**451 tests** at
   release).
 
-[Unreleased]: https://github.com/Artui/djangorestframework-mcp-server/compare/v0.7.1...HEAD
+[Unreleased]: https://github.com/Artui/djangorestframework-mcp-server/compare/v0.8.0...HEAD
+[0.8.0]: https://github.com/Artui/djangorestframework-mcp-server/compare/v0.7.1...v0.8.0
 [0.7.1]: https://github.com/Artui/djangorestframework-mcp-server/compare/v0.7.0...v0.7.1
 [0.7.0]: https://github.com/Artui/djangorestframework-mcp-server/compare/v0.6.2...v0.7.0
 [0.6.2]: https://github.com/Artui/djangorestframework-mcp-server/compare/v0.6.1...v0.6.2
