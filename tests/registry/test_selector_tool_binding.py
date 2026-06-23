@@ -95,3 +95,7 @@ def test_retrieve_kind_without_list_knobs_constructs_cleanly() -> None:
         spec=SelectorSpec(kind=SelectorKind.RETRIEVE, selector=_sel),
     )
     assert binding.kind is SelectorKind.RETRIEVE
+    # The `selector` / `filter_set` accessors delegate to the spec (single
+    # source of truth) — the dispatch path reads the spec directly now.
+    assert binding.selector is _sel
+    assert binding.filter_set is None

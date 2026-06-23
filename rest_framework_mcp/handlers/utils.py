@@ -49,21 +49,25 @@ def services_dispatch_policies(
     """Translate a binding's MCP dispatch knobs to ``dispatch_spec``'s policies.
 
     Returns the ``(argument_binding, unknown_arguments)`` pair to pass to
-    ``dispatch_spec``. Two subtleties preserve MCP's historical behaviour:
+    ``dispatch_spec``. Three subtleties preserve MCP's historical behaviour:
 
+    - A **selector** is validated by the MCP layer against its own
+      ``inputSchema`` (the binding's ``input_serializer`` + filter-set fields +
+      post-fetch knobs) *before* dispatch, so the neutral core must not
+      re-reject: its declared set is only the selector signature, which excludes
+      filter / ordering / pagination args. Always ``IGNORE``.
     - A **service with no ``input_serializer``** has an empty declared set, so
       MCP's old "unknown-args policy short-circuits, raw args spread under
       MERGE/REPLACE" maps to ``PASSTHROUGH`` when spreading (raw args still reach
       the callable) and ``IGNORE`` when bundling (raw args drop, ``data`` stays
       ``None``) — never a rejection against an empty declared set.
-    - Otherwise the binding's own ``unknown_arguments`` carries over verbatim
-      (the member names match drf-services').
+    - Otherwise the service binding's own ``unknown_arguments`` carries over
+      verbatim (the member names match drf-services').
     """
     argument_binding = _TO_SERVICES_ARGUMENT_BINDING[binding.argument_binding]
-    no_service_serializer = (
-        isinstance(binding.spec, ServiceSpec) and binding.spec.input_serializer is None
-    )
-    if no_service_serializer:
+    if not isinstance(binding.spec, ServiceSpec):
+        return argument_binding, ServicesUnknownArguments.IGNORE
+    if binding.spec.input_serializer is None:
         unknown = (
             ServicesUnknownArguments.PASSTHROUGH
             if argument_binding in _SPREAD_BINDINGS

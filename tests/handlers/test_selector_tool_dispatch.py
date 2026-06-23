@@ -484,15 +484,15 @@ class _CustomArgs(drf_serializers.Serializer):
 
 @pytest.mark.django_db
 def test_selector_tool_with_input_serializer_validates_custom_args() -> None:
-    """Non-filter custom args go through ``input_serializer``."""
+    """Validated custom args spread to the selector's declared params (coerced)."""
     Invoice.objects.create(number="A", amount_cents=100)
 
     server = _server()
 
-    seen_data: dict[str, Any] = {}
+    seen: dict[str, Any] = {}
 
-    def selector(*, data: dict[str, Any]) -> Any:
-        seen_data.update(data)
+    def selector(*, expand: bool = False) -> Any:
+        seen["expand"] = expand
         return Invoice.objects.all()
 
     server.register_selector_tool(
@@ -505,7 +505,8 @@ def test_selector_tool_with_input_serializer_validates_custom_args() -> None:
 
     out = handle_tools_call({"name": "invoices.list", "arguments": {"expand": True}}, _ctx(server))
     assert isinstance(out, dict)
-    assert seen_data == {"expand": True}
+    # ``_CustomArgs`` coerces ``expand`` to a bool and it spreads to the selector.
+    assert seen == {"expand": True}
 
 
 @pytest.mark.django_db
@@ -541,13 +542,14 @@ def test_selector_returning_list_skips_queryset_pipeline() -> None:
 
     server.register_selector_tool(
         name="things.list",
-        # filter_set is set but won't apply because the result isn't a QS.
-        spec=SelectorSpec(kind=SelectorKind.LIST, selector=selector, filter_set=InvoiceFilterSet),
+        # A list-returning selector declares no queryset shaping (shaping +
+        # filter_set require a QuerySet; see test_spec_shaping_and_context).
+        spec=SelectorSpec(kind=SelectorKind.LIST, selector=selector),
     )
 
     out = handle_tools_call({"name": "things.list", "arguments": {}}, _ctx(server))
     assert isinstance(out, dict)
-    # No output_serializer → list passes through.
+    # No output_serializer → list passes through (ordering / pagination no-op).
     assert out["structuredContent"] == [{"number": "A"}, {"number": "B"}]
 
 
