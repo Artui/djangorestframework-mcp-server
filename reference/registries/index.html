@@ -1149,6 +1149,17 @@
   
 </li>
         
+          <li class="md-nav__item">
+  <a href="#rest_framework_mcp.registry.types.selector_tool_binding.SelectorToolBinding.filter_set" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        filter_set
+      
+    </span>
+  </a>
+  
+</li>
+        
       </ul>
     </nav>
   
@@ -1304,7 +1315,7 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#rest_framework_mcp.constants.UnknownArguments" class="md-nav__link">
+  <a href="#rest_framework_services.types.unknown_arguments.UnknownArguments" class="md-nav__link">
     <span class="md-ellipsis">
       
         UnknownArguments
@@ -1315,7 +1326,7 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#rest_framework_mcp.constants.ArgumentBinding" class="md-nav__link">
+  <a href="#rest_framework_services.types.argument_binding.ArgumentBinding" class="md-nav__link">
     <span class="md-ellipsis">
       
         ArgumentBinding
@@ -1330,17 +1341,6 @@
     <span class="md-ellipsis">
       
         Selector-tool schema
-      
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#rest_framework_mcp.schema.filterset_schema.filterset_to_schema_properties" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        filterset_to_schema_properties
       
     </span>
   </a>
@@ -1734,6 +1734,17 @@
   
 </li>
         
+          <li class="md-nav__item">
+  <a href="#rest_framework_mcp.registry.types.selector_tool_binding.SelectorToolBinding.filter_set" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        filter_set
+      
+    </span>
+  </a>
+  
+</li>
+        
       </ul>
     </nav>
   
@@ -1889,7 +1900,7 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#rest_framework_mcp.constants.UnknownArguments" class="md-nav__link">
+  <a href="#rest_framework_services.types.unknown_arguments.UnknownArguments" class="md-nav__link">
     <span class="md-ellipsis">
       
         UnknownArguments
@@ -1900,7 +1911,7 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#rest_framework_mcp.constants.ArgumentBinding" class="md-nav__link">
+  <a href="#rest_framework_services.types.argument_binding.ArgumentBinding" class="md-nav__link">
     <span class="md-ellipsis">
       
         ArgumentBinding
@@ -1915,17 +1926,6 @@
     <span class="md-ellipsis">
       
         Selector-tool schema
-      
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#rest_framework_mcp.schema.filterset_schema.filterset_to_schema_properties" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        filterset_to_schema_properties
       
     </span>
   </a>
@@ -2215,8 +2215,9 @@
 <h1 id="registries">Registries<a class="headerlink" href="#registries" title="Permanent link">&para;</a></h1>
 <p>Tool, resource, and prompt lookup, plus session storage and SSE infrastructure.</p>
 <p><code>ToolBinding</code> wraps a <code>ServiceSpec</code> (mutation tools);
-<code>SelectorToolBinding</code> wraps a <code>SelectorSpec</code> and carries the read-shaped
-pipeline knobs (<code>filter_set</code>, <code>ordering_fields</code>, <code>paginate</code>). The shared
+<code>SelectorToolBinding</code> wraps a <code>SelectorSpec</code> and exposes the read-shaped
+pipeline knobs — <code>filter_set</code> is read from the spec; <code>ordering_fields</code> /
+<code>paginate</code> are binding-level MCP mechanics. The shared
 <code>ToolRegistry</code> accepts either kind and is what <code>tools/list</code> and
 <code>tools/call</code> iterate.</p>
 
@@ -2315,11 +2316,13 @@ chosen by :attr:<code>kind</code>:</p>
           → output_serializer(many=True)
           → ToolResult
 </code></pre></div>
-<p><code>kind=RETRIEVE</code> skips the post-fetch pipeline entirely — the
-selector's single-instance return goes straight to
-<code>output_serializer(many=False)</code>. Combining <code>RETRIEVE</code> with
-<code>filter_set</code> / <code>ordering_fields</code> / <code>paginate</code> is rejected at
-construction (those knobs only make sense on a collection).</p>
+<p><code>kind=RETRIEVE</code> skips ordering / pagination but still applies
+queryset shaping + <code>spec.filter_set</code> before materializing the
+single instance via <code>.first()</code> (so a "stats from a filtered set"
+retrieve works, matching the sister repo's <code>dispatch_spec</code>), then
+renders <code>output_serializer(many=False)</code>. Combining <code>RETRIEVE</code>
+with <code>ordering_fields</code> / <code>paginate</code> is rejected at construction
+(those knobs only make sense on a collection).</p>
 <p>Selectors return raw, unscoped data (a queryset for <code>LIST</code>, a
 single instance for <code>RETRIEVE</code>) — the tool layer owns shape
 decisions. A <code>LIST</code> binding with none of <code>filter_set</code> /
@@ -2371,6 +2374,40 @@ checkers.</p>
 independent copy — it would only be a chance for the two to
 drift. Exposed as a property so the dispatch layer can keep
 reading <code>binding.kind</code> unchanged.</p>
+
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-attribute">
+
+
+
+<h3 id="rest_framework_mcp.registry.types.selector_tool_binding.SelectorToolBinding.filter_set" class="doc doc-heading">
+            <span class="doc doc-object-name doc-attribute-name">filter_set</span>
+
+
+  <span class="doc doc-labels">
+      <small class="doc doc-label doc-label-property"><code>property</code></small>
+  </span>
+
+<a href="#rest_framework_mcp.registry.types.selector_tool_binding.SelectorToolBinding.filter_set" class="headerlink" title="Permanent link">&para;</a></h3>
+<div class="language-python doc-signature highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="n">filter_set</span><span class="p">:</span> <span class="n">Any</span> <span class="o">|</span> <span class="kc">None</span>
+</span></code></pre></div>
+
+    <div class="doc doc-contents ">
+
+        <p>Transport-neutral filtering, sourced from the spec.</p>
+<p>Like :attr:<code>kind</code> and :attr:<code>selector</code>, this delegates to the
+:class:<code>SelectorSpec</code> rather than storing a copy — the spec is
+the single source of truth (<code>SelectorSpec.filter_set</code>,
+<code>djangorestframework-services</code> 0.18+). The MCP read pipeline
+and <code>inputSchema</code> generation read <code>binding.filter_set</code>
+unchanged, so a project declares its filterable shape once, on
+the spec, and both the HTTP and MCP transports honour it.</p>
+<p>Typed <code>Any</code> because <code>django-filter</code> is an optional dep behind
+the <code>[filter]</code> extra — narrowing the type would force a hard
+import here.</p>
 
     </div>
 
@@ -2733,9 +2770,11 @@ kwargs that would otherwise be passed to
 discriminator that selects between them at dispatch time.</p>
 <p>Construct via the classmethods, not the dataclass constructor — the
 methods enforce the per-kind kwarg surface (a service definition
-can't set <code>filter_set</code>; a selector definition can't omit
-<code>input_serializer</code> quietly etc.). Direct construction is available
-for tests and tooling but bypasses the type-shape guarantees.</p>
+can't set <code>ordering_fields</code> / <code>paginate</code>; a selector definition
+can't omit <code>input_serializer</code> quietly etc.). Filtering is declared
+on the spec (<code>SelectorSpec.filter_set</code>), not here, so neither kind
+carries a <code>filter_set</code> kwarg. Direct construction is available for
+tests and tooling but bypasses the type-shape guarantees.</p>
 <p>Every per-call kwarg defaults to <code>None</code>; downstream
 :func:<code>register_tools</code> treats <code>None</code> as "no override", which lets
 a :class:<code>SelectorDefaults</code> / :class:<code>ServiceDefaults</code> instance
@@ -2830,16 +2869,15 @@ default if neither is set.</p>
 </span><span id="__span-0-11"><a id="__codelineno-0-11" name="__codelineno-0-11" href="#__codelineno-0-11"></a>    <span class="n">permissions</span><span class="p">:</span> <span class="n">Sequence</span><span class="p">[</span><span class="n">Any</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
 </span><span id="__span-0-12"><a id="__codelineno-0-12" name="__codelineno-0-12" href="#__codelineno-0-12"></a>    <span class="n">rate_limits</span><span class="p">:</span> <span class="n">Sequence</span><span class="p">[</span><span class="n">Any</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
 </span><span id="__span-0-13"><a id="__codelineno-0-13" name="__codelineno-0-13" href="#__codelineno-0-13"></a>    <span class="n">annotations</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
-</span><span id="__span-0-14"><a id="__codelineno-0-14" name="__codelineno-0-14" href="#__codelineno-0-14"></a>    <span class="n">filter_set</span><span class="p">:</span> <span class="n">Any</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
-</span><span id="__span-0-15"><a id="__codelineno-0-15" name="__codelineno-0-15" href="#__codelineno-0-15"></a>    <span class="n">ordering_fields</span><span class="p">:</span> <span class="n">Sequence</span><span class="p">[</span><span class="nb">str</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
-</span><span id="__span-0-16"><a id="__codelineno-0-16" name="__codelineno-0-16" href="#__codelineno-0-16"></a>    <span class="n">paginate</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
-</span><span id="__span-0-17"><a id="__codelineno-0-17" name="__codelineno-0-17" href="#__codelineno-0-17"></a>    <span class="n">include_structured_content</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
-</span><span id="__span-0-18"><a id="__codelineno-0-18" name="__codelineno-0-18" href="#__codelineno-0-18"></a>    <span class="n">include_output_schema</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
-</span><span id="__span-0-19"><a id="__codelineno-0-19" name="__codelineno-0-19" href="#__codelineno-0-19"></a>    <span class="n">argument_binding</span><span class="p">:</span> <span class="n">ArgumentBinding</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
-</span><span id="__span-0-20"><a id="__codelineno-0-20" name="__codelineno-0-20" href="#__codelineno-0-20"></a>    <span class="n">unknown_arguments</span><span class="p">:</span> <span class="n">UnknownArguments</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
-</span><span id="__span-0-21"><a id="__codelineno-0-21" name="__codelineno-0-21" href="#__codelineno-0-21"></a>    <span class="n">always_listed</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
-</span><span id="__span-0-22"><a id="__codelineno-0-22" name="__codelineno-0-22" href="#__codelineno-0-22"></a>    <span class="n">spec_kwargs_provides</span><span class="p">:</span> <span class="n">Sequence</span><span class="p">[</span><span class="nb">str</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
-</span><span id="__span-0-23"><a id="__codelineno-0-23" name="__codelineno-0-23" href="#__codelineno-0-23"></a><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">ToolDefinition</span>
+</span><span id="__span-0-14"><a id="__codelineno-0-14" name="__codelineno-0-14" href="#__codelineno-0-14"></a>    <span class="n">ordering_fields</span><span class="p">:</span> <span class="n">Sequence</span><span class="p">[</span><span class="nb">str</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+</span><span id="__span-0-15"><a id="__codelineno-0-15" name="__codelineno-0-15" href="#__codelineno-0-15"></a>    <span class="n">paginate</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+</span><span id="__span-0-16"><a id="__codelineno-0-16" name="__codelineno-0-16" href="#__codelineno-0-16"></a>    <span class="n">include_structured_content</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+</span><span id="__span-0-17"><a id="__codelineno-0-17" name="__codelineno-0-17" href="#__codelineno-0-17"></a>    <span class="n">include_output_schema</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+</span><span id="__span-0-18"><a id="__codelineno-0-18" name="__codelineno-0-18" href="#__codelineno-0-18"></a>    <span class="n">argument_binding</span><span class="p">:</span> <span class="n">ArgumentBinding</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+</span><span id="__span-0-19"><a id="__codelineno-0-19" name="__codelineno-0-19" href="#__codelineno-0-19"></a>    <span class="n">unknown_arguments</span><span class="p">:</span> <span class="n">UnknownArguments</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+</span><span id="__span-0-20"><a id="__codelineno-0-20" name="__codelineno-0-20" href="#__codelineno-0-20"></a>    <span class="n">always_listed</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+</span><span id="__span-0-21"><a id="__codelineno-0-21" name="__codelineno-0-21" href="#__codelineno-0-21"></a>    <span class="n">spec_kwargs_provides</span><span class="p">:</span> <span class="n">Sequence</span><span class="p">[</span><span class="nb">str</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+</span><span id="__span-0-22"><a id="__codelineno-0-22" name="__codelineno-0-22" href="#__codelineno-0-22"></a><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">ToolDefinition</span>
 </span></code></pre></div>
 
     <div class="doc doc-contents ">
@@ -2951,10 +2989,11 @@ to inherit the global, leave it unset; if you want to force
   :meth:<code>MCPServer.register_selector_tool</code> default".</li>
 <li>Per-definition kwargs always win on conflict.</li>
 </ul>
-<p>Selector-only knobs (<code>input_serializer</code>, <code>filter_set</code>,
-<code>ordering_fields</code>, <code>paginate</code>) live here too so a project that
-wants every selector tool to paginate by default can express that
-in one place.</p>
+<p>Selector-only knobs (<code>input_serializer</code>, <code>ordering_fields</code>,
+<code>paginate</code>) live here too so a project that wants every selector
+tool to paginate by default can express that in one place. Filtering
+is not among them — <code>filter_set</code> is declared on each
+<code>SelectorSpec</code>, not as a registration default.</p>
 
 
 
@@ -3041,17 +3080,20 @@ directly — the classmethods are the typed entry points.</p>
 
     </div>
 
-</div>
+</div><p><code>ArgumentBinding</code> and <code>UnknownArguments</code> are re-exported from
+<code>djangorestframework-services</code> (the transport-neutral <code>dispatch_spec</code> owns
+these dispatch policies); import them from <code>rest_framework_mcp.constants</code>.</p>
+
 
 <div class="doc doc-object doc-class">
 
 
 
-<h2 id="rest_framework_mcp.constants.UnknownArguments" class="doc doc-heading">
+<h2 id="rest_framework_services.types.unknown_arguments.UnknownArguments" class="doc doc-heading">
             <span class="doc doc-object-name doc-class-name">UnknownArguments</span>
 
 
-<a href="#rest_framework_mcp.constants.UnknownArguments" class="headerlink" title="Permanent link">&para;</a></h2>
+<a href="#rest_framework_services.types.unknown_arguments.UnknownArguments" class="headerlink" title="Permanent link">&para;</a></h2>
 
 
     <div class="doc doc-contents first">
@@ -3060,36 +3102,31 @@ directly — the classmethods are the typed entry points.</p>
 
 
 
-        <p>How a binding handles MCP <code>arguments</code> keys not declared in its <code>inputSchema</code>.</p>
-<p>Decouples "fields I want strictly validated" from "fields the client
-may pass through anyway". Built on top of <code>input_serializer</code>, not as
-a replacement — DRF validation still runs on the declared fields in
-every mode.</p>
-<p>Members:</p>
+        <p>How <code>dispatch_spec</code> treats <code>params</code> keys outside a spec's declared set.</p>
+<p>The <em>declared set</em> is derived from the spec without any transport knowledge:
+a :class:<code>ServiceSpec</code>'s <code>input_serializer</code> fields plus the keys its nested
+target selectors consume; a :class:<code>SelectorSpec</code>'s <code>selector</code> parameters.
+When the set cannot be enumerated — a callable that declares <code>**kwargs</code>, or
+a duck-typed <code>filter_set</code> whose fields are opaque to the core — the spec is
+treated as <strong>open</strong> and this policy is a no-op (there is nothing to call
+"unknown").</p>
+<p>Members (internal knob — the value never appears on a wire):</p>
 <ul>
-<li><code>REJECT</code> (default) — the merged <code>inputSchema</code> advertises
-  <code>"additionalProperties": false</code> and the validator rejects any key
-  that isn't part of the binding's known field set. Failure surfaces
-  as <code>-32602</code> with the offending key names in
-  <code>data.detail["non_field_errors"]</code>.</li>
-<li><code>PASSTHROUGH</code> — the merged <code>inputSchema</code> advertises
-  <code>"additionalProperties": true</code>; unknown keys survive validation
-  and are merged onto the validated dict before binding to the
-  callable. Useful when the client sends evolving query args
-  (<code>q</code> / <code>cursor</code> / <code>since</code>) that the spec author wants to
-  forward to the callable without restating each in the serializer.</li>
-<li><code>IGNORE</code> — the merged <code>inputSchema</code> advertises
-  <code>"additionalProperties": true</code>, but unknown keys are dropped
-  after validation. Forward-compatibility mode: older clients can
-  still send fields newer servers haven't formalised yet, and the
-  server silently accepts and ignores them.</li>
+<li><code>IGNORE</code> — undeclared keys are dropped (DRF serializers already do this
+  to a mutation's payload, and a selector simply never receives kwargs it
+  doesn't declare). The default, reproducing the pre-policy behaviour.</li>
+<li><code>REJECT</code> — an undeclared key raises
+  :exc:<code>~rest_framework.exceptions.ValidationError</code>, the same surface a
+  strict serializer produces. Useful when the caller wants a clean
+  correction signal (e.g. a model calling a tool with a mistyped argument).</li>
+<li><code>PASSTHROUGH</code> — undeclared keys survive: they are merged onto the
+  mutation's <code>validated_data</code> before the keyword pool is built, so a
+  callable that declares them (or <code>**kwargs</code>) receives them. The one
+  policy that <em>must</em> live inside <code>dispatch_spec</code> — it needs the seam
+  between validation and pool construction that a wrapper cannot reach.</li>
 </ul>
-<p>Reserved transport-controlled keys (<code>request</code> / <code>user</code> / <code>data</code>)
-and selector-tool post-fetch keys (<code>ordering</code> / <code>page</code> /
-<code>limit</code>) are never considered "unknown" in any mode — they're
-handled by the dispatch pipeline, not the validator.</p>
-<p>Plain :class:<code>Enum</code>, same discipline as :class:<code>ArgumentBinding</code>:
-internal-only value, no string coercion at API boundaries.</p>
+<p>Callers strip their own transport-only keys (pagination, ordering, output
+format) before calling, so the declared-set check sees only spec inputs.</p>
 
 
 
@@ -3124,11 +3161,11 @@ internal-only value, no string coercion at API boundaries.</p>
 
 
 
-<h2 id="rest_framework_mcp.constants.ArgumentBinding" class="doc doc-heading">
+<h2 id="rest_framework_services.types.argument_binding.ArgumentBinding" class="doc doc-heading">
             <span class="doc doc-object-name doc-class-name">ArgumentBinding</span>
 
 
-<a href="#rest_framework_mcp.constants.ArgumentBinding" class="headerlink" title="Permanent link">&para;</a></h2>
+<a href="#rest_framework_services.types.argument_binding.ArgumentBinding" class="headerlink" title="Permanent link">&para;</a></h2>
 
 
     <div class="doc doc-contents first">
@@ -3137,33 +3174,37 @@ internal-only value, no string coercion at API boundaries.</p>
 
 
 
-        <p>How MCP <code>arguments</code> flow into the kwarg pool of the dispatched callable.</p>
-<p>The pool always carries <code>request</code> and <code>user</code>. This enum controls
-whether MCP <code>arguments</code> show up as a single <code>data=</code> key (the
-historical behavior, well-suited to mutation-shaped services that take
-an <code>input_serializer</code>-validated dict) or are spread as top-level
-pool keys so the callable can declare them as individual parameters
-(the natural shape for selectors and parametric reads).</p>
-<p>Members:</p>
+        <p>How <code>dispatch_spec</code> turns the flat <code>params</code> into a callable's kwargs.</p>
+<p>Every dispatched callable's keyword pool always carries the <code>request</code> /
+<code>user</code> seeds (and, for a mutation, <code>data</code> / <code>serializer</code> / <code>instance</code>
+/ <code>collection</code>). This enum controls the <em>one</em> remaining question a caller
+answers about its wire: <strong>can client-supplied input land as individual
+keyword arguments, and do those override the spec author's <code>kwargs(...)</code>
+invariants?</strong> It is a trust-boundary decision, not plumbing — which is why it
+belongs to the caller rather than the spec.</p>
+<p>Members (the value never appears on a wire — pass the member directly):</p>
 <ul>
-<li><code>DATA_ONLY</code> — MCP <code>arguments</code> enter the pool only as
-  <code>data=&lt;validated-or-raw&gt;</code>. Default for :class:<code>ToolBinding</code>
-  (service tools), since mutation services typically take a single
-  validated <code>data</code> payload.</li>
-<li><code>MERGE</code> — every key from the validated MCP arguments (or, when
-  no <code>input_serializer</code> is declared, the raw arguments minus the
-  pipeline-reserved keys <code>ordering</code> / <code>page</code> / <code>limit</code>) is
-  added to the pool. <code>spec.kwargs(...)</code> output <em>overrides</em> on
-  conflict — author-declared kwargs win over client-supplied ones, a
-  critical invariant for project-scoping selectors. Default for
-  :class:<code>SelectorToolBinding</code> (selector tools).</li>
-<li><code>REPLACE</code> — like <code>MERGE</code>, but <code>spec.kwargs(...)</code> <em>loses</em> on
-  conflict. Useful only when the kwargs provider supplies defaults
-  the client is allowed to override.</li>
+<li><code>AUTO</code> — resolve per spec type to reproduce the pre-policy behaviour:
+  :class:<code>ServiceSpec</code> → <code>BUNDLE</code> (a mutation takes its validated payload
+  as one <code>data</code> bundle), :class:<code>SelectorSpec</code> → <code>SPREAD_AUTHOR_WINS</code> (a
+  read spreads its params so the selector can declare them as parameters).
+  The default.</li>
+<li><code>BUNDLE</code> — only the validated payload reaches the callable, as <code>data=</code>;
+  individual client fields are <strong>not</strong> spread as kwargs. The safe default for
+  a mutation whose <code>kwargs</code> scopes the write — the client cannot inject
+  arbitrary keyword arguments.</li>
+<li><code>SPREAD_AUTHOR_WINS</code> — client fields are spread into the pool as
+  individual kwargs, but <code>spec.kwargs(...)</code> <strong>overrides on conflict</strong>. An
+  author-scoped <code>tenant_id</code> cannot be reset by the client. (drf-mcp's
+  former <code>MERGE</code>.)</li>
+<li><code>SPREAD_CALLER_WINS</code> — like <code>SPREAD_AUTHOR_WINS</code> but the client wins on
+  conflict: <code>spec.kwargs(...)</code> supplies <em>defaults</em> the client may override.
+  (drf-mcp's former <code>REPLACE</code>.)</li>
 </ul>
-<p>The value is internal — never appears on the wire, never coerced
-from a string. <code>ArgumentBinding</code> is a plain :class:<code>Enum</code> (not
-<code>str, Enum</code>); pass the member directly when registering tools.</p>
+<p>Reserved pool seeds (<code>request</code> / <code>user</code> / <code>data</code> / <code>serializer</code> /
+<code>instance</code> / <code>collection</code>) are always stripped from the spread in the
+<code>SPREAD_*</code> modes, so a client cannot poison transport-controlled state by
+naming an argument after one of them.</p>
 
 
 
@@ -3193,46 +3234,13 @@ from a string. <code>ArgumentBinding</code> is a plain :class:<code>Enum</code> 
     </div>
 
 </div><h2 id="selector-tool-schema">Selector-tool schema<a class="headerlink" href="#selector-tool-schema" title="Permanent link">&para;</a></h2>
-<p>Helpers that build the merged <code>inputSchema</code> for selector tools — exposed
-for projects that want to introspect filter / ordering / pagination
-property generation outside of the registration flow.</p>
+<p>Builds the merged <code>inputSchema</code> for selector tools — exposed for projects
+that want to introspect filter / ordering / pagination property generation
+outside of the registration flow. The FilterSet → JSON-Schema mapping is
+delegated to <code>djangorestframework-services</code>'
+<a href="https://github.com/Artui/djangorestframework-services"><code>filterset_to_json_schema</code></a>,
+so the filterable shape is described the same way across transports.</p>
 
-
-<div class="doc doc-object doc-function">
-
-
-<h2 id="rest_framework_mcp.schema.filterset_schema.filterset_to_schema_properties" class="doc doc-heading">
-            <span class="doc doc-object-name doc-function-name">filterset_to_schema_properties</span>
-
-
-<a href="#rest_framework_mcp.schema.filterset_schema.filterset_to_schema_properties" class="headerlink" title="Permanent link">&para;</a></h2>
-<div class="language-python doc-signature highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="nf">filterset_to_schema_properties</span><span class="p">(</span><span class="n">filter_set_class</span><span class="p">:</span> <span class="n">Any</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]]</span>
-</span></code></pre></div>
-
-    <div class="doc doc-contents first">
-
-        <p>Map a django-filter <code>FilterSet</code> class to JSON Schema properties.</p>
-<p>Walks <code>FilterSet.declared_filters</code> plus any auto-generated filters
-(from a <code>Meta</code> declaration) and returns a property dict shaped like
-the <code>"properties"</code> key of a JSON Schema object — ready to merge into
-a tool's <code>inputSchema</code>.</p>
-<p>Filter properties are always optional from MCP's perspective: they
-narrow the queryset but are not required to call the tool. The merger
-in :mod:<code>rest_framework_mcp.schema.input_schema</code> does not add filter
-names to the <code>required</code> array.</p>
-<p>Common filter classes get accurate JSON Schema mappings; exotic
-classes fall back to <code>{}</code> (the JSON Schema "any value" shape) so a
-custom filter never breaks tool discovery. Tests document which
-classes are precisely mapped.</p>
-<p>Raises <code>ImportError</code> when <code>django-filter</code> isn't installed — this
-only fires when a binding is actually constructed with
-<code>filter_set=...</code>, so projects that don't use the integration are
-unaffected.</p>
-
-
-    </div>
-
-</div>
 
 <div class="doc doc-object doc-function">
 

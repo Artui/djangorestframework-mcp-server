@@ -1425,7 +1425,7 @@ selector tiny (return a queryset) and gives the tool layer the
 post-fetch knobs.</p>
 <div class="language-text highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a>arguments → validate(merged inputSchema)
 </span><span id="__span-0-2"><a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a>          → run_selector
-</span><span id="__span-0-3"><a id="__codelineno-0-3" name="__codelineno-0-3" href="#__codelineno-0-3"></a>          → FilterSet(data=…).qs    (if filter_set)
+</span><span id="__span-0-3"><a id="__codelineno-0-3" name="__codelineno-0-3" href="#__codelineno-0-3"></a>          → FilterSet(data=…).qs    (if spec.filter_set)
 </span><span id="__span-0-4"><a id="__codelineno-0-4" name="__codelineno-0-4" href="#__codelineno-0-4"></a>          → qs.order_by(…)          (if ordering_fields)
 </span><span id="__span-0-5"><a id="__codelineno-0-5" name="__codelineno-0-5" href="#__codelineno-0-5"></a>          → paginate                (if paginate=True)
 </span><span id="__span-0-6"><a id="__codelineno-0-6" name="__codelineno-0-6" href="#__codelineno-0-6"></a>          → output_serializer(many=True)
@@ -1434,12 +1434,12 @@ post-fetch knobs.</p>
 <p>Each knob is opt-in. A bare <code>register_selector_tool</code> with no
 filter/order/paginate behaves like a plain RPC read.</p>
 <h2 id="install-the-optional-extra">Install the optional extra<a class="headerlink" href="#install-the-optional-extra" title="Permanent link">&para;</a></h2>
-<p><code>filter_set=</code> requires <code>django-filter</code>:</p>
+<p><code>spec.filter_set</code> requires <code>django-filter</code>:</p>
 <div class="language-bash highlight"><pre><span></span><code><span id="__span-1-1"><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a>pip<span class="w"> </span>install<span class="w"> </span><span class="s2">&quot;djangorestframework-mcp-server[filter]&quot;</span>
 </span></code></pre></div>
 <p>Without it, importing <code>rest_framework_mcp</code> still works — the
-<code>ImportError</code> only fires when you actually pass <code>filter_set=</code> to a
-binding.</p>
+<code>ImportError</code> only fires when a selector spec actually carries a
+<code>filter_set</code>.</p>
 <h2 id="define-the-pieces">Define the pieces<a class="headerlink" href="#define-the-pieces" title="Permanent link">&para;</a></h2>
 <p>A model:</p>
 <div class="language-python highlight"><pre><span></span><code><span id="__span-2-1"><a id="__codelineno-2-1" name="__codelineno-2-1" href="#__codelineno-2-1"></a><span class="c1"># invoices/models.py</span>
@@ -1509,18 +1509,28 @@ binding.</p>
 </span><span id="__span-6-14"><a id="__codelineno-6-14" name="__codelineno-6-14" href="#__codelineno-6-14"></a>        <span class="n">kind</span><span class="o">=</span><span class="n">SelectorKind</span><span class="o">.</span><span class="n">LIST</span><span class="p">,</span>
 </span><span id="__span-6-15"><a id="__codelineno-6-15" name="__codelineno-6-15" href="#__codelineno-6-15"></a>        <span class="n">selector</span><span class="o">=</span><span class="n">list_invoices</span><span class="p">,</span>
 </span><span id="__span-6-16"><a id="__codelineno-6-16" name="__codelineno-6-16" href="#__codelineno-6-16"></a>        <span class="n">output_serializer</span><span class="o">=</span><span class="n">InvoiceOutputSerializer</span><span class="p">,</span>
-</span><span id="__span-6-17"><a id="__codelineno-6-17" name="__codelineno-6-17" href="#__codelineno-6-17"></a>    <span class="p">),</span>
-</span><span id="__span-6-18"><a id="__codelineno-6-18" name="__codelineno-6-18" href="#__codelineno-6-18"></a>    <span class="n">description</span><span class="o">=</span><span class="s2">&quot;List invoices, optionally filtered / ordered / paginated.&quot;</span><span class="p">,</span>
-</span><span id="__span-6-19"><a id="__codelineno-6-19" name="__codelineno-6-19" href="#__codelineno-6-19"></a>    <span class="n">filter_set</span><span class="o">=</span><span class="n">InvoiceFilterSet</span><span class="p">,</span>
+</span><span id="__span-6-17"><a id="__codelineno-6-17" name="__codelineno-6-17" href="#__codelineno-6-17"></a>        <span class="n">filter_set</span><span class="o">=</span><span class="n">InvoiceFilterSet</span><span class="p">,</span>
+</span><span id="__span-6-18"><a id="__codelineno-6-18" name="__codelineno-6-18" href="#__codelineno-6-18"></a>    <span class="p">),</span>
+</span><span id="__span-6-19"><a id="__codelineno-6-19" name="__codelineno-6-19" href="#__codelineno-6-19"></a>    <span class="n">description</span><span class="o">=</span><span class="s2">&quot;List invoices, optionally filtered / ordered / paginated.&quot;</span><span class="p">,</span>
 </span><span id="__span-6-20"><a id="__codelineno-6-20" name="__codelineno-6-20" href="#__codelineno-6-20"></a>    <span class="n">ordering_fields</span><span class="o">=</span><span class="p">[</span><span class="s2">&quot;created_at&quot;</span><span class="p">,</span> <span class="s2">&quot;amount_cents&quot;</span><span class="p">],</span>
 </span><span id="__span-6-21"><a id="__codelineno-6-21" name="__codelineno-6-21" href="#__codelineno-6-21"></a>    <span class="n">paginate</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
 </span><span id="__span-6-22"><a id="__codelineno-6-22" name="__codelineno-6-22" href="#__codelineno-6-22"></a><span class="p">)</span>
 </span></code></pre></div>
-<p>The decorator form is symmetric with <code>@server.service_tool</code>:</p>
+<p><code>filter_set</code> lives on the <code>SelectorSpec</code> (since
+<code>djangorestframework-services</code> 0.18), so the same declaration drives the
+HTTP transport and MCP — declare the filterable shape once. The
+MCP-only pipeline mechanics, <code>ordering_fields</code> and <code>paginate</code>, stay on
+the registration call.</p>
+<p>The decorator form is symmetric with <code>@server.service_tool</code>. It
+auto-builds the <code>SelectorSpec</code> from <code>kind</code> + the wrapped function, so it
+covers <code>ordering_fields</code> / <code>paginate</code> but <strong>not</strong> <code>filter_set</code> (a
+<code>FilterSet</code> belongs on the spec). For a filtered tool, use the explicit
+<code>register_selector_tool</code> form above, or hand the decorator a ready
+<code>spec=</code> that carries the <code>filter_set</code>:</p>
 <div class="language-python highlight"><pre><span></span><code><span id="__span-7-1"><a id="__codelineno-7-1" name="__codelineno-7-1" href="#__codelineno-7-1"></a><span class="nd">@server</span><span class="o">.</span><span class="n">selector_tool</span><span class="p">(</span>
 </span><span id="__span-7-2"><a id="__codelineno-7-2" name="__codelineno-7-2" href="#__codelineno-7-2"></a>    <span class="n">name</span><span class="o">=</span><span class="s2">&quot;invoices.list&quot;</span><span class="p">,</span>
-</span><span id="__span-7-3"><a id="__codelineno-7-3" name="__codelineno-7-3" href="#__codelineno-7-3"></a>    <span class="n">output_serializer</span><span class="o">=</span><span class="n">InvoiceOutputSerializer</span><span class="p">,</span>
-</span><span id="__span-7-4"><a id="__codelineno-7-4" name="__codelineno-7-4" href="#__codelineno-7-4"></a>    <span class="n">filter_set</span><span class="o">=</span><span class="n">InvoiceFilterSet</span><span class="p">,</span>
+</span><span id="__span-7-3"><a id="__codelineno-7-3" name="__codelineno-7-3" href="#__codelineno-7-3"></a>    <span class="n">kind</span><span class="o">=</span><span class="n">SelectorKind</span><span class="o">.</span><span class="n">LIST</span><span class="p">,</span>
+</span><span id="__span-7-4"><a id="__codelineno-7-4" name="__codelineno-7-4" href="#__codelineno-7-4"></a>    <span class="n">output_serializer</span><span class="o">=</span><span class="n">InvoiceOutputSerializer</span><span class="p">,</span>
 </span><span id="__span-7-5"><a id="__codelineno-7-5" name="__codelineno-7-5" href="#__codelineno-7-5"></a>    <span class="n">ordering_fields</span><span class="o">=</span><span class="p">[</span><span class="s2">&quot;created_at&quot;</span><span class="p">,</span> <span class="s2">&quot;amount_cents&quot;</span><span class="p">],</span>
 </span><span id="__span-7-6"><a id="__codelineno-7-6" name="__codelineno-7-6" href="#__codelineno-7-6"></a>    <span class="n">paginate</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
 </span><span id="__span-7-7"><a id="__codelineno-7-7" name="__codelineno-7-7" href="#__codelineno-7-7"></a><span class="p">)</span>
@@ -1629,7 +1639,7 @@ pagination envelope:</p>
 based on how many rows your selector can return — paginate as soon as
 the list could outgrow a single tool-call response.</p>
 <h2 id="combining-with-input_serializer">Combining with <code>input_serializer</code><a class="headerlink" href="#combining-with-input_serializer" title="Permanent link">&para;</a></h2>
-<p><code>filter_set=</code> only describes the filter shape. If your tool also needs
+<p><code>spec.filter_set</code> only describes the filter shape. If your tool also needs
 non-filter arguments, declare them through <code>input_serializer=</code> — the
 two schemas merge in <code>inputSchema</code> and the validated payload reaches
 the selector via the kwargs pool.</p>
@@ -1643,9 +1653,9 @@ the selector via the kwargs pool.</p>
 </span><span id="__span-10-8"><a id="__codelineno-10-8" name="__codelineno-10-8" href="#__codelineno-10-8"></a>        <span class="n">kind</span><span class="o">=</span><span class="n">SelectorKind</span><span class="o">.</span><span class="n">LIST</span><span class="p">,</span>
 </span><span id="__span-10-9"><a id="__codelineno-10-9" name="__codelineno-10-9" href="#__codelineno-10-9"></a>        <span class="n">selector</span><span class="o">=</span><span class="n">list_invoices</span><span class="p">,</span>
 </span><span id="__span-10-10"><a id="__codelineno-10-10" name="__codelineno-10-10" href="#__codelineno-10-10"></a>        <span class="n">output_serializer</span><span class="o">=</span><span class="n">InvoiceOutputSerializer</span><span class="p">,</span>
-</span><span id="__span-10-11"><a id="__codelineno-10-11" name="__codelineno-10-11" href="#__codelineno-10-11"></a>    <span class="p">),</span>
-</span><span id="__span-10-12"><a id="__codelineno-10-12" name="__codelineno-10-12" href="#__codelineno-10-12"></a>    <span class="n">input_serializer</span><span class="o">=</span><span class="n">InvoiceListInput</span><span class="p">,</span>
-</span><span id="__span-10-13"><a id="__codelineno-10-13" name="__codelineno-10-13" href="#__codelineno-10-13"></a>    <span class="n">filter_set</span><span class="o">=</span><span class="n">InvoiceFilterSet</span><span class="p">,</span>
+</span><span id="__span-10-11"><a id="__codelineno-10-11" name="__codelineno-10-11" href="#__codelineno-10-11"></a>        <span class="n">filter_set</span><span class="o">=</span><span class="n">InvoiceFilterSet</span><span class="p">,</span>
+</span><span id="__span-10-12"><a id="__codelineno-10-12" name="__codelineno-10-12" href="#__codelineno-10-12"></a>    <span class="p">),</span>
+</span><span id="__span-10-13"><a id="__codelineno-10-13" name="__codelineno-10-13" href="#__codelineno-10-13"></a>    <span class="n">input_serializer</span><span class="o">=</span><span class="n">InvoiceListInput</span><span class="p">,</span>
 </span><span id="__span-10-14"><a id="__codelineno-10-14" name="__codelineno-10-14" href="#__codelineno-10-14"></a>    <span class="n">ordering_fields</span><span class="o">=</span><span class="p">[</span><span class="s2">&quot;created_at&quot;</span><span class="p">],</span>
 </span><span id="__span-10-15"><a id="__codelineno-10-15" name="__codelineno-10-15" href="#__codelineno-10-15"></a>    <span class="n">paginate</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
 </span><span id="__span-10-16"><a id="__codelineno-10-16" name="__codelineno-10-16" href="#__codelineno-10-16"></a><span class="p">)</span>
