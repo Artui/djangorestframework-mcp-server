@@ -53,9 +53,11 @@ register a spec once and both surfaces get the same shape:
 - **`SelectorSpec.kind`** — required `SelectorKind` discriminator
   (`LIST` or `RETRIEVE`). It drives the `many=` flag on the output
   serializer and gates which post-fetch knobs the registration
-  accepts (a `RETRIEVE` spec rejects `filter_set` / `ordering_fields`
-  / `paginate`). `SelectorKind` is re-exported from
-  `rest_framework_mcp` for convenience.
+  accepts (a `RETRIEVE` spec rejects the collection-only
+  `ordering_fields` / `paginate`, but `filter_set` is allowed — it is
+  shaped + applied before the single-instance `.first()`).
+  `SelectorKind` is re-exported from `rest_framework_mcp` for
+  convenience.
 - **`ServiceSpec.output_selector_spec`** — a nested
   `SelectorSpec | None` describing the post-call render pipeline
   (optional re-fetch via its `selector`, then `output_serializer`
@@ -143,16 +145,21 @@ Beyond `permissions=`, `output_format=`, and `include_structured_content=`,
 forms) accept three behavior knobs:
 
 - **`argument_binding=`** — how the validated `arguments` flow into the
-  callable's kwarg pool.
-  - `ArgumentBinding.DATA_ONLY` (default for service tools) — only
+  callable's kwarg pool. The enum is re-exported from
+  `djangorestframework-services` (the transport-neutral `dispatch_spec` owns
+  these policies).
+  - `ArgumentBinding.BUNDLE` (default for service tools) — only
     `data=<validated>` enters the pool.
-  - `ArgumentBinding.MERGE` (default for selector tools) — every key from
-    the validated arguments is spread into the pool as a top-level kwarg,
-    so selectors can declare individual parameters
+  - `ArgumentBinding.SPREAD_AUTHOR_WINS` (default for selector tools) — every
+    key from the validated arguments is spread into the pool as a top-level
+    kwarg, so selectors can declare individual parameters
     (`def list_drafts(*, project_id, page=1)`). `spec.kwargs(...)` wins
     on conflict so author-declared invariants beat client input.
-  - `ArgumentBinding.REPLACE` — like `MERGE` but the spread wins on
-    conflict, so `spec.kwargs(...)` supplies client-overridable defaults.
+  - `ArgumentBinding.SPREAD_CALLER_WINS` — like `SPREAD_AUTHOR_WINS` but the
+    spread wins on conflict, so `spec.kwargs(...)` supplies client-overridable
+    defaults.
+  - `ArgumentBinding.AUTO` — resolve per spec type (service → `BUNDLE`,
+    selector → `SPREAD_AUTHOR_WINS`).
 
   Reserved transport-pool seeds (`request` / `user` / `data`) and the
   selector pipeline keys (`ordering` / `page` / `limit`) are stripped
@@ -179,6 +186,36 @@ forms) accept three behavior knobs:
   `prompts/list` when their permissions deny the current caller.
   Setting `always_listed=True` keeps the binding visible as a discovery
   aid; the permission still gates the actual invocation.
+
+### Tool annotations
+
+Every tool advertises the MCP-standard `ToolAnnotations` hints, derived
+from what the server already knows about the tool's mutation profile —
+so downstream clients get correct `readOnlyHint` / `destructiveHint`
+without a hand-set flag:
+
+- **Selector tools** are reads → `{"readOnlyHint": true}`.
+- **Service tools** are mutations → `{"readOnlyHint": false,
+  "destructiveHint": true}`.
+- **Chain tools** are read-only only when *every* step is a selector;
+  any service step makes the whole chain a mutation.
+
+`destructiveHint` / `idempotentHint` are spec-meaningful only when
+`readOnlyHint` is false, so a read-only tool emits neither. Pass
+`annotations=` at registration to override or extend the derived hints —
+the explicit values win:
+
+```python
+server.register_service_tool(
+    name="invoices.mark_paid",
+    spec=mark_paid_spec,
+    # An idempotent, non-destructive mutation:
+    annotations={"destructiveHint": False, "idempotentHint": True},
+)
+```
+
+The merged bundle lands on `binding.annotations` and on the `tools/list`
+wire payload.
 
 ### Bulk registration
 
@@ -213,6 +250,37 @@ register_tools(
 
 Per-definition kwargs win over defaults on conflict; `None` is the
 "no override" sentinel across both layers.
+
+## Transport-neutral invocation: `call_tool`
+
+`server.call_tool(name, arguments, *, user, request=None)` invokes a
+registered spec-backed tool **off the HTTP / JSON-RPC path** and returns
+the same `ToolResult` the wire handlers build. An in-process consumer — a
+bridge, a Pydantic-AI toolset, a management command — uses it instead of
+re-implementing dispatch:
+
+```python
+result = server.call_tool("invoices.create", {"number": "A-1"}, user=request.user)
+result.structured_content  # the rendered payload
+```
+
+It is built on `djangorestframework-services`' transport-neutral
+`dispatch_spec` / `render_spec_output` / `enforce_permissions`, so the
+spec-execution core (instance resolution, input validation, the
+service / selector run, the output-selector re-fetch, queryset shaping
+including `filter_set`, and the retrieve nullability contract) is shared
+with the HTTP transport rather than reproduced.
+
+It honours the binding's `argument_binding` / `unknown_arguments` policies
+(mapped onto `dispatch_spec`'s) and the spec's `permission_classes` via the
+`on_target_resolved=enforce_permissions` hook — object-level checks included.
+It does **not** layer on the read-shaped transport extras (pagination,
+ordering, a selector binding's MCP-only `input_serializer`); those stay with
+the wire handlers, as do the transport-level MCP permissions / rate limits.
+Chain tools are unsupported — they orchestrate several specs and raise
+`TypeError`. A service raising `ServiceValidationError` / `ServiceError` and a
+missing required instance come back as `isError` results; a denied permission
+or malformed input raises, for the caller to map.
 
 ## Tools vs resources
 

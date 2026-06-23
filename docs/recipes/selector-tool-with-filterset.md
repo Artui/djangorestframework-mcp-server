@@ -13,7 +13,7 @@ post-fetch knobs.
 ```text
 arguments → validate(merged inputSchema)
           → run_selector
-          → FilterSet(data=…).qs    (if filter_set)
+          → FilterSet(data=…).qs    (if spec.filter_set)
           → qs.order_by(…)          (if ordering_fields)
           → paginate                (if paginate=True)
           → output_serializer(many=True)
@@ -25,15 +25,15 @@ filter/order/paginate behaves like a plain RPC read.
 
 ## Install the optional extra
 
-`filter_set=` requires `django-filter`:
+`spec.filter_set` requires `django-filter`:
 
 ```bash
 pip install "djangorestframework-mcp-server[filter]"
 ```
 
 Without it, importing `rest_framework_mcp` still works — the
-`ImportError` only fires when you actually pass `filter_set=` to a
-binding.
+`ImportError` only fires when a selector spec actually carries a
+`filter_set`.
 
 ## Define the pieces
 
@@ -119,21 +119,32 @@ server.register_selector_tool(
         kind=SelectorKind.LIST,
         selector=list_invoices,
         output_serializer=InvoiceOutputSerializer,
+        filter_set=InvoiceFilterSet,
     ),
     description="List invoices, optionally filtered / ordered / paginated.",
-    filter_set=InvoiceFilterSet,
     ordering_fields=["created_at", "amount_cents"],
     paginate=True,
 )
 ```
 
-The decorator form is symmetric with `@server.service_tool`:
+`filter_set` lives on the `SelectorSpec` (since
+`djangorestframework-services` 0.18), so the same declaration drives the
+HTTP transport and MCP — declare the filterable shape once. The
+MCP-only pipeline mechanics, `ordering_fields` and `paginate`, stay on
+the registration call.
+
+The decorator form is symmetric with `@server.service_tool`. It
+auto-builds the `SelectorSpec` from `kind` + the wrapped function, so it
+covers `ordering_fields` / `paginate` but **not** `filter_set` (a
+`FilterSet` belongs on the spec). For a filtered tool, use the explicit
+`register_selector_tool` form above, or hand the decorator a ready
+`spec=` that carries the `filter_set`:
 
 ```python
 @server.selector_tool(
     name="invoices.list",
+    kind=SelectorKind.LIST,
     output_serializer=InvoiceOutputSerializer,
-    filter_set=InvoiceFilterSet,
     ordering_fields=["created_at", "amount_cents"],
     paginate=True,
 )
@@ -214,7 +225,7 @@ the list could outgrow a single tool-call response.
 
 ## Combining with `input_serializer`
 
-`filter_set=` only describes the filter shape. If your tool also needs
+`spec.filter_set` only describes the filter shape. If your tool also needs
 non-filter arguments, declare them through `input_serializer=` — the
 two schemas merge in `inputSchema` and the validated payload reaches
 the selector via the kwargs pool.
@@ -230,9 +241,9 @@ server.register_selector_tool(
         kind=SelectorKind.LIST,
         selector=list_invoices,
         output_serializer=InvoiceOutputSerializer,
+        filter_set=InvoiceFilterSet,
     ),
     input_serializer=InvoiceListInput,
-    filter_set=InvoiceFilterSet,
     ordering_fields=["created_at"],
     paginate=True,
 )

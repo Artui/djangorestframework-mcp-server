@@ -7,6 +7,117 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.8.0] — 2026-06-23
+
+### Added
+
+- **Service & selector tool dispatch now routes through drf-services'
+  `dispatch_spec`** (pins `djangorestframework-services` 0.20). The wire handlers
+  (`handle_tools_call` / `handle_tools_call_async`) and the selector pipeline
+  hand off the spec-execution core — instance resolution, `input_serializer`
+  validation, the kwarg pool (per the binding's `argument_binding` /
+  `unknown_arguments`), the service / selector run, queryset shaping +
+  `filter_set`, and the output-selector re-fetch — to the neutral core, keeping
+  only the transport shell (MCP permissions / rate limits, ordering, pagination,
+  output format, `structuredContent`). Two capabilities come for free by routing
+  through the path that already composes them:
+  - **bulk mutations over MCP** — `spec.many` (list payload), a
+    `collection_selector_spec` target, and list-shaped output;
+  - **object-level permissions over MCP** — `spec.permission_classes` now run via
+    the `on_target_resolved=enforce_permissions` hook, so a `has_object_permission`
+    rule denies over MCP (previously only `has_permission` was checked).
+
+  The reproduced dispatch code is deleted: the local kwarg-pool builder
+  (`build_call_pool`), the input-validation/instance-resolution helpers, and the
+  output-selector re-fetch.
+- **`MCPServer.call_tool(name, arguments, *, user, request=None)`** — a blessed,
+  transport-neutral way to invoke a spec-backed tool off the HTTP / JSON-RPC
+  path, returning the same `ToolResult` the wire handlers build. It is built on
+  the sister repo's `dispatch_spec` / `render_spec_output` / `enforce_permissions`,
+  so the spec-execution core — instance resolution, input validation, the service
+  / selector run, the output-selector re-fetch, queryset shaping incl.
+  `filter_set`, and the retrieve nullability contract — is shared rather than
+  re-implemented. An in-process consumer (a bridge, a Pydantic-AI toolset, a
+  management command) calls this instead of reaching into handler internals. It
+  honours the binding's `argument_binding` / `unknown_arguments` policies and the
+  spec's `permission_classes` (object-level checks included, via the
+  `on_target_resolved=enforce_permissions` hook); the read-shaped transport extras
+  (pagination, ordering, a selector binding's MCP-only `input_serializer`) and the
+  transport-level MCP permissions / rate limits stay with the wire handlers. Chain
+  tools are unsupported (they orchestrate several specs).
+- **Tools auto-advertise MCP `ToolAnnotations` hints.** Every tool now
+  carries the standard hints derived from its mutation profile: selector
+  tools → `readOnlyHint: true`; service tools → `readOnlyHint: false` +
+  `destructiveHint: true`; chain tools are read-only only when every step
+  is a selector. `destructiveHint` / `idempotentHint` are emitted only for
+  non-read tools (per the spec). Hints passed at registration via
+  `annotations=` override the derived defaults (e.g.
+  `annotations={"destructiveHint": False, "idempotentHint": True}`). The
+  bundle lands on `binding.annotations` and the `tools/list` payload, so a
+  client can gate destructive tools without a hand-set flag.
+
+### Changed
+
+- **`ArgumentBinding` is re-exported from drf-services, with renamed members
+  (breaking).** `dispatch_spec` owns the argument-binding policy, so MCP
+  consumes its enum rather than a parallel copy. The members are renamed to the
+  neutral-core names — `DATA_ONLY` → `BUNDLE`, `MERGE` → `SPREAD_AUTHOR_WINS`,
+  `REPLACE` → `SPREAD_CALLER_WINS` (and `AUTO` is now available). Update
+  `register_*_tool(argument_binding=...)` call sites accordingly. Defaults are
+  unchanged in effect (service tools `BUNDLE`, selector tools
+  `SPREAD_AUTHOR_WINS`); the import path (`rest_framework_mcp.constants`) and
+  `UnknownArguments` (`REJECT` / `PASSTHROUGH` / `IGNORE`) are unchanged.
+- **Selector tools adopt drf-services' selector contract (two visible
+  changes).** Routing selectors through `dispatch_spec` means: (1) validated
+  args **spread** to the selector's declared parameters (coerced via the
+  binding's `input_serializer`) rather than arriving as one `data` bundle —
+  selectors are reads; a selector should declare its params (`def list(*,
+  project_id, ...)`), not `def list(*, data)`. (2) A selector configured with
+  queryset shaping / `filter_set` must **return a `QuerySet`**; a non-queryset
+  return now raises `ImproperlyConfigured` (a loud developer-facing config
+  error) instead of silently skipping the shaping.
+- **JSON-Schema generation now delegates to drf-services.** MCP's
+  `inputSchema` / `outputSchema` generation — serializer / dataclass / FilterSet
+  → JSON Schema, including drf-spectacular `@extend_schema_field` /
+  `@extend_schema_serializer` overrides and the LIST pagination envelope — now
+  routes through the sister repo's `serializer_to_json_schema` /
+  `output_to_json_schema` / `filterset_to_json_schema` (drf-services 0.19)
+  instead of MCP-local copies. The emitted schemas are unchanged; the duplicated
+  converters (`schema/utils.py`, `schema/spectacular_overrides.py`, and the
+  `schema/filterset_schema.py` introspection) are deleted. MCP keeps the
+  wrappers that stamp its transport-specific concerns (`additionalProperties`
+  per `unknown_arguments`, the `ordering` enum, and `page` / `limit`).
+- **Retrieve selectors now shape + filter before `.first()`.** A
+  `kind=RETRIEVE` selector tool now applies queryset shaping
+  (`select_related` … `extend_queryset`) and `spec.filter_set` to its
+  queryset before materializing the single instance — so a "stats from a
+  filtered set" retrieve works over MCP, matching the sister repo's
+  `dispatch_spec`. `filter_set` on a retrieve spec is no longer rejected at
+  registration (ordering / pagination remain collection-only). Internally,
+  the selector dispatcher now delegates shaping + filtering to
+  drf-services' blessed `apply_queryset_shaping` leaf instead of
+  re-implementing it (the local `_apply_filter_set` / `_apply_spec_shaping`
+  helpers are gone); non-queryset selector returns still pass through
+  unfiltered.
+- **Selector filtering is declared on the spec.** A selector tool now
+  reads its `FilterSet` from `SelectorSpec.filter_set`
+  (`djangorestframework-services` 0.18+) rather than a separate
+  `filter_set=` argument at registration. The one declaration drives both
+  the HTTP transport and MCP, so a project states its filterable shape
+  once instead of re-passing it per transport. `ordering_fields` /
+  `paginate` stay on the registration call — they are MCP pipeline
+  mechanics with no spec analogue. Schema generation and dispatch are
+  unchanged; `binding.filter_set` now delegates to the spec.
+- Dependency range bumped to `djangorestframework-services>=0.20,<0.21`.
+
+### Removed
+
+- **`filter_set=` is no longer accepted** by `register_selector_tool`,
+  the `@selector_tool` decorator, `ToolDefinition.selector`, or
+  `SelectorDefaults`. Declare it on the spec instead —
+  `SelectorSpec(kind=…, selector=…, filter_set=MyFilterSet)`. Pre-1.0
+  hard cut, no deprecation shim (the consumer set is tiny).
+
 ## [0.7.1] — 2026-06-10
 
 ### Changed
@@ -905,7 +1016,8 @@ Pinned to `djangorestframework-services==0.6.0`.
 - 100% line + branch coverage enforced by pytest (**451 tests** at
   release).
 
-[Unreleased]: https://github.com/Artui/djangorestframework-mcp-server/compare/v0.7.1...HEAD
+[Unreleased]: https://github.com/Artui/djangorestframework-mcp-server/compare/v0.8.0...HEAD
+[0.8.0]: https://github.com/Artui/djangorestframework-mcp-server/compare/v0.7.1...v0.8.0
 [0.7.1]: https://github.com/Artui/djangorestframework-mcp-server/compare/v0.7.0...v0.7.1
 [0.7.0]: https://github.com/Artui/djangorestframework-mcp-server/compare/v0.6.2...v0.7.0
 [0.6.2]: https://github.com/Artui/djangorestframework-mcp-server/compare/v0.6.1...v0.6.2

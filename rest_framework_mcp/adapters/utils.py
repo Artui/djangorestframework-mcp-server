@@ -1,11 +1,16 @@
-"""Adapter-layer helpers shared by the service / selector adapters.
+"""Adapter-layer helpers shared by the service / selector / chain adapters.
 
-The single piece of shared logic right now is the registration-time
-check that an ``input_serializer``'s declared fields actually map to
-the dispatched callable's parameter list. The check is intentionally
-ran at adapter time — *before* the binding lands in a registry — so
-configuration mistakes surface during application startup rather than
-the first time a client calls the tool.
+Two pieces of shared logic live here:
+
+- :func:`validate_input_serializer_against_callable` — the
+  registration-time check that an ``input_serializer``'s declared fields
+  actually map to the dispatched callable's parameter list. Run at
+  adapter time — *before* the binding lands in a registry — so
+  configuration mistakes surface during application startup rather than
+  the first time a client calls the tool.
+- :func:`merge_tool_annotations` — auto-derives the MCP ``ToolAnnotations``
+  hint bundle from a tool's mutation profile (read vs. write), with any
+  explicitly-registered hints taking precedence.
 """
 
 from __future__ import annotations
@@ -83,7 +88,7 @@ def validate_input_serializer_against_callable(
         # raising on something the framework can't introspect.
         return
 
-    if argument_binding is ArgumentBinding.DATA_ONLY:
+    if argument_binding is ArgumentBinding.BUNDLE:
         if input_serializer is not None:
             _validate_data_only(label, sig)
     else:
@@ -226,7 +231,7 @@ def _validate_required_params_have_sources(
     if input_serializer is not None:
         sources.add("serializer")
     sources.update(spec_kwargs_provides)
-    if argument_binding is not ArgumentBinding.DATA_ONLY:
+    if argument_binding is not ArgumentBinding.BUNDLE:
         if input_serializer is not None:
             sources.update(_serializer_field_names(input_serializer))
         else:
@@ -254,6 +259,36 @@ def _validate_required_params_have_sources(
         )
 
 
+def merge_tool_annotations(explicit: dict[str, Any] | None, *, read_only: bool) -> dict[str, Any]:
+    """Auto-derive a tool's MCP ``ToolAnnotations``, explicit hints winning.
+
+    drf-mcp knows each tool's mutation profile from its kind, so it can
+    stamp the standard MCP hints instead of leaving downstream consumers
+    to hand-set a non-standard flag:
+
+    - ``read_only=True`` (selector tools, and chains whose every step is a
+      selector) → ``{"readOnlyHint": True}``. ``destructiveHint`` /
+      ``idempotentHint`` are deliberately *not* emitted — the MCP spec
+      defines them as meaningful only when ``readOnlyHint`` is false.
+    - ``read_only=False`` (service tools, and chains with any service
+      step) → ``{"readOnlyHint": False, "destructiveHint": True}``. A
+      mutation is treated as destructive by default; ``idempotentHint`` is
+      left unset because ``ServiceSpec`` carries no idempotency signal.
+
+    Any hint supplied at registration via ``annotations=`` overrides the
+    derived default — a non-destructive mutation passes
+    ``annotations={"destructiveHint": False}``, an idempotent one adds
+    ``{"idempotentHint": True}``, and either kind can set ``title`` /
+    ``openWorldHint``. The result is stored on the binding so it is the
+    single source of truth for both ``tools/list`` and any downstream
+    consumer that reads ``binding.annotations``.
+    """
+    derived: dict[str, Any] = (
+        {"readOnlyHint": True} if read_only else {"readOnlyHint": False, "destructiveHint": True}
+    )
+    return {**derived, **(explicit or {})}
+
+
 def _accepts_var_keyword(sig: inspect.Signature) -> bool:
     return any(p.kind == inspect.Parameter.VAR_KEYWORD for p in sig.parameters.values())
 
@@ -277,4 +312,4 @@ def _serializer_field_names(input_serializer: type) -> Iterable[str]:
     return ()
 
 
-__all__ = ["validate_input_serializer_against_callable"]
+__all__ = ["merge_tool_annotations", "validate_input_serializer_against_callable"]

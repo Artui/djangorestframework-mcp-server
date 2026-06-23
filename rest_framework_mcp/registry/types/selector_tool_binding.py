@@ -33,11 +33,13 @@ class SelectorToolBinding(Generic[ResultT, ExtraT]):
                   → output_serializer(many=True)
                   → ToolResult
 
-    ``kind=RETRIEVE`` skips the post-fetch pipeline entirely — the
-    selector's single-instance return goes straight to
-    ``output_serializer(many=False)``. Combining ``RETRIEVE`` with
-    ``filter_set`` / ``ordering_fields`` / ``paginate`` is rejected at
-    construction (those knobs only make sense on a collection).
+    ``kind=RETRIEVE`` skips ordering / pagination but still applies
+    queryset shaping + ``spec.filter_set`` before materializing the
+    single instance via ``.first()`` (so a "stats from a filtered set"
+    retrieve works, matching the sister repo's ``dispatch_spec``), then
+    renders ``output_serializer(many=False)``. Combining ``RETRIEVE``
+    with ``ordering_fields`` / ``paginate`` is rejected at construction
+    (those knobs only make sense on a collection).
 
     Selectors return raw, unscoped data (a queryset for ``LIST``, a
     single instance for ``RETRIEVE``) — the tool layer owns shape
@@ -83,11 +85,9 @@ class SelectorToolBinding(Generic[ResultT, ExtraT]):
     # ``include_structured_content=False`` is rejected at construction time.
     include_output_schema: bool | None = None
     # ----- read-shaped pipeline knobs -----
-    # ``filter_set`` is a django-filter ``FilterSet`` class (or ``None`` to
-    # skip filtering). Typed as ``Any`` because ``django-filter`` is an
-    # optional dep behind the ``[filter]`` extra — narrowing the type would
-    # force a hard import in this module.
-    filter_set: Any | None = None
+    # ``filter_set`` is no longer stored here — it is sourced from
+    # ``spec.filter_set`` via the property below (the spec is the single
+    # source of truth, exactly like ``kind`` / ``selector``).
     # Field names allowed in the generated ``ordering`` enum. Each name is
     # exposed as both ``"<name>"`` (asc) and ``"-<name>"`` (desc) — django's
     # convention. Empty tuple disables ordering.
@@ -102,7 +102,7 @@ class SelectorToolBinding(Generic[ResultT, ExtraT]):
     # query parameters as individual function arguments
     # (``def list_drafts(*, project_id, page=1, limit=10)``), so the
     # MCP layer spreads the validated/raw arguments across the pool.
-    argument_binding: ArgumentBinding = ArgumentBinding.MERGE
+    argument_binding: ArgumentBinding = ArgumentBinding.SPREAD_AUTHOR_WINS
     # How unknown ``arguments`` keys are handled relative to the binding's
     # merged ``inputSchema`` (input_serializer fields + filter_set
     # properties + ordering + pagination). ``REJECT`` (default) rejects
@@ -122,9 +122,10 @@ class SelectorToolBinding(Generic[ResultT, ExtraT]):
                 "conforming structuredContent. Set one of them differently."
             )
         if self.kind is SelectorKind.RETRIEVE:
+            # ``filter_set`` is *allowed* on RETRIEVE — the dispatcher shapes +
+            # filters the queryset before ``.first()`` (sister-repo parity).
+            # Ordering / pagination still only make sense on a collection.
             list_only: list[str] = []
-            if self.filter_set is not None:
-                list_only.append("filter_set")
             if self.ordering_fields:
                 list_only.append("ordering_fields")
             if self.paginate:
@@ -134,8 +135,8 @@ class SelectorToolBinding(Generic[ResultT, ExtraT]):
                     f"Selector tool {self.name!r}: spec.kind=RETRIEVE is incompatible "
                     f"with list-shaped pipeline knob(s) {sorted(list_only)!r}. A "
                     "retrieve selector returns a single instance — there is no "
-                    "queryset to filter, order, or paginate. Either drop the "
-                    "knob(s) or set the spec's kind to LIST."
+                    "collection to order or paginate. Either drop the knob(s) or "
+                    "set the spec's kind to LIST."
                 )
 
     @property
@@ -155,6 +156,24 @@ class SelectorToolBinding(Generic[ResultT, ExtraT]):
         if self.spec.selector is None:  # pragma: no cover - guarded at registration
             raise ValueError(f"SelectorToolBinding {self.name!r} has no selector")
         return self.spec.selector
+
+    @property
+    def filter_set(self) -> Any | None:
+        """Transport-neutral filtering, sourced from the spec.
+
+        Like :attr:`kind` and :attr:`selector`, this delegates to the
+        :class:`SelectorSpec` rather than storing a copy — the spec is
+        the single source of truth (``SelectorSpec.filter_set``,
+        ``djangorestframework-services`` 0.18+). The MCP read pipeline
+        and ``inputSchema`` generation read ``binding.filter_set``
+        unchanged, so a project declares its filterable shape once, on
+        the spec, and both the HTTP and MCP transports honour it.
+
+        Typed ``Any`` because ``django-filter`` is an optional dep behind
+        the ``[filter]`` extra — narrowing the type would force a hard
+        import here.
+        """
+        return self.spec.filter_set
 
 
 __all__ = ["SelectorToolBinding"]

@@ -17,6 +17,7 @@ from collections.abc import Mapping
 from typing import Any
 
 import pytest
+from django.core.exceptions import ImproperlyConfigured
 from django.db import models
 from django.http import HttpRequest
 from rest_framework import serializers as drf_serializers
@@ -194,8 +195,15 @@ def test_selector_spec_select_related_lookups_recorded() -> None:
 
 
 @pytest.mark.django_db
-def test_selector_spec_shaping_skipped_for_list_returns() -> None:
-    """Non-queryset returns pass through shaping unchanged."""
+def test_selector_spec_shaping_requires_a_queryset() -> None:
+    """Shaping fields on a selector that returns a non-queryset fail loudly.
+
+    Routing through ``dispatch_spec`` adopts drf-services' strict contract:
+    ``select_related`` … ``extend_queryset`` / ``filter_set`` require a
+    ``QuerySet``. A list-returning selector with shaping configured is a
+    misconfiguration and raises ``ImproperlyConfigured`` (a developer error,
+    surfaced loudly) rather than silently skipping the shaping.
+    """
 
     def _return_list() -> list[dict[str, str]]:
         return [{"id": 1, "number": "X"}]
@@ -206,15 +214,13 @@ def test_selector_spec_shaping_skipped_for_list_returns() -> None:
         spec=SelectorSpec(
             kind=SelectorKind.LIST,
             selector=_return_list,
-            # Shaping fields declared but inapplicable; must not raise.
             select_related=("ignored",),
             annotations={"ignored": models.F("amount_cents")},
             extend_queryset=lambda qs, view, req: qs,
         ),
     )
-    out = handle_tools_call({"name": "static.list", "arguments": {}}, _ctx(server))
-    assert isinstance(out, dict)
-    assert out["structuredContent"] == [{"id": 1, "number": "X"}]
+    with pytest.raises(ImproperlyConfigured):
+        handle_tools_call({"name": "static.list", "arguments": {}}, _ctx(server))
 
 
 # ---------- Selector-tool output_serializer_context ----------

@@ -108,8 +108,8 @@ Optional extras degrade gracefully:
   `__init__` if `redis` isn't installed.
 - The OTel tracing helper yields a no-op span when `opentelemetry-api` isn't
   importable, so handlers stay branch-free.
-- `filter_set=` on a selector tool raises a clear `ImportError` only if you
-  declare it without `django-filter` installed.
+- `spec.filter_set` on a selector tool raises a clear `ImportError` only if the
+  spec declares it without `django-filter` installed.
 
 ## Where to next
 

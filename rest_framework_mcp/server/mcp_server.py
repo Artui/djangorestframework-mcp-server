@@ -18,7 +18,9 @@ from rest_framework_mcp.auth.protected_resource_metadata import ProtectedResourc
 from rest_framework_mcp.auth.types.auth_backend import MCPAuthBackend
 from rest_framework_mcp.conf import get_setting
 from rest_framework_mcp.constants import ArgumentBinding, OutputFormat, UnknownArguments
+from rest_framework_mcp.handlers.call_spec_tool import call_spec_tool
 from rest_framework_mcp.protocol.types.prompt_argument import PromptArgument
+from rest_framework_mcp.protocol.types.tool_result import ToolResult
 from rest_framework_mcp.registry.prompt_registry import PromptRegistry
 from rest_framework_mcp.registry.resource_registry import ResourceRegistry
 from rest_framework_mcp.registry.tool_registry import ToolRegistry
@@ -127,7 +129,7 @@ class MCPServer:
         annotations: dict[str, Any] | None = None,
         include_structured_content: bool | None = None,
         include_output_schema: bool | None = None,
-        argument_binding: ArgumentBinding = ArgumentBinding.DATA_ONLY,
+        argument_binding: ArgumentBinding = ArgumentBinding.BUNDLE,
         unknown_arguments: UnknownArguments = UnknownArguments.REJECT,
         always_listed: bool = False,
         spec_kwargs_provides: tuple[str, ...] = (),
@@ -183,12 +185,11 @@ class MCPServer:
         permissions: list[Any] | None = None,
         rate_limits: list[Any] | None = None,
         annotations: dict[str, Any] | None = None,
-        filter_set: Any | None = None,
         ordering_fields: list[str] | tuple[str, ...] | None = None,
         paginate: bool = False,
         include_structured_content: bool | None = None,
         include_output_schema: bool | None = None,
-        argument_binding: ArgumentBinding = ArgumentBinding.MERGE,
+        argument_binding: ArgumentBinding = ArgumentBinding.SPREAD_AUTHOR_WINS,
         unknown_arguments: UnknownArguments = UnknownArguments.REJECT,
         always_listed: bool = False,
         spec_kwargs_provides: tuple[str, ...] = (),
@@ -203,25 +204,30 @@ class MCPServer:
 
             arguments → validate(merged inputSchema)
                       → run_selector
-                      → FilterSet(data=...).qs    (if filter_set set)
+                      → FilterSet(data=...).qs    (if spec.filter_set set)
                       → order_by(...)             (if ordering_fields set)
                       → paginate                  (if paginate=True)
                       → output_serializer(many=True)
                       → ToolResult
 
-        Each pipeline knob is optional. A selector tool with none of
-        ``filter_set`` / ``ordering_fields`` / ``paginate`` set behaves
-        like a plain RPC read against the selector — same effective
-        contract as a service tool minus the side effects.
+        Each pipeline knob is optional. A selector tool with no
+        ``spec.filter_set`` / ``ordering_fields`` / ``paginate`` set
+        behaves like a plain RPC read against the selector — same
+        effective contract as a service tool minus the side effects.
 
-        ``filter_set`` requires the ``[filter]`` extra
-        (``django-filter``). The constructor surfaces a clear
-        ``ImportError`` if you set it without the package installed.
+        Filtering is declared on the spec, not here: set
+        ``SelectorSpec.filter_set`` (``djangorestframework-services``
+        0.18+) and both the HTTP and MCP transports honour it. It
+        requires the ``[filter]`` extra (``django-filter``); schema
+        generation surfaces a clear ``ImportError`` if a spec carries a
+        ``filter_set`` without the package installed. ``ordering_fields``
+        / ``paginate`` stay here — they are MCP pipeline mechanics with
+        no spec analogue.
 
         The selector's shape (``LIST`` vs ``RETRIEVE``) is read from
         ``spec.kind`` — a required field on ``SelectorSpec`` in
         ``djangorestframework-services`` 0.13+. ``LIST`` runs the full
-        post-fetch pipeline (``filter_set`` / ``ordering_fields`` /
+        post-fetch pipeline (``spec.filter_set`` / ``ordering_fields`` /
         ``paginate``) and renders with ``many=True``; ``RETRIEVE``
         rejects those pipeline knobs at registration and renders the
         result with ``many=False``.
@@ -238,7 +244,6 @@ class MCPServer:
             permissions=tuple(permissions or ()),
             rate_limits=tuple(rate_limits or ()),
             annotations=annotations,
-            filter_set=filter_set,
             ordering_fields=tuple(ordering_fields or ()),
             paginate=paginate,
             include_structured_content=include_structured_content,
@@ -326,6 +331,45 @@ class MCPServer:
         check_tool_permissions_declared(binding.name, binding.permissions)
         self._tools.register(binding)
         return binding
+
+    # ----- transport-neutral invocation -----
+
+    def call_tool(
+        self,
+        name: str,
+        arguments: dict[str, Any] | None = None,
+        *,
+        user: Any,
+        request: Any = None,
+    ) -> ToolResult:
+        """Invoke a registered spec-backed tool off the HTTP / JSON-RPC path.
+
+        The blessed, transport-neutral entry point: hand a tool ``name`` and a
+        flat ``arguments`` dict (the role ``request.data`` / query params play on
+        HTTP) plus the acting ``user``, and get back the same :class:`ToolResult`
+        the wire handlers build — without going through JSON-RPC. An in-process
+        consumer (the django-ag-ui bridge, a Pydantic-AI toolset, a management
+        command) calls this instead of re-implementing dispatch.
+
+        Built on the sister repo's ``dispatch_spec`` / ``render_spec_output`` /
+        ``enforce_permissions``, so the spec core (instance resolution, input
+        validation, the service / selector run, the output-selector re-fetch,
+        queryset shaping incl. ``filter_set``, and the retrieve nullability
+        contract) is shared with every other transport rather than reproduced.
+
+        This is the spec core only: the HTTP transport's pagination, ordering,
+        ``unknown_arguments`` policy, ``argument_binding`` modes, and a selector
+        binding's MCP-only ``input_serializer`` are not applied here, and the
+        spec's ``permission_classes`` are enforced (not the transport-level MCP
+        permissions / rate limits). Chain tools are unsupported — they orchestrate
+        several specs and raise :class:`TypeError`.
+
+        Raises :class:`KeyError` when no tool is registered under ``name``.
+        """
+        binding = self._tools.get(name)
+        if binding is None:
+            raise KeyError(f"No tool registered under {name!r}.")
+        return call_spec_tool(binding, arguments or {}, user=user, request=request)
 
     def register_resource(
         self,
@@ -431,7 +475,7 @@ class MCPServer:
         annotations: dict[str, Any] | None = None,
         include_structured_content: bool | None = None,
         include_output_schema: bool | None = None,
-        argument_binding: ArgumentBinding = ArgumentBinding.DATA_ONLY,
+        argument_binding: ArgumentBinding = ArgumentBinding.BUNDLE,
         unknown_arguments: UnknownArguments = UnknownArguments.REJECT,
         always_listed: bool = False,
         spec_kwargs_provides: tuple[str, ...] = (),
@@ -497,12 +541,11 @@ class MCPServer:
         permissions: list[Any] | None = None,
         rate_limits: list[Any] | None = None,
         annotations: dict[str, Any] | None = None,
-        filter_set: Any | None = None,
         ordering_fields: list[str] | tuple[str, ...] | None = None,
         paginate: bool = False,
         include_structured_content: bool | None = None,
         include_output_schema: bool | None = None,
-        argument_binding: ArgumentBinding = ArgumentBinding.MERGE,
+        argument_binding: ArgumentBinding = ArgumentBinding.SPREAD_AUTHOR_WINS,
         unknown_arguments: UnknownArguments = UnknownArguments.REJECT,
         always_listed: bool = False,
         spec_kwargs_provides: tuple[str, ...] = (),
@@ -548,7 +591,6 @@ class MCPServer:
                 permissions=permissions,
                 rate_limits=rate_limits,
                 annotations=annotations,
-                filter_set=filter_set,
                 ordering_fields=ordering_fields,
                 paginate=paginate,
                 include_structured_content=include_structured_content,

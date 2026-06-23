@@ -48,14 +48,14 @@ def test_service_classmethod_forwards_all_kwargs() -> None:
         title="Title",
         output_format=OutputFormat.TOON,
         include_structured_content=True,
-        argument_binding=ArgumentBinding.MERGE,
+        argument_binding=ArgumentBinding.SPREAD_AUTHOR_WINS,
         unknown_arguments=UnknownArguments.PASSTHROUGH,
     )
     assert d.description == "desc"
     assert d.title == "Title"
     assert d.output_format is OutputFormat.TOON
     assert d.include_structured_content is True
-    assert d.argument_binding is ArgumentBinding.MERGE
+    assert d.argument_binding is ArgumentBinding.SPREAD_AUTHOR_WINS
     assert d.unknown_arguments is UnknownArguments.PASSTHROUGH
 
 
@@ -84,12 +84,12 @@ def test_selector_classmethod_forwards_all_selector_kwargs() -> None:
         input_serializer=str,
         ordering_fields=("a",),
         paginate=True,
-        argument_binding=ArgumentBinding.REPLACE,
+        argument_binding=ArgumentBinding.SPREAD_CALLER_WINS,
     )
     assert d.input_serializer is str
     assert d.ordering_fields == ("a",)
     assert d.paginate is True
-    assert d.argument_binding is ArgumentBinding.REPLACE
+    assert d.argument_binding is ArgumentBinding.SPREAD_CALLER_WINS
 
 
 def test_default_optional_fields_are_none() -> None:

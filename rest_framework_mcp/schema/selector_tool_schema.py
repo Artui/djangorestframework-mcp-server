@@ -2,8 +2,9 @@ from __future__ import annotations
 
 from typing import Any
 
+from rest_framework_services import filterset_to_json_schema
+
 from rest_framework_mcp.registry.types.selector_tool_binding import SelectorToolBinding
-from rest_framework_mcp.schema.filterset_schema import filterset_to_schema_properties
 from rest_framework_mcp.schema.input_schema import build_input_schema
 
 
@@ -32,7 +33,7 @@ def build_selector_tool_input_schema(binding: SelectorToolBinding) -> dict[str, 
     required: list[str] = list(base.get("required", []))
 
     if binding.filter_set is not None:
-        for name, schema in filterset_to_schema_properties(binding.filter_set).items():
+        for name, schema in filterset_to_json_schema(binding.filter_set).items():
             properties[name] = schema  # filter args are always optional
 
     if binding.ordering_fields:

@@ -18,10 +18,11 @@ class SelectorDefaults:
       :meth:`MCPServer.register_selector_tool` default".
     - Per-definition kwargs always win on conflict.
 
-    Selector-only knobs (``input_serializer``, ``filter_set``,
-    ``ordering_fields``, ``paginate``) live here too so a project that
-    wants every selector tool to paginate by default can express that
-    in one place.
+    Selector-only knobs (``input_serializer``, ``ordering_fields``,
+    ``paginate``) live here too so a project that wants every selector
+    tool to paginate by default can express that in one place. Filtering
+    is not among them — ``filter_set`` is declared on each
+    ``SelectorSpec``, not as a registration default.
     """
 
     description: str | None = None
@@ -31,7 +32,6 @@ class SelectorDefaults:
     permissions: Sequence[Any] | None = None
     rate_limits: Sequence[Any] | None = None
     annotations: dict[str, Any] | None = None
-    filter_set: Any | None = None
     ordering_fields: Sequence[str] | None = None
     paginate: bool | None = None
     include_structured_content: bool | None = None

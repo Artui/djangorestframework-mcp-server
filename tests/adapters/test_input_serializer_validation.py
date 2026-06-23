@@ -40,7 +40,7 @@ def test_skips_when_serializer_is_none() -> None:
         label="x",
         input_serializer=None,
         callable_=lambda **kw: None,
-        argument_binding=ArgumentBinding.MERGE,
+        argument_binding=ArgumentBinding.SPREAD_AUTHOR_WINS,
     )
 
 
@@ -50,7 +50,7 @@ def test_skips_when_callable_is_none() -> None:
         label="x",
         input_serializer=_TwoField,
         callable_=None,
-        argument_binding=ArgumentBinding.MERGE,
+        argument_binding=ArgumentBinding.SPREAD_AUTHOR_WINS,
     )
 
 
@@ -61,7 +61,7 @@ def test_merge_passes_when_callable_declares_every_field_as_param() -> None:
         label="x",
         input_serializer=_TwoField,
         callable_=fn,
-        argument_binding=ArgumentBinding.MERGE,
+        argument_binding=ArgumentBinding.SPREAD_AUTHOR_WINS,
     )
 
 
@@ -72,7 +72,7 @@ def test_merge_passes_when_callable_accepts_var_keyword() -> None:
         label="x",
         input_serializer=_TwoField,
         callable_=fn,
-        argument_binding=ArgumentBinding.MERGE,
+        argument_binding=ArgumentBinding.SPREAD_AUTHOR_WINS,
     )
 
 
@@ -85,7 +85,7 @@ def test_merge_passes_when_callable_declares_data_bundle_param() -> None:
         label="x",
         input_serializer=_TwoField,
         callable_=fn,
-        argument_binding=ArgumentBinding.MERGE,
+        argument_binding=ArgumentBinding.SPREAD_AUTHOR_WINS,
     )
 
 
@@ -97,7 +97,7 @@ def test_merge_raises_when_fields_missing_from_callable() -> None:
             label="my tool",
             input_serializer=_TwoField,
             callable_=fn,
-            argument_binding=ArgumentBinding.MERGE,
+            argument_binding=ArgumentBinding.SPREAD_AUTHOR_WINS,
         )
     msg = str(excinfo.value)
     assert "my tool" in msg
@@ -120,7 +120,7 @@ def test_merge_exempts_reserved_pool_seeds_and_post_fetch_keys() -> None:
         label="x",
         input_serializer=_ReservedNames,
         callable_=fn,
-        argument_binding=ArgumentBinding.MERGE,
+        argument_binding=ArgumentBinding.SPREAD_AUTHOR_WINS,
     )
 
 
@@ -131,7 +131,7 @@ def test_data_only_passes_when_callable_declares_data() -> None:
         label="x",
         input_serializer=_TwoField,
         callable_=fn,
-        argument_binding=ArgumentBinding.DATA_ONLY,
+        argument_binding=ArgumentBinding.BUNDLE,
     )
 
 
@@ -142,7 +142,7 @@ def test_data_only_passes_when_callable_accepts_var_keyword() -> None:
         label="x",
         input_serializer=_TwoField,
         callable_=fn,
-        argument_binding=ArgumentBinding.DATA_ONLY,
+        argument_binding=ArgumentBinding.BUNDLE,
     )
 
 
@@ -154,7 +154,7 @@ def test_data_only_raises_when_callable_lacks_data() -> None:
             label="x",
             input_serializer=_TwoField,
             callable_=fn,
-            argument_binding=ArgumentBinding.DATA_ONLY,
+            argument_binding=ArgumentBinding.BUNDLE,
         )
     assert "DATA_ONLY" in str(excinfo.value)
     assert "data" in str(excinfo.value)
@@ -177,7 +177,7 @@ def test_dataclass_serializer_field_names_extracted() -> None:
             label="x",
             input_serializer=_DCInput,
             callable_=fn,
-            argument_binding=ArgumentBinding.MERGE,
+            argument_binding=ArgumentBinding.SPREAD_AUTHOR_WINS,
         )
 
 
@@ -196,7 +196,7 @@ def test_non_serializer_non_dataclass_input_yields_no_violations() -> None:
         label="x",
         input_serializer=_NotASerializer,
         callable_=fn,
-        argument_binding=ArgumentBinding.MERGE,
+        argument_binding=ArgumentBinding.SPREAD_AUTHOR_WINS,
     )
 
 
@@ -221,7 +221,7 @@ def test_service_spec_to_tool_runs_the_check() -> None:
         service_spec_to_tool(
             name="t",
             spec=ServiceSpec(service=service, input_serializer=_TwoField, atomic=False),
-            argument_binding=ArgumentBinding.MERGE,
+            argument_binding=ArgumentBinding.SPREAD_AUTHOR_WINS,
         )
 
 
@@ -244,7 +244,7 @@ def test_required_param_must_appear_in_serializer() -> None:
             label="my tool",
             input_serializer=_OneField,
             callable_=fn,
-            argument_binding=ArgumentBinding.MERGE,
+            argument_binding=ArgumentBinding.SPREAD_AUTHOR_WINS,
         )
     msg = str(excinfo.value)
     assert "region" in msg
@@ -261,7 +261,7 @@ def test_required_param_satisfied_by_pool_seed() -> None:
         label="x",
         input_serializer=_OneField,
         callable_=fn,
-        argument_binding=ArgumentBinding.MERGE,
+        argument_binding=ArgumentBinding.SPREAD_AUTHOR_WINS,
     )
 
 
@@ -274,7 +274,7 @@ def test_defaulted_param_is_exempt() -> None:
         label="x",
         input_serializer=_OneField,
         callable_=fn,
-        argument_binding=ArgumentBinding.MERGE,
+        argument_binding=ArgumentBinding.SPREAD_AUTHOR_WINS,
     )
 
 
@@ -289,7 +289,7 @@ def test_spec_kwargs_provides_opts_in_to_provider_source() -> None:
         label="x",
         input_serializer=None,  # no serializer needed when provider supplies
         callable_=fn,
-        argument_binding=ArgumentBinding.MERGE,
+        argument_binding=ArgumentBinding.SPREAD_AUTHOR_WINS,
         spec_kwargs_provides=frozenset({"tenant_id"}),
     )
 
@@ -310,7 +310,7 @@ def test_data_only_does_not_count_serializer_fields_as_sources() -> None:
             label="x",
             input_serializer=_TwoField,
             callable_=fn,
-            argument_binding=ArgumentBinding.DATA_ONLY,
+            argument_binding=ArgumentBinding.BUNDLE,
         )
 
 
@@ -325,7 +325,7 @@ def test_trust_mode_skips_required_param_check_for_non_seed_params() -> None:
         label="x",
         input_serializer=None,
         callable_=fn,
-        argument_binding=ArgumentBinding.MERGE,
+        argument_binding=ArgumentBinding.SPREAD_AUTHOR_WINS,
     )
 
 

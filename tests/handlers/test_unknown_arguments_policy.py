@@ -11,6 +11,7 @@ shape is what end users see.
 
 from __future__ import annotations
 
+from dataclasses import dataclass
 from typing import Any
 
 import pytest
@@ -270,6 +271,32 @@ def test_passthrough_does_not_override_validated_field() -> None:
     # ``known`` reflects the serializer-coerced uppercase, not the raw value.
     assert out["structuredContent"]["known"] == "OK"
     assert out["structuredContent"]["extra"] == 1
+
+
+def test_selector_dataclass_input_serializer_passthrough() -> None:
+    """A selector's ``input_serializer`` may be a bare dataclass (auto-wrapped).
+
+    ``validated`` is then a dataclass instance, not a dict, so ``PASSTHROUGH``
+    has no dict to merge unknown keys onto — the extra reaches the selector via
+    the spread instead. Exercises the dataclass-wrap + non-dict passthrough
+    branches of the read-path validator.
+    """
+
+    @dataclass
+    class _DC:
+        known: str
+
+    server = _server()
+    server.register_selector_tool(
+        name="x",
+        spec=SelectorSpec(kind=SelectorKind.LIST, selector=_list),
+        input_serializer=_DC,
+        unknown_arguments=UnknownArguments.PASSTHROUGH,
+    )
+    out = handle_tools_call({"name": "x", "arguments": {"known": "ok", "extra": 1}}, _ctx(server))
+    assert not isinstance(out, JsonRpcError)
+    assert isinstance(out, dict)
+    assert out["structuredContent"] == [{"id": "1"}]
 
 
 @pytest.mark.parametrize("policy", [UnknownArguments.REJECT, UnknownArguments.PASSTHROUGH])

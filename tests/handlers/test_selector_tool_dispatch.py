@@ -111,8 +111,8 @@ def test_tools_list_emits_filter_args_in_input_schema() -> None:
             kind=SelectorKind.LIST,
             selector=_list_invoices,
             output_serializer=InvoiceOutputSerializer,
+            filter_set=InvoiceFilterSet,
         ),
-        filter_set=InvoiceFilterSet,
         ordering_fields=["amount_cents"],
         paginate=True,
     )
@@ -146,8 +146,8 @@ def test_filter_narrows_queryset() -> None:
             kind=SelectorKind.LIST,
             selector=_list_invoices,
             output_serializer=InvoiceOutputSerializer,
+            filter_set=InvoiceFilterSet,
         ),
-        filter_set=InvoiceFilterSet,
     )
 
     out = handle_tools_call({"name": "invoices.list", "arguments": {"sent": True}}, _ctx(server))
@@ -168,8 +168,8 @@ def test_filter_with_no_args_returns_everything() -> None:
             kind=SelectorKind.LIST,
             selector=_list_invoices,
             output_serializer=InvoiceOutputSerializer,
+            filter_set=InvoiceFilterSet,
         ),
-        filter_set=InvoiceFilterSet,
     )
 
     out = handle_tools_call({"name": "invoices.list", "arguments": {}}, _ctx(server))
@@ -179,7 +179,7 @@ def test_filter_with_no_args_returns_everything() -> None:
 
 @pytest.mark.django_db
 def test_no_filter_set_means_no_filtering() -> None:
-    """Selector tool without ``filter_set=`` returns the queryset verbatim."""
+    """Selector tool without ``spec.filter_set`` returns the queryset verbatim."""
     Invoice.objects.create(number="A", amount_cents=100, sent=True)
     Invoice.objects.create(number="B", amount_cents=200, sent=False)
 
@@ -197,6 +197,28 @@ def test_no_filter_set_means_no_filtering() -> None:
     out = handle_tools_call({"name": "invoices.list", "arguments": {"sent": True}}, _ctx(server))
     assert isinstance(out, dict)
     assert len(out["structuredContent"]) == 2
+
+
+@pytest.mark.django_db
+def test_retrieve_applies_filter_set_before_first() -> None:
+    """A RETRIEVE selector shapes + filters its queryset before ``.first()``."""
+    Invoice.objects.create(number="A", amount_cents=100, sent=True)
+    Invoice.objects.create(number="B", amount_cents=200, sent=False)
+
+    server = _server()
+    server.register_selector_tool(
+        name="invoices.get",
+        spec=SelectorSpec(
+            kind=SelectorKind.RETRIEVE,
+            selector=lambda **_: Invoice.objects.all(),
+            output_serializer=InvoiceOutputSerializer,
+            filter_set=InvoiceFilterSet,
+        ),
+    )
+    # Filtering to sent=False selects B, not the first row (A).
+    out = handle_tools_call({"name": "invoices.get", "arguments": {"sent": False}}, _ctx(server))
+    assert isinstance(out, dict)
+    assert out["structuredContent"]["number"] == "B"
 
 
 # ---------- Ordering ----------
@@ -427,8 +449,8 @@ def test_full_pipeline_filter_then_order_then_paginate() -> None:
             kind=SelectorKind.LIST,
             selector=_list_invoices,
             output_serializer=InvoiceOutputSerializer,
+            filter_set=InvoiceFilterSet,
         ),
-        filter_set=InvoiceFilterSet,
         ordering_fields=["amount_cents"],
         paginate=True,
     )
@@ -462,15 +484,15 @@ class _CustomArgs(drf_serializers.Serializer):
 
 @pytest.mark.django_db
 def test_selector_tool_with_input_serializer_validates_custom_args() -> None:
-    """Non-filter custom args go through ``input_serializer``."""
+    """Validated custom args spread to the selector's declared params (coerced)."""
     Invoice.objects.create(number="A", amount_cents=100)
 
     server = _server()
 
-    seen_data: dict[str, Any] = {}
+    seen: dict[str, Any] = {}
 
-    def selector(*, data: dict[str, Any]) -> Any:
-        seen_data.update(data)
+    def selector(*, expand: bool = False) -> Any:
+        seen["expand"] = expand
         return Invoice.objects.all()
 
     server.register_selector_tool(
@@ -483,7 +505,8 @@ def test_selector_tool_with_input_serializer_validates_custom_args() -> None:
 
     out = handle_tools_call({"name": "invoices.list", "arguments": {"expand": True}}, _ctx(server))
     assert isinstance(out, dict)
-    assert seen_data == {"expand": True}
+    # ``_CustomArgs`` coerces ``expand`` to a bool and it spreads to the selector.
+    assert seen == {"expand": True}
 
 
 @pytest.mark.django_db
@@ -519,14 +542,14 @@ def test_selector_returning_list_skips_queryset_pipeline() -> None:
 
     server.register_selector_tool(
         name="things.list",
+        # A list-returning selector declares no queryset shaping (shaping +
+        # filter_set require a QuerySet; see test_spec_shaping_and_context).
         spec=SelectorSpec(kind=SelectorKind.LIST, selector=selector),
-        # filter_set is set but won't apply because the result isn't a QS.
-        filter_set=InvoiceFilterSet,
     )
 
     out = handle_tools_call({"name": "things.list", "arguments": {}}, _ctx(server))
     assert isinstance(out, dict)
-    # No output_serializer → list passes through.
+    # No output_serializer → list passes through (ordering / pagination no-op).
     assert out["structuredContent"] == [{"number": "A"}, {"number": "B"}]
 
 

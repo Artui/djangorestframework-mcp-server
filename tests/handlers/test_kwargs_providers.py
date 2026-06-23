@@ -49,7 +49,7 @@ def test_service_spec_kwargs_provider_merged_into_pool() -> None:
     """The provider's return dict reaches the service callable as kwargs."""
     captured: dict[str, Any] = {}
 
-    def svc(*, data: dict, tenant_id: int) -> dict:
+    def svc(*, tenant_id: int) -> dict:
         captured["tenant_id"] = tenant_id
         return {"tenant_id": tenant_id}
 
@@ -79,7 +79,7 @@ def test_service_spec_kwargs_provider_merged_into_pool() -> None:
 def test_service_spec_kwargs_provider_receives_drf_request() -> None:
     seen: dict[str, Any] = {}
 
-    def svc(*, data: dict, label: str) -> dict:
+    def svc(*, label: str) -> dict:
         return {"label": label}
 
     def kwargs_provider(view, request) -> dict[str, Any]:
@@ -101,7 +101,7 @@ def test_service_spec_kwargs_provider_receives_drf_request() -> None:
 
 
 async def test_async_service_spec_kwargs_provider_merged_into_pool() -> None:
-    def svc(*, data: dict, tenant_id: int) -> dict:
+    def svc(*, tenant_id: int) -> dict:
         return {"tenant_id": tenant_id}
 
     def kwargs_provider(view, request) -> dict[str, Any]:

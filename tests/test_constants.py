@@ -38,15 +38,16 @@ def test_output_format_coerce_invalid_string_raises() -> None:
 # ---------- ArgumentBinding ----------
 
 
-def test_argument_binding_has_three_members() -> None:
+def test_argument_binding_re_exports_drf_services_members() -> None:
+    """``ArgumentBinding`` is re-exported from drf-services (the dispatch core)."""
     members = {m.name for m in ArgumentBinding}
-    assert members == {"DATA_ONLY", "MERGE", "REPLACE"}
+    assert members == {"AUTO", "BUNDLE", "SPREAD_AUTHOR_WINS", "SPREAD_CALLER_WINS"}
 
 
 def test_argument_binding_members_identity() -> None:
-    assert ArgumentBinding.DATA_ONLY is ArgumentBinding.DATA_ONLY
-    assert ArgumentBinding.MERGE is not ArgumentBinding.DATA_ONLY
-    assert ArgumentBinding.REPLACE is not ArgumentBinding.MERGE
+    assert ArgumentBinding.BUNDLE is ArgumentBinding.BUNDLE
+    assert ArgumentBinding.SPREAD_AUTHOR_WINS is not ArgumentBinding.BUNDLE
+    assert ArgumentBinding.SPREAD_CALLER_WINS is not ArgumentBinding.SPREAD_AUTHOR_WINS
 
 
 def test_argument_binding_str_value_is_internal_only() -> None:
@@ -56,8 +57,8 @@ def test_argument_binding_str_value_is_internal_only() -> None:
     don't compare equal to their string values. This is intentional —
     forces API consumers to pass the enum member.
     """
-    assert ArgumentBinding.MERGE != "merge"
-    assert ArgumentBinding.MERGE.value == "merge"
+    assert ArgumentBinding.SPREAD_AUTHOR_WINS != "spread_author_wins"
+    assert ArgumentBinding.SPREAD_AUTHOR_WINS.value == "spread_author_wins"
 
 
 # ---------- JSON-RPC envelope ----------
