@@ -3,6 +3,7 @@ from __future__ import annotations
 from collections.abc import Callable
 from typing import Any
 
+from django.http import HttpRequest
 from django.urls import URLPattern, path
 from django.utils.module_loading import import_string
 from rest_framework.serializers import Serializer
@@ -16,9 +17,14 @@ from rest_framework_mcp.adapters.selector_to_tool import selector_spec_to_tool
 from rest_framework_mcp.adapters.service_to_tool import service_spec_to_tool
 from rest_framework_mcp.auth.protected_resource_metadata import ProtectedResourceMetadataViewSet
 from rest_framework_mcp.auth.types.auth_backend import MCPAuthBackend
+from rest_framework_mcp.auth.types.token_info import TokenInfo
 from rest_framework_mcp.conf import get_setting
 from rest_framework_mcp.constants import ArgumentBinding, OutputFormat, UnknownArguments
 from rest_framework_mcp.handlers.call_spec_tool import call_spec_tool
+from rest_framework_mcp.handlers.handle_tools_call_async import handle_tools_call_async
+from rest_framework_mcp.handlers.handle_tools_list import handle_tools_list
+from rest_framework_mcp.handlers.types.context import MCPCallContext
+from rest_framework_mcp.protocol.types.json_rpc_error import JsonRpcError
 from rest_framework_mcp.protocol.types.prompt_argument import PromptArgument
 from rest_framework_mcp.protocol.types.tool_result import ToolResult
 from rest_framework_mcp.registry.prompt_registry import PromptRegistry
@@ -357,12 +363,14 @@ class MCPServer:
         queryset shaping incl. ``filter_set``, and the retrieve nullability
         contract) is shared with every other transport rather than reproduced.
 
-        This is the spec core only: the HTTP transport's pagination, ordering,
-        ``unknown_arguments`` policy, ``argument_binding`` modes, and a selector
-        binding's MCP-only ``input_serializer`` are not applied here, and the
-        spec's ``permission_classes`` are enforced (not the transport-level MCP
-        permissions / rate limits). Chain tools are unsupported — they orchestrate
-        several specs and raise :class:`TypeError`.
+        This is the spec core only: it honours the binding's ``argument_binding`` /
+        ``unknown_arguments`` policies and the spec's ``permission_classes``
+        (object-level checks included), but does not layer on the read-shaped
+        transport extras — pagination, ordering, and a selector binding's MCP-only
+        ``input_serializer`` — nor the transport-level MCP permissions / rate
+        limits. For those (and for tool listing), use the full in-process transport
+        surface, :meth:`acall_tool` / :meth:`list_tools`. Chain tools are
+        unsupported — they orchestrate several specs and raise :class:`TypeError`.
 
         Raises :class:`KeyError` when no tool is registered under ``name``.
         """
@@ -370,6 +378,92 @@ class MCPServer:
         if binding is None:
             raise KeyError(f"No tool registered under {name!r}.")
         return call_spec_tool(binding, arguments or {}, user=user, request=request)
+
+    # ----- in-process transport invocation -----
+
+    def list_tools(
+        self,
+        cursor: str | None = None,
+        *,
+        user: Any,
+        request: Any = None,
+    ) -> dict[str, Any] | JsonRpcError:
+        """List the tools this server exposes, exactly as the wire would.
+
+        The in-process twin of a ``tools/list`` request: returns one page of the
+        tool catalog with the *same* merged ``inputSchema`` the HTTP transport
+        advertises (serializer fields plus a selector tool's filter / ordering /
+        pagination arguments and the ``additionalProperties`` policy), the same
+        per-caller listing-permission filter (``FILTER_LISTINGS_BY_PERMISSIONS``),
+        and the same opaque-cursor pagination — pass the returned ``nextCursor``
+        back to fetch the next page. A :class:`JsonRpcError` signals a bad cursor.
+
+        Unlike :meth:`call_tool` (the spec core), this is the full transport
+        surface — the entry point for an in-process consumer (the django-ag-ui
+        bridge, a Pydantic-AI toolset) that must mirror what a remote MCP client
+        would see.
+        """
+        params = {"cursor": cursor} if cursor is not None else None
+        return handle_tools_list(params, self._call_context(user=user, request=request))
+
+    async def acall_tool(
+        self,
+        name: str,
+        arguments: dict[str, Any] | None = None,
+        *,
+        user: Any,
+        request: Any = None,
+    ) -> dict[str, Any] | JsonRpcError:
+        """Invoke a tool off the HTTP path with full transport semantics (async).
+
+        The in-process twin of a ``tools/call`` request: routes through the same
+        async handler the wire uses, so the transport-level MCP permissions and
+        rate limits, the selector post-fetch pipeline (filter / order / paginate),
+        a selector binding's MCP-only ``input_serializer``, chain tools, and the
+        output format all apply — everything :meth:`call_tool` (the spec core)
+        deliberately omits. Returns the wire's result payload (a ``dict`` carrying
+        ``content`` / ``structuredContent`` / ``isError``), or a
+        :class:`JsonRpcError` for a protocol fault (unknown tool, malformed
+        ``arguments`` shape, denied permission).
+
+        ``arguments`` is the flat dict that ``request.data`` / query params play on
+        HTTP; ``user`` is the acting user and ``request`` the originating Django
+        request when there is one (a minimal request is synthesised otherwise,
+        mirroring :meth:`call_tool`).
+        """
+        params = {"name": name, "arguments": arguments or {}}
+        return await handle_tools_call_async(params, self._call_context(user=user, request=request))
+
+    def _call_context(
+        self,
+        *,
+        user: Any,
+        request: Any = None,
+        session_id: str | None = None,
+    ) -> MCPCallContext:
+        """Build the per-call context the wire handlers thread through.
+
+        Carries the acting ``user`` (as both ``request.user`` and the synthetic
+        :class:`TokenInfo`) plus the server's registries. When ``request`` is
+        ``None`` a minimal :class:`~django.http.HttpRequest` is synthesised
+        bearing the user — the shape ``build_offline_context`` uses for the
+        spec-core path — so permission classes reading ``request.user`` behave as
+        they would on HTTP. The protocol version is the server's first (most
+        preferred) supported version, not a hardcoded literal.
+        """
+        http_request: HttpRequest = request if request is not None else HttpRequest()
+        if request is None:
+            http_request.user = user
+            http_request.method = "POST"
+        return MCPCallContext(
+            http_request=http_request,
+            token=TokenInfo(user=user),
+            tools=self._tools,
+            resources=self._resources,
+            prompts=self._prompts,
+            protocol_version=get_setting("PROTOCOL_VERSIONS")[0],
+            session_id=session_id,
+        )
 
     def register_resource(
         self,

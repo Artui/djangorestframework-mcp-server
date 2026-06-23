@@ -20,10 +20,12 @@ from rest_framework_mcp.auth.types.auth_backend import MCPAuthBackend
 from rest_framework_mcp.auth.types.token_info import TokenInfo
 from rest_framework_mcp.constants import (
     ArgumentBinding,
+    JsonRpcErrorCode,
     OutputFormat,
     ToolKind,
     UnknownArguments,
 )
+from rest_framework_mcp.protocol.types.json_rpc_error import JsonRpcError
 from rest_framework_mcp.protocol.types.prompt_argument import PromptArgument
 from rest_framework_mcp.protocol.types.prompt_message import PromptMessage
 from rest_framework_mcp.registry.prompt_registry import PromptRegistry
@@ -58,6 +60,8 @@ __all__ = [
     "InMemorySSEBroker",
     "InMemorySSEReplayBuffer",
     "InMemorySessionStore",
+    "JsonRpcError",
+    "JsonRpcErrorCode",
     "ListSelector",
     "MCPAuthBackend",
     "MCPPermission",
