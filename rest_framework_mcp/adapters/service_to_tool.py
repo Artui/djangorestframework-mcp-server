@@ -4,7 +4,10 @@ from typing import Any
 
 from rest_framework_services.types.service_spec import ServiceSpec
 
-from rest_framework_mcp.adapters.utils import validate_input_serializer_against_callable
+from rest_framework_mcp.adapters.utils import (
+    merge_tool_annotations,
+    validate_input_serializer_against_callable,
+)
 from rest_framework_mcp.auth.permissions.wrap_spec_permissions import wrap_spec_permissions
 from rest_framework_mcp.constants import ArgumentBinding, OutputFormat, UnknownArguments
 from rest_framework_mcp.registry.types.tool_binding import ToolBinding
@@ -64,7 +67,7 @@ def service_spec_to_tool(
         output_format=output_format,
         permissions=effective_perms,
         rate_limits=rate_limits,
-        annotations=annotations or {},
+        annotations=merge_tool_annotations(annotations, read_only=False),
         include_structured_content=include_structured_content,
         include_output_schema=include_output_schema,
         argument_binding=argument_binding,

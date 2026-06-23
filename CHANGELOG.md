@@ -7,6 +7,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- **Tools auto-advertise MCP `ToolAnnotations` hints.** Every tool now
+  carries the standard hints derived from its mutation profile: selector
+  tools → `readOnlyHint: true`; service tools → `readOnlyHint: false` +
+  `destructiveHint: true`; chain tools are read-only only when every step
+  is a selector. `destructiveHint` / `idempotentHint` are emitted only for
+  non-read tools (per the spec). Hints passed at registration via
+  `annotations=` override the derived defaults (e.g.
+  `annotations={"destructiveHint": False, "idempotentHint": True}`). The
+  bundle lands on `binding.annotations` and the `tools/list` payload, so a
+  client can gate destructive tools without a hand-set flag.
+
 ### Changed
 
 - **Selector filtering is declared on the spec.** A selector tool now

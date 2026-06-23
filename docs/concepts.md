@@ -180,6 +180,36 @@ forms) accept three behavior knobs:
   Setting `always_listed=True` keeps the binding visible as a discovery
   aid; the permission still gates the actual invocation.
 
+### Tool annotations
+
+Every tool advertises the MCP-standard `ToolAnnotations` hints, derived
+from what the server already knows about the tool's mutation profile —
+so downstream clients get correct `readOnlyHint` / `destructiveHint`
+without a hand-set flag:
+
+- **Selector tools** are reads → `{"readOnlyHint": true}`.
+- **Service tools** are mutations → `{"readOnlyHint": false,
+  "destructiveHint": true}`.
+- **Chain tools** are read-only only when *every* step is a selector;
+  any service step makes the whole chain a mutation.
+
+`destructiveHint` / `idempotentHint` are spec-meaningful only when
+`readOnlyHint` is false, so a read-only tool emits neither. Pass
+`annotations=` at registration to override or extend the derived hints —
+the explicit values win:
+
+```python
+server.register_service_tool(
+    name="invoices.mark_paid",
+    spec=mark_paid_spec,
+    # An idempotent, non-destructive mutation:
+    annotations={"destructiveHint": False, "idempotentHint": True},
+)
+```
+
+The merged bundle lands on `binding.annotations` and on the `tools/list`
+wire payload.
+
 ### Bulk registration
 
 For projects that register many tools in one place, the

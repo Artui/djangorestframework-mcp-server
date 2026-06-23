@@ -4,7 +4,10 @@ from typing import Any
 
 from rest_framework_services.types.selector_spec import SelectorSpec
 
-from rest_framework_mcp.adapters.utils import validate_input_serializer_against_callable
+from rest_framework_mcp.adapters.utils import (
+    merge_tool_annotations,
+    validate_input_serializer_against_callable,
+)
 from rest_framework_mcp.auth.permissions.wrap_spec_permissions import wrap_spec_permissions
 from rest_framework_mcp.constants import ArgumentBinding, OutputFormat, UnknownArguments
 from rest_framework_mcp.registry.types.selector_tool_binding import SelectorToolBinding
@@ -79,7 +82,7 @@ def selector_spec_to_tool(
         output_format=output_format,
         permissions=effective_perms,
         rate_limits=rate_limits,
-        annotations=annotations or {},
+        annotations=merge_tool_annotations(annotations, read_only=True),
         ordering_fields=ordering_fields,
         paginate=paginate,
         include_structured_content=include_structured_content,
