@@ -9,6 +9,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **`MCPServer.call_tool(name, arguments, *, user, request=None)`** — a blessed,
+  transport-neutral way to invoke a spec-backed tool off the HTTP / JSON-RPC
+  path, returning the same `ToolResult` the wire handlers build. It is built on
+  the sister repo's `dispatch_spec` / `render_spec_output` / `enforce_permissions`
+  (drf-services 0.19), so the spec-execution core — instance resolution, input
+  validation, the service / selector run, the output-selector re-fetch, queryset
+  shaping incl. `filter_set`, and the retrieve nullability contract — is shared
+  rather than re-implemented. An in-process consumer (a bridge, a Pydantic-AI
+  toolset, a management command) calls this instead of reaching into handler
+  internals. Scope note: this is the spec core — the HTTP transport's pagination,
+  ordering, `unknown_arguments` policy, `argument_binding` modes, and a selector
+  binding's MCP-only `input_serializer` are not layered on here, and the spec's
+  `permission_classes` are enforced (not the transport-level MCP permissions /
+  rate limits). Chain tools are unsupported (they orchestrate several specs).
 - **Tools auto-advertise MCP `ToolAnnotations` hints.** Every tool now
   carries the standard hints derived from its mutation profile: selector
   tools → `readOnlyHint: true`; service tools → `readOnlyHint: false` +

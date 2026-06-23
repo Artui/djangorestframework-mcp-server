@@ -18,7 +18,9 @@ from rest_framework_mcp.auth.protected_resource_metadata import ProtectedResourc
 from rest_framework_mcp.auth.types.auth_backend import MCPAuthBackend
 from rest_framework_mcp.conf import get_setting
 from rest_framework_mcp.constants import ArgumentBinding, OutputFormat, UnknownArguments
+from rest_framework_mcp.handlers.call_spec_tool import call_spec_tool
 from rest_framework_mcp.protocol.types.prompt_argument import PromptArgument
+from rest_framework_mcp.protocol.types.tool_result import ToolResult
 from rest_framework_mcp.registry.prompt_registry import PromptRegistry
 from rest_framework_mcp.registry.resource_registry import ResourceRegistry
 from rest_framework_mcp.registry.tool_registry import ToolRegistry
@@ -329,6 +331,45 @@ class MCPServer:
         check_tool_permissions_declared(binding.name, binding.permissions)
         self._tools.register(binding)
         return binding
+
+    # ----- transport-neutral invocation -----
+
+    def call_tool(
+        self,
+        name: str,
+        arguments: dict[str, Any] | None = None,
+        *,
+        user: Any,
+        request: Any = None,
+    ) -> ToolResult:
+        """Invoke a registered spec-backed tool off the HTTP / JSON-RPC path.
+
+        The blessed, transport-neutral entry point: hand a tool ``name`` and a
+        flat ``arguments`` dict (the role ``request.data`` / query params play on
+        HTTP) plus the acting ``user``, and get back the same :class:`ToolResult`
+        the wire handlers build — without going through JSON-RPC. An in-process
+        consumer (the django-ag-ui bridge, a Pydantic-AI toolset, a management
+        command) calls this instead of re-implementing dispatch.
+
+        Built on the sister repo's ``dispatch_spec`` / ``render_spec_output`` /
+        ``enforce_permissions``, so the spec core (instance resolution, input
+        validation, the service / selector run, the output-selector re-fetch,
+        queryset shaping incl. ``filter_set``, and the retrieve nullability
+        contract) is shared with every other transport rather than reproduced.
+
+        This is the spec core only: the HTTP transport's pagination, ordering,
+        ``unknown_arguments`` policy, ``argument_binding`` modes, and a selector
+        binding's MCP-only ``input_serializer`` are not applied here, and the
+        spec's ``permission_classes`` are enforced (not the transport-level MCP
+        permissions / rate limits). Chain tools are unsupported — they orchestrate
+        several specs and raise :class:`TypeError`.
+
+        Raises :class:`KeyError` when no tool is registered under ``name``.
+        """
+        binding = self._tools.get(name)
+        if binding is None:
+            raise KeyError(f"No tool registered under {name!r}.")
+        return call_spec_tool(binding, arguments or {}, user=user, request=request)
 
     def register_resource(
         self,

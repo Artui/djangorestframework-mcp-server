@@ -244,6 +244,36 @@ register_tools(
 Per-definition kwargs win over defaults on conflict; `None` is the
 "no override" sentinel across both layers.
 
+## Transport-neutral invocation: `call_tool`
+
+`server.call_tool(name, arguments, *, user, request=None)` invokes a
+registered spec-backed tool **off the HTTP / JSON-RPC path** and returns
+the same `ToolResult` the wire handlers build. An in-process consumer — a
+bridge, a Pydantic-AI toolset, a management command — uses it instead of
+re-implementing dispatch:
+
+```python
+result = server.call_tool("invoices.create", {"number": "A-1"}, user=request.user)
+result.structured_content  # the rendered payload
+```
+
+It is built on `djangorestframework-services`' transport-neutral
+`dispatch_spec` / `render_spec_output` / `enforce_permissions`, so the
+spec-execution core (instance resolution, input validation, the
+service / selector run, the output-selector re-fetch, queryset shaping
+including `filter_set`, and the retrieve nullability contract) is shared
+with the HTTP transport rather than reproduced.
+
+It is the **spec core** only. The HTTP transport's pagination, ordering,
+`unknown_arguments` policy, `argument_binding` modes, and a selector
+binding's MCP-only `input_serializer` are not applied; the spec's
+`permission_classes` are enforced (not the transport-level MCP
+permissions / rate limits). Chain tools are unsupported — they orchestrate
+several specs and raise `TypeError`. A service raising
+`ServiceValidationError` / `ServiceError` and a missing required instance
+come back as `isError` results; a denied permission or malformed input
+raises, for the caller to map.
+
 ## Tools vs resources
 
 | | Tools | Resources |
