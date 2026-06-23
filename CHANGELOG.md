@@ -7,6 +7,27 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- **Selector filtering is declared on the spec.** A selector tool now
+  reads its `FilterSet` from `SelectorSpec.filter_set`
+  (`djangorestframework-services` 0.18+) rather than a separate
+  `filter_set=` argument at registration. The one declaration drives both
+  the HTTP transport and MCP, so a project states its filterable shape
+  once instead of re-passing it per transport. `ordering_fields` /
+  `paginate` stay on the registration call — they are MCP pipeline
+  mechanics with no spec analogue. Schema generation and dispatch are
+  unchanged; `binding.filter_set` now delegates to the spec.
+- Dependency range bumped to `djangorestframework-services>=0.19,<0.20`.
+
+### Removed
+
+- **`filter_set=` is no longer accepted** by `register_selector_tool`,
+  the `@selector_tool` decorator, `ToolDefinition.selector`, or
+  `SelectorDefaults`. Declare it on the spec instead —
+  `SelectorSpec(kind=…, selector=…, filter_set=MyFilterSet)`. Pre-1.0
+  hard cut, no deprecation shim (the consumer set is tiny).
+
 ## [0.7.1] — 2026-06-10
 
 ### Changed

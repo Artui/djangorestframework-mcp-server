@@ -40,13 +40,13 @@ def filterset_to_schema_properties(filter_set_class: Any) -> dict[str, dict[str,
     classes are precisely mapped.
 
     Raises ``ImportError`` when ``django-filter`` isn't installed — this
-    only fires when a binding is actually constructed with
-    ``filter_set=...``, so projects that don't use the integration are
+    only fires when a selector spec actually carries a
+    ``spec.filter_set``, so projects that don't use the integration are
     unaffected.
     """
     if _django_filters is None:  # pragma: no cover - exercised by no-extras smoke job
         raise ImportError(
-            "filter_set= requires the `django-filter` package. "
+            "spec.filter_set requires the `django-filter` package. "
             'Install with `pip install "djangorestframework-mcp-server[filter]"`.'
         )
     # ``base_filters`` is populated by the FilterSet metaclass at class

@@ -23,7 +23,6 @@ def selector_spec_to_tool(
     permissions: tuple[Any, ...] = (),
     rate_limits: tuple[Any, ...] = (),
     annotations: dict[str, Any] | None = None,
-    filter_set: Any | None = None,
     ordering_fields: tuple[str, ...] = (),
     paginate: bool = False,
     include_structured_content: bool | None = None,
@@ -48,6 +47,12 @@ def selector_spec_to_tool(
     ``spec.kind`` — a required field on ``SelectorSpec`` since
     ``djangorestframework-services`` 0.13. No separate ``kind`` kwarg is
     accepted here; the spec is the single source of truth.
+
+    Filtering follows the same rule: ``spec.filter_set``
+    (``djangorestframework-services`` 0.18+) is read off the spec, not
+    passed here, so the filterable shape is declared once and shared by
+    the HTTP and MCP transports. ``ordering_fields`` / ``paginate`` stay
+    binding-level — they are MCP pipeline mechanics with no spec analogue.
     """
     if spec.selector is None:
         raise ValueError(
@@ -75,7 +80,6 @@ def selector_spec_to_tool(
         permissions=effective_perms,
         rate_limits=rate_limits,
         annotations=annotations or {},
-        filter_set=filter_set,
         ordering_fields=ordering_fields,
         paginate=paginate,
         include_structured_content=include_structured_content,

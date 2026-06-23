@@ -41,8 +41,8 @@ def test_retrieve_kind_rejects_filter_set() -> None:
         SelectorToolBinding(
             name="r",
             description=None,
-            spec=SelectorSpec(kind=SelectorKind.RETRIEVE, selector=_sel),
-            filter_set=object,  # any truthy class triggers the guard
+            # filter_set lives on the spec now; any truthy value triggers the guard.
+            spec=SelectorSpec(kind=SelectorKind.RETRIEVE, selector=_sel, filter_set=object),
         )
     assert "spec.kind=RETRIEVE" in str(excinfo.value)
     assert "filter_set" in str(excinfo.value)
@@ -76,8 +76,7 @@ def test_retrieve_kind_lists_every_offending_knob() -> None:
         SelectorToolBinding(
             name="r",
             description=None,
-            spec=SelectorSpec(kind=SelectorKind.RETRIEVE, selector=_sel),
-            filter_set=object,
+            spec=SelectorSpec(kind=SelectorKind.RETRIEVE, selector=_sel, filter_set=object),
             ordering_fields=("x",),
             paginate=True,
         )

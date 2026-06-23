@@ -83,11 +83,9 @@ class SelectorToolBinding(Generic[ResultT, ExtraT]):
     # ``include_structured_content=False`` is rejected at construction time.
     include_output_schema: bool | None = None
     # ----- read-shaped pipeline knobs -----
-    # ``filter_set`` is a django-filter ``FilterSet`` class (or ``None`` to
-    # skip filtering). Typed as ``Any`` because ``django-filter`` is an
-    # optional dep behind the ``[filter]`` extra — narrowing the type would
-    # force a hard import in this module.
-    filter_set: Any | None = None
+    # ``filter_set`` is no longer stored here — it is sourced from
+    # ``spec.filter_set`` via the property below (the spec is the single
+    # source of truth, exactly like ``kind`` / ``selector``).
     # Field names allowed in the generated ``ordering`` enum. Each name is
     # exposed as both ``"<name>"`` (asc) and ``"-<name>"`` (desc) — django's
     # convention. Empty tuple disables ordering.
@@ -155,6 +153,24 @@ class SelectorToolBinding(Generic[ResultT, ExtraT]):
         if self.spec.selector is None:  # pragma: no cover - guarded at registration
             raise ValueError(f"SelectorToolBinding {self.name!r} has no selector")
         return self.spec.selector
+
+    @property
+    def filter_set(self) -> Any | None:
+        """Transport-neutral filtering, sourced from the spec.
+
+        Like :attr:`kind` and :attr:`selector`, this delegates to the
+        :class:`SelectorSpec` rather than storing a copy — the spec is
+        the single source of truth (``SelectorSpec.filter_set``,
+        ``djangorestframework-services`` 0.18+). The MCP read pipeline
+        and ``inputSchema`` generation read ``binding.filter_set``
+        unchanged, so a project declares its filterable shape once, on
+        the spec, and both the HTTP and MCP transports honour it.
+
+        Typed ``Any`` because ``django-filter`` is an optional dep behind
+        the ``[filter]`` extra — narrowing the type would force a hard
+        import here.
+        """
+        return self.spec.filter_set
 
 
 __all__ = ["SelectorToolBinding"]

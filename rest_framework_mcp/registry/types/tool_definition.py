@@ -27,9 +27,11 @@ class ToolDefinition:
 
     Construct via the classmethods, not the dataclass constructor — the
     methods enforce the per-kind kwarg surface (a service definition
-    can't set ``filter_set``; a selector definition can't omit
-    ``input_serializer`` quietly etc.). Direct construction is available
-    for tests and tooling but bypasses the type-shape guarantees.
+    can't set ``ordering_fields`` / ``paginate``; a selector definition
+    can't omit ``input_serializer`` quietly etc.). Filtering is declared
+    on the spec (``SelectorSpec.filter_set``), not here, so neither kind
+    carries a ``filter_set`` kwarg. Direct construction is available for
+    tests and tooling but bypasses the type-shape guarantees.
 
     Every per-call kwarg defaults to ``None``; downstream
     :func:`register_tools` treats ``None`` as "no override", which lets
@@ -59,7 +61,6 @@ class ToolDefinition:
     unknown_arguments: UnknownArguments | None = None
     # Selector-only:
     input_serializer: type | None = None
-    filter_set: Any | None = None
     ordering_fields: Sequence[str] | None = None
     paginate: bool | None = None
     # Phase 10g — per-binding opt-back-in to ``tools/list`` when
@@ -134,7 +135,6 @@ class ToolDefinition:
         permissions: Sequence[Any] | None = None,
         rate_limits: Sequence[Any] | None = None,
         annotations: dict[str, Any] | None = None,
-        filter_set: Any | None = None,
         ordering_fields: Sequence[str] | None = None,
         paginate: bool | None = None,
         include_structured_content: bool | None = None,
@@ -164,7 +164,6 @@ class ToolDefinition:
             permissions=permissions,
             rate_limits=rate_limits,
             annotations=annotations,
-            filter_set=filter_set,
             ordering_fields=ordering_fields,
             paginate=paginate,
             include_structured_content=include_structured_content,

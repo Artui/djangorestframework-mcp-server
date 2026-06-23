@@ -183,7 +183,6 @@ class MCPServer:
         permissions: list[Any] | None = None,
         rate_limits: list[Any] | None = None,
         annotations: dict[str, Any] | None = None,
-        filter_set: Any | None = None,
         ordering_fields: list[str] | tuple[str, ...] | None = None,
         paginate: bool = False,
         include_structured_content: bool | None = None,
@@ -203,25 +202,30 @@ class MCPServer:
 
             arguments → validate(merged inputSchema)
                       → run_selector
-                      → FilterSet(data=...).qs    (if filter_set set)
+                      → FilterSet(data=...).qs    (if spec.filter_set set)
                       → order_by(...)             (if ordering_fields set)
                       → paginate                  (if paginate=True)
                       → output_serializer(many=True)
                       → ToolResult
 
-        Each pipeline knob is optional. A selector tool with none of
-        ``filter_set`` / ``ordering_fields`` / ``paginate`` set behaves
-        like a plain RPC read against the selector — same effective
-        contract as a service tool minus the side effects.
+        Each pipeline knob is optional. A selector tool with no
+        ``spec.filter_set`` / ``ordering_fields`` / ``paginate`` set
+        behaves like a plain RPC read against the selector — same
+        effective contract as a service tool minus the side effects.
 
-        ``filter_set`` requires the ``[filter]`` extra
-        (``django-filter``). The constructor surfaces a clear
-        ``ImportError`` if you set it without the package installed.
+        Filtering is declared on the spec, not here: set
+        ``SelectorSpec.filter_set`` (``djangorestframework-services``
+        0.18+) and both the HTTP and MCP transports honour it. It
+        requires the ``[filter]`` extra (``django-filter``); schema
+        generation surfaces a clear ``ImportError`` if a spec carries a
+        ``filter_set`` without the package installed. ``ordering_fields``
+        / ``paginate`` stay here — they are MCP pipeline mechanics with
+        no spec analogue.
 
         The selector's shape (``LIST`` vs ``RETRIEVE``) is read from
         ``spec.kind`` — a required field on ``SelectorSpec`` in
         ``djangorestframework-services`` 0.13+. ``LIST`` runs the full
-        post-fetch pipeline (``filter_set`` / ``ordering_fields`` /
+        post-fetch pipeline (``spec.filter_set`` / ``ordering_fields`` /
         ``paginate``) and renders with ``many=True``; ``RETRIEVE``
         rejects those pipeline knobs at registration and renders the
         result with ``many=False``.
@@ -238,7 +242,6 @@ class MCPServer:
             permissions=tuple(permissions or ()),
             rate_limits=tuple(rate_limits or ()),
             annotations=annotations,
-            filter_set=filter_set,
             ordering_fields=tuple(ordering_fields or ()),
             paginate=paginate,
             include_structured_content=include_structured_content,
@@ -497,7 +500,6 @@ class MCPServer:
         permissions: list[Any] | None = None,
         rate_limits: list[Any] | None = None,
         annotations: dict[str, Any] | None = None,
-        filter_set: Any | None = None,
         ordering_fields: list[str] | tuple[str, ...] | None = None,
         paginate: bool = False,
         include_structured_content: bool | None = None,
@@ -548,7 +550,6 @@ class MCPServer:
                 permissions=permissions,
                 rate_limits=rate_limits,
                 annotations=annotations,
-                filter_set=filter_set,
                 ordering_fields=ordering_fields,
                 paginate=paginate,
                 include_structured_content=include_structured_content,

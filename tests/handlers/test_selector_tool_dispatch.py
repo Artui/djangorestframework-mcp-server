@@ -111,8 +111,8 @@ def test_tools_list_emits_filter_args_in_input_schema() -> None:
             kind=SelectorKind.LIST,
             selector=_list_invoices,
             output_serializer=InvoiceOutputSerializer,
+            filter_set=InvoiceFilterSet,
         ),
-        filter_set=InvoiceFilterSet,
         ordering_fields=["amount_cents"],
         paginate=True,
     )
@@ -146,8 +146,8 @@ def test_filter_narrows_queryset() -> None:
             kind=SelectorKind.LIST,
             selector=_list_invoices,
             output_serializer=InvoiceOutputSerializer,
+            filter_set=InvoiceFilterSet,
         ),
-        filter_set=InvoiceFilterSet,
     )
 
     out = handle_tools_call({"name": "invoices.list", "arguments": {"sent": True}}, _ctx(server))
@@ -168,8 +168,8 @@ def test_filter_with_no_args_returns_everything() -> None:
             kind=SelectorKind.LIST,
             selector=_list_invoices,
             output_serializer=InvoiceOutputSerializer,
+            filter_set=InvoiceFilterSet,
         ),
-        filter_set=InvoiceFilterSet,
     )
 
     out = handle_tools_call({"name": "invoices.list", "arguments": {}}, _ctx(server))
@@ -179,7 +179,7 @@ def test_filter_with_no_args_returns_everything() -> None:
 
 @pytest.mark.django_db
 def test_no_filter_set_means_no_filtering() -> None:
-    """Selector tool without ``filter_set=`` returns the queryset verbatim."""
+    """Selector tool without ``spec.filter_set`` returns the queryset verbatim."""
     Invoice.objects.create(number="A", amount_cents=100, sent=True)
     Invoice.objects.create(number="B", amount_cents=200, sent=False)
 
@@ -427,8 +427,8 @@ def test_full_pipeline_filter_then_order_then_paginate() -> None:
             kind=SelectorKind.LIST,
             selector=_list_invoices,
             output_serializer=InvoiceOutputSerializer,
+            filter_set=InvoiceFilterSet,
         ),
-        filter_set=InvoiceFilterSet,
         ordering_fields=["amount_cents"],
         paginate=True,
     )
@@ -519,9 +519,8 @@ def test_selector_returning_list_skips_queryset_pipeline() -> None:
 
     server.register_selector_tool(
         name="things.list",
-        spec=SelectorSpec(kind=SelectorKind.LIST, selector=selector),
         # filter_set is set but won't apply because the result isn't a QS.
-        filter_set=InvoiceFilterSet,
+        spec=SelectorSpec(kind=SelectorKind.LIST, selector=selector, filter_set=InvoiceFilterSet),
     )
 
     out = handle_tools_call({"name": "things.list", "arguments": {}}, _ctx(server))

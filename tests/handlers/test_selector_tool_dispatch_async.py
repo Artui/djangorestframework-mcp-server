@@ -74,8 +74,8 @@ async def test_async_filter_then_paginate() -> None:
             kind=SelectorKind.LIST,
             selector=list_invoices,
             output_serializer=InvoiceOutputSerializer,
+            filter_set=InvoiceFilterSet,
         ),
-        filter_set=InvoiceFilterSet,
         ordering_fields=["amount_cents"],
         paginate=True,
     )
