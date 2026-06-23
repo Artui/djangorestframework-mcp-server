@@ -282,6 +282,41 @@ Chain tools are unsupported — they orchestrate several specs and raise
 missing required instance come back as `isError` results; a denied permission
 or malformed input raises, for the caller to map.
 
+### Full in-process transport: `acall_tool` / `list_tools`
+
+`call_tool` is the spec **core**. When an in-process consumer needs the *whole*
+transport — exactly what a remote MCP client sees — `MCPServer` exposes two
+async-friendly siblings that route through the same wire handlers:
+
+```python
+page = server.list_tools(user=request.user, request=request)   # one tools/list page
+page["tools"]        # merged inputSchema per tool
+page["nextCursor"]   # pass back to list_tools(cursor, ...) to paginate
+
+result = await server.acall_tool("invoices.list", {"ordering": "-amount", "page": 1},
+                                 user=request.user, request=request)
+result["structuredContent"]   # the wire's result payload (dict, not ToolResult)
+```
+
+- `list_tools(cursor=None, *, user, request=None)` returns one page of the tool
+  catalog with the same merged `inputSchema` (serializer fields **plus** a
+  selector tool's filter / ordering / pagination arguments and the
+  `additionalProperties` policy), the same `FILTER_LISTINGS_BY_PERMISSIONS`
+  per-caller filter, and the same opaque-cursor pagination the HTTP transport uses.
+- `acall_tool(name, arguments=None, *, user, request=None)` invokes a tool with
+  the **full** transport applied: the transport-level MCP permissions and rate
+  limits, the selector post-fetch pipeline (filter / order / paginate), a selector
+  binding's MCP-only `input_serializer`, chain tools, and the output format —
+  everything `call_tool` deliberately omits. It returns the wire's `dict` payload
+  (`content` / `structuredContent` / `isError`) or a `JsonRpcError` for a protocol
+  fault (unknown tool, malformed `arguments` shape, denied permission).
+
+Both build the call context internally from `user` + `request` (a minimal request
+is synthesised when `request` is `None`). `JsonRpcError` and `JsonRpcErrorCode`
+are re-exported from the package root so a consumer can branch on faults. This is
+the surface the `django-ag-ui` bridge consumes to run drf-mcp tools in-process
+with HTTP-equivalent semantics.
+
 ## Tools vs resources
 
 | | Tools | Resources |

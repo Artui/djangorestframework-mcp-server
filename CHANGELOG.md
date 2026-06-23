@@ -7,6 +7,31 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- **Public in-process transport surface on `MCPServer`** — two methods that let
+  an in-process consumer (a bridge, a Pydantic-AI toolset, a management command)
+  run tools exactly as a remote MCP client would, without the HTTP / JSON-RPC hop
+  and without reaching into handler internals:
+  - `MCPServer.list_tools(cursor=None, *, user, request=None)` returns one
+    `tools/list` page with the same merged `inputSchema` (serializer fields plus a
+    selector tool's filter / ordering / pagination arguments and the
+    `additionalProperties` policy), the same `FILTER_LISTINGS_BY_PERMISSIONS`
+    per-caller filter, and the same opaque-cursor pagination as the wire.
+  - `MCPServer.acall_tool(name, arguments=None, *, user, request=None)` (async)
+    invokes a tool with the **full** transport applied — the transport-level MCP
+    permissions and rate limits, the selector post-fetch pipeline (filter / order
+    / paginate), a selector binding's MCP-only `input_serializer`, chain tools, and
+    the output format — everything the spec-core `call_tool` deliberately omits.
+    Returns the wire's `dict` payload (`content` / `structuredContent` / `isError`)
+    or a `JsonRpcError` for a protocol fault.
+
+  Both build the call context internally from `user` + `request` (synthesising a
+  minimal request when `request` is `None`).
+- **`JsonRpcError` and `JsonRpcErrorCode` re-exported from the package root**, so a
+  consumer of `acall_tool` / `list_tools` can branch on protocol faults without a
+  leaf-module import.
+
 ## [0.8.0] — 2026-06-23
 
 ### Added
