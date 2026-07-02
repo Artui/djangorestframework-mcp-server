@@ -1879,8 +1879,10 @@ service / selector run, the output-selector re-fetch, queryset shaping
 including <code>filter_set</code>, and the retrieve nullability contract) is shared
 with the HTTP transport rather than reproduced.</p>
 <p>It honours the binding's <code>argument_binding</code> / <code>unknown_arguments</code> policies
-(mapped onto <code>dispatch_spec</code>'s) and the spec's <code>permission_classes</code> via the
-<code>on_target_resolved=enforce_permissions</code> hook — object-level checks included.
+(mapped onto <code>dispatch_spec</code>'s) and the spec's <code>permission_classes</code> in two
+layers: an upfront <code>enforce_permissions</code> call for the class-level
+<code>has_permission</code> check, plus the <code>on_target_resolved=enforce_permissions</code> hook
+for object-level checks on the resolved target.
 It does <strong>not</strong> layer on the read-shaped transport extras (pagination,
 ordering, a selector binding's MCP-only <code>input_serializer</code>); those stay with
 the wire handlers, as do the transport-level MCP permissions / rate limits.
