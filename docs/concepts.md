@@ -272,8 +272,10 @@ including `filter_set`, and the retrieve nullability contract) is shared
 with the HTTP transport rather than reproduced.
 
 It honours the binding's `argument_binding` / `unknown_arguments` policies
-(mapped onto `dispatch_spec`'s) and the spec's `permission_classes` via the
-`on_target_resolved=enforce_permissions` hook — object-level checks included.
+(mapped onto `dispatch_spec`'s) and the spec's `permission_classes` in two
+layers: an upfront `enforce_permissions` call for the class-level
+`has_permission` check, plus the `on_target_resolved=enforce_permissions` hook
+for object-level checks on the resolved target.
 It does **not** layer on the read-shaped transport extras (pagination,
 ordering, a selector binding's MCP-only `input_serializer`); those stay with
 the wire handlers, as do the transport-level MCP permissions / rate limits.
