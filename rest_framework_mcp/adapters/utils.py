@@ -38,6 +38,7 @@ def validate_input_serializer_against_callable(
     argument_binding: ArgumentBinding,
     spec_kwargs_provides: frozenset[str] = frozenset(),
     provides_instance: bool = False,
+    provides_collection: bool = False,
 ) -> None:
     """Fail-fast at registration time when input shape doesn't match the callable.
 
@@ -102,6 +103,7 @@ def validate_input_serializer_against_callable(
         argument_binding=argument_binding,
         spec_kwargs_provides=spec_kwargs_provides,
         provides_instance=provides_instance,
+        provides_collection=provides_collection,
     )
 
 
@@ -173,6 +175,7 @@ def _validate_required_params_have_sources(
     argument_binding: ArgumentBinding,
     spec_kwargs_provides: frozenset[str],
     provides_instance: bool,
+    provides_collection: bool,
 ) -> None:
     """Every required callable parameter must have a static source.
 
@@ -222,12 +225,16 @@ def _validate_required_params_have_sources(
         and param.default is inspect.Parameter.empty
     )
     # Conditional pool seeds: ``instance`` only exists when the spec
-    # carries an ``instance_selector_spec`` with a selector, ``serializer``
-    # only when an ``input_serializer`` produces a bound instance. The
-    # unconditional seeds are ``request`` / ``user`` / ``data``.
+    # carries an ``instance_selector_spec`` with a selector, ``collection``
+    # only when it carries a ``collection_selector_spec`` with a selector (the
+    # bulk / list-mutation target), ``serializer`` only when an
+    # ``input_serializer`` produces a bound instance. The unconditional seeds
+    # are ``request`` / ``user`` / ``data``.
     sources: set[str] = {"request", "user", "data"}
     if provides_instance:
         sources.add("instance")
+    if provides_collection:
+        sources.add("collection")
     if input_serializer is not None:
         sources.add("serializer")
     sources.update(spec_kwargs_provides)

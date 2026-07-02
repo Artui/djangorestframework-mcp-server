@@ -718,12 +718,13 @@ def test_selector_tool_inputschema_minimal_no_optional_pipeline_knobs() -> None:
     assert isinstance(out, dict)
     schema = out["tools"][0]["inputSchema"]
     # Only the empty input-serializer-derived shape; no filter / ordering /
-    # paginate properties added. ``additionalProperties: false`` reflects
-    # the default ``UnknownArguments.REJECT`` policy.
+    # paginate properties added. ``additionalProperties`` is ``true`` even under
+    # the default ``REJECT`` policy: with no ``input_serializer`` the runtime
+    # can't reject unknown keys, so the schema stays open to match (CONF-3).
     assert schema == {
         "type": "object",
         "properties": {},
-        "additionalProperties": False,
+        "additionalProperties": True,
     }
 
 

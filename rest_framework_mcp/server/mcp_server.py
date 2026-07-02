@@ -1,8 +1,9 @@
 from __future__ import annotations
 
-from collections.abc import Callable
+from collections.abc import Callable, Sequence
 from typing import Any
 
+from asgiref.sync import sync_to_async
 from django.http import HttpRequest
 from django.urls import URLPattern, path
 from django.utils.module_loading import import_string
@@ -387,6 +388,7 @@ class MCPServer:
         *,
         user: Any,
         request: Any = None,
+        scopes: Sequence[str] | None = None,
     ) -> dict[str, Any] | JsonRpcError:
         """List the tools this server exposes, exactly as the wire would.
 
@@ -398,13 +400,42 @@ class MCPServer:
         and the same opaque-cursor pagination — pass the returned ``nextCursor``
         back to fetch the next page. A :class:`JsonRpcError` signals a bad cursor.
 
+        ``scopes`` are the caller's granted scopes; pass them so a
+        ``ScopeRequired``-gated tool is visible under
+        ``FILTER_LISTINGS_BY_PERMISSIONS`` exactly as it would be on the wire.
+
         Unlike :meth:`call_tool` (the spec core), this is the full transport
         surface — the entry point for an in-process consumer (the django-ag-ui
         bridge, a Pydantic-AI toolset) that must mirror what a remote MCP client
-        would see.
+        would see. Under an event loop use :meth:`alist_tools` — a listing
+        permission filter that hits the DB raises ``SynchronousOnlyOperation``
+        from a sync call on the loop.
         """
         params = {"cursor": cursor} if cursor is not None else None
-        return handle_tools_list(params, self._call_context(user=user, request=request))
+        return handle_tools_list(
+            params, self._call_context(user=user, request=request, scopes=scopes)
+        )
+
+    async def alist_tools(
+        self,
+        cursor: str | None = None,
+        *,
+        user: Any,
+        request: Any = None,
+        scopes: Sequence[str] | None = None,
+    ) -> dict[str, Any] | JsonRpcError:
+        """Async :meth:`list_tools` — safe to call from an event loop.
+
+        Listing itself is pure Python, but the per-caller permission filter
+        (``FILTER_LISTINGS_BY_PERMISSIONS``) may run a DB-backed check (e.g.
+        ``DjangoPermRequired`` → ``user.has_perm``), which raises
+        ``SynchronousOnlyOperation`` when reached synchronously from within an
+        event loop — the exact context an async in-process consumer runs in. The
+        whole sync handler therefore runs in Django's thread-sensitive executor.
+        """
+        params = {"cursor": cursor} if cursor is not None else None
+        context = self._call_context(user=user, request=request, scopes=scopes)
+        return await sync_to_async(handle_tools_list, thread_sensitive=True)(params, context)
 
     async def acall_tool(
         self,
@@ -413,6 +444,7 @@ class MCPServer:
         *,
         user: Any,
         request: Any = None,
+        scopes: Sequence[str] | None = None,
     ) -> dict[str, Any] | JsonRpcError:
         """Invoke a tool off the HTTP path with full transport semantics (async).
 
@@ -429,16 +461,21 @@ class MCPServer:
         ``arguments`` is the flat dict that ``request.data`` / query params play on
         HTTP; ``user`` is the acting user and ``request`` the originating Django
         request when there is one (a minimal request is synthesised otherwise,
-        mirroring :meth:`call_tool`).
+        mirroring :meth:`call_tool`). ``scopes`` are the caller's granted scopes,
+        populating the synthetic token so a ``ScopeRequired``-gated tool is
+        invokable in-process just as it is on the wire.
         """
         params = {"name": name, "arguments": arguments or {}}
-        return await handle_tools_call_async(params, self._call_context(user=user, request=request))
+        return await handle_tools_call_async(
+            params, self._call_context(user=user, request=request, scopes=scopes)
+        )
 
     def _call_context(
         self,
         *,
         user: Any,
         request: Any = None,
+        scopes: Sequence[str] | None = None,
         session_id: str | None = None,
     ) -> MCPCallContext:
         """Build the per-call context the wire handlers thread through.
@@ -450,6 +487,10 @@ class MCPServer:
         spec-core path — so permission classes reading ``request.user`` behave as
         they would on HTTP. The protocol version is the server's first (most
         preferred) supported version, not a hardcoded literal.
+
+        ``scopes`` populate the synthetic :class:`TokenInfo`, so a scope-gated
+        tool (``ScopeRequired``) is callable and listable in-process the same way
+        it is over the wire; the default (``None``) is an empty scope set.
         """
         http_request: HttpRequest = request if request is not None else HttpRequest()
         if request is None:
@@ -457,7 +498,7 @@ class MCPServer:
             http_request.method = "POST"
         return MCPCallContext(
             http_request=http_request,
-            token=TokenInfo(user=user),
+            token=TokenInfo(user=user, scopes=tuple(scopes or ())),
             tools=self._tools,
             resources=self._resources,
             prompts=self._prompts,

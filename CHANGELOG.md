@@ -7,6 +7,78 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.10.0] — 2026-07-02
+
+### Added
+
+- **`MCPServer.alist_tools` — async tool listing.** Listing itself is pure
+  Python, but the per-caller listing-permission filter
+  (`FILTER_LISTINGS_BY_PERMISSIONS`) can run a DB-backed check (e.g.
+  `DjangoPermRequired`), which raises `SynchronousOnlyOperation` when the sync
+  `list_tools` reaches it from inside an event loop — the exact context an async
+  in-process consumer runs in. `alist_tools` runs the whole handler in a thread
+  (CONF-5).
+- **Scopes on the in-process transport surface (CONF-5).** `list_tools`,
+  `alist_tools`, and `acall_tool` now accept `scopes=`, populating the synthetic
+  `TokenInfo`, so a `ScopeRequired`-gated tool is listable and callable
+  in-process exactly as it is over the wire. Previously `_call_context` hardcoded
+  an empty scope set, making scope-gated tools permanently invisible / uncallable
+  off-HTTP.
+
+### Changed
+
+- **`djangorestframework-services` floor raised to `>=0.21.1,<0.22`.** Picks up
+  the collection-safe `enforce_permissions`, the object-permission guard firing
+  on selector dispatch (AUTHZ-1b), and the CONF-1/2 dispatch fixes.
+- **Object-level permissions are now enforced on selector RETRIEVE reads through
+  the spec-core surface (AUTHZ-2 object-level half).** With the guard now firing
+  on selector dispatch (drf-services 0.21), `MCPServer.call_tool`'s
+  `on_target_resolved=enforce_permissions` hook denies an object-level
+  `has_object_permission` failure on the resolved row — not just class-level
+  denials.
+- **`tools/list` advertises `additionalProperties` honestly (CONF-3).** A schema
+  is stamped `additionalProperties: false` only when the runtime actually rejects
+  unknown keys — i.e. under `REJECT` *and* with an `input_serializer` to validate
+  against. A serializer-less binding can't reject (the service path downgrades
+  `REJECT`; the read/chain validator short-circuits), so its schema now stays
+  open, matching the runtime instead of over-claiming a closed contract.
+- **Service tools under `REJECT` now reject the post-fetch keys `ordering` /
+  `page` / `limit` (CONF-3, contract change).** Routing service dispatch through
+  `dispatch_spec` means those keys are treated as unknown arguments on a mutation
+  tool (they are the selector pipeline's, not a service's), so a client sending
+  them to a `REJECT` service tool now gets `-32602` rather than having them
+  silently dropped. Selector tools still consume and strip them as before.
+- **Off-HTTP request/view synthesis unified on `djangorestframework-services`
+  (CONF-5).** The selector, chain, resource, and prompt handlers now build their
+  synthetic DRF request/view via the sister repo's `build_offline_context` /
+  `OfflineServiceView` — the same synthesizer the service path already used —
+  instead of the local `build_internal_drf_request` + `MCPServiceView`, removing
+  the package's second parallel off-HTTP request synthesizer.
+
+### Fixed
+
+- **`collection_selector_spec` service tools can now be registered (CONF-4).**
+  Registration validated that every required callable parameter has a source but
+  did not recognise `collection` (the bulk / list-mutation target a
+  `collection_selector_spec` resolves), so a bulk-mutation service declaring
+  `collection` raised `ImproperlyConfigured` at registration. `collection` is now
+  a recognised source, matching the existing `instance` handling.
+- **The tracked examples build against the shipped API (CONF-4).** Both
+  `examples/invoicing` and `examples/job_status` passed the removed `filter_set=`
+  kwarg to `register_selector_tool()`, built `SelectorSpec` without the required
+  `kind=`, set `output_serializer=` on `ServiceSpec` (now on
+  `output_selector_spec`), and imported prompt types from stale module paths — so
+  they crashed on import. They are updated to the 0.8+ API, and a CI smoke test
+  now imports and builds each example server so this can't regress.
+
+### Removed
+
+- **`MCPServiceView` (breaking).** The MCP-local off-HTTP view adapter is removed
+  in favour of `djangorestframework-services`' `OfflineServiceView`, which is
+  structurally identical (`request` / `action` / `kwargs`). `spec.kwargs` /
+  `output_serializer_context` providers now receive an `OfflineServiceView`.
+  Import it from `rest_framework_services` if you referenced the type directly.
+
 ## [0.9.1] — 2026-07-02
 
 ### Security
@@ -1060,7 +1132,8 @@ Pinned to `djangorestframework-services==0.6.0`.
 - 100% line + branch coverage enforced by pytest (**451 tests** at
   release).
 
-[Unreleased]: https://github.com/Artui/djangorestframework-mcp-server/compare/v0.9.1...HEAD
+[Unreleased]: https://github.com/Artui/djangorestframework-mcp-server/compare/v0.10.0...HEAD
+[0.10.0]: https://github.com/Artui/djangorestframework-mcp-server/compare/v0.9.1...v0.10.0
 [0.9.1]: https://github.com/Artui/djangorestframework-mcp-server/compare/v0.9.0...v0.9.1
 [0.9.0]: https://github.com/Artui/djangorestframework-mcp-server/compare/v0.8.0...v0.9.0
 [0.8.0]: https://github.com/Artui/djangorestframework-mcp-server/compare/v0.7.1...v0.8.0

@@ -2,13 +2,11 @@ from __future__ import annotations
 
 import dataclasses
 import inspect
-import json
 from collections.abc import Callable, Mapping
-from typing import Any, cast
+from typing import Any
 
 from django.http import HttpRequest
 from rest_framework import serializers as drf_serializers
-from rest_framework.parsers import JSONParser
 from rest_framework.request import Request
 from rest_framework_dataclasses.serializers import DataclassSerializer
 from rest_framework_services.types.service_spec import ServiceSpec
@@ -23,10 +21,46 @@ from rest_framework_mcp.constants import (
     ArgumentBinding,
     UnknownArguments,
 )
+from rest_framework_mcp.registry.types.chain_tool_binding import ChainToolBinding
+from rest_framework_mcp.registry.types.selector_tool_binding import SelectorToolBinding
 
 _SPREAD_BINDINGS = frozenset(
     {ArgumentBinding.SPREAD_AUTHOR_WINS, ArgumentBinding.SPREAD_CALLER_WINS}
 )
+
+
+def binding_input_serializer(binding: Any) -> type | None:
+    """The serializer a binding actually validates ``arguments`` against.
+
+    A service tool validates against its ``spec.input_serializer``; a selector
+    tool against the MCP-only ``binding.input_serializer``; a chain tool against
+    its ``resolved_input_serializer`` (explicit or first-step fallback). ``None``
+    means the binding has no serializer, so there is nothing to validate against.
+    """
+    if isinstance(binding, SelectorToolBinding):
+        return binding.input_serializer
+    if isinstance(binding, ChainToolBinding):
+        return binding.resolved_input_serializer
+    return binding.spec.input_serializer
+
+
+def advertises_closed_schema(binding: Any) -> bool:
+    """Whether ``tools/list`` may stamp ``additionalProperties: false`` for ``binding``.
+
+    A closed schema is honest only when the runtime *actually* rejects unknown
+    keys. ``REJECT`` is a silent no-op for a **serializer-less** binding: a
+    service with no ``input_serializer`` is downgraded to IGNORE / PASSTHROUGH by
+    :func:`services_dispatch_policies`, and the read-path validator
+    (:func:`build_validated_input_serializer`) short-circuits before the
+    unknown-key check when there is no serializer. In both cases undeclared keys
+    are accepted, so the advertised schema must stay open. A binding therefore
+    advertises a closed schema only under ``REJECT`` *and* with a serializer to
+    validate against.
+    """
+    return (
+        binding.unknown_arguments is UnknownArguments.REJECT
+        and binding_input_serializer(binding) is not None
+    )
 
 
 def services_dispatch_policies(binding: Any) -> tuple[ArgumentBinding, UnknownArguments]:
@@ -60,38 +94,6 @@ def services_dispatch_policies(binding: Any) -> tuple[ArgumentBinding, UnknownAr
     else:
         unknown = binding.unknown_arguments
     return argument_binding, unknown
-
-
-def build_internal_drf_request(
-    http_request: HttpRequest,
-    *,
-    user: Any,
-    data: dict[str, Any] | None,
-) -> Request:
-    """Wrap a Django request as a DRF ``Request`` populated with MCP-supplied data.
-
-    Services that declare ``request`` or ``user`` parameters expect a DRF
-    ``Request`` with parsed ``.data`` and a ``.user``. We synthesise that
-    here so callables written for the HTTP transport keep working when
-    invoked via MCP.
-
-    The HTTP method is forced to ``POST`` because mutation services often
-    branch on it; this is internal and not surfaced to MCP clients.
-    """
-    http_request.method = "POST"
-    body: bytes = json.dumps(data or {}).encode("utf-8")
-    http_request._body = body  # type: ignore[attr-defined]
-    http_request.META["CONTENT_TYPE"] = "application/json"
-    # The django-stubs ``HttpRequest.__new__`` is typed ``(cls) -> _MutableHttpRequest``
-    # and bleeds into the ``Request`` subclass: ty resolves the wrong ``__new__``
-    # first and rejects the call (wrong return type, surplus positional + keyword
-    # args). ``parsers=`` is a real DRF init kwarg per
-    # ``rest_framework-stubs/request.pyi``. Construct via ``Any`` and cast back
-    # to bypass the stub-confusion without losing the static type on the result.
-    raw: Any = Request(http_request, parsers=[JSONParser()])  # ty: ignore[unknown-argument, too-many-positional-arguments]
-    drf_request: Request = cast(Request, raw)
-    drf_request.user = user
-    return drf_request
 
 
 def check_permissions(
@@ -310,7 +312,8 @@ def invoke_context_provider(
 
 
 __all__ = [
-    "build_internal_drf_request",
+    "advertises_closed_schema",
+    "binding_input_serializer",
     "build_validated_input_serializer",
     "check_permissions",
     "consume_rate_limits",
