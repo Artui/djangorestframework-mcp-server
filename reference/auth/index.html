@@ -2541,8 +2541,8 @@ in its view <code>get_permissions</code>).</p>
 with <code>user</code> set to <code>token.user</code> and a lightweight view stand-in
 sufficient for the DRF permission contract (<code>request</code>, <code>action</code>).
 The HTTP method on the underlying <code>HttpRequest</code> is left untouched
-(unlike :func:<code>build_internal_drf_request</code>, which forces <code>POST</code> for
-mutation-flow dispatch) — permission evaluation is method-agnostic.</p>
+(unlike :func:<code>~rest_framework_services.build_offline_context</code>, which forces
+<code>POST</code> for mutation-flow dispatch) — permission evaluation is method-agnostic.</p>
 
 
 

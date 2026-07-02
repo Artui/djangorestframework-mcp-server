@@ -1703,10 +1703,10 @@ register a spec once and both surfaces get the same shape:</p>
 extra kwargs to merge into the dispatch pool — useful for plumbing per-tenant
 context, signed lookups, etc. without scattering <code>request.user.*</code> reads
 across services.</p>
-<div class="language-python highlight"><pre><span></span><code><span id="__span-1-1"><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a><span class="kn">from</span><span class="w"> </span><span class="nn">rest_framework_mcp</span><span class="w"> </span><span class="kn">import</span> <span class="n">MCPServiceView</span><span class="p">,</span> <span class="n">ServiceSpec</span>
+<div class="language-python highlight"><pre><span></span><code><span id="__span-1-1"><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a><span class="kn">from</span><span class="w"> </span><span class="nn">rest_framework_services</span><span class="w"> </span><span class="kn">import</span> <span class="n">OfflineServiceView</span><span class="p">,</span> <span class="n">ServiceSpec</span>
 </span><span id="__span-1-2"><a id="__codelineno-1-2" name="__codelineno-1-2" href="#__codelineno-1-2"></a>
 </span><span id="__span-1-3"><a id="__codelineno-1-3" name="__codelineno-1-3" href="#__codelineno-1-3"></a>
-</span><span id="__span-1-4"><a id="__codelineno-1-4" name="__codelineno-1-4" href="#__codelineno-1-4"></a><span class="k">def</span><span class="w"> </span><span class="nf">with_tenant</span><span class="p">(</span><span class="n">view</span><span class="p">:</span> <span class="n">MCPServiceView</span><span class="p">,</span> <span class="n">request</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">dict</span><span class="p">:</span>
+</span><span id="__span-1-4"><a id="__codelineno-1-4" name="__codelineno-1-4" href="#__codelineno-1-4"></a><span class="k">def</span><span class="w"> </span><span class="nf">with_tenant</span><span class="p">(</span><span class="n">view</span><span class="p">:</span> <span class="n">OfflineServiceView</span><span class="p">,</span> <span class="n">request</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">dict</span><span class="p">:</span>
 </span><span id="__span-1-5"><a id="__codelineno-1-5" name="__codelineno-1-5" href="#__codelineno-1-5"></a>    <span class="k">return</span> <span class="p">{</span><span class="s2">&quot;tenant_id&quot;</span><span class="p">:</span> <span class="n">request</span><span class="o">.</span><span class="n">user</span><span class="o">.</span><span class="n">tenant_id</span><span class="p">}</span>
 </span><span id="__span-1-6"><a id="__codelineno-1-6" name="__codelineno-1-6" href="#__codelineno-1-6"></a>
 </span><span id="__span-1-7"><a id="__codelineno-1-7" name="__codelineno-1-7" href="#__codelineno-1-7"></a>
@@ -1723,9 +1723,10 @@ across services.</p>
 </span><span id="__span-1-18"><a id="__codelineno-1-18" name="__codelineno-1-18" href="#__codelineno-1-18"></a>    <span class="p">),</span>
 </span><span id="__span-1-19"><a id="__codelineno-1-19" name="__codelineno-1-19" href="#__codelineno-1-19"></a><span class="p">)</span>
 </span></code></pre></div>
-<p>The provider receives an :class:<code>MCPServiceView</code> (synthesised because MCP
-has no DRF view) — <code>view.action</code> is the binding name, and on resource reads
-<code>view.kwargs</code> carries the URI-template variables. Same wire shape as the
+<p>The provider receives an <code>OfflineServiceView</code> (synthesised by the sister
+repo's <code>build_offline_context</code> because MCP has no DRF view) — <code>view.action</code>
+is the binding name, and on resource reads <code>view.kwargs</code> carries the
+URI-template variables. Same wire shape as the
 HTTP transport's <code>ServiceView</code>, so providers can be shared between
 transports.</p>
 <h3 id="selectorspec-for-resources"><code>SelectorSpec</code> for resources<a class="headerlink" href="#selectorspec-for-resources" title="Permanent link">&para;</a></h3>
@@ -1790,9 +1791,12 @@ forms) accept three behavior knobs:</p>
 <ul>
 <li><strong><code>unknown_arguments=</code></strong> — how <code>arguments</code> keys outside the binding's
   declared field set are handled.</li>
-<li><code>UnknownArguments.REJECT</code> (default) — outer <code>inputSchema</code> advertises
-    <code>"additionalProperties": false</code> and the validator rejects unknown
-    keys with <code>-32602</code>.</li>
+<li><code>UnknownArguments.REJECT</code> (default) — the validator rejects unknown
+    keys with <code>-32602</code>, and the outer <code>inputSchema</code> advertises
+    <code>"additionalProperties": false</code>. This holds only when the binding has an
+    <code>input_serializer</code> to validate against: a serializer-less binding has no
+    declared field set, so <code>REJECT</code> can't fire and its schema stays open
+    (<code>"additionalProperties": true</code>) to match the runtime.</li>
 <li><code>UnknownArguments.PASSTHROUGH</code> — <code>"additionalProperties": true</code>;
     unknown keys survive validation and are merged onto the validated
     payload before binding.</li>

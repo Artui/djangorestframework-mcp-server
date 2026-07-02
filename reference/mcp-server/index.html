@@ -1149,6 +1149,17 @@
 </li>
         
           <li class="md-nav__item">
+  <a href="#rest_framework_mcp.server.mcp_server.MCPServer.alist_tools" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        alist_tools
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
   <a href="#rest_framework_mcp.server.mcp_server.MCPServer.acall_tool" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -1238,28 +1249,6 @@
         
       </ul>
     </nav>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#mcpserviceview" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        MCPServiceView
-      
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#rest_framework_mcp.server.types.mcp_service_view.MCPServiceView" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        MCPServiceView
-      
-    </span>
-  </a>
   
 </li>
       
@@ -1507,6 +1496,17 @@
 </li>
         
           <li class="md-nav__item">
+  <a href="#rest_framework_mcp.server.mcp_server.MCPServer.alist_tools" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        alist_tools
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
   <a href="#rest_framework_mcp.server.mcp_server.MCPServer.acall_tool" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -1596,28 +1596,6 @@
         
       </ul>
     </nav>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#mcpserviceview" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        MCPServiceView
-      
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#rest_framework_mcp.server.types.mcp_service_view.MCPServiceView" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        MCPServiceView
-      
-    </span>
-  </a>
   
 </li>
       
@@ -2005,8 +1983,12 @@ unsupported — they orchestrate several specs and raise :class:<code>TypeError<
 
 <a href="#rest_framework_mcp.server.mcp_server.MCPServer.list_tools" class="headerlink" title="Permanent link">&para;</a></h3>
 <div class="language-python doc-signature highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="nf">list_tools</span><span class="p">(</span>
-</span><span id="__span-0-2"><a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a>    <span class="n">cursor</span><span class="p">:</span> <span class="nb">str</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span> <span class="o">*</span><span class="p">,</span> <span class="n">user</span><span class="p">:</span> <span class="n">Any</span><span class="p">,</span> <span class="n">request</span><span class="p">:</span> <span class="n">Any</span> <span class="o">=</span> <span class="kc">None</span>
-</span><span id="__span-0-3"><a id="__codelineno-0-3" name="__codelineno-0-3" href="#__codelineno-0-3"></a><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]</span> <span class="o">|</span> <span class="n">JsonRpcError</span>
+</span><span id="__span-0-2"><a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a>    <span class="n">cursor</span><span class="p">:</span> <span class="nb">str</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+</span><span id="__span-0-3"><a id="__codelineno-0-3" name="__codelineno-0-3" href="#__codelineno-0-3"></a>    <span class="o">*</span><span class="p">,</span>
+</span><span id="__span-0-4"><a id="__codelineno-0-4" name="__codelineno-0-4" href="#__codelineno-0-4"></a>    <span class="n">user</span><span class="p">:</span> <span class="n">Any</span><span class="p">,</span>
+</span><span id="__span-0-5"><a id="__codelineno-0-5" name="__codelineno-0-5" href="#__codelineno-0-5"></a>    <span class="n">request</span><span class="p">:</span> <span class="n">Any</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+</span><span id="__span-0-6"><a id="__codelineno-0-6" name="__codelineno-0-6" href="#__codelineno-0-6"></a>    <span class="n">scopes</span><span class="p">:</span> <span class="n">Sequence</span><span class="p">[</span><span class="nb">str</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+</span><span id="__span-0-7"><a id="__codelineno-0-7" name="__codelineno-0-7" href="#__codelineno-0-7"></a><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]</span> <span class="o">|</span> <span class="n">JsonRpcError</span>
 </span></code></pre></div>
 
     <div class="doc doc-contents ">
@@ -2019,10 +2001,51 @@ pagination arguments and the <code>additionalProperties</code> policy), the same
 per-caller listing-permission filter (<code>FILTER_LISTINGS_BY_PERMISSIONS</code>),
 and the same opaque-cursor pagination — pass the returned <code>nextCursor</code>
 back to fetch the next page. A :class:<code>JsonRpcError</code> signals a bad cursor.</p>
+<p><code>scopes</code> are the caller's granted scopes; pass them so a
+<code>ScopeRequired</code>-gated tool is visible under
+<code>FILTER_LISTINGS_BY_PERMISSIONS</code> exactly as it would be on the wire.</p>
 <p>Unlike :meth:<code>call_tool</code> (the spec core), this is the full transport
 surface — the entry point for an in-process consumer (the django-ag-ui
 bridge, a Pydantic-AI toolset) that must mirror what a remote MCP client
-would see.</p>
+would see. Under an event loop use :meth:<code>alist_tools</code> — a listing
+permission filter that hits the DB raises <code>SynchronousOnlyOperation</code>
+from a sync call on the loop.</p>
+
+
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-function">
+
+
+<h3 id="rest_framework_mcp.server.mcp_server.MCPServer.alist_tools" class="doc doc-heading">
+            <span class="doc doc-object-name doc-function-name">alist_tools</span>
+
+
+  <span class="doc doc-labels">
+      <small class="doc doc-label doc-label-async"><code>async</code></small>
+  </span>
+
+<a href="#rest_framework_mcp.server.mcp_server.MCPServer.alist_tools" class="headerlink" title="Permanent link">&para;</a></h3>
+<div class="language-python doc-signature highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="nf">alist_tools</span><span class="p">(</span>
+</span><span id="__span-0-2"><a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a>    <span class="n">cursor</span><span class="p">:</span> <span class="nb">str</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+</span><span id="__span-0-3"><a id="__codelineno-0-3" name="__codelineno-0-3" href="#__codelineno-0-3"></a>    <span class="o">*</span><span class="p">,</span>
+</span><span id="__span-0-4"><a id="__codelineno-0-4" name="__codelineno-0-4" href="#__codelineno-0-4"></a>    <span class="n">user</span><span class="p">:</span> <span class="n">Any</span><span class="p">,</span>
+</span><span id="__span-0-5"><a id="__codelineno-0-5" name="__codelineno-0-5" href="#__codelineno-0-5"></a>    <span class="n">request</span><span class="p">:</span> <span class="n">Any</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+</span><span id="__span-0-6"><a id="__codelineno-0-6" name="__codelineno-0-6" href="#__codelineno-0-6"></a>    <span class="n">scopes</span><span class="p">:</span> <span class="n">Sequence</span><span class="p">[</span><span class="nb">str</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+</span><span id="__span-0-7"><a id="__codelineno-0-7" name="__codelineno-0-7" href="#__codelineno-0-7"></a><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]</span> <span class="o">|</span> <span class="n">JsonRpcError</span>
+</span></code></pre></div>
+
+    <div class="doc doc-contents ">
+
+        <p>Async :meth:<code>list_tools</code> — safe to call from an event loop.</p>
+<p>Listing itself is pure Python, but the per-caller permission filter
+(<code>FILTER_LISTINGS_BY_PERMISSIONS</code>) may run a DB-backed check (e.g.
+<code>DjangoPermRequired</code> → <code>user.has_perm</code>), which raises
+<code>SynchronousOnlyOperation</code> when reached synchronously from within an
+event loop — the exact context an async in-process consumer runs in. The
+whole sync handler therefore runs in Django's thread-sensitive executor.</p>
 
 
     </div>
@@ -2047,7 +2070,8 @@ would see.</p>
 </span><span id="__span-0-4"><a id="__codelineno-0-4" name="__codelineno-0-4" href="#__codelineno-0-4"></a>    <span class="o">*</span><span class="p">,</span>
 </span><span id="__span-0-5"><a id="__codelineno-0-5" name="__codelineno-0-5" href="#__codelineno-0-5"></a>    <span class="n">user</span><span class="p">:</span> <span class="n">Any</span><span class="p">,</span>
 </span><span id="__span-0-6"><a id="__codelineno-0-6" name="__codelineno-0-6" href="#__codelineno-0-6"></a>    <span class="n">request</span><span class="p">:</span> <span class="n">Any</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
-</span><span id="__span-0-7"><a id="__codelineno-0-7" name="__codelineno-0-7" href="#__codelineno-0-7"></a><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]</span> <span class="o">|</span> <span class="n">JsonRpcError</span>
+</span><span id="__span-0-7"><a id="__codelineno-0-7" name="__codelineno-0-7" href="#__codelineno-0-7"></a>    <span class="n">scopes</span><span class="p">:</span> <span class="n">Sequence</span><span class="p">[</span><span class="nb">str</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+</span><span id="__span-0-8"><a id="__codelineno-0-8" name="__codelineno-0-8" href="#__codelineno-0-8"></a><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]</span> <span class="o">|</span> <span class="n">JsonRpcError</span>
 </span></code></pre></div>
 
     <div class="doc doc-contents ">
@@ -2065,7 +2089,9 @@ deliberately omits. Returns the wire's result payload (a <code>dict</code> carry
 <p><code>arguments</code> is the flat dict that <code>request.data</code> / query params play on
 HTTP; <code>user</code> is the acting user and <code>request</code> the originating Django
 request when there is one (a minimal request is synthesised otherwise,
-mirroring :meth:<code>call_tool</code>).</p>
+mirroring :meth:<code>call_tool</code>). <code>scopes</code> are the caller's granted scopes,
+populating the synthetic token so a <code>ScopeRequired</code>-gated tool is
+invokable in-process just as it is on the wire.</p>
 
 
     </div>
@@ -2362,71 +2388,6 @@ only sees its own worker.</p>
     </div>
 
 </div>
-
-
-
-  </div>
-
-    </div>
-
-</div><h2 id="mcpserviceview">MCPServiceView<a class="headerlink" href="#mcpserviceview" title="Permanent link">&para;</a></h2>
-
-
-<div class="doc doc-object doc-class">
-
-
-
-<h2 id="rest_framework_mcp.server.types.mcp_service_view.MCPServiceView" class="doc doc-heading">
-            <span class="doc doc-object-name doc-class-name">MCPServiceView</span>
-
-
-  <span class="doc doc-labels">
-      <small class="doc doc-label doc-label-dataclass"><code>dataclass</code></small>
-  </span>
-
-<a href="#rest_framework_mcp.server.types.mcp_service_view.MCPServiceView" class="headerlink" title="Permanent link">&para;</a></h2>
-
-
-    <div class="doc doc-contents first">
-
-
-
-        <p>Minimal :class:<code>rest_framework_services.ServiceView</code> adapter for MCP.</p>
-<p>Per-spec <code>kwargs</code> providers on <code>ServiceSpec</code> / <code>SelectorSpec</code> (added
-in djangorestframework-services 0.6) are typed against
-:class:<code>~rest_framework_services.ServiceView</code> — a structural Protocol
-requiring <code>request</code>, <code>kwargs</code>, and <code>action</code>. The MCP transport
-doesn't go through DRF views, so we synthesise an instance that satisfies
-the Protocol and pass it into the provider.</p>
-<ul>
-<li><code>request</code> is the internal DRF Request the dispatch flow already
-  builds (so providers can read <code>request.user</code> etc.).</li>
-<li><code>kwargs</code> is the URI-template variables on resource reads, or an empty
-  dict on tool calls.</li>
-<li><code>action</code> is the binding name (<code>"invoices.create"</code>, etc.) — gives
-  providers a stable identifier without digging at view internals.</li>
-</ul>
-
-
-
-
-
-
-
-
-
-
-
-<div class="doc doc-children">
-
-
-
-
-
-
-
-
-
 
 
 

@@ -2506,7 +2506,8 @@ return — usually <code>"application/json"</code>.</p>
 <p><code>kwargs_provider</code> mirrors <code>SelectorSpec.kwargs</code> from
 <code>djangorestframework-services &gt;= 0.6</code>: when set, the handler invokes it
 once per request and merges the returned dict into the kwarg pool. The
-provider receives a synthesised :class:<code>MCPServiceView</code> (URI-template
+provider receives a synthesised
+:class:<code>~rest_framework_services.OfflineServiceView</code> (URI-template
 variables exposed as <code>view.kwargs</code>, the binding name as
 <code>view.action</code>).</p>
 <p>The <code>Generic[ResultT]</code> parameter is purely informational — it lets
