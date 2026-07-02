@@ -154,6 +154,31 @@ def test_spec_permission_denial_propagates() -> None:
         server.call_tool("things.create", user=None)
 
 
+def test_selector_spec_permission_denial_propagates() -> None:
+    # AUTHZ-2 regression: a selector spec's class-level ``permission_classes``
+    # used to leak through this spec-core surface — the ``on_target_resolved``
+    # hook never fired on selector reads, and ``dispatch_spec`` never consults
+    # ``permission_classes`` itself. The upfront ``enforce_permissions`` call now
+    # denies before the selector runs.
+    ran = False
+
+    def _selector(**_: Any) -> Any:
+        nonlocal ran
+        ran = True
+        return {"leaked": True}
+
+    server = _server()
+    server.register_selector_tool(
+        name="things.secret",
+        spec=SelectorSpec(
+            kind=SelectorKind.RETRIEVE, selector=_selector, permission_classes=[_DenyAll]
+        ),
+    )
+    with pytest.raises(PermissionDenied):
+        server.call_tool("things.secret", {"pk": 1}, user=None)
+    assert ran is False  # denied before the selector could produce a payload
+
+
 def test_unknown_tool_name_raises_keyerror() -> None:
     server = _server()
     with pytest.raises(KeyError, match="nope"):

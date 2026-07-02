@@ -7,6 +7,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.9.1] — 2026-07-02
+
+### Security
+
+- **`MCPServer.call_tool` now enforces a spec's class-level `permission_classes`
+  for selector tools.** The spec-core in-process surface relied solely on the
+  `on_target_resolved=enforce_permissions` hook, which never fired on selector
+  reads (and `dispatch_spec` never consults `permission_classes` itself) — so a
+  selector spec whose `has_permission` denied (e.g. `permission_classes=[DenyAll]`)
+  returned its payload through `call_tool` with `isError=False`. `call_spec_tool`
+  now calls `enforce_permissions(spec, context)` **upfront and unconditionally**
+  for both spec kinds before dispatching, raising `PermissionDenied` as intended;
+  the hook still adds object-level checks. Only the in-process spec-core surface
+  (`MCPServer.call_tool`) was affected — the wire paths (`tools/call`,
+  `acall_tool`) fold spec permissions into `binding.permissions` at registration
+  and were never impacted. Independent of the `djangorestframework-services` pin.
+
 ## [0.9.0] — 2026-06-23
 
 ### Added
@@ -1043,7 +1060,8 @@ Pinned to `djangorestframework-services==0.6.0`.
 - 100% line + branch coverage enforced by pytest (**451 tests** at
   release).
 
-[Unreleased]: https://github.com/Artui/djangorestframework-mcp-server/compare/v0.9.0...HEAD
+[Unreleased]: https://github.com/Artui/djangorestframework-mcp-server/compare/v0.9.1...HEAD
+[0.9.1]: https://github.com/Artui/djangorestframework-mcp-server/compare/v0.9.0...v0.9.1
 [0.9.0]: https://github.com/Artui/djangorestframework-mcp-server/compare/v0.8.0...v0.9.0
 [0.8.0]: https://github.com/Artui/djangorestframework-mcp-server/compare/v0.7.1...v0.8.0
 [0.7.1]: https://github.com/Artui/djangorestframework-mcp-server/compare/v0.7.0...v0.7.1

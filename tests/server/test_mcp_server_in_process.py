@@ -16,6 +16,7 @@ from typing import Any
 
 import pytest
 from django.http import HttpRequest
+from rest_framework.permissions import BasePermission
 from rest_framework_services.types.selector_kind import SelectorKind
 from rest_framework_services.types.selector_spec import SelectorSpec
 from rest_framework_services.types.service_spec import ServiceSpec
@@ -38,6 +39,13 @@ class _Deny:
 
     def required_scopes(self) -> list[str]:
         return ["x"]
+
+
+class _DenyAllSpecPerm(BasePermission):
+    """A DRF spec-level ``permission_classes`` entry that denies at class level."""
+
+    def has_permission(self, request: Any, view: Any) -> bool:  # noqa: ARG002
+        return False
 
 
 def _list_invoices() -> Any:
@@ -194,6 +202,25 @@ async def test_acall_tool_enforces_mcp_permissions() -> None:
         name="locked", spec=ServiceSpec(service=lambda: None), permissions=[_Deny()]
     )
     result = await server.acall_tool("locked", {}, user=None)
+    assert isinstance(result, JsonRpcError)
+    assert result.code == JsonRpcErrorCode.FORBIDDEN
+
+
+@pytest.mark.django_db(transaction=True)
+async def test_acall_tool_enforces_selector_spec_permissions() -> None:
+    """AUTHZ-2 regression guard: a selector spec's ``permission_classes`` are
+    wrapped into ``binding.permissions`` at registration, so the wire path
+    (unlike the pre-fix spec-core ``call_tool``) has always denied them."""
+    server = _server()
+    server.register_selector_tool(
+        name="secret",
+        spec=SelectorSpec(
+            kind=SelectorKind.RETRIEVE,
+            selector=lambda **_: {"leaked": True},
+            permission_classes=[_DenyAllSpecPerm],
+        ),
+    )
+    result = await server.acall_tool("secret", {"pk": 1}, user=None)
     assert isinstance(result, JsonRpcError)
     assert result.code == JsonRpcErrorCode.FORBIDDEN
 
