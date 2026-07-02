@@ -2,7 +2,12 @@ from __future__ import annotations
 
 from typing import Any
 
-from rest_framework_services import resolve_callable_kwargs, run_selector
+from rest_framework_services import (
+    OfflineServiceView,
+    build_offline_context,
+    resolve_callable_kwargs,
+    run_selector,
+)
 from rest_framework_services.types.selector_kind import SelectorKind
 
 from rest_framework_mcp._compat.tracing import span
@@ -10,14 +15,12 @@ from rest_framework_mcp.constants import JsonRpcErrorCode
 from rest_framework_mcp.handlers.handle_tools_call import _span_attrs
 from rest_framework_mcp.handlers.types.context import MCPCallContext
 from rest_framework_mcp.handlers.utils import (
-    build_internal_drf_request,
     check_permissions,
     consume_rate_limits,
 )
 from rest_framework_mcp.output.encode_json import encode_json
 from rest_framework_mcp.protocol.types.json_rpc_error import JsonRpcError
 from rest_framework_mcp.protocol.types.resource_contents import ResourceContents
-from rest_framework_mcp.server.types.mcp_service_view import MCPServiceView
 
 
 def handle_resources_read(
@@ -71,9 +74,9 @@ def handle_resources_read(
                 data={"retryAfter": retry_after},
             )
 
-        drf_request = build_internal_drf_request(
-            context.http_request, user=context.token.user, data=None
-        )
+        drf_request = build_offline_context(
+            context.token.user, None, http_request=context.http_request
+        ).request
 
         pool: dict[str, Any] = {
             "request": drf_request,
@@ -84,7 +87,7 @@ def handle_resources_read(
             # Per-spec kwargs provider from ``SelectorSpec.kwargs``: URI-template
             # variables are exposed via ``view.kwargs`` so providers can inspect
             # them without parsing the URI again.
-            view = MCPServiceView(request=drf_request, action=binding.name, kwargs=dict(vars_))
+            view = OfflineServiceView(request=drf_request, action=binding.name, kwargs=dict(vars_))
             pool.update(binding.kwargs_provider(view, drf_request))
         kwargs: dict[str, Any] = resolve_callable_kwargs(binding.selector, pool)
         raw: Any = run_selector(binding.selector, kwargs)

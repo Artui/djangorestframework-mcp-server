@@ -65,11 +65,14 @@ class ToolBinding(Generic[InputT, ResultT, ExtraT]):
     # historical shape.
     argument_binding: ArgumentBinding = ArgumentBinding.BUNDLE
     # How unknown ``arguments`` keys are handled relative to the binding's
-    # ``inputSchema``. ``REJECT`` (default) advertises
-    # ``additionalProperties: false`` and rejects unknown keys with
-    # ``-32602``. ``PASSTHROUGH`` advertises ``additionalProperties: true``
-    # and merges unknown keys into the validated payload. ``IGNORE``
-    # advertises ``additionalProperties: true`` and silently drops them.
+    # ``inputSchema``. ``REJECT`` (default) rejects unknown keys with ``-32602``
+    # and advertises ``additionalProperties: false`` — but only when there is an
+    # ``input_serializer`` to validate against; a serializer-less binding has no
+    # declared field set, so ``REJECT`` can't fire and its schema stays open
+    # (``additionalProperties: true``). ``PASSTHROUGH`` advertises
+    # ``additionalProperties: true`` and merges unknown keys into the validated
+    # payload. ``IGNORE`` advertises ``additionalProperties: true`` and silently
+    # drops them.
     unknown_arguments: UnknownArguments = UnknownArguments.REJECT
     # When ``FILTER_LISTINGS_BY_PERMISSIONS`` is enabled, this binding is
     # normally dropped from ``tools/list`` if any of its ``permissions``
