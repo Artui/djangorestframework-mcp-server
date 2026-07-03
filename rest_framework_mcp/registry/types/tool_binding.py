@@ -59,7 +59,7 @@ class ToolBinding(Generic[InputT, ResultT, ExtraT]):
     # is rejected at construction time.
     include_output_schema: bool | None = None
     # How MCP ``arguments`` flow into the kwarg pool. Defaults to
-    # ``DATA_ONLY`` for service tools: mutation services typically take
+    # ``BUNDLE`` for service tools: mutation services typically take
     # a single ``input_serializer``-validated ``data`` payload, so
     # spreading the dict as top-level kwargs would conflict with that
     # historical shape.

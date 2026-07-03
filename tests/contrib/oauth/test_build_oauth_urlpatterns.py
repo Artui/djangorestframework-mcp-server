@@ -1,4 +1,4 @@
-"""Phase 10d coverage: the full opt-in URL matrix assembled by ``build_oauth_urlpatterns``.
+"""Coverage: the full opt-in URL matrix assembled by ``build_oauth_urlpatterns``.
 
 Verifies that every endpoint we advertise actually resolves and that the
 flags (``include_aliases`` / ``include_openid_discovery`` / ``include_dcr``)

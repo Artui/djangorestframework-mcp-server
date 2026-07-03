@@ -1,6 +1,6 @@
 """MCP server factory for the conformance suite.
 
-Exercises every Phase 10 feature in one server so the conformance tests
+Exercises every binding feature in one server so the conformance tests
 can verify each binding contract end-to-end through the real Django
 URL conf + transport stack. Each tool is named for the feature it
 demonstrates so failing assertions point at the right binding.
@@ -74,28 +74,28 @@ def _bulk_list() -> list[dict[str, str]]:
 
 
 def build_conformance_server() -> MCPServer:
-    """Build a server exercising every Phase 10 binding contract."""
+    """Build a server exercising every binding contract."""
     server = MCPServer(
         name="conformance",
         auth_backend=AllowAnyBackend(),
         session_store=InMemorySessionStore(),
     )
 
-    # 10a — argument_binding=MERGE on a service tool.
+    # argument_binding=SPREAD_AUTHOR_WINS on a service tool.
     server.register_service_tool(
         name="conformance.merge",
         spec=ServiceSpec(service=_merge_service, atomic=False),
         argument_binding=ArgumentBinding.SPREAD_AUTHOR_WINS,
     )
 
-    # 10b — unknown-args REJECT on a strict-known selector.
+    # unknown-args REJECT on a strict-known selector.
     server.register_selector_tool(
         name="conformance.reject_unknown",
         spec=SelectorSpec(kind=SelectorKind.LIST, selector=_project_scoped_selector),
         input_serializer=_ProjectScopedArgs,
         unknown_arguments=UnknownArguments.REJECT,
     )
-    # 10b — unknown-args PASSTHROUGH sibling.
+    # unknown-args PASSTHROUGH sibling.
     server.register_selector_tool(
         name="conformance.passthrough_unknown",
         spec=SelectorSpec(kind=SelectorKind.LIST, selector=_project_scoped_selector),
@@ -103,7 +103,7 @@ def build_conformance_server() -> MCPServer:
         unknown_arguments=UnknownArguments.PASSTHROUGH,
     )
 
-    # 10c — declarative bulk registration with mixed kinds + defaults.
+    # declarative bulk registration with mixed kinds + defaults.
     register_tools(
         server,
         definitions=[

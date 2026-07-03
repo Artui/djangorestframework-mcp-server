@@ -720,7 +720,7 @@ def test_selector_tool_inputschema_minimal_no_optional_pipeline_knobs() -> None:
     # Only the empty input-serializer-derived shape; no filter / ordering /
     # paginate properties added. ``additionalProperties`` is ``true`` even under
     # the default ``REJECT`` policy: with no ``input_serializer`` the runtime
-    # can't reject unknown keys, so the schema stays open to match (CONF-3).
+    # can't reject unknown keys, so the schema stays open to match.
     assert schema == {
         "type": "object",
         "properties": {},

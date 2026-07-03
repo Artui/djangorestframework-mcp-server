@@ -156,7 +156,7 @@ def test_data_only_raises_when_callable_lacks_data() -> None:
             callable_=fn,
             argument_binding=ArgumentBinding.BUNDLE,
         )
-    assert "DATA_ONLY" in str(excinfo.value)
+    assert "BUNDLE" in str(excinfo.value)
     assert "data" in str(excinfo.value)
 
 
@@ -295,12 +295,12 @@ def test_spec_kwargs_provides_opts_in_to_provider_source() -> None:
 
 
 def test_data_only_does_not_count_serializer_fields_as_sources() -> None:
-    """In DATA_ONLY, the validated payload is bundled into ``data``;
+    """In BUNDLE, the validated payload is bundled into ``data``;
     individual field names never reach the callable as kwargs. A
-    callable that declares ``data`` (so the DATA_ONLY shape check
+    callable that declares ``data`` (so the BUNDLE shape check
     passes) but *also* declares an additional required param like
     ``tenant_id`` is still flagged — that name isn't a pool seed and
-    DATA_ONLY doesn't spread serializer fields.
+    BUNDLE doesn't spread serializer fields.
     """
 
     def fn(*, data: Any, tenant_id: int) -> None: ...  # noqa: ARG001

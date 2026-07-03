@@ -71,6 +71,13 @@ See the [quickstart](docs/quickstart.md) for the full end-to-end recipe.
   templated URIs.
 - **Prompts** — `prompts/list`, `prompts/get` against render callables
   returning strings, `PromptMessage`s, or async coroutines.
+- **In-process transport surface** — call tools without an HTTP round-trip:
+  `MCPServer.call_tool` / `acall_tool` and `list_tools` / `alist_tools`
+  drive the same dispatch and permission checks as the wire path, for
+  embedding in agent bridges, toolsets, or management commands.
+- **Tool annotations** — pass `annotations=` at registration (or rely on the
+  read/mutation default) to advertise MCP hints like `readOnlyHint` /
+  `destructiveHint` on `tools/list`.
 - **Pluggable auth** — `DjangoOAuthToolkitBackend` (default) and
   `AllowAnyBackend` (dev only). Per-binding `MCPPermission` classes
   (`ScopeRequired`, `DjangoPermRequired`) plus your own.
@@ -103,7 +110,8 @@ pip install "djangorestframework-mcp-server[redis]"                     # +Redis
 pip install "djangorestframework-mcp-server[otel]"                      # +OpenTelemetry instrumentation
 pip install "djangorestframework-mcp-server[filter]"                    # +django-filter for selector-tool FilterSets
 pip install "djangorestframework-mcp-server[spectacular]"               # +drf-spectacular schema overrides
-pip install "djangorestframework-mcp-server[toon,oauth,redis,otel,filter,spectacular]"  # everything
+pip install "djangorestframework-mcp-server[jwt]"                       # +SimpleJWTCookieAdapter (djangorestframework-simplejwt)
+pip install "djangorestframework-mcp-server[toon,oauth,redis,otel,filter,spectacular,jwt]"  # everything
 ```
 
 …or with `uv`:
@@ -116,7 +124,8 @@ uv add "djangorestframework-mcp-server[redis]"                          # +Redis
 uv add "djangorestframework-mcp-server[otel]"                           # +OpenTelemetry instrumentation
 uv add "djangorestframework-mcp-server[filter]"                         # +django-filter for selector-tool FilterSets
 uv add "djangorestframework-mcp-server[spectacular]"                    # +drf-spectacular schema overrides
-uv add "djangorestframework-mcp-server[toon,oauth,redis,otel,filter,spectacular]"  # everything
+uv add "djangorestframework-mcp-server[jwt]"                            # +SimpleJWTCookieAdapter (djangorestframework-simplejwt)
+uv add "djangorestframework-mcp-server[toon,oauth,redis,otel,filter,spectacular,jwt]"  # everything
 ```
 
 Optional extras degrade gracefully: TOON falls back to JSON with a runtime

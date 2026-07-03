@@ -1,4 +1,4 @@
-"""Phase 10e coverage: ``SimpleJWTCookieAdapter`` resolution behaviour."""
+"""``SimpleJWTCookieAdapter`` resolution behaviour."""
 
 from __future__ import annotations
 

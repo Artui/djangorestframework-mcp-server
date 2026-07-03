@@ -1,4 +1,4 @@
-"""Phase 10e coverage: the DOT ``AuthorizationView`` adapter hook.
+"""Coverage: the DOT ``AuthorizationView`` adapter hook.
 
 We don't drive a full OAuth flow here — that's DOT's responsibility and
 already covered by its own suite. The test only verifies the hook
