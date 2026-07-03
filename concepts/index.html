@@ -1784,7 +1784,8 @@ forms) accept three behavior knobs:</p>
 <li><code>ArgumentBinding.AUTO</code> — resolve per spec type (service → <code>BUNDLE</code>,
     selector → <code>SPREAD_AUTHOR_WINS</code>).</li>
 </ul>
-<p>Reserved transport-pool seeds (<code>request</code> / <code>user</code> / <code>data</code>) and the
+<p>Reserved transport-pool seeds (<code>request</code> / <code>user</code> / <code>data</code> / <code>instance</code> /
+  <code>serializer</code>) and the
   selector pipeline keys (<code>ordering</code> / <code>page</code> / <code>limit</code>) are stripped
   from the spread regardless of mode so clients can't poison
   transport-controlled state.</p>

@@ -2108,7 +2108,7 @@ the <code>/.well-known/oauth-protected-resource</code> view (RFC 9728) and retur
 a :class:<code>ProtectedResourceMetadata</code> dataclass; the contrib PRM ViewSet
 calls <code>.to_dict()</code> for the wire shape.</p>
 <p>:meth:<code>authorization_server_metadata</code> is consumed by the optional
-<code>rest_framework_mcp.contrib.oauth</code> mount (Phase 10d+) — backends
+<code>rest_framework_mcp.contrib.oauth</code> mount — backends
 that host an authorization server return an :class:<code>AuthorizationServerMetadata</code>
 dataclass; backends that don't host one raise :class:<code>NotImplementedError</code>
 so the contrib code can skip the AS endpoint matrix cleanly.</p>
