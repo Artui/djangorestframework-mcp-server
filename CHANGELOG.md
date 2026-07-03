@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.10.1] — 2026-07-03
+
 ### Fixed
 
 - The `ImproperlyConfigured` raised for a mis-declared `argument_binding` now
@@ -1148,7 +1150,8 @@ Pinned to `djangorestframework-services==0.6.0`.
 - 100% line + branch coverage enforced by pytest (**451 tests** at
   release).
 
-[Unreleased]: https://github.com/Artui/djangorestframework-mcp-server/compare/v0.10.0...HEAD
+[Unreleased]: https://github.com/Artui/djangorestframework-mcp-server/compare/v0.10.1...HEAD
+[0.10.1]: https://github.com/Artui/djangorestframework-mcp-server/compare/v0.10.0...v0.10.1
 [0.10.0]: https://github.com/Artui/djangorestframework-mcp-server/compare/v0.9.1...v0.10.0
 [0.9.1]: https://github.com/Artui/djangorestframework-mcp-server/compare/v0.9.0...v0.9.1
 [0.9.0]: https://github.com/Artui/djangorestframework-mcp-server/compare/v0.8.0...v0.9.0
