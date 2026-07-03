@@ -210,7 +210,7 @@ async def test_acall_tool_enforces_mcp_permissions() -> None:
 
 @pytest.mark.django_db(transaction=True)
 async def test_acall_tool_enforces_selector_spec_permissions() -> None:
-    """AUTHZ-2 regression guard: a selector spec's ``permission_classes`` are
+    """Regression guard: a selector spec's ``permission_classes`` are
     wrapped into ``binding.permissions`` at registration, so the wire path
     (unlike the pre-fix spec-core ``call_tool``) has always denied them."""
     server = _server()
@@ -265,7 +265,7 @@ def test_call_context_uses_a_provided_request_verbatim() -> None:
     assert ctx.http_request.user is sentinel  # type: ignore[attr-defined]
 
 
-# ----- CONF-5: scopes on the in-process surface -----
+# ----- scopes on the in-process surface -----
 
 
 def test_call_context_carries_scopes() -> None:
@@ -305,7 +305,7 @@ async def test_acall_tool_scopes_allow_a_scope_gated_call() -> None:
     assert allowed.get("isError") is not True
 
 
-# ----- CONF-5: alist_tools -----
+# ----- alist_tools -----
 
 
 async def test_alist_tools_mirrors_list_tools() -> None:

@@ -1,4 +1,4 @@
-"""Phase 10b coverage: ``UnknownArguments`` policy on validation + ``tools/list``.
+"""Coverage: ``UnknownArguments`` policy on validation + ``tools/list``.
 
 The three policies live on the binding and influence two layers:
 
@@ -103,7 +103,7 @@ def _svc_no_input(*, user: Any = None) -> dict[str, Any]:
 
 
 def test_serializerless_service_schema_is_open_under_reject() -> None:
-    # CONF-3: a service with no input_serializer is downgraded off REJECT at
+    # A service with no input_serializer is downgraded off REJECT at
     # dispatch, so it can't reject unknown keys — its schema must advertise open.
     server = _server()
     server.register_service_tool(
@@ -272,7 +272,7 @@ def test_selector_tool_schema_additional_properties_false_under_reject() -> None
 
 
 def test_selector_tool_schema_additional_properties_true_when_serializerless_reject() -> None:
-    # CONF-3: a serializer-less binding can't reject unknown keys (the read-path
+    # A serializer-less binding can't reject unknown keys (the read-path
     # validator short-circuits when there is no serializer), so even under REJECT
     # its schema must stay open rather than falsely advertise a closed contract.
     server = _server()

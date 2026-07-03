@@ -16,9 +16,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   (`FILTER_LISTINGS_BY_PERMISSIONS`) can run a DB-backed check (e.g.
   `DjangoPermRequired`), which raises `SynchronousOnlyOperation` when the sync
   `list_tools` reaches it from inside an event loop — the exact context an async
-  in-process consumer runs in. `alist_tools` runs the whole handler in a thread
-  (CONF-5).
-- **Scopes on the in-process transport surface (CONF-5).** `list_tools`,
+  in-process consumer runs in. `alist_tools` runs the whole handler in a thread.
+- **Scopes on the in-process transport surface.** `list_tools`,
   `alist_tools`, and `acall_tool` now accept `scopes=`, populating the synthetic
   `TokenInfo`, so a `ScopeRequired`-gated tool is listable and callable
   in-process exactly as it is over the wire. Previously `_call_context` hardcoded
@@ -29,27 +28,27 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - **`djangorestframework-services` floor raised to `>=0.21.1,<0.22`.** Picks up
   the collection-safe `enforce_permissions`, the object-permission guard firing
-  on selector dispatch (AUTHZ-1b), and the CONF-1/2 dispatch fixes.
+  on selector dispatch, and the conformance dispatch fixes.
 - **Object-level permissions are now enforced on selector RETRIEVE reads through
-  the spec-core surface (AUTHZ-2 object-level half).** With the guard now firing
+  the spec-core surface (object-level half).** With the guard now firing
   on selector dispatch (drf-services 0.21), `MCPServer.call_tool`'s
   `on_target_resolved=enforce_permissions` hook denies an object-level
   `has_object_permission` failure on the resolved row — not just class-level
   denials.
-- **`tools/list` advertises `additionalProperties` honestly (CONF-3).** A schema
+- **`tools/list` advertises `additionalProperties` honestly.** A schema
   is stamped `additionalProperties: false` only when the runtime actually rejects
   unknown keys — i.e. under `REJECT` *and* with an `input_serializer` to validate
   against. A serializer-less binding can't reject (the service path downgrades
   `REJECT`; the read/chain validator short-circuits), so its schema now stays
   open, matching the runtime instead of over-claiming a closed contract.
 - **Service tools under `REJECT` now reject the post-fetch keys `ordering` /
-  `page` / `limit` (CONF-3, contract change).** Routing service dispatch through
+  `page` / `limit` (contract change).** Routing service dispatch through
   `dispatch_spec` means those keys are treated as unknown arguments on a mutation
   tool (they are the selector pipeline's, not a service's), so a client sending
   them to a `REJECT` service tool now gets `-32602` rather than having them
   silently dropped. Selector tools still consume and strip them as before.
-- **Off-HTTP request/view synthesis unified on `djangorestframework-services`
-  (CONF-5).** The selector, chain, resource, and prompt handlers now build their
+- **Off-HTTP request/view synthesis unified on `djangorestframework-services`.**
+  The selector, chain, resource, and prompt handlers now build their
   synthetic DRF request/view via the sister repo's `build_offline_context` /
   `OfflineServiceView` — the same synthesizer the service path already used —
   instead of the local `build_internal_drf_request` + `MCPServiceView`, removing
@@ -57,13 +56,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
-- **`collection_selector_spec` service tools can now be registered (CONF-4).**
+- **`collection_selector_spec` service tools can now be registered.**
   Registration validated that every required callable parameter has a source but
   did not recognise `collection` (the bulk / list-mutation target a
   `collection_selector_spec` resolves), so a bulk-mutation service declaring
   `collection` raised `ImproperlyConfigured` at registration. `collection` is now
   a recognised source, matching the existing `instance` handling.
-- **The tracked examples build against the shipped API (CONF-4).** Both
+- **The tracked examples build against the shipped API.** Both
   `examples/invoicing` and `examples/job_status` passed the removed `filter_set=`
   kwarg to `register_selector_tool()`, built `SelectorSpec` without the required
   `kind=`, set `output_serializer=` on `ServiceSpec` (now on
@@ -239,7 +238,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Changed
 
 - **Adopted drf-services' stable dispatch surface** (the sister repo's
-  SURF-1 / 0.17). All dispatch-leaf imports — `run_service`,
+  0.17 release). All dispatch-leaf imports — `run_service`,
   `arun_service`, `is_async`, `resolve_callable_kwargs`, `run_selector`,
   `arun_selector`, `is_queryset`, `apply_queryset_shaping` — now come from
   the `rest_framework_services` package root (the documented, semver-stable
@@ -565,7 +564,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
-- **Structural cleanup (Phase 10h)** — pure refactor, no behavior
+- **Structural cleanup** — pure refactor, no behavior
   change. Public top-level `rest_framework_mcp` re-exports unchanged.
   - **`types/` sub-packages.** Every parent package that mixed type
     declarations with functionality now has a `types/` sibling that
@@ -651,7 +650,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `DRFPermissionAdapter`. Filter is point-in-time only —
   per-call-argument permissions evaluate against a data-less request at
   list time, so this is binding-level gating, not per-record gating.
-- Conformance test suite (`tests/conformance/`) — drives every Phase 10
+- Conformance test suite (`tests/conformance/`) — drives every binding
   feature through the live Django URL conf + JSON-RPC transport so the
   wire shape is what an MCP client actually sees. Covers
   `ArgumentBinding.MERGE` spread + pool-seed protection, all three
@@ -838,13 +837,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - `docs/quickstart.md` claimed `AllowAnyBackend` was the default
     auth backend; the default is `DjangoOAuthToolkitBackend`. Updated
     the dev snippet to tell users to swap it in explicitly.
-  - `docs/concepts.md` and `docs/async.md` carried stale "Phase 6 /
-    Phase 7 / no-replay" roadmap statements that have since shipped
+  - `docs/concepts.md` and `docs/async.md` carried stale roadmap
+    statements that have since shipped
     (`async_urls` + GET-side SSE, `RedisSSEBroker`,
     `InMemorySSEReplayBuffer` / `RedisSSEReplayBuffer`). Rewrote to
     describe the shipped state and link the recipes.
   - `RedisSSEBroker` docstring still claimed `Last-Event-ID` resume
-    was "Phase 7c"; the `RedisSSEReplayBuffer` pairing is in tree.
+    was unimplemented; the `RedisSSEReplayBuffer` pairing is in tree.
   - `docs/recipes/custom-permission.md` showed a permission example
     reading `request.user.tenant_id` at registration time, where no
     request exists. Updated to use a configured `settings` value and
@@ -929,7 +928,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Fixed
 
 - `docs/index.md` was significantly out of sync with `README.md` —
-  the install matrix was stuck at the Phase 1 era (`[toon]` + `[oauth]`
+  the install matrix was outdated (`[toon]` + `[oauth]`
   only, missing `[redis]` / `[otel]` / `[filter]` / `[spectacular]`
   and the `uv add` block), and "What ships in v1" predated prompts,
   SSE, rate limits, and OpenTelemetry entirely. Aligned the
