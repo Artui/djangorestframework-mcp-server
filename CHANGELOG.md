@@ -7,6 +7,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- The `ImproperlyConfigured` raised for a mis-declared `argument_binding` now
+  names the current enum member (`BUNDLE`) instead of the retired `DATA_ONLY`,
+  so the message points at a member that actually exists. Internal comments and
+  docstrings still using the old `DATA_ONLY` / `MERGE` / `REPLACE` vocabulary
+  were updated to `BUNDLE` / `SPREAD_AUTHOR_WINS` / `SPREAD_CALLER_WINS` to match.
+
+### Changed
+
+- Widened the `djangorestframework-services` dependency to `>=0.21.1,<0.23` to
+  allow the published 0.22.x line.
+- Documentation: corrected the stale error-mapping and dispatch descriptions,
+  documented the `[jwt]` extra and the in-process transport surface / tool
+  annotations in the README, and completed the reserved-seed list in
+  `docs/concepts.md`.
+
 ## [0.10.0] — 2026-07-02
 
 ### Added
