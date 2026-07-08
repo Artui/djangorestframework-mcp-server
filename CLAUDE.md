@@ -114,16 +114,21 @@ Import these — do not parallel them:
 - `is_async`, `is_queryset`, `apply_queryset_shaping` — the remaining dispatch leaves.
 - `rest_framework_services.exceptions.service_error.ServiceError` and
   `service_validation_error.ServiceValidationError` — caught at the MCP boundary and
-  mapped to JSON-RPC error responses (`-32602` for `ServiceValidationError`, `-32000`
-  for `ServiceError`).
+  mapped to `isError: true` tool results via `build_error_tool_result(...)`
+  (`error_type="validation_error"` for `ServiceValidationError`, `"service_error"`
+  for `ServiceError`), not to JSON-RPC error envelopes. A dispatch failure surfaces
+  as a failed *tool result*, so the caller still gets a well-formed `tools/call`
+  response.
 
 The dispatch leaves are **top-level exports** of `rest_framework_services` (its
 documented "stable dispatch surface", 0.17+) — import them from the package root,
-never from internal `utils` / `_compat` paths (`_compat` was removed in 0.17).
+never from internal `utils` / `_compat` paths.
 
-Validation, output-serializer rendering, and kwarg-pool construction are reproduced
-locally in the `handlers/` layer — small, transport-shaped equivalents without
-view-layer dependencies.
+Validation, output-serializer rendering, and kwarg-pool construction are **not**
+reproduced locally. The `handlers/` layer delegates to the sister repo's
+transport-neutral dispatch surface — `dispatch_spec` + `render_spec_output` (see
+`handlers/call_spec_tool.py` and `mcp_server.py`) — so a single implementation of
+validation and output rendering serves both the DRF view path and this MCP transport.
 
 ## Tests
 

@@ -54,6 +54,10 @@ def service_spec_to_tool(
             spec.instance_selector_spec is not None
             and spec.instance_selector_spec.selector is not None
         ),
+        provides_collection=(
+            spec.collection_selector_spec is not None
+            and spec.collection_selector_spec.selector is not None
+        ),
     )
     spec_perms: tuple[Any, ...] = wrap_spec_permissions(spec.permission_classes, label=name)
     effective_perms: tuple[Any, ...] = spec_perms + tuple(permissions)

@@ -40,7 +40,9 @@ from typing import Any
 
 from rest_framework import serializers as drf_serializers
 from rest_framework_services import (
+    OfflineServiceView,
     adispatch_spec,
+    build_offline_context,
     dispatch_spec,
     filterset_to_json_schema,
     is_queryset,
@@ -59,7 +61,6 @@ from rest_framework_mcp.constants import (
 )
 from rest_framework_mcp.handlers.types.context import MCPCallContext
 from rest_framework_mcp.handlers.utils import (
-    build_internal_drf_request,
     check_permissions,
     consume_rate_limits,
     invoke_context_provider,
@@ -72,7 +73,6 @@ from rest_framework_mcp.output.resolve_structured_output import resolve_structur
 from rest_framework_mcp.output.tool_result import build_tool_result
 from rest_framework_mcp.protocol.types.json_rpc_error import JsonRpcError
 from rest_framework_mcp.registry.types.selector_tool_binding import SelectorToolBinding
-from rest_framework_mcp.server.types.mcp_service_view import MCPServiceView
 
 
 def dispatch_selector_tool(
@@ -206,9 +206,9 @@ def _build_request_and_validate(
     Their names are passed in as ``additional_known_keys`` so the
     unknown-argument policy doesn't flag them as unrecognised.
     """
-    drf_request = build_internal_drf_request(
-        context.http_request, user=context.token.user, data=arguments_raw
-    )
+    drf_request = build_offline_context(
+        context.token.user, arguments_raw, http_request=context.http_request
+    ).request
     try:
         validated = validate_input_against_serializer(
             arguments_raw,
@@ -369,7 +369,7 @@ def _dispatch_kwargs(
         "user": context.token.user,
         "params": _selector_dispatch_params(arguments_raw, validated),
         "request": drf_request,
-        "view": MCPServiceView(request=drf_request, action=binding.name),
+        "view": OfflineServiceView(request=drf_request, action=binding.name),
         "argument_binding": argument_binding,
         "unknown_arguments": unknown_arguments,
     }
@@ -516,7 +516,7 @@ def _resolve_output_context(
     spec = binding.spec
     if spec.output_serializer_context is None:
         return None
-    view = MCPServiceView(request=drf_request, action=binding.name)
+    view = OfflineServiceView(request=drf_request, action=binding.name)
     return invoke_context_provider(spec.output_serializer_context, view, drf_request, extras=extras)
 
 

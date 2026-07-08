@@ -1,4 +1,4 @@
-"""Phase 10d coverage: DCR view behaviour (gating + happy path + errors)."""
+"""OAuth DCR view behaviour: gating + happy path + errors."""
 
 from __future__ import annotations
 

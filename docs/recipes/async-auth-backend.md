@@ -82,7 +82,7 @@ Mount under `async_urls` so the backend's `authenticate` is awaited
 directly instead of being wrapped in `sync_to_async`:
 
 ```python
-urlpatterns = [path("mcp/", include(server.async_urls))]
+urlpatterns = [path("mcp/", server.async_urls)]
 ```
 
 ## What about the sync transport?

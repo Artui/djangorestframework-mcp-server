@@ -38,7 +38,6 @@ from rest_framework_mcp.registry.types.selector_defaults import SelectorDefaults
 from rest_framework_mcp.registry.types.service_defaults import ServiceDefaults
 from rest_framework_mcp.registry.types.tool_definition import ToolDefinition
 from rest_framework_mcp.server.mcp_server import MCPServer
-from rest_framework_mcp.server.types.mcp_service_view import MCPServiceView
 from rest_framework_mcp.transport.django_cache_session_store import DjangoCacheSessionStore
 from rest_framework_mcp.transport.in_memory_session_store import InMemorySessionStore
 from rest_framework_mcp.transport.in_memory_sse_broker import InMemorySSEBroker
@@ -66,7 +65,6 @@ __all__ = [
     "MCPAuthBackend",
     "MCPPermission",
     "MCPServer",
-    "MCPServiceView",
     "OutputFormat",
     "PromptArgument",
     "PromptMessage",

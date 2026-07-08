@@ -1,4 +1,4 @@
-"""End-to-end Phase 10-pre coverage: spec.permission_classes through HTTP.
+"""End-to-end coverage: spec.permission_classes through HTTP.
 
 Unit tests pin the adapter wrap; this file proves the wrapped
 permission denies a real client request through the full transport.

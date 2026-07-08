@@ -38,6 +38,7 @@ def validate_input_serializer_against_callable(
     argument_binding: ArgumentBinding,
     spec_kwargs_provides: frozenset[str] = frozenset(),
     provides_instance: bool = False,
+    provides_collection: bool = False,
 ) -> None:
     """Fail-fast at registration time when input shape doesn't match the callable.
 
@@ -102,6 +103,7 @@ def validate_input_serializer_against_callable(
         argument_binding=argument_binding,
         spec_kwargs_provides=spec_kwargs_provides,
         provides_instance=provides_instance,
+        provides_collection=provides_collection,
     )
 
 
@@ -124,7 +126,7 @@ def _validate_data_only(label: str, sig: inspect.Signature) -> None:
         # the payload through it and needs no ``data`` parameter.
         return
     raise ImproperlyConfigured(
-        f"{label}: argument_binding=DATA_ONLY requires the callable to declare a "
+        f"{label}: argument_binding=BUNDLE requires the callable to declare a "
         "`data` parameter (or `serializer`, or accept `**kwargs`) — the validated "
         "input payload is forwarded under those names. The callable declares "
         "none of them, so the payload would be silently dropped at dispatch time."
@@ -145,7 +147,7 @@ def _validate_merge_or_replace(label: str, sig: inspect.Signature, input_seriali
     )
     # If the callable declares ``data``, the full validated payload is
     # forwarded under that name — individual fields don't need to map to
-    # individual parameters. This is a deliberate MERGE-mode pattern
+    # individual parameters. This is a deliberate SPREAD_AUTHOR_WINS-mode pattern
     # (``def fn(*, data, request)``): the callable wants the bundle, not
     # the spread. Skip the per-field check in that case.
     if "data" in declared_params:
@@ -173,21 +175,22 @@ def _validate_required_params_have_sources(
     argument_binding: ArgumentBinding,
     spec_kwargs_provides: frozenset[str],
     provides_instance: bool,
+    provides_collection: bool,
 ) -> None:
     """Every required callable parameter must have a static source.
 
     Sources, in priority order:
 
     - ``request`` / ``user`` / ``data`` — always in the pool (transport
-      seeds). In ``MERGE`` / ``REPLACE`` mode the validated payload
+      seeds). In ``SPREAD_AUTHOR_WINS`` / ``SPREAD_CALLER_WINS`` mode the validated payload
       also lands as ``data=`` in the pool, so a callable declaring
       ``data`` always gets it regardless of mode. ``instance`` counts
       only when the spec resolves one (``provides_instance``) and
       ``serializer`` only when an ``input_serializer`` is declared —
       sister-repo 0.16's conditional seeds.
     - ``input_serializer`` fields — only count as sources in
-      ``MERGE`` / ``REPLACE`` mode, where the validated dict is
-      spread into the pool. In ``DATA_ONLY`` mode the fields are
+      ``SPREAD_AUTHOR_WINS`` / ``SPREAD_CALLER_WINS`` mode, where the validated dict is
+      spread into the pool. In ``BUNDLE`` mode the fields are
       bundled into ``data`` and individual names never reach the
       callable as kwargs.
     - ``spec_kwargs_provides`` — explicit opt-in declaring that
@@ -206,7 +209,7 @@ def _validate_required_params_have_sources(
     callable's required params; the rest are presumed to come from
     the raw arguments. Combined with ``spec_kwargs_provides``, this
     still catches a callable that declares a required param the
-    transport has no way to produce (e.g. ``DATA_ONLY`` with no
+    transport has no way to produce (e.g. ``BUNDLE`` with no
     serializer and a callable that doesn't take ``data``).
     """
     if _accepts_var_keyword(sig):
@@ -222,12 +225,16 @@ def _validate_required_params_have_sources(
         and param.default is inspect.Parameter.empty
     )
     # Conditional pool seeds: ``instance`` only exists when the spec
-    # carries an ``instance_selector_spec`` with a selector, ``serializer``
-    # only when an ``input_serializer`` produces a bound instance. The
-    # unconditional seeds are ``request`` / ``user`` / ``data``.
+    # carries an ``instance_selector_spec`` with a selector, ``collection``
+    # only when it carries a ``collection_selector_spec`` with a selector (the
+    # bulk / list-mutation target), ``serializer`` only when an
+    # ``input_serializer`` produces a bound instance. The unconditional seeds
+    # are ``request`` / ``user`` / ``data``.
     sources: set[str] = {"request", "user", "data"}
     if provides_instance:
         sources.add("instance")
+    if provides_collection:
+        sources.add("collection")
     if input_serializer is not None:
         sources.add("serializer")
     sources.update(spec_kwargs_provides)

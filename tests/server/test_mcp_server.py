@@ -194,3 +194,38 @@ def test_register_tool_duplicate_raises() -> None:
     server.register_service_tool(name="dup", spec=ServiceSpec(service=lambda: None))
     with pytest.raises(ValueError, match="Duplicate"):
         server.register_service_tool(name="dup", spec=ServiceSpec(service=lambda: None))
+
+
+def test_urls_is_the_namespaced_triple() -> None:
+    patterns, app_name, namespace = _make().urls
+    # (patterns, app_name, namespace) — the shape path() mounts directly, like
+    # admin.site.urls (no include()).
+    assert app_name == namespace == "mcp"
+    assert [p.name for p in patterns] == ["endpoint", "protected-resource-metadata"]
+
+
+def test_async_urls_is_the_namespaced_triple() -> None:
+    patterns, app_name, namespace = _make().async_urls
+    assert app_name == namespace == "mcp"
+    assert [p.name for p in patterns] == ["endpoint", "protected-resource-metadata"]
+
+
+def test_url_namespace_is_overridable() -> None:
+    from rest_framework_mcp.auth.backends.allow_any_backend import AllowAnyBackend
+
+    server = MCPServer(
+        auth_backend=AllowAnyBackend(),
+        session_store=InMemorySessionStore(),
+        url_namespace="tools",
+    )
+    _, app_name, namespace = server.urls
+    assert app_name == namespace == "tools"
+
+
+def test_urls_mount_via_path_and_reverse_namespaced() -> None:
+    # tests.testapp.urls mounts path("mcp/", server.urls) (the conftest
+    # ROOT_URLCONF), so the namespaced names reverse without include().
+    from django.urls import reverse
+
+    assert reverse("mcp:endpoint") == "/mcp/"
+    assert reverse("mcp:protected-resource-metadata") == "/mcp/.well-known/oauth-protected-resource"
