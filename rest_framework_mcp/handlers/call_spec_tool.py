@@ -1,6 +1,6 @@
 """``call_spec_tool`` — transport-neutral invocation of a spec-backed MCP tool.
 
-The blessed surface KEY-1 introduces: drive a ``ServiceSpec`` / ``SelectorSpec``
+The blessed surface this introduces: drive a ``ServiceSpec`` / ``SelectorSpec``
 tool through the sister repo's transport-neutral ``dispatch_spec`` +
 ``render_spec_output`` + ``enforce_permissions`` (off the HTTP / JSON-RPC path),
 returning the same :class:`ToolResult` the wire handlers build. A programmatic
@@ -12,8 +12,10 @@ This is deliberately the **spec core**: it resolves the instance, validates the
 spec's ``input_serializer``, runs the service / selector, re-fetches through the
 output selector, shapes + filters the queryset, and renders — honouring the
 binding's ``argument_binding`` / ``unknown_arguments`` policies (mapped onto
-``dispatch_spec``'s) and its ``permission_classes`` via the
-``on_target_resolved=enforce_permissions`` hook (object-level checks included).
+``dispatch_spec``'s) and its ``permission_classes`` in two layers: an upfront
+``enforce_permissions`` call for the class-level ``has_permission`` check, plus
+the ``on_target_resolved=enforce_permissions`` hook for object-level checks on
+the resolved target.
 It does *not* layer on the read-shaped transport extras — pagination, ordering,
 and a selector binding's MCP-only ``input_serializer`` stay with the wire
 handlers. The transport-level MCP permissions / rate limits are a wire concern
@@ -72,6 +74,14 @@ def call_spec_tool(
         )
     spec = binding.spec
     context = build_offline_context(user, arguments, http_request=request, action=binding.name)
+    # Class-level ``permission_classes``, enforced upfront and unconditionally.
+    # ``dispatch_spec`` never consults ``permission_classes`` (authz is the
+    # caller's job), and the ``on_target_resolved`` hook only adds *object-level*
+    # checks on a resolved target — and, before drf-services 0.21, never fired on
+    # the selector paths at all. So a spec whose ``has_permission`` denies (e.g.
+    # a ``DenyAll`` selector) would otherwise leak its payload through this
+    # in-process surface. The hook below still covers object-level checks.
+    enforce_permissions(spec, context)
     argument_binding, unknown_arguments = services_dispatch_policies(binding)
     try:
         result = dispatch_spec(

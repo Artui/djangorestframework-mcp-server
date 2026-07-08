@@ -1,4 +1,4 @@
-"""Phase 10g end-to-end coverage: ``FILTER_LISTINGS_BY_PERMISSIONS`` toggle.
+"""End-to-end coverage: ``FILTER_LISTINGS_BY_PERMISSIONS`` toggle.
 
 Exercises every list handler (``tools/list``, ``resources/list``,
 ``resources/templates/list``, ``prompts/list``) with the setting on

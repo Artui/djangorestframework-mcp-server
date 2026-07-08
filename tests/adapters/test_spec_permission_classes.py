@@ -1,6 +1,6 @@
 """Integration tests for ``spec.permission_classes`` plumbing.
 
-These cover the wiring added in Phase 10-pre across the three adapter
+These cover the ``spec.permission_classes`` wiring across the three adapter
 entry points (service tools, selector tools, resources). The unit-shaped
 tests for the helper and adapter live next to the corresponding modules
 under ``tests/auth/permissions/``; what's covered here is the binding-

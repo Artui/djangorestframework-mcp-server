@@ -106,14 +106,19 @@ def create_invoice(*, data):
 ## 5. Mount the URLs
 
 ```python title="urls.py"
-from django.urls import include, path
+from django.urls import path
 
 from invoices.mcp import server
 
 urlpatterns = [
-    path("mcp/", include(server.urls)),
+    path("mcp/", server.urls),
 ]
 ```
+
+`server.urls` is a namespaced `(patterns, app_name, namespace)` triple `path()`
+mounts directly (like `admin.site.urls` — no `include()`), so the endpoints
+reverse as `reverse("mcp:endpoint")` / `reverse("mcp:protected-resource-metadata")`.
+Override the namespace with `MCPServer(url_namespace="…")`.
 
 That mounts:
 
