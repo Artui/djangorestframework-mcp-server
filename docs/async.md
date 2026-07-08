@@ -16,13 +16,13 @@ many concurrent MCP calls without a thread pool.
 ## Switch to ASGI
 
 ```python title="urls.py"
-from django.urls import include, path
+from django.urls import path
 
 from invoices.mcp import server
 
 urlpatterns = [
-    # Old: path("mcp/", include(server.urls)),
-    path("mcp/", include(server.async_urls)),
+    # Sync: path("mcp/", server.urls),
+    path("mcp/", server.async_urls),
 ]
 ```
 

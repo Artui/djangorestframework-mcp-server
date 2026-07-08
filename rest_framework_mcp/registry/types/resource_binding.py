@@ -24,7 +24,8 @@ class ResourceBinding(Generic[ResultT]):
     ``kwargs_provider`` mirrors ``SelectorSpec.kwargs`` from
     ``djangorestframework-services >= 0.6``: when set, the handler invokes it
     once per request and merges the returned dict into the kwarg pool. The
-    provider receives a synthesised :class:`MCPServiceView` (URI-template
+    provider receives a synthesised
+    :class:`~rest_framework_services.OfflineServiceView` (URI-template
     variables exposed as ``view.kwargs``, the binding name as
     ``view.action``).
 

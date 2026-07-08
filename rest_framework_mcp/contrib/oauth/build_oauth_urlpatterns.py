@@ -16,7 +16,7 @@ contiguous set of endpoints:
 .. code-block:: python
 
     urlpatterns = [
-        *server.urls,
+        path("mcp/", server.urls),
         *build_oauth_urlpatterns(server=server, include_dcr=True),
     ]
 """

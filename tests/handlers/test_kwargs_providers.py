@@ -1,9 +1,9 @@
 """``ServiceSpec.kwargs`` / ``SelectorSpec.kwargs`` providers wired through MCP.
 
 The sister repo ships ``kwargs`` as a per-spec callable that returns extra
-kwargs to merge into the dispatch pool. MCP exposes this through
-:class:`MCPServiceView` so providers see the right shape (request, action
-name, URI-template variables on resources).
+kwargs to merge into the dispatch pool. MCP dispatches through the sister
+repo's :class:`~rest_framework_services.OfflineServiceView` so providers see
+the right shape (request, action name, URI-template variables on resources).
 """
 
 from __future__ import annotations
@@ -28,7 +28,6 @@ from rest_framework_mcp.registry.resource_registry import ResourceRegistry
 from rest_framework_mcp.registry.tool_registry import ToolRegistry
 from rest_framework_mcp.registry.types.tool_binding import ToolBinding
 from rest_framework_mcp.server.mcp_server import MCPServer
-from rest_framework_mcp.server.types.mcp_service_view import MCPServiceView
 
 
 def _ctx(*, tools=None, resources=None) -> MCPCallContext:
@@ -272,22 +271,3 @@ async def test_async_selector_spec_kwargs_provider_invoked_on_read() -> None:
     import json
 
     assert json.loads(text) == {"pk": "5", "tenant": 11}
-
-
-# ---------- MCPServiceView shape ----------
-
-
-def test_mcp_service_view_default_kwargs_is_empty_dict() -> None:
-    """``kwargs`` defaults to ``{}`` — the most common shape on tool calls."""
-    request = HttpRequest()
-    view = MCPServiceView(request=request, action="x")
-    assert view.kwargs == {}
-
-
-def test_mcp_service_view_is_frozen() -> None:
-    """The adapter is immutable — providers can't accidentally mutate dispatch state."""
-    import dataclasses
-
-    view = MCPServiceView(request=HttpRequest(), action="x")
-    with pytest.raises(dataclasses.FrozenInstanceError):
-        view.action = "y"  # type: ignore[misc]

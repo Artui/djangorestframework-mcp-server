@@ -1,4 +1,4 @@
-"""Phase 10-pre coverage: sister-repo 0.12+ ``SelectorSpec`` / ``ServiceSpec`` fields.
+"""Coverage: sister-repo 0.12+ ``SelectorSpec`` / ``ServiceSpec`` fields.
 
 The shaping fields (``select_related``, ``prefetch_related``,
 ``annotations``, ``extend_queryset``) are exercised against a real

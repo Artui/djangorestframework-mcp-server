@@ -440,7 +440,7 @@ def test_tools_list_emits_output_schema_when_structured_content_enabled() -> Non
     assert "outputSchema" in tool
 
 
-# ---------- argument_binding: native parameter binding (Phase 10a) ----------
+# ---------- argument_binding: native parameter binding ----------
 
 
 def test_service_tool_with_merge_binding_spreads_args_to_callable_params() -> None:

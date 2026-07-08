@@ -1,4 +1,4 @@
-"""Phase 10b coverage: ``UnknownArguments`` policy on validation + ``tools/list``.
+"""Coverage: ``UnknownArguments`` policy on validation + ``tools/list``.
 
 The three policies live on the binding and influence two layers:
 
@@ -96,6 +96,39 @@ def test_ignore_schema_carries_additional_properties_true() -> None:
     out = handle_tools_list(None, _ctx(server))
     assert isinstance(out, dict)
     assert out["tools"][0]["inputSchema"]["additionalProperties"] is True
+
+
+def _svc_no_input(*, user: Any = None) -> dict[str, Any]:
+    return {"ok": True}
+
+
+def test_serializerless_service_schema_is_open_under_reject() -> None:
+    # A service with no input_serializer is downgraded off REJECT at
+    # dispatch, so it can't reject unknown keys — its schema must advertise open.
+    server = _server()
+    server.register_service_tool(
+        name="t",
+        spec=ServiceSpec(service=_svc_no_input, atomic=False),
+        unknown_arguments=UnknownArguments.REJECT,
+    )
+    out = handle_tools_list(None, _ctx(server))
+    assert isinstance(out, dict)
+    assert out["tools"][0]["inputSchema"]["additionalProperties"] is True
+
+
+@pytest.mark.django_db
+def test_serializerless_service_accepts_unknown_key_under_reject() -> None:
+    # The runtime side of the same contract: an unknown key does not raise
+    # -32602 for a serializer-less service, matching the open schema above.
+    server = _server()
+    server.register_service_tool(
+        name="t",
+        spec=ServiceSpec(service=_svc_no_input, atomic=False),
+        unknown_arguments=UnknownArguments.REJECT,
+    )
+    out = handle_tools_call({"name": "t", "arguments": {"rogue": "v"}}, _ctx(server))
+    assert isinstance(out, dict)
+    assert out.get("isError") is not True
 
 
 # ---------- Runtime behaviour ----------
@@ -223,6 +256,25 @@ def test_selector_tool_reject_rejects_truly_unknown_keys() -> None:
 
 
 def test_selector_tool_schema_additional_properties_false_under_reject() -> None:
+    # A closed schema is honest only with a serializer to validate against —
+    # the runtime then really rejects unknown keys under REJECT.
+    server = _server()
+    server.register_selector_tool(
+        name="x",
+        spec=SelectorSpec(kind=SelectorKind.LIST, selector=_list),
+        input_serializer=_OneFieldInput,
+        paginate=True,
+        unknown_arguments=UnknownArguments.REJECT,
+    )
+    out = handle_tools_list(None, _ctx(server))
+    assert isinstance(out, dict)
+    assert out["tools"][0]["inputSchema"]["additionalProperties"] is False
+
+
+def test_selector_tool_schema_additional_properties_true_when_serializerless_reject() -> None:
+    # A serializer-less binding can't reject unknown keys (the read-path
+    # validator short-circuits when there is no serializer), so even under REJECT
+    # its schema must stay open rather than falsely advertise a closed contract.
     server = _server()
     server.register_selector_tool(
         name="x",
@@ -232,7 +284,7 @@ def test_selector_tool_schema_additional_properties_false_under_reject() -> None
     )
     out = handle_tools_list(None, _ctx(server))
     assert isinstance(out, dict)
-    assert out["tools"][0]["inputSchema"]["additionalProperties"] is False
+    assert out["tools"][0]["inputSchema"]["additionalProperties"] is True
 
 
 def test_selector_tool_schema_additional_properties_true_under_passthrough() -> None:

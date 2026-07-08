@@ -23,8 +23,8 @@ class DRFPermissionAdapter:
     with ``user`` set to ``token.user`` and a lightweight view stand-in
     sufficient for the DRF permission contract (``request``, ``action``).
     The HTTP method on the underlying ``HttpRequest`` is left untouched
-    (unlike :func:`build_internal_drf_request`, which forces ``POST`` for
-    mutation-flow dispatch) — permission evaluation is method-agnostic.
+    (unlike :func:`~rest_framework_services.build_offline_context`, which forces
+    ``POST`` for mutation-flow dispatch) — permission evaluation is method-agnostic.
     """
 
     def __init__(self, permission_class: type[BasePermission]) -> None:

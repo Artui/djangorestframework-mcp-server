@@ -31,7 +31,13 @@ from typing import Any
 
 from django.db import transaction
 from rest_framework import serializers as drf_serializers
-from rest_framework_services import resolve_callable_kwargs, run_selector, run_service
+from rest_framework_services import (
+    OfflineServiceView,
+    build_offline_context,
+    resolve_callable_kwargs,
+    run_selector,
+    run_service,
+)
 from rest_framework_services.exceptions.service_error import ServiceError
 from rest_framework_services.exceptions.service_validation_error import ServiceValidationError
 from rest_framework_services.types.selector_kind import SelectorKind
@@ -43,7 +49,6 @@ from rest_framework_mcp.conf import get_setting
 from rest_framework_mcp.constants import JsonRpcErrorCode, OutputFormat
 from rest_framework_mcp.handlers.types.context import MCPCallContext
 from rest_framework_mcp.handlers.utils import (
-    build_internal_drf_request,
     check_permissions,
     consume_rate_limits,
     invoke_context_provider,
@@ -57,7 +62,6 @@ from rest_framework_mcp.protocol.types.json_rpc_error import JsonRpcError
 from rest_framework_mcp.registry.types.chain_context import ChainContext
 from rest_framework_mcp.registry.types.chain_step import ChainStep
 from rest_framework_mcp.registry.types.chain_tool_binding import ChainToolBinding
-from rest_framework_mcp.server.types.mcp_service_view import MCPServiceView
 
 
 class _ChainAbort(Exception):
@@ -99,9 +103,9 @@ def dispatch_chain_tool(
             data={"retryAfter": retry_after},
         )
 
-    drf_request = build_internal_drf_request(
-        context.http_request, user=context.token.user, data=arguments_raw
-    )
+    drf_request = build_offline_context(
+        context.token.user, arguments_raw, http_request=context.http_request
+    ).request
     serializer: type | None = binding.resolved_input_serializer
     try:
         validated: Any = validate_input_against_serializer(
@@ -275,7 +279,7 @@ def _render_step(step: ChainStep, ctx: ChainContext, drf_request: Any) -> Any:
         return {} if result is None else result
     if provider is None:
         return serializer(result, many=many).data
-    view = MCPServiceView(request=drf_request, action=step.alias)
+    view = OfflineServiceView(request=drf_request, action=step.alias)
     sctx: Mapping[str, Any] = invoke_context_provider(
         provider, view, drf_request, extras={extra_name: result}
     )

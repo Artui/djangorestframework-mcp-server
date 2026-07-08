@@ -24,7 +24,7 @@ class MCPAuthBackend(Protocol):
     calls ``.to_dict()`` for the wire shape.
 
     :meth:`authorization_server_metadata` is consumed by the optional
-    ``rest_framework_mcp.contrib.oauth`` mount (Phase 10d+) — backends
+    ``rest_framework_mcp.contrib.oauth`` mount — backends
     that host an authorization server return an :class:`AuthorizationServerMetadata`
     dataclass; backends that don't host one raise :class:`NotImplementedError`
     so the contrib code can skip the AS endpoint matrix cleanly.

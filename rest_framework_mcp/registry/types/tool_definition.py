@@ -63,7 +63,7 @@ class ToolDefinition:
     input_serializer: type | None = None
     ordering_fields: Sequence[str] | None = None
     paginate: bool | None = None
-    # Phase 10g — per-binding opt-back-in to ``tools/list`` when
+    # Per-binding opt-back-in to ``tools/list`` when
     # ``FILTER_LISTINGS_BY_PERMISSIONS`` would otherwise hide this
     # binding. ``None`` means "use the registration default" (which is
     # ``False``); ``True``/``False`` force the behaviour.

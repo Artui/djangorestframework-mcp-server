@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import django_filters
+from rest_framework_services.types.selector_kind import SelectorKind
 from rest_framework_services.types.selector_spec import SelectorSpec
 from rest_framework_services.types.service_spec import ServiceSpec
 
@@ -29,7 +30,10 @@ def build_server() -> MCPServer:
         spec=ServiceSpec(
             service=start_job,
             input_serializer=StartJobInputSerializer,
-            output_serializer=JobOutputSerializer,
+            output_selector_spec=SelectorSpec(
+                kind=SelectorKind.RETRIEVE,
+                output_serializer=JobOutputSerializer,
+            ),
             # The thread-dispatch happens *after* the HTTP response is
             # written, so a transaction here would commit too early. The
             # example uses ``atomic=False`` for that reason; production
@@ -44,6 +48,7 @@ def build_server() -> MCPServer:
         name="job",
         uri_template="jobs://{job_id}",
         selector=SelectorSpec(
+            kind=SelectorKind.RETRIEVE,
             selector=get_job,
             output_serializer=JobOutputSerializer,
         ),
@@ -53,11 +58,12 @@ def build_server() -> MCPServer:
     server.register_selector_tool(
         name="jobs.list",
         spec=SelectorSpec(
+            kind=SelectorKind.LIST,
             selector=list_jobs,
             output_serializer=JobOutputSerializer,
+            filter_set=JobFilterSet,
         ),
         description="List jobs, optionally filtered by status, paginated.",
-        filter_set=JobFilterSet,
         ordering_fields=["created_at"],
         paginate=True,
     )
