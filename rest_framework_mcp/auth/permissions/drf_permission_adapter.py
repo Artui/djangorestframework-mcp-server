@@ -43,7 +43,7 @@ class DRFPermissionAdapter:
         # stock and most custom permissions, but isn't an ``APIView`` subclass.
         # Cast to ``Any`` at the boundary keeps the rest of the package
         # statically typed.
-        return bool(self._instance.has_permission(drf_request, view))  # ty: ignore[invalid-argument-type]
+        return bool(self._instance.has_permission(drf_request, view))
 
     def required_scopes(self) -> list[str]:
         # DRF permissions don't carry OAuth-scope semantics natively. Subclasses
