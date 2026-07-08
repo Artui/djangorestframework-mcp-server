@@ -17,7 +17,7 @@ from tests.conformance.mcp import build_conformance_server
 server = build_conformance_server()
 
 urlpatterns: list = [
-    path("mcp/", include(server.urls)),
+    path("mcp/", server.urls),
     *build_oauth_urlpatterns(
         server=server,
         include_dcr=True,
