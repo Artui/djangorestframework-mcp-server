@@ -31,9 +31,9 @@ server.register_service_tool(
 Mount in `urls.py`:
 
 ```python
-from django.urls import include, path
+from django.urls import path
 
-urlpatterns = [path("mcp/", include(server.urls))]
+urlpatterns = [path("mcp/", server.urls)]
 ```
 
 Validation, error mapping (`ServiceValidationError` → `-32602`), and JSON-Schema

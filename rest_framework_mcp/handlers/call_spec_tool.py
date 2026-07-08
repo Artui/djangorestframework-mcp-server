@@ -1,6 +1,6 @@
 """``call_spec_tool`` — transport-neutral invocation of a spec-backed MCP tool.
 
-The blessed surface KEY-1 introduces: drive a ``ServiceSpec`` / ``SelectorSpec``
+The blessed surface this introduces: drive a ``ServiceSpec`` / ``SelectorSpec``
 tool through the sister repo's transport-neutral ``dispatch_spec`` +
 ``render_spec_output`` + ``enforce_permissions`` (off the HTTP / JSON-RPC path),
 returning the same :class:`ToolResult` the wire handlers build. A programmatic

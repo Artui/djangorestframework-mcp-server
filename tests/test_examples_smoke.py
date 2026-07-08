@@ -1,4 +1,4 @@
-"""CONF-4 smoke test: the tracked examples import + build against the shipped API.
+"""Smoke test: the tracked examples import + build against the shipped API.
 
 The examples are standalone Django projects (their own settings + apps), so each
 is exercised in a subprocess with its own ``DJANGO_SETTINGS_MODULE`` rather than

@@ -98,7 +98,7 @@ class SelectorToolBinding(Generic[ResultT, ExtraT]):
     # ``hasNext``). When False, the queryset is rendered as-is.
     paginate: bool = False
     # How MCP ``arguments`` flow into the kwarg pool. Defaults to
-    # ``MERGE`` for selector tools: selectors typically declare their
+    # ``SPREAD_AUTHOR_WINS`` for selector tools: selectors typically declare their
     # query parameters as individual function arguments
     # (``def list_drafts(*, project_id, page=1, limit=10)``), so the
     # MCP layer spreads the validated/raw arguments across the pool.

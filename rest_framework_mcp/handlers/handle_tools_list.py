@@ -36,7 +36,7 @@ def handle_tools_list(
     if cursor is not None and not isinstance(cursor, str):
         return JsonRpcError(JsonRpcErrorCode.INVALID_PARAMS, "'cursor' must be a string")
 
-    # Per-caller visibility filter (Phase 10g): when enabled, drop bindings
+    # Per-caller visibility filter: when enabled, drop bindings
     # the current token can't invoke before paginating, so ``nextCursor``
     # reflects the visible slice rather than the full registry.
     bindings = list(context.tools.all())
@@ -71,7 +71,7 @@ def handle_tools_list(
         # enforces. A closed schema (``false``) is advertised only when the
         # dispatch path really rejects unknown keys — ``REJECT`` *and* a
         # serializer to validate against; a serializer-less binding silently
-        # accepts unknowns even under ``REJECT`` (CONF-3), so its schema stays
+        # accepts unknowns even under ``REJECT``, so its schema stays
         # open. ``build_input_schema`` and ``build_selector_tool_input_schema``
         # always return a ``"type": "object"`` shape, so this stamps every
         # emitted schema.

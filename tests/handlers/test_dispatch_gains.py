@@ -1,4 +1,4 @@
-"""CONF-4: wire-level coverage for the 0.8.0 ADOPT-DISP "gains".
+"""Wire-level coverage for the 0.8.0 dispatch "gains".
 
 Routing service tools through drf-services' ``dispatch_spec`` gained two
 capabilities the pre-0.8 pool-based path lacked — collection (bulk) mutations

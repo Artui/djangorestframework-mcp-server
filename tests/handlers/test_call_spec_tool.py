@@ -163,7 +163,7 @@ def test_spec_permission_denial_propagates() -> None:
 
 
 def test_selector_spec_permission_denial_propagates() -> None:
-    # AUTHZ-2 regression: a selector spec's class-level ``permission_classes``
+    # Regression: a selector spec's class-level ``permission_classes``
     # used to leak through this spec-core surface — the ``on_target_resolved``
     # hook never fired on selector reads, and ``dispatch_spec`` never consults
     # ``permission_classes`` itself. The upfront ``enforce_permissions`` call now
@@ -189,7 +189,7 @@ def test_selector_spec_permission_denial_propagates() -> None:
 
 @pytest.mark.django_db
 def test_selector_object_permission_denial_propagates() -> None:
-    # AUTHZ-2 object-level half (rides drf-services >= 0.21): the
+    # Object-level half (rides drf-services >= 0.21): the
     # ``on_target_resolved=enforce_permissions`` hook now fires on selector
     # RETRIEVE dispatch, so an object-level denial on the *resolved row*
     # propagates through the spec-core surface — not just class-level denials.
