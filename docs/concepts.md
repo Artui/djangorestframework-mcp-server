@@ -74,10 +74,10 @@ context, signed lookups, etc. without scattering `request.user.*` reads
 across services.
 
 ```python
-from rest_framework_mcp import MCPServiceView, ServiceSpec
+from rest_framework_services import OfflineServiceView, ServiceSpec
 
 
-def with_tenant(view: MCPServiceView, request) -> dict:
+def with_tenant(view: OfflineServiceView, request) -> dict:
     return {"tenant_id": request.user.tenant_id}
 
 
@@ -95,9 +95,10 @@ server.register_service_tool(
 )
 ```
 
-The provider receives an :class:`MCPServiceView` (synthesised because MCP
-has no DRF view) — `view.action` is the binding name, and on resource reads
-`view.kwargs` carries the URI-template variables. Same wire shape as the
+The provider receives an `OfflineServiceView` (synthesised by the sister
+repo's `build_offline_context` because MCP has no DRF view) — `view.action`
+is the binding name, and on resource reads `view.kwargs` carries the
+URI-template variables. Same wire shape as the
 HTTP transport's `ServiceView`, so providers can be shared between
 transports.
 
@@ -161,16 +162,20 @@ forms) accept three behavior knobs:
   - `ArgumentBinding.AUTO` — resolve per spec type (service → `BUNDLE`,
     selector → `SPREAD_AUTHOR_WINS`).
 
-  Reserved transport-pool seeds (`request` / `user` / `data`) and the
+  Reserved transport-pool seeds (`request` / `user` / `data` / `instance` /
+  `serializer`) and the
   selector pipeline keys (`ordering` / `page` / `limit`) are stripped
   from the spread regardless of mode so clients can't poison
   transport-controlled state.
 
 - **`unknown_arguments=`** — how `arguments` keys outside the binding's
   declared field set are handled.
-  - `UnknownArguments.REJECT` (default) — outer `inputSchema` advertises
-    `"additionalProperties": false` and the validator rejects unknown
-    keys with `-32602`.
+  - `UnknownArguments.REJECT` (default) — the validator rejects unknown
+    keys with `-32602`, and the outer `inputSchema` advertises
+    `"additionalProperties": false`. This holds only when the binding has an
+    `input_serializer` to validate against: a serializer-less binding has no
+    declared field set, so `REJECT` can't fire and its schema stays open
+    (`"additionalProperties": true`) to match the runtime.
   - `UnknownArguments.PASSTHROUGH` — `"additionalProperties": true`;
     unknown keys survive validation and are merged onto the validated
     payload before binding.
@@ -272,8 +277,10 @@ including `filter_set`, and the retrieve nullability contract) is shared
 with the HTTP transport rather than reproduced.
 
 It honours the binding's `argument_binding` / `unknown_arguments` policies
-(mapped onto `dispatch_spec`'s) and the spec's `permission_classes` via the
-`on_target_resolved=enforce_permissions` hook — object-level checks included.
+(mapped onto `dispatch_spec`'s) and the spec's `permission_classes` in two
+layers: an upfront `enforce_permissions` call for the class-level
+`has_permission` check, plus the `on_target_resolved=enforce_permissions` hook
+for object-level checks on the resolved target.
 It does **not** layer on the read-shaped transport extras (pagination,
 ordering, a selector binding's MCP-only `input_serializer`); those stay with
 the wire handlers, as do the transport-level MCP permissions / rate limits.

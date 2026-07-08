@@ -315,7 +315,7 @@ from invoices.mcp import server
 
 urlpatterns = [
     path("oauth/", include("oauth2_provider.urls", namespace="oauth2_provider")),
-    path("mcp/", include(server.urls)),
+    path("mcp/", server.urls),
 ]
 ```
 

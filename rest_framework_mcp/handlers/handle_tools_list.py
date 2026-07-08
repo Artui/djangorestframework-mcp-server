@@ -3,10 +3,11 @@ from __future__ import annotations
 from typing import Any
 
 from rest_framework_mcp.conf import get_setting
-from rest_framework_mcp.constants import JsonRpcErrorCode, UnknownArguments
+from rest_framework_mcp.constants import JsonRpcErrorCode
 from rest_framework_mcp.handlers.is_binding_listable import is_binding_listable
 from rest_framework_mcp.handlers.pagination import paginate
 from rest_framework_mcp.handlers.types.context import MCPCallContext
+from rest_framework_mcp.handlers.utils import advertises_closed_schema
 from rest_framework_mcp.output.resolve_structured_output import resolve_structured_output
 from rest_framework_mcp.protocol.types.json_rpc_error import JsonRpcError
 from rest_framework_mcp.protocol.types.tool import Tool
@@ -35,7 +36,7 @@ def handle_tools_list(
     if cursor is not None and not isinstance(cursor, str):
         return JsonRpcError(JsonRpcErrorCode.INVALID_PARAMS, "'cursor' must be a string")
 
-    # Per-caller visibility filter (Phase 10g): when enabled, drop bindings
+    # Per-caller visibility filter: when enabled, drop bindings
     # the current token can't invoke before paginating, so ``nextCursor``
     # reflects the visible slice rather than the full registry.
     bindings = list(context.tools.all())
@@ -66,15 +67,16 @@ def handle_tools_list(
                 binding.spec.input_serializer,
                 partial=binding.spec.partial is True,
             )
-        # Stamp ``additionalProperties`` per the binding's unknown-argument
-        # policy. ``REJECT`` declares the schema as closed; ``PASSTHROUGH``
-        # and ``IGNORE`` keep it open. ``build_input_schema`` and
-        # ``build_selector_tool_input_schema`` always return a
-        # ``"type": "object"`` shape, so this stamps every emitted schema.
+        # Stamp ``additionalProperties`` to match what the runtime actually
+        # enforces. A closed schema (``false``) is advertised only when the
+        # dispatch path really rejects unknown keys — ``REJECT`` *and* a
+        # serializer to validate against; a serializer-less binding silently
+        # accepts unknowns even under ``REJECT``, so its schema stays
+        # open. ``build_input_schema`` and ``build_selector_tool_input_schema``
+        # always return a ``"type": "object"`` shape, so this stamps every
+        # emitted schema.
         input_schema = dict(input_schema)
-        input_schema["additionalProperties"] = (
-            binding.unknown_arguments is not UnknownArguments.REJECT
-        )
+        input_schema["additionalProperties"] = not advertises_closed_schema(binding)
         # ``outputSchema`` and ``structuredContent`` are independently
         # toggleable, but the spec forbids one combination — advertising
         # the schema while suppressing the content. ``resolve_structured_output``

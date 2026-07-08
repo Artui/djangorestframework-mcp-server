@@ -138,7 +138,7 @@ server.register_selector_tool(
 
 ```python
 # urls.py
-urlpatterns = [path("mcp/", include(server.urls))]
+urlpatterns = [path("mcp/", server.urls)]
 ```
 
 That's it. Every MCP method (`initialize`, `tools/list`, `tools/call`,
@@ -233,7 +233,7 @@ concretely (`Any` doesn't introspect — see
 - FastAPI runs under `uvicorn` directly. Django needs an ASGI server
   too — `uvicorn invoicing.asgi:application` is fine.
 - `fastapi-mcp` mounts on a path of your choice; this package mounts
-  via `path("mcp/", include(server.urls))`. Both are configurable.
+  via `path("mcp/", server.urls)`. Both are configurable.
 - Auth: `fastapi-mcp` typically piggybacks on FastAPI's dependency
   graph for tokens. Replace with an `MCPAuthBackend` — the
   `DjangoOAuthToolkitBackend` covers most BYO-AS scenarios, or

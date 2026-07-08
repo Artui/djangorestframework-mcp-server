@@ -229,7 +229,7 @@ def test_www_authenticate_challenge_minimal(settings) -> None:
     assert DjangoOAuthToolkitBackend().www_authenticate_challenge() == 'Bearer realm="mcp"'
 
 
-# ---------- authorization_server_metadata (Phase 10d) ----------
+# ---------- authorization_server_metadata ----------
 
 
 def test_authorization_server_metadata_shape(settings) -> None:

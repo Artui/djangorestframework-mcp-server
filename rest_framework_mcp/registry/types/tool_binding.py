@@ -59,17 +59,20 @@ class ToolBinding(Generic[InputT, ResultT, ExtraT]):
     # is rejected at construction time.
     include_output_schema: bool | None = None
     # How MCP ``arguments`` flow into the kwarg pool. Defaults to
-    # ``DATA_ONLY`` for service tools: mutation services typically take
+    # ``BUNDLE`` for service tools: mutation services typically take
     # a single ``input_serializer``-validated ``data`` payload, so
     # spreading the dict as top-level kwargs would conflict with that
     # historical shape.
     argument_binding: ArgumentBinding = ArgumentBinding.BUNDLE
     # How unknown ``arguments`` keys are handled relative to the binding's
-    # ``inputSchema``. ``REJECT`` (default) advertises
-    # ``additionalProperties: false`` and rejects unknown keys with
-    # ``-32602``. ``PASSTHROUGH`` advertises ``additionalProperties: true``
-    # and merges unknown keys into the validated payload. ``IGNORE``
-    # advertises ``additionalProperties: true`` and silently drops them.
+    # ``inputSchema``. ``REJECT`` (default) rejects unknown keys with ``-32602``
+    # and advertises ``additionalProperties: false`` — but only when there is an
+    # ``input_serializer`` to validate against; a serializer-less binding has no
+    # declared field set, so ``REJECT`` can't fire and its schema stays open
+    # (``additionalProperties: true``). ``PASSTHROUGH`` advertises
+    # ``additionalProperties: true`` and merges unknown keys into the validated
+    # payload. ``IGNORE`` advertises ``additionalProperties: true`` and silently
+    # drops them.
     unknown_arguments: UnknownArguments = UnknownArguments.REJECT
     # When ``FILTER_LISTINGS_BY_PERMISSIONS`` is enabled, this binding is
     # normally dropped from ``tools/list`` if any of its ``permissions``
