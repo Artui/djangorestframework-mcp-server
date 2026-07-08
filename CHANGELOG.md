@@ -7,6 +7,26 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed (breaking)
+
+- **`MCPServer.urls` / `.async_urls` now return a namespaced
+  `(patterns, app_name, namespace)` triple** — the shape `path()` mounts directly,
+  the `admin.site.urls` idiom, aligning with `django-ag-ui`'s `AGUIServer.urls`
+  (the MOUNT cross-package symmetry). Mount **without** `include()`:
+
+  ```python
+  # before
+  urlpatterns = [path("mcp/", include(server.urls))]
+  # after
+  urlpatterns = [path("mcp/", server.urls)]
+  ```
+
+  The endpoint URL **names are now namespaced** and unqualified within the
+  namespace: `mcp-endpoint` → `mcp:endpoint`, `mcp-protected-resource-metadata` →
+  `mcp:protected-resource-metadata` (default namespace `"mcp"`; override with the
+  new `MCPServer(url_namespace="…")`). Update any `reverse()` / `{% url %}` calls
+  and switch the `*server.urls` splat form to `path("mcp/", server.urls)`.
+
 ## [0.10.1] — 2026-07-03
 
 ### Fixed

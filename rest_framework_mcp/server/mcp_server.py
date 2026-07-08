@@ -80,9 +80,12 @@ class MCPServer:
         @server.resource(uri_template="invoices://{pk}", output_serializer=InvoiceOutput)
         def get_invoice(*, pk): ...
 
-    Mount the URLs in your URL conf:
+    Mount the URLs in your URL conf the ``admin.site.urls`` way — ``.urls`` is a
+    namespaced ``(patterns, app_name, namespace)`` triple ``path()`` mounts
+    directly (no ``include()``):
 
-        urlpatterns = [path("mcp/", include(server.urls))]
+        urlpatterns = [path("mcp/", server.urls)]
+        # reverse("mcp:endpoint") · reverse("mcp:protected-resource-metadata")
     """
 
     def __init__(
@@ -94,9 +97,11 @@ class MCPServer:
         session_store: SessionStore | None = None,
         sse_broker: SSEBroker | None = None,
         sse_replay_buffer: SSEReplayBuffer | None = None,
+        url_namespace: str = "mcp",
     ) -> None:
         self.name: str = name
         self.description: str | None = description
+        self._url_namespace: str = url_namespace
         self._tools: ToolRegistry = ToolRegistry()
         self._resources: ResourceRegistry = ResourceRegistry()
         self._prompts: PromptRegistry = PromptRegistry()
@@ -900,11 +905,15 @@ class MCPServer:
     # ----- URLs -----
 
     @property
-    def urls(self) -> list[URLPattern]:
+    def urls(self) -> tuple[list[URLPattern], str, str]:
         """Sync URL patterns. Suitable for any deployment (WSGI or ASGI).
 
-        Use :attr:`async_urls` instead when running under ASGI to get
-        non-blocking dispatch for the I/O-bound handlers.
+        Returns the namespaced ``(patterns, app_name, namespace)`` triple
+        ``path()`` mounts directly — ``path("mcp/", server.urls)``, the
+        ``admin.site.urls`` idiom — so the endpoints reverse within the
+        namespace (``reverse("mcp:endpoint")``). Use :attr:`async_urls` instead
+        when running under ASGI to get non-blocking dispatch for the I/O-bound
+        handlers.
         """
         view = StreamableHttpViewSet.as_view(
             STREAMABLE_HTTP_ACTION_MAP,  # ty: ignore[invalid-argument-type]
@@ -917,14 +926,15 @@ class MCPServer:
         return self._urls_with_view(view)
 
     @property
-    def async_urls(self) -> list[URLPattern]:
+    def async_urls(self) -> tuple[list[URLPattern], str, str]:
         """Async URL patterns for ASGI deployments.
 
-        ``tools/call``, ``resources/read``, and ``prompts/get`` dispatch
-        through async-native runners; sync collaborators (auth backend,
-        session store, custom permissions) are bridged via
-        :func:`asgiref.sync.sync_to_async` so a fully sync stack still works.
-        Async-native backends are detected by signature and called directly.
+        The namespaced triple (like :attr:`urls`), but ``tools/call``,
+        ``resources/read``, and ``prompts/get`` dispatch through async-native
+        runners; sync collaborators (auth backend, session store, custom
+        permissions) are bridged via :func:`asgiref.sync.sync_to_async` so a
+        fully sync stack still works. Async-native backends are detected by
+        signature and called directly.
         """
         view = AsyncStreamableHttpViewSet.as_view(
             ASYNC_STREAMABLE_HTTP_ACTION_MAP,
@@ -938,17 +948,18 @@ class MCPServer:
         )
         return self._urls_with_view(view)
 
-    def _urls_with_view(self, view: Any) -> list[URLPattern]:
-        return [
-            path("", view, name="mcp-endpoint"),
+    def _urls_with_view(self, view: Any) -> tuple[list[URLPattern], str, str]:
+        patterns = [
+            path("", view, name="endpoint"),
             path(
                 ".well-known/oauth-protected-resource",
                 ProtectedResourceMetadataViewSet.as_view(
                     {"get": "list"}, auth_backend=self._auth_backend
                 ),
-                name="mcp-protected-resource-metadata",
+                name="protected-resource-metadata",
             ),
         ]
+        return patterns, self._url_namespace, self._url_namespace
 
 
 def _load_default(setting_name: str, expected: type) -> Any:
