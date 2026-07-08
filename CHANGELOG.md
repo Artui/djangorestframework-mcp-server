@@ -7,6 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.11.1] — 2026-07-08
+
+### Changed
+
+- Widen the `djangorestframework-services` dependency constraint from `<0.23`
+  to `<0.25`, so the MCP server installs alongside drf-services 0.23.x and
+  0.24.x. The previous `<0.23` cap excluded those releases, which meant the
+  latest drf-services (selector input-schema fidelity, off-HTTP query params)
+  could not be co-installed. Refreshed the pinned dependency set at the same
+  time.
+
 ## [0.11.0] — 2026-07-08
 
 ### Changed (breaking)
@@ -1172,7 +1183,8 @@ Pinned to `djangorestframework-services==0.6.0`.
 - 100% line + branch coverage enforced by pytest (**451 tests** at
   release).
 
-[Unreleased]: https://github.com/Artui/djangorestframework-mcp-server/compare/v0.11.0...HEAD
+[Unreleased]: https://github.com/Artui/djangorestframework-mcp-server/compare/v0.11.1...HEAD
+[0.11.1]: https://github.com/Artui/djangorestframework-mcp-server/compare/v0.11.0...v0.11.1
 [0.11.0]: https://github.com/Artui/djangorestframework-mcp-server/compare/v0.10.1...v0.11.0
 [0.10.1]: https://github.com/Artui/djangorestframework-mcp-server/compare/v0.10.0...v0.10.1
 [0.10.0]: https://github.com/Artui/djangorestframework-mcp-server/compare/v0.9.1...v0.10.0
