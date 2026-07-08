@@ -7,6 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- Widen the `djangorestframework-services` dependency constraint from `<0.23`
+  to `<0.25`, so the MCP server installs alongside drf-services 0.23.x and
+  0.24.x. The previous `<0.23` cap excluded those releases, which meant the
+  latest drf-services (selector input-schema fidelity, off-HTTP query params)
+  could not be co-installed. Refreshed the pinned dependency set at the same
+  time.
+
 ## [0.11.0] — 2026-07-08
 
 ### Changed (breaking)
