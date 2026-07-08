@@ -19,7 +19,7 @@ Register `ServiceSpec` instances directly — no DRF router or viewset
 involvement. The unit of registration is the `ServiceSpec`, not a view.
 
 ```python
-from django.urls import include, path
+from django.urls import path
 from rest_framework_services.types.selector_kind import SelectorKind
 from rest_framework_services.types.selector_spec import SelectorSpec
 from rest_framework_services.types.service_spec import ServiceSpec
@@ -50,7 +50,7 @@ server.register_resource(
     ),
 )
 
-urlpatterns = [path("mcp/", include(server.urls))]
+urlpatterns = [path("mcp/", server.urls)]
 ```
 
 A decorator form is also supported (`@server.service_tool(...)` / `@server.resource(...)`).
@@ -71,6 +71,13 @@ See the [quickstart](docs/quickstart.md) for the full end-to-end recipe.
   templated URIs.
 - **Prompts** — `prompts/list`, `prompts/get` against render callables
   returning strings, `PromptMessage`s, or async coroutines.
+- **In-process transport surface** — call tools without an HTTP round-trip:
+  `MCPServer.call_tool` / `acall_tool` and `list_tools` / `alist_tools`
+  drive the same dispatch and permission checks as the wire path, for
+  embedding in agent bridges, toolsets, or management commands.
+- **Tool annotations** — pass `annotations=` at registration (or rely on the
+  read/mutation default) to advertise MCP hints like `readOnlyHint` /
+  `destructiveHint` on `tools/list`.
 - **Pluggable auth** — `DjangoOAuthToolkitBackend` (default) and
   `AllowAnyBackend` (dev only). Per-binding `MCPPermission` classes
   (`ScopeRequired`, `DjangoPermRequired`) plus your own.
@@ -103,7 +110,8 @@ pip install "djangorestframework-mcp-server[redis]"                     # +Redis
 pip install "djangorestframework-mcp-server[otel]"                      # +OpenTelemetry instrumentation
 pip install "djangorestframework-mcp-server[filter]"                    # +django-filter for selector-tool FilterSets
 pip install "djangorestframework-mcp-server[spectacular]"               # +drf-spectacular schema overrides
-pip install "djangorestframework-mcp-server[toon,oauth,redis,otel,filter,spectacular]"  # everything
+pip install "djangorestframework-mcp-server[jwt]"                       # +SimpleJWTCookieAdapter (djangorestframework-simplejwt)
+pip install "djangorestframework-mcp-server[toon,oauth,redis,otel,filter,spectacular,jwt]"  # everything
 ```
 
 …or with `uv`:
@@ -116,7 +124,8 @@ uv add "djangorestframework-mcp-server[redis]"                          # +Redis
 uv add "djangorestframework-mcp-server[otel]"                           # +OpenTelemetry instrumentation
 uv add "djangorestframework-mcp-server[filter]"                         # +django-filter for selector-tool FilterSets
 uv add "djangorestframework-mcp-server[spectacular]"                    # +drf-spectacular schema overrides
-uv add "djangorestframework-mcp-server[toon,oauth,redis,otel,filter,spectacular]"  # everything
+uv add "djangorestframework-mcp-server[jwt]"                            # +SimpleJWTCookieAdapter (djangorestframework-simplejwt)
+uv add "djangorestframework-mcp-server[toon,oauth,redis,otel,filter,spectacular,jwt]"  # everything
 ```
 
 Optional extras degrade gracefully: TOON falls back to JSON with a runtime

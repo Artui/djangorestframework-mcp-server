@@ -101,7 +101,7 @@ def _post(
     return view(request)
 
 
-# ---------- POST: auth before session lookup (SEC-2) ----------
+# ---------- POST: auth before session lookup ----------
 
 
 def test_unauthenticated_post_with_bogus_session_is_401_not_404() -> None:
@@ -118,7 +118,7 @@ def test_authenticated_post_with_bogus_session_is_404() -> None:
     assert response.status_code == 404
 
 
-# ---------- POST: session bound to principal (SEC-3) ----------
+# ---------- POST: session bound to principal ----------
 
 
 def test_session_is_bound_to_initializing_principal() -> None:
@@ -136,7 +136,7 @@ def test_session_is_bound_to_initializing_principal() -> None:
     assert other.status_code == 404
 
 
-# ---------- GET (SEC-1) ----------
+# ---------- GET: authentication required ----------
 
 
 def test_sync_get_requires_authentication() -> None:
@@ -174,7 +174,7 @@ async def test_async_get_wrong_principal_is_404() -> None:
     assert response.status_code == 404
 
 
-# ---------- DELETE (SEC-1 + SEC-3) ----------
+# ---------- DELETE: authentication + principal binding ----------
 
 
 def test_sync_delete_requires_authentication() -> None:

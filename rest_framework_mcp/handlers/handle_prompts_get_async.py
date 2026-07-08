@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from rest_framework_services import resolve_callable_kwargs
+from rest_framework_services import build_offline_context, resolve_callable_kwargs
 
 from rest_framework_mcp._compat.acall import acall
 from rest_framework_mcp._compat.tracing import span
@@ -12,7 +12,6 @@ from rest_framework_mcp.handlers.handle_tools_call import _span_attrs
 from rest_framework_mcp.handlers.render_prompt_messages import normalize_render_result
 from rest_framework_mcp.handlers.types.context import MCPCallContext
 from rest_framework_mcp.handlers.utils import (
-    build_internal_drf_request,
     check_permissions,
     consume_rate_limits,
 )
@@ -81,9 +80,9 @@ async def handle_prompts_get_async(
                 data={"retryAfter": retry_after},
             )
 
-        drf_request = build_internal_drf_request(
-            context.http_request, user=context.token.user, data=None
-        )
+        drf_request = build_offline_context(
+            context.token.user, None, http_request=context.http_request
+        ).request
         pool: dict[str, Any] = {
             "request": drf_request,
             "user": context.token.user,

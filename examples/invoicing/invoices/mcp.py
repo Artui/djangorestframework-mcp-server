@@ -7,6 +7,7 @@ modules (one per app) and combine them into a single ``MCPServer``.
 
 from __future__ import annotations
 
+from rest_framework_services.types.selector_kind import SelectorKind
 from rest_framework_services.types.selector_spec import SelectorSpec
 from rest_framework_services.types.service_spec import ServiceSpec
 
@@ -19,9 +20,7 @@ from invoices.serializers import (
     MarkSentInputSerializer,
 )
 from invoices.services import create_invoice, mark_invoice_sent
-from rest_framework_mcp import MCPServer
-from rest_framework_mcp.protocol.prompt_argument import PromptArgument
-from rest_framework_mcp.protocol.prompt_message import PromptMessage
+from rest_framework_mcp import MCPServer, PromptArgument, PromptMessage
 
 
 def build_server() -> MCPServer:
@@ -35,7 +34,10 @@ def build_server() -> MCPServer:
         spec=ServiceSpec(
             service=create_invoice,
             input_serializer=InvoiceInputSerializer,
-            output_serializer=InvoiceOutputSerializer,
+            output_selector_spec=SelectorSpec(
+                kind=SelectorKind.RETRIEVE,
+                output_serializer=InvoiceOutputSerializer,
+            ),
         ),
         description="Create a new invoice with a unique number and a positive amount.",
     )
@@ -45,7 +47,10 @@ def build_server() -> MCPServer:
         spec=ServiceSpec(
             service=mark_invoice_sent,
             input_serializer=MarkSentInputSerializer,
-            output_serializer=InvoiceOutputSerializer,
+            output_selector_spec=SelectorSpec(
+                kind=SelectorKind.RETRIEVE,
+                output_serializer=InvoiceOutputSerializer,
+            ),
         ),
         description="Flip an invoice's ``sent`` flag.",
     )
@@ -55,11 +60,12 @@ def build_server() -> MCPServer:
     server.register_selector_tool(
         name="invoices.list",
         spec=SelectorSpec(
+            kind=SelectorKind.LIST,
             selector=list_invoices,
             output_serializer=InvoiceOutputSerializer,
+            filter_set=InvoiceFilterSet,
         ),
         description="List invoices, optionally filtered / ordered / paginated.",
-        filter_set=InvoiceFilterSet,
         ordering_fields=["created_at", "amount_cents"],
         paginate=True,
     )
@@ -70,6 +76,7 @@ def build_server() -> MCPServer:
         name="invoice",
         uri_template="invoices://{pk}",
         selector=SelectorSpec(
+            kind=SelectorKind.RETRIEVE,
             selector=get_invoice,
             output_serializer=InvoiceOutputSerializer,
         ),
