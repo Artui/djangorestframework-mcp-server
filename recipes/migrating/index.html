@@ -1623,7 +1623,7 @@ already have DRF serializers, reuse them verbatim.</p>
 </span></code></pre></div>
 <h3 id="step-4-drop-the-url-conf-in">Step 4 — Drop the URL conf in<a class="headerlink" href="#step-4-drop-the-url-conf-in" title="Permanent link">&para;</a></h3>
 <div class="language-python highlight"><pre><span></span><code><span id="__span-4-1"><a id="__codelineno-4-1" name="__codelineno-4-1" href="#__codelineno-4-1"></a><span class="c1"># urls.py</span>
-</span><span id="__span-4-2"><a id="__codelineno-4-2" name="__codelineno-4-2" href="#__codelineno-4-2"></a><span class="n">urlpatterns</span> <span class="o">=</span> <span class="p">[</span><span class="n">path</span><span class="p">(</span><span class="s2">&quot;mcp/&quot;</span><span class="p">,</span> <span class="n">include</span><span class="p">(</span><span class="n">server</span><span class="o">.</span><span class="n">urls</span><span class="p">))]</span>
+</span><span id="__span-4-2"><a id="__codelineno-4-2" name="__codelineno-4-2" href="#__codelineno-4-2"></a><span class="n">urlpatterns</span> <span class="o">=</span> <span class="p">[</span><span class="n">path</span><span class="p">(</span><span class="s2">&quot;mcp/&quot;</span><span class="p">,</span> <span class="n">server</span><span class="o">.</span><span class="n">urls</span><span class="p">)]</span>
 </span></code></pre></div>
 <p>That's it. Every MCP method (<code>initialize</code>, <code>tools/list</code>, <code>tools/call</code>,
 <code>resources/*</code>, <code>prompts/*</code>, <code>ping</code>) is handled. Auth, sessions, origin
@@ -1754,7 +1754,7 @@ concretely (<code>Any</code> doesn't introspect — see
 <li>FastAPI runs under <code>uvicorn</code> directly. Django needs an ASGI server
   too — <code>uvicorn invoicing.asgi:application</code> is fine.</li>
 <li><code>fastapi-mcp</code> mounts on a path of your choice; this package mounts
-  via <code>path("mcp/", include(server.urls))</code>. Both are configurable.</li>
+  via <code>path("mcp/", server.urls)</code>. Both are configurable.</li>
 <li>Auth: <code>fastapi-mcp</code> typically piggybacks on FastAPI's dependency
   graph for tokens. Replace with an <code>MCPAuthBackend</code> — the
   <code>DjangoOAuthToolkitBackend</code> covers most BYO-AS scenarios, or

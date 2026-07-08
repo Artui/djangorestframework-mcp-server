@@ -1357,7 +1357,7 @@ directly.</p>
 </span></code></pre></div>
 <p>Mount under <code>async_urls</code> so the backend's <code>authenticate</code> is awaited
 directly instead of being wrapped in <code>sync_to_async</code>:</p>
-<div class="language-python highlight"><pre><span></span><code><span id="__span-2-1"><a id="__codelineno-2-1" name="__codelineno-2-1" href="#__codelineno-2-1"></a><span class="n">urlpatterns</span> <span class="o">=</span> <span class="p">[</span><span class="n">path</span><span class="p">(</span><span class="s2">&quot;mcp/&quot;</span><span class="p">,</span> <span class="n">include</span><span class="p">(</span><span class="n">server</span><span class="o">.</span><span class="n">async_urls</span><span class="p">))]</span>
+<div class="language-python highlight"><pre><span></span><code><span id="__span-2-1"><a id="__codelineno-2-1" name="__codelineno-2-1" href="#__codelineno-2-1"></a><span class="n">urlpatterns</span> <span class="o">=</span> <span class="p">[</span><span class="n">path</span><span class="p">(</span><span class="s2">&quot;mcp/&quot;</span><span class="p">,</span> <span class="n">server</span><span class="o">.</span><span class="n">async_urls</span><span class="p">)]</span>
 </span></code></pre></div>
 <h2 id="what-about-the-sync-transport">What about the sync transport?<a class="headerlink" href="#what-about-the-sync-transport" title="Permanent link">&para;</a></h2>
 <p>The same backend works under <code>server.urls</code> — the sync view detects the

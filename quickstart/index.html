@@ -1453,14 +1453,18 @@ the nested spec for you.</p>
 </span><span id="__span-5-10"><a id="__codelineno-5-10" name="__codelineno-5-10" href="#__codelineno-5-10"></a>    <span class="p">)</span>
 </span></code></pre></div>
 <h2 id="5-mount-the-urls">5. Mount the URLs<a class="headerlink" href="#5-mount-the-urls" title="Permanent link">&para;</a></h2>
-<div class="language-python highlight"><span class="filename">urls.py</span><pre><span></span><code><span id="__span-6-1"><a id="__codelineno-6-1" name="__codelineno-6-1" href="#__codelineno-6-1"></a><span class="kn">from</span><span class="w"> </span><span class="nn">django.urls</span><span class="w"> </span><span class="kn">import</span> <span class="n">include</span><span class="p">,</span> <span class="n">path</span>
+<div class="language-python highlight"><span class="filename">urls.py</span><pre><span></span><code><span id="__span-6-1"><a id="__codelineno-6-1" name="__codelineno-6-1" href="#__codelineno-6-1"></a><span class="kn">from</span><span class="w"> </span><span class="nn">django.urls</span><span class="w"> </span><span class="kn">import</span> <span class="n">path</span>
 </span><span id="__span-6-2"><a id="__codelineno-6-2" name="__codelineno-6-2" href="#__codelineno-6-2"></a>
 </span><span id="__span-6-3"><a id="__codelineno-6-3" name="__codelineno-6-3" href="#__codelineno-6-3"></a><span class="kn">from</span><span class="w"> </span><span class="nn">invoices.mcp</span><span class="w"> </span><span class="kn">import</span> <span class="n">server</span>
 </span><span id="__span-6-4"><a id="__codelineno-6-4" name="__codelineno-6-4" href="#__codelineno-6-4"></a>
 </span><span id="__span-6-5"><a id="__codelineno-6-5" name="__codelineno-6-5" href="#__codelineno-6-5"></a><span class="n">urlpatterns</span> <span class="o">=</span> <span class="p">[</span>
-</span><span id="__span-6-6"><a id="__codelineno-6-6" name="__codelineno-6-6" href="#__codelineno-6-6"></a>    <span class="n">path</span><span class="p">(</span><span class="s2">&quot;mcp/&quot;</span><span class="p">,</span> <span class="n">include</span><span class="p">(</span><span class="n">server</span><span class="o">.</span><span class="n">urls</span><span class="p">)),</span>
+</span><span id="__span-6-6"><a id="__codelineno-6-6" name="__codelineno-6-6" href="#__codelineno-6-6"></a>    <span class="n">path</span><span class="p">(</span><span class="s2">&quot;mcp/&quot;</span><span class="p">,</span> <span class="n">server</span><span class="o">.</span><span class="n">urls</span><span class="p">),</span>
 </span><span id="__span-6-7"><a id="__codelineno-6-7" name="__codelineno-6-7" href="#__codelineno-6-7"></a><span class="p">]</span>
 </span></code></pre></div>
+<p><code>server.urls</code> is a namespaced <code>(patterns, app_name, namespace)</code> triple <code>path()</code>
+mounts directly (like <code>admin.site.urls</code> — no <code>include()</code>), so the endpoints
+reverse as <code>reverse("mcp:endpoint")</code> / <code>reverse("mcp:protected-resource-metadata")</code>.
+Override the namespace with <code>MCPServer(url_namespace="…")</code>.</p>
 <p>That mounts:</p>
 <ul>
 <li><code>POST /mcp/</code> — Streamable HTTP endpoint.</li>

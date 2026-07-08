@@ -1665,8 +1665,11 @@ def create_invoice(*, data): ...
 @server.resource(uri_template=&quot;invoices://{pk}&quot;, output_serializer=InvoiceOutput)
 def get_invoice(*, pk): ...
 </code></pre></div>
-<p>Mount the URLs in your URL conf:</p>
-<div class="language-text highlight"><pre><span></span><code>urlpatterns = [path(&quot;mcp/&quot;, include(server.urls))]
+<p>Mount the URLs in your URL conf the <code>admin.site.urls</code> way — <code>.urls</code> is a
+namespaced <code>(patterns, app_name, namespace)</code> triple <code>path()</code> mounts
+directly (no <code>include()</code>):</p>
+<div class="language-text highlight"><pre><span></span><code>urlpatterns = [path(&quot;mcp/&quot;, server.urls)]
+# reverse(&quot;mcp:endpoint&quot;) · reverse(&quot;mcp:protected-resource-metadata&quot;)
 </code></pre></div>
 
 
@@ -1700,14 +1703,18 @@ def get_invoice(*, pk): ...
   </span>
 
 <a href="#rest_framework_mcp.server.mcp_server.MCPServer.urls" class="headerlink" title="Permanent link">&para;</a></h3>
-<div class="language-python doc-signature highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="n">urls</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="n">URLPattern</span><span class="p">]</span>
+<div class="language-python doc-signature highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="n">urls</span><span class="p">:</span> <span class="nb">tuple</span><span class="p">[</span><span class="nb">list</span><span class="p">[</span><span class="n">URLPattern</span><span class="p">],</span> <span class="nb">str</span><span class="p">,</span> <span class="nb">str</span><span class="p">]</span>
 </span></code></pre></div>
 
     <div class="doc doc-contents ">
 
         <p>Sync URL patterns. Suitable for any deployment (WSGI or ASGI).</p>
-<p>Use :attr:<code>async_urls</code> instead when running under ASGI to get
-non-blocking dispatch for the I/O-bound handlers.</p>
+<p>Returns the namespaced <code>(patterns, app_name, namespace)</code> triple
+<code>path()</code> mounts directly — <code>path("mcp/", server.urls)</code>, the
+<code>admin.site.urls</code> idiom — so the endpoints reverse within the
+namespace (<code>reverse("mcp:endpoint")</code>). Use :attr:<code>async_urls</code> instead
+when running under ASGI to get non-blocking dispatch for the I/O-bound
+handlers.</p>
 
     </div>
 
@@ -1726,17 +1733,18 @@ non-blocking dispatch for the I/O-bound handlers.</p>
   </span>
 
 <a href="#rest_framework_mcp.server.mcp_server.MCPServer.async_urls" class="headerlink" title="Permanent link">&para;</a></h3>
-<div class="language-python doc-signature highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="n">async_urls</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="n">URLPattern</span><span class="p">]</span>
+<div class="language-python doc-signature highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="n">async_urls</span><span class="p">:</span> <span class="nb">tuple</span><span class="p">[</span><span class="nb">list</span><span class="p">[</span><span class="n">URLPattern</span><span class="p">],</span> <span class="nb">str</span><span class="p">,</span> <span class="nb">str</span><span class="p">]</span>
 </span></code></pre></div>
 
     <div class="doc doc-contents ">
 
         <p>Async URL patterns for ASGI deployments.</p>
-<p><code>tools/call</code>, <code>resources/read</code>, and <code>prompts/get</code> dispatch
-through async-native runners; sync collaborators (auth backend,
-session store, custom permissions) are bridged via
-:func:<code>asgiref.sync.sync_to_async</code> so a fully sync stack still works.
-Async-native backends are detected by signature and called directly.</p>
+<p>The namespaced triple (like :attr:<code>urls</code>), but <code>tools/call</code>,
+<code>resources/read</code>, and <code>prompts/get</code> dispatch through async-native
+runners; sync collaborators (auth backend, session store, custom
+permissions) are bridged via :func:<code>asgiref.sync.sync_to_async</code> so a
+fully sync stack still works. Async-native backends are detected by
+signature and called directly.</p>
 
     </div>
 
