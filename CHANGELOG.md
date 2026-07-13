@@ -7,6 +7,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- Raise the `djangorestframework-services` floor from `>=0.21.1` to `>=0.24.1`
+  (kept `<0.25`) so the MCP server always dispatches through the two DRF-parity
+  fixes shipped in drf-services 0.24.1: `SelectorSpec.filter_set` now validates
+  and rejects an invalid filter value (a `400`/`ValidationError`, not a silent
+  unfiltered result), and the `input_data` merge no longer corrupts
+  form-encoded request bodies. MCP tool dispatch routes filter and input
+  handling through drf-services (`dispatch_spec`), so both fixes reach MCP
+  callers with no code change here. Refreshed the pinned dependency set to
+  0.24.1 at the same time.
+
 ## [0.11.1] — 2026-07-08
 
 ### Changed
