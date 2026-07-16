@@ -10,13 +10,13 @@
       
       
       
-        <link rel="canonical" href="https://artui.github.io/djangorestframework-mcp-server/recipes/sse-replay-buffer/">
+        <link rel="canonical" href="https://artui.github.io/djangorestframework-mcp-server/recipes/polymorphic-action/">
       
       
-        <link rel="prev" href="../redis-sse-broker/">
+        <link rel="prev" href="../selector-tool-with-filterset/">
       
       
-        <link rel="next" href="../drf-spectacular/">
+        <link rel="next" href="../chain-tools/">
       
       
         
@@ -27,7 +27,7 @@
     
     
       
-        <title>Resume SSE with Last-Event-ID - djangorestframework-mcp-server</title>
+        <title>Expose a polymorphic action as tools - djangorestframework-mcp-server</title>
       
     
     
@@ -80,7 +80,7 @@
     <div data-md-component="skip">
       
         
-        <a href="#resume-dropped-sse-streams-with-last-event-id" class="md-skip">
+        <a href="#expose-a-polymorphic-action-as-per-variant-tools" class="md-skip">
           Skip to content
         </a>
       
@@ -116,7 +116,7 @@
         <div class="md-header__topic" data-md-component="header-topic">
           <span class="md-ellipsis">
             
-              Resume SSE with Last-Event-ID
+              Expose a polymorphic action as tools
             
           </span>
         </div>
@@ -773,37 +773,10 @@
                 
   
   
-    
   
   
-  
-    <li class="md-nav__item md-nav__item--active">
-      
-      <input class="md-nav__toggle md-toggle" type="checkbox" id="__toc">
-      
-      
-        
-      
-      
-        <label class="md-nav__link md-nav__link--active" for="__toc">
-          
-  
-  
-  <span class="md-ellipsis">
-    
-  
-    Resume SSE with Last-Event-ID
-  
-
-    
-  </span>
-  
-  
-
-          <span class="md-nav__icon md-icon"></span>
-        </label>
-      
-      <a href="./" class="md-nav__link md-nav__link--active">
+    <li class="md-nav__item">
+      <a href="../sse-replay-buffer/" class="md-nav__link">
         
   
   
@@ -819,92 +792,6 @@
   
 
       </a>
-      
-        
-
-<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
-  
-  
-  
-    
-  
-  
-    <label class="md-nav__title" for="__toc">
-      <span class="md-nav__icon md-icon"></span>
-      Table of contents
-    </label>
-    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
-      
-        <li class="md-nav__item">
-  <a href="#single-process-inmemoryssereplaybuffer" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Single-process: InMemorySSEReplayBuffer
-      
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#multi-worker-redisssereplaybuffer" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Multi-worker: RedisSSEReplayBuffer
-      
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#what-the-wire-looks-like" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        What the wire looks like
-      
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#choosing-max_events" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Choosing max_events
-      
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#custom-buffers" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Custom buffers
-      
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#caveats" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Caveats
-      
-    </span>
-  </a>
-  
-</li>
-      
-    </ul>
-  
-</nav>
-      
     </li>
   
 
@@ -970,10 +857,19 @@
                 
   
   
+    
   
   
-    <li class="md-nav__item">
-      <a href="../polymorphic-action/" class="md-nav__link">
+  
+    <li class="md-nav__item md-nav__item--active">
+      
+      <input class="md-nav__toggle md-toggle" type="checkbox" id="__toc">
+      
+      
+        
+      
+      
+      <a href="./" class="md-nav__link md-nav__link--active">
         
   
   
@@ -989,6 +885,7 @@
   
 
       </a>
+      
     </li>
   
 
@@ -1303,80 +1200,6 @@
     
   
   
-    <label class="md-nav__title" for="__toc">
-      <span class="md-nav__icon md-icon"></span>
-      Table of contents
-    </label>
-    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
-      
-        <li class="md-nav__item">
-  <a href="#single-process-inmemoryssereplaybuffer" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Single-process: InMemorySSEReplayBuffer
-      
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#multi-worker-redisssereplaybuffer" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Multi-worker: RedisSSEReplayBuffer
-      
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#what-the-wire-looks-like" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        What the wire looks like
-      
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#choosing-max_events" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Choosing max_events
-      
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#custom-buffers" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Custom buffers
-      
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#caveats" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Caveats
-      
-    </span>
-  </a>
-  
-</li>
-      
-    </ul>
-  
 </nav>
                   </div>
                 </div>
@@ -1392,7 +1215,7 @@
 
 
   
-    <a href="https://github.com/Artui/djangorestframework-mcp-server/edit/main/docs/recipes/sse-replay-buffer.md" title="Edit this page" class="md-content__button md-icon" rel="edit">
+    <a href="https://github.com/Artui/djangorestframework-mcp-server/edit/main/docs/recipes/polymorphic-action.md" title="Edit this page" class="md-content__button md-icon" rel="edit">
       
       <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M10 20H6V4h7v5h5v3.1l2-2V8l-6-6H6c-1.1 0-2 .9-2 2v16c0 1.1.9 2 2 2h4zm10.2-7c.1 0 .3.1.4.2l1.3 1.3c.2.2.2.6 0 .8l-1 1-2.1-2.1 1-1c.1-.1.2-.2.4-.2m0 3.9L14.1 23H12v-2.1l6.1-6.1z"/></svg>
     </a>
@@ -1400,110 +1223,61 @@
   
 
 
-<h1 id="resume-dropped-sse-streams-with-last-event-id">Resume dropped SSE streams with <code>Last-Event-ID</code><a class="headerlink" href="#resume-dropped-sse-streams-with-last-event-id" title="Permanent link">&para;</a></h1>
-<p>The MCP transport supports the standard SSE
-<a href="https://html.spec.whatwg.org/multipage/server-sent-events.html#last-event-id"><code>Last-Event-ID</code></a>
-header so clients that drop a streaming connection can reconnect and
-receive the events they missed. This is <strong>opt-in</strong>: pass an
-:class:<code>SSEReplayBuffer</code> to <code>MCPServer(sse_replay_buffer=...)</code> and every
-event published via <code>await server.notify(...)</code> is recorded with a
-monotonic ID before fan-out, then replayed on the client's next GET if it
-arrives carrying <code>Last-Event-ID</code>.</p>
-<p>Without a buffer, the wire shape is unchanged — no <code>id:</code> lines, and a
-client that sends <code>Last-Event-ID</code> is silently ignored (no replay, fresh
-live stream).</p>
-<h2 id="single-process-inmemoryssereplaybuffer">Single-process: <code>InMemorySSEReplayBuffer</code><a class="headerlink" href="#single-process-inmemoryssereplaybuffer" title="Permanent link">&para;</a></h2>
-<p>Suitable when you run a single ASGI worker. State lives on the buffer
-instance, sized to a fixed-cap <code>deque</code> per session.</p>
-<div class="language-python highlight"><span class="filename">myproject/mcp.py</span><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="kn">from</span><span class="w"> </span><span class="nn">rest_framework_mcp</span><span class="w"> </span><span class="kn">import</span> <span class="n">MCPServer</span>
-</span><span id="__span-0-2"><a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a><span class="kn">from</span><span class="w"> </span><span class="nn">rest_framework_mcp.transport.in_memory_sse_replay_buffer</span><span class="w"> </span><span class="kn">import</span> <span class="p">(</span>
-</span><span id="__span-0-3"><a id="__codelineno-0-3" name="__codelineno-0-3" href="#__codelineno-0-3"></a>    <span class="n">InMemorySSEReplayBuffer</span><span class="p">,</span>
-</span><span id="__span-0-4"><a id="__codelineno-0-4" name="__codelineno-0-4" href="#__codelineno-0-4"></a><span class="p">)</span>
-</span><span id="__span-0-5"><a id="__codelineno-0-5" name="__codelineno-0-5" href="#__codelineno-0-5"></a>
-</span><span id="__span-0-6"><a id="__codelineno-0-6" name="__codelineno-0-6" href="#__codelineno-0-6"></a><span class="n">server</span> <span class="o">=</span> <span class="n">MCPServer</span><span class="p">(</span>
-</span><span id="__span-0-7"><a id="__codelineno-0-7" name="__codelineno-0-7" href="#__codelineno-0-7"></a>    <span class="n">name</span><span class="o">=</span><span class="s2">&quot;my-app&quot;</span><span class="p">,</span>
-</span><span id="__span-0-8"><a id="__codelineno-0-8" name="__codelineno-0-8" href="#__codelineno-0-8"></a>    <span class="n">sse_replay_buffer</span><span class="o">=</span><span class="n">InMemorySSEReplayBuffer</span><span class="p">(</span><span class="n">max_events</span><span class="o">=</span><span class="mi">2048</span><span class="p">),</span>
-</span><span id="__span-0-9"><a id="__codelineno-0-9" name="__codelineno-0-9" href="#__codelineno-0-9"></a><span class="p">)</span>
+<h1 id="expose-a-polymorphic-action-as-per-variant-tools">Expose a polymorphic action as per-variant tools<a class="headerlink" href="#expose-a-polymorphic-action-as-per-variant-tools" title="Permanent link">&para;</a></h1>
+<p>drf-services 0.25 added <code>PolymorphicServiceSpec</code> — one action that accepts
+<em>N</em> mutually exclusive payload shapes and picks a variant at dispatch time
+from a <code>discriminator</code> callable reading the request body. It exists because
+an HTTP URL is a scarce, addressable resource: sometimes you want one
+endpoint to accept a tagged-union body instead of <em>N</em> endpoints.</p>
+<p>MCP has no such scarcity. You can register as many tools as you like, and a
+model calls tools far more reliably when each is a single-purpose tool with a
+flat schema than when it has to pick a <code>anyOf</code> arm <em>and</em> set a discriminator
+field correctly. So the right move is not to mirror the union — it's to
+<strong>expand a <code>PolymorphicServiceSpec</code> into one tool per variant</strong>. The tool
+<em>name</em> selects the variant, so the discriminator never runs and the model
+never sees a union.</p>
+<p><code>PolymorphicServiceSpec.specs</code> is a public <code>Mapping[str, ServiceSpec]</code>
+(variant key → full <code>ServiceSpec</code>, each with its own <code>input_serializer</code>,
+<code>service</code>, and output pipeline), so the expansion is a loop over existing
+API:</p>
+<div class="language-python highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="kn">from</span><span class="w"> </span><span class="nn">rest_framework_services</span><span class="w"> </span><span class="kn">import</span> <span class="n">PolymorphicServiceSpec</span><span class="p">,</span> <span class="n">ServiceSpec</span>
+</span><span id="__span-0-2"><a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a><span class="kn">from</span><span class="w"> </span><span class="nn">rest_framework_mcp</span><span class="w"> </span><span class="kn">import</span> <span class="n">MCPServer</span>
+</span><span id="__span-0-3"><a id="__codelineno-0-3" name="__codelineno-0-3" href="#__codelineno-0-3"></a>
+</span><span id="__span-0-4"><a id="__codelineno-0-4" name="__codelineno-0-4" href="#__codelineno-0-4"></a><span class="c1"># The same spec you&#39;d hand a viewset&#39;s `action_specs` on the HTTP side.</span>
+</span><span id="__span-0-5"><a id="__codelineno-0-5" name="__codelineno-0-5" href="#__codelineno-0-5"></a><span class="n">moderate</span> <span class="o">=</span> <span class="n">PolymorphicServiceSpec</span><span class="p">(</span>
+</span><span id="__span-0-6"><a id="__codelineno-0-6" name="__codelineno-0-6" href="#__codelineno-0-6"></a>    <span class="n">discriminator</span><span class="o">=</span><span class="k">lambda</span> <span class="o">*</span><span class="p">,</span> <span class="n">data</span><span class="p">:</span> <span class="n">data</span><span class="p">[</span><span class="s2">&quot;op&quot;</span><span class="p">],</span>       <span class="c1"># HTTP-only; unused here</span>
+</span><span id="__span-0-7"><a id="__codelineno-0-7" name="__codelineno-0-7" href="#__codelineno-0-7"></a>    <span class="n">specs</span><span class="o">=</span><span class="p">{</span>
+</span><span id="__span-0-8"><a id="__codelineno-0-8" name="__codelineno-0-8" href="#__codelineno-0-8"></a>        <span class="s2">&quot;approve&quot;</span><span class="p">:</span> <span class="n">ServiceSpec</span><span class="p">(</span><span class="n">service</span><span class="o">=</span><span class="n">approve_document</span><span class="p">,</span> <span class="n">output_selector_spec</span><span class="o">=</span><span class="n">DOC_OUT</span><span class="p">),</span>
+</span><span id="__span-0-9"><a id="__codelineno-0-9" name="__codelineno-0-9" href="#__codelineno-0-9"></a>        <span class="s2">&quot;reject&quot;</span><span class="p">:</span> <span class="n">ServiceSpec</span><span class="p">(</span><span class="n">service</span><span class="o">=</span><span class="n">reject_document</span><span class="p">,</span> <span class="n">output_selector_spec</span><span class="o">=</span><span class="n">DOC_OUT</span><span class="p">),</span>
+</span><span id="__span-0-10"><a id="__codelineno-0-10" name="__codelineno-0-10" href="#__codelineno-0-10"></a>    <span class="p">},</span>
+</span><span id="__span-0-11"><a id="__codelineno-0-11" name="__codelineno-0-11" href="#__codelineno-0-11"></a><span class="p">)</span>
+</span><span id="__span-0-12"><a id="__codelineno-0-12" name="__codelineno-0-12" href="#__codelineno-0-12"></a>
+</span><span id="__span-0-13"><a id="__codelineno-0-13" name="__codelineno-0-13" href="#__codelineno-0-13"></a><span class="n">server</span> <span class="o">=</span> <span class="n">MCPServer</span><span class="p">(</span><span class="n">name</span><span class="o">=</span><span class="s2">&quot;docs&quot;</span><span class="p">)</span>
+</span><span id="__span-0-14"><a id="__codelineno-0-14" name="__codelineno-0-14" href="#__codelineno-0-14"></a><span class="k">for</span> <span class="n">variant_key</span><span class="p">,</span> <span class="n">variant</span> <span class="ow">in</span> <span class="n">moderate</span><span class="o">.</span><span class="n">specs</span><span class="o">.</span><span class="n">items</span><span class="p">():</span>
+</span><span id="__span-0-15"><a id="__codelineno-0-15" name="__codelineno-0-15" href="#__codelineno-0-15"></a>    <span class="n">server</span><span class="o">.</span><span class="n">register_service_tool</span><span class="p">(</span>
+</span><span id="__span-0-16"><a id="__codelineno-0-16" name="__codelineno-0-16" href="#__codelineno-0-16"></a>        <span class="n">name</span><span class="o">=</span><span class="sa">f</span><span class="s2">&quot;moderate_document_</span><span class="si">{</span><span class="n">variant_key</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">,</span>   <span class="c1"># → moderate_document_approve, …</span>
+</span><span id="__span-0-17"><a id="__codelineno-0-17" name="__codelineno-0-17" href="#__codelineno-0-17"></a>        <span class="n">spec</span><span class="o">=</span><span class="n">variant</span><span class="p">,</span>
+</span><span id="__span-0-18"><a id="__codelineno-0-18" name="__codelineno-0-18" href="#__codelineno-0-18"></a>        <span class="n">description</span><span class="o">=</span><span class="sa">f</span><span class="s2">&quot;Moderate a document (</span><span class="si">{</span><span class="n">variant_key</span><span class="si">}</span><span class="s2">).&quot;</span><span class="p">,</span>
+</span><span id="__span-0-19"><a id="__codelineno-0-19" name="__codelineno-0-19" href="#__codelineno-0-19"></a>    <span class="p">)</span>
 </span></code></pre></div>
-<p><code>max_events</code> caps <strong>per-session</strong> retention. Events older than that drop
-off the back when new ones arrive — a client that disconnects for very
-long and replays from a buried event sees a partial replay (best-effort).</p>
-<h2 id="multi-worker-redisssereplaybuffer">Multi-worker: <code>RedisSSEReplayBuffer</code><a class="headerlink" href="#multi-worker-redisssereplaybuffer" title="Permanent link">&para;</a></h2>
-<p>Pair this with <code>RedisSSEBroker</code> so any worker can both publish the live
-event and serve the replay request. The buffer is backed by a
-<a href="https://redis.io/docs/data-types/streams/">Redis Stream</a> per session:
-<code>XADD MAXLEN ~ N</code> for record (capped, approximate trimming),
-<code>XRANGE (&lt;id&gt; +</code> for replay.</p>
-<div class="language-python highlight"><span class="filename">myproject/mcp.py</span><pre><span></span><code><span id="__span-1-1"><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a><span class="kn">from</span><span class="w"> </span><span class="nn">redis.asyncio</span><span class="w"> </span><span class="kn">import</span> <span class="n">Redis</span>
-</span><span id="__span-1-2"><a id="__codelineno-1-2" name="__codelineno-1-2" href="#__codelineno-1-2"></a>
-</span><span id="__span-1-3"><a id="__codelineno-1-3" name="__codelineno-1-3" href="#__codelineno-1-3"></a><span class="kn">from</span><span class="w"> </span><span class="nn">rest_framework_mcp</span><span class="w"> </span><span class="kn">import</span> <span class="n">MCPServer</span>
-</span><span id="__span-1-4"><a id="__codelineno-1-4" name="__codelineno-1-4" href="#__codelineno-1-4"></a><span class="kn">from</span><span class="w"> </span><span class="nn">rest_framework_mcp.transport.redis_sse_broker</span><span class="w"> </span><span class="kn">import</span> <span class="n">RedisSSEBroker</span>
-</span><span id="__span-1-5"><a id="__codelineno-1-5" name="__codelineno-1-5" href="#__codelineno-1-5"></a><span class="kn">from</span><span class="w"> </span><span class="nn">rest_framework_mcp.transport.redis_sse_replay_buffer</span><span class="w"> </span><span class="kn">import</span> <span class="p">(</span>
-</span><span id="__span-1-6"><a id="__codelineno-1-6" name="__codelineno-1-6" href="#__codelineno-1-6"></a>    <span class="n">RedisSSEReplayBuffer</span><span class="p">,</span>
-</span><span id="__span-1-7"><a id="__codelineno-1-7" name="__codelineno-1-7" href="#__codelineno-1-7"></a><span class="p">)</span>
-</span><span id="__span-1-8"><a id="__codelineno-1-8" name="__codelineno-1-8" href="#__codelineno-1-8"></a>
-</span><span id="__span-1-9"><a id="__codelineno-1-9" name="__codelineno-1-9" href="#__codelineno-1-9"></a>
-</span><span id="__span-1-10"><a id="__codelineno-1-10" name="__codelineno-1-10" href="#__codelineno-1-10"></a><span class="n">client</span> <span class="o">=</span> <span class="n">Redis</span><span class="o">.</span><span class="n">from_url</span><span class="p">(</span><span class="s2">&quot;redis://localhost:6379/0&quot;</span><span class="p">)</span>
-</span><span id="__span-1-11"><a id="__codelineno-1-11" name="__codelineno-1-11" href="#__codelineno-1-11"></a>
-</span><span id="__span-1-12"><a id="__codelineno-1-12" name="__codelineno-1-12" href="#__codelineno-1-12"></a><span class="n">server</span> <span class="o">=</span> <span class="n">MCPServer</span><span class="p">(</span>
-</span><span id="__span-1-13"><a id="__codelineno-1-13" name="__codelineno-1-13" href="#__codelineno-1-13"></a>    <span class="n">name</span><span class="o">=</span><span class="s2">&quot;my-app&quot;</span><span class="p">,</span>
-</span><span id="__span-1-14"><a id="__codelineno-1-14" name="__codelineno-1-14" href="#__codelineno-1-14"></a>    <span class="n">sse_broker</span><span class="o">=</span><span class="n">RedisSSEBroker</span><span class="p">(</span><span class="n">client</span><span class="p">),</span>
-</span><span id="__span-1-15"><a id="__codelineno-1-15" name="__codelineno-1-15" href="#__codelineno-1-15"></a>    <span class="n">sse_replay_buffer</span><span class="o">=</span><span class="n">RedisSSEReplayBuffer</span><span class="p">(</span><span class="n">client</span><span class="p">,</span> <span class="n">max_events</span><span class="o">=</span><span class="mi">4096</span><span class="p">),</span>
-</span><span id="__span-1-16"><a id="__codelineno-1-16" name="__codelineno-1-16" href="#__codelineno-1-16"></a><span class="p">)</span>
+<p>Each registered tool is an ordinary service tool: its <code>inputSchema</code> comes
+from that variant's <code>input_serializer</code>, and dispatch runs the usual
+<code>input_serializer → run_service(atomic) → output</code> pipeline. Nothing about
+<code>PolymorphicServiceSpec</code> leaks into the wire — the discriminator is a
+server-side HTTP concern, and the MCP surface stays a flat menu of clear
+tools.</p>
+<p>Give each variant its own <code>permissions</code>, <code>output_format</code>, or <code>annotations</code>
+as needed — they're independent tools that happen to share an origin spec:</p>
+<div class="language-python highlight"><pre><span></span><code><span id="__span-1-1"><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a><span class="n">server</span><span class="o">.</span><span class="n">register_service_tool</span><span class="p">(</span>
+</span><span id="__span-1-2"><a id="__codelineno-1-2" name="__codelineno-1-2" href="#__codelineno-1-2"></a>    <span class="n">name</span><span class="o">=</span><span class="s2">&quot;moderate_document_reject&quot;</span><span class="p">,</span>
+</span><span id="__span-1-3"><a id="__codelineno-1-3" name="__codelineno-1-3" href="#__codelineno-1-3"></a>    <span class="n">spec</span><span class="o">=</span><span class="n">moderate</span><span class="o">.</span><span class="n">specs</span><span class="p">[</span><span class="s2">&quot;reject&quot;</span><span class="p">],</span>
+</span><span id="__span-1-4"><a id="__codelineno-1-4" name="__codelineno-1-4" href="#__codelineno-1-4"></a>    <span class="n">permissions</span><span class="o">=</span><span class="p">[</span><span class="n">ScopeRequired</span><span class="p">(</span><span class="s2">&quot;documents:moderate&quot;</span><span class="p">)],</span>
+</span><span id="__span-1-5"><a id="__codelineno-1-5" name="__codelineno-1-5" href="#__codelineno-1-5"></a>    <span class="n">annotations</span><span class="o">=</span><span class="p">{</span><span class="s2">&quot;destructiveHint&quot;</span><span class="p">:</span> <span class="kc">True</span><span class="p">},</span>
+</span><span id="__span-1-6"><a id="__codelineno-1-6" name="__codelineno-1-6" href="#__codelineno-1-6"></a><span class="p">)</span>
 </span></code></pre></div>
-<p>The two collaborators are independent: you could pair an in-memory
-broker with a Redis buffer, or vice versa. They're decoupled because
-brokers handle live fan-out and buffers handle resume — different
-concerns, different storage trade-offs.</p>
-<h2 id="what-the-wire-looks-like">What the wire looks like<a class="headerlink" href="#what-the-wire-looks-like" title="Permanent link">&para;</a></h2>
-<p>With a buffer wired in, every <code>notify</code> produces an SSE frame carrying
-both <code>id:</code> and <code>data:</code>:</p>
-<div class="language-text highlight"><pre><span></span><code><span id="__span-2-1"><a id="__codelineno-2-1" name="__codelineno-2-1" href="#__codelineno-2-1"></a>id: 0000000000000007
-</span><span id="__span-2-2"><a id="__codelineno-2-2" name="__codelineno-2-2" href="#__codelineno-2-2"></a>data: {&quot;event&quot;:&quot;job-finished&quot;,&quot;jobId&quot;:42}
-</span><span id="__span-2-3"><a id="__codelineno-2-3" name="__codelineno-2-3" href="#__codelineno-2-3"></a>
-</span><span id="__span-2-4"><a id="__codelineno-2-4" name="__codelineno-2-4" href="#__codelineno-2-4"></a>id: 0000000000000008
-</span><span id="__span-2-5"><a id="__codelineno-2-5" name="__codelineno-2-5" href="#__codelineno-2-5"></a>data: {&quot;event&quot;:&quot;job-finished&quot;,&quot;jobId&quot;:43}
-</span></code></pre></div>
-<p>On reconnect the client sends:</p>
-<div class="language-text highlight"><pre><span></span><code><span id="__span-3-1"><a id="__codelineno-3-1" name="__codelineno-3-1" href="#__codelineno-3-1"></a>Last-Event-ID: 0000000000000007
-</span></code></pre></div>
-<p>…and the server replays event 8 (and any later events) before resuming
-live mode. Browser <code>EventSource</code> does this automatically; programmatic
-SSE clients should preserve the latest <code>id:</code> they received and echo it
-back on retry.</p>
-<h2 id="choosing-max_events">Choosing <code>max_events</code><a class="headerlink" href="#choosing-max_events" title="Permanent link">&para;</a></h2>
-<p>Pick a number that covers your worst-case disconnect window times your
-peak event rate per session. Examples:</p>
-<ul>
-<li>"5-minute reconnect window, 10 events/sec peak" → <code>max_events ≥ 3000</code>.</li>
-<li>"1-minute reconnect window, 1 event/sec average" → <code>max_events ≥ 60</code>
-  (round up for headroom).</li>
-</ul>
-<p>Per-session, so total memory scales with <code>(active sessions) × max_events
-× avg_payload_size</code>. The Redis variant is also bounded but uses
-approximate trimming — actual retention may be slightly above the cap
-between trim events.</p>
-<h2 id="custom-buffers">Custom buffers<a class="headerlink" href="#custom-buffers" title="Permanent link">&para;</a></h2>
-<p><code>SSEReplayBuffer</code> is a small Protocol — three methods: <code>record</code>,
-<code>replay</code>, <code>forget</code>. Implement it against any storage you like (PostgreSQL
-LISTEN/NOTIFY, NATS JetStream, Kafka with a consumer group key, …). Pass
-your instance via <code>sse_replay_buffer=</code> and the rest of the package works
-unchanged.</p>
-<h2 id="caveats">Caveats<a class="headerlink" href="#caveats" title="Permanent link">&para;</a></h2>
-<ul>
-<li><strong>Bounded retention.</strong> A client that disconnects for hours and tries
-  to resume from an evicted ID will get a partial replay. The MCP spec
-  is silent on how the client should detect this; in practice clients
-  treat any successful resume as "OK" and rely on application-level
-  consistency (e.g. a follow-up <code>tools/call</code> to fetch latest state).</li>
-<li><strong>DELETE forgets the buffer.</strong> When a client tears the session down
-  with <code>DELETE /mcp/</code>, the transport calls <code>buffer.forget(session_id)</code>
-  so dead sessions don't accumulate state. Buffers can no-op this if
-  they prefer TTL-based eviction.</li>
-<li><strong>No replay without a buffer.</strong> This is a deliberate v1 default — most
-  deployments don't need resume, and recording every event has cost.
-  Opt in when you need it.</li>
-</ul>
+<p>If several variants genuinely belong together as one atomic operation
+(retrieve-then-write, say), that's a <em>chain</em>, not a union — see
+<a href="../chain-tools/">Chain several specs into one tool</a>.</p>
 
 
 
