@@ -22,5 +22,8 @@ that solves a single concrete problem. Browse the list:
 - [Selector tool with FilterSet](selector-tool-with-filterset.md) —
   expose a list-shaped read tool with `django-filter`, ordering, and
   pagination, generated `inputSchema` and all.
+- [Expose a polymorphic action as tools](polymorphic-action.md) — expand a
+  drf-services `PolymorphicServiceSpec` into one flat tool per variant
+  instead of a `anyOf` union.
 - [Migrate from `fastapi-mcp` / hand-rolled MCP](migrating.md) — step
   by step from a custom Django MCP view or a `fastapi-mcp` app.

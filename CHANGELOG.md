@@ -7,6 +7,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.11.3] — 2026-07-16
+
+### Changed
+
+- Raise the `djangorestframework-services` ceiling from `<0.25` to `<0.26`
+  (floor unchanged at `>=0.24.1`) so the MCP server installs alongside
+  drf-services 0.25.x. 0.25.0 is additive for this layer; the one relevant
+  change is the bugfix giving `collection_selector_spec` selectors the view's
+  URL kwargs on the bulk path, which now flows through automatically.
+
+### Added
+
+- Docs recipe: [Expose a polymorphic action as tools](recipes/polymorphic-action.md)
+  — expand a drf-services 0.25 `PolymorphicServiceSpec` into one flat tool per
+  variant rather than advertising a `anyOf` union to the model.
+
 ## [0.11.2] — 2026-07-13
 
 ### Changed
@@ -1197,7 +1213,8 @@ Pinned to `djangorestframework-services==0.6.0`.
 - 100% line + branch coverage enforced by pytest (**451 tests** at
   release).
 
-[Unreleased]: https://github.com/Artui/djangorestframework-mcp-server/compare/v0.11.2...HEAD
+[Unreleased]: https://github.com/Artui/djangorestframework-mcp-server/compare/v0.11.3...HEAD
+[0.11.3]: https://github.com/Artui/djangorestframework-mcp-server/compare/v0.11.2...v0.11.3
 [0.11.2]: https://github.com/Artui/djangorestframework-mcp-server/compare/v0.11.1...v0.11.2
 [0.11.1]: https://github.com/Artui/djangorestframework-mcp-server/compare/v0.11.0...v0.11.1
 [0.11.0]: https://github.com/Artui/djangorestframework-mcp-server/compare/v0.10.1...v0.11.0
