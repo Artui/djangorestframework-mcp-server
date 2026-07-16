@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.11.3] — 2026-07-16
+
 ### Changed
 
 - Raise the `djangorestframework-services` ceiling from `<0.25` to `<0.26`
@@ -1211,7 +1213,8 @@ Pinned to `djangorestframework-services==0.6.0`.
 - 100% line + branch coverage enforced by pytest (**451 tests** at
   release).
 
-[Unreleased]: https://github.com/Artui/djangorestframework-mcp-server/compare/v0.11.2...HEAD
+[Unreleased]: https://github.com/Artui/djangorestframework-mcp-server/compare/v0.11.3...HEAD
+[0.11.3]: https://github.com/Artui/djangorestframework-mcp-server/compare/v0.11.2...v0.11.3
 [0.11.2]: https://github.com/Artui/djangorestframework-mcp-server/compare/v0.11.1...v0.11.2
 [0.11.1]: https://github.com/Artui/djangorestframework-mcp-server/compare/v0.11.0...v0.11.1
 [0.11.0]: https://github.com/Artui/djangorestframework-mcp-server/compare/v0.10.1...v0.11.0
