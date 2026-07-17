@@ -14,7 +14,6 @@ from rest_framework_services.types.service_spec import ServiceSpec
 from rest_framework_mcp.auth.permissions.types.mcp_permission import MCPPermission
 from rest_framework_mcp.auth.rate_limits.types.mcp_rate_limit import MCPRateLimit
 from rest_framework_mcp.auth.types.token_info import TokenInfo
-from rest_framework_mcp.conf import get_setting
 from rest_framework_mcp.constants import (
     RESERVED_POOL_SEEDS,
     RESERVED_POST_FETCH_KEYS,
@@ -261,18 +260,18 @@ def validate_input_against_serializer(
     return validated
 
 
-def validation_error_data(detail: Any, value: Any) -> dict[str, Any]:
+def validation_error_data(detail: Any, value: Any, *, include_value: bool) -> dict[str, Any]:
     """Build the ``data`` payload for a JSON-RPC validation error.
 
     Always carries the per-field ``detail`` shape that DRF / sister-repo
-    validation produces. When ``REST_FRAMEWORK_MCP["INCLUDE_VALIDATION_VALUE"]``
-    is True, ``value`` is also echoed back — useful for debugging schema
+    validation produces. When ``include_value`` (the server's
+    ``MCPConfig.include_validation_value``) is True, ``value`` is also echoed back — useful for debugging schema
     mismatches against opaque client SDKs. Off by default because the value
     may carry sensitive payloads (PII, secrets) consumers don't want flowing
     back to the client or appearing in client-side logs.
     """
     payload: dict[str, Any] = {"detail": detail}
-    if get_setting("INCLUDE_VALIDATION_VALUE"):
+    if include_value:
         payload["value"] = value
     return payload
 

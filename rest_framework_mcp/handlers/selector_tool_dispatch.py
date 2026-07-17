@@ -53,7 +53,7 @@ from rest_framework_services.types.dispatch_result import DispatchResult
 from rest_framework_services.types.selector_kind import SelectorKind
 
 from rest_framework_mcp._compat.acall import acall
-from rest_framework_mcp.conf import get_setting
+from rest_framework_mcp.config.types.mcp_config import MCPConfig
 from rest_framework_mcp.constants import (
     RESERVED_POST_FETCH_KEYS,
     JsonRpcErrorCode,
@@ -103,14 +103,18 @@ def dispatch_selector_tool(
         return build_error_tool_result(
             exc.message,
             error_type="validation_error",
-            detail=validation_error_data(exc.detail, arguments_raw),
+            detail=validation_error_data(
+                exc.detail, arguments_raw, include_value=context.config.include_validation_value
+            ),
         ).to_dict()
     except ServiceError as exc:
-        if get_setting("RECORD_SERVICE_EXCEPTIONS"):
+        if context.config.record_service_exceptions:
             otel_span.record_exception(exc)
         return build_error_tool_result(exc.message, error_type="service_error").to_dict()
 
-    return _post_fetch_and_render(binding, result, drf_request, arguments_raw, params)
+    return _post_fetch_and_render(
+        binding, result, drf_request, arguments_raw, params, context.config
+    )
 
 
 async def _post_fetch_and_render_async(
@@ -119,6 +123,7 @@ async def _post_fetch_and_render_async(
     drf_request: Any,
     arguments_raw: dict[str, Any],
     params: dict[str, Any],
+    config: MCPConfig,
 ) -> dict[str, Any]:
     """Bridge the sync post-fetch pipeline through ``sync_to_async``.
 
@@ -127,7 +132,9 @@ async def _post_fetch_and_render_async(
     through a thread. The pipeline itself is unchanged — only the
     async-context boundary differs.
     """
-    return await acall(_post_fetch_and_render, binding, result, drf_request, arguments_raw, params)
+    return await acall(
+        _post_fetch_and_render, binding, result, drf_request, arguments_raw, params, config
+    )
 
 
 async def dispatch_selector_tool_async(
@@ -156,14 +163,18 @@ async def dispatch_selector_tool_async(
         return build_error_tool_result(
             exc.message,
             error_type="validation_error",
-            detail=validation_error_data(exc.detail, arguments_raw),
+            detail=validation_error_data(
+                exc.detail, arguments_raw, include_value=context.config.include_validation_value
+            ),
         ).to_dict()
     except ServiceError as exc:
-        if get_setting("RECORD_SERVICE_EXCEPTIONS"):
+        if context.config.record_service_exceptions:
             otel_span.record_exception(exc)
         return build_error_tool_result(exc.message, error_type="service_error").to_dict()
 
-    return await _post_fetch_and_render_async(binding, result, drf_request, arguments_raw, params)
+    return await _post_fetch_and_render_async(
+        binding, result, drf_request, arguments_raw, params, context.config
+    )
 
 
 # ---------- helpers shared between sync + async ----------
@@ -223,7 +234,9 @@ def _build_request_and_validate(
             JsonRpcError(
                 JsonRpcErrorCode.INVALID_PARAMS,
                 "Invalid arguments",
-                data=validation_error_data(exc.detail, arguments_raw),
+                data=validation_error_data(
+                    exc.detail, arguments_raw, include_value=context.config.include_validation_value
+                ),
             ),
         )
     return drf_request, validated, None
@@ -263,6 +276,7 @@ def _post_fetch_and_render(
     drf_request: Any,
     arguments_raw: dict[str, Any],
     params: dict[str, Any],
+    config: MCPConfig,
 ) -> dict[str, Any]:
     """Order → paginate → render the shaped value ``dispatch_spec`` returned.
 
@@ -279,6 +293,8 @@ def _post_fetch_and_render(
         include_output_schema_override=binding.include_output_schema,
         include_structured_content_override=binding.include_structured_content,
         binding_name=binding.name,
+        default_output_schema=config.include_output_schema,
+        default_structured_content=config.include_structured_content,
     )
 
     if binding.kind is SelectorKind.RETRIEVE:

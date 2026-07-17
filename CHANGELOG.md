@@ -99,6 +99,29 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **`MCPConfig` + `build_mcp_config()` — the scalar settings are now per-server.**
+  Twelve settings were read from `REST_FRAMEWORK_MCP` **on every request**, deep
+  in the handlers. Read there they could only ever be global, so no two servers
+  in one project could differ on any of them. They are now resolved **once**, in
+  `MCPServer.__init__`, into a frozen `MCPConfig` threaded to the transport and
+  to every handler via `MCPCallContext.config`:
+
+  ```python
+  MCPServer(name="internal", config=build_mcp_config(page_size=500))
+  ```
+
+  `REST_FRAMEWORK_MCP` remains the **default source** for every one of them, so
+  a single-server project that configures settings and passes no `config=` is
+  unaffected. Covers `PROTOCOL_VERSIONS`, `REQUIRE_PROTOCOL_VERSION_HEADER`,
+  `INCLUDE_STRUCTURED_CONTENT`, `INCLUDE_OUTPUT_SCHEMA`, `ALLOWED_ORIGINS`,
+  `DEFAULT_OUTPUT_FORMAT`, `MAX_REQUEST_BYTES`, `PAGE_SIZE`,
+  `INCLUDE_VALIDATION_VALUE`, `RECORD_SERVICE_EXCEPTIONS`,
+  `FILTER_LISTINGS_BY_PERMISSIONS`, `REQUIRE_TOOL_PERMISSIONS`.
+
+  Use `build_mcp_config(**overrides)` rather than `MCPConfig(...)` directly — it
+  layers your overrides over the project's settings instead of discarding them.
+
+- `MCPServer.config`, exposing the resolved snapshot.
 - **`MCPServer(title=...)`** — the spec's `Implementation.title`, which this
   package did not implement. The MCP spec splits the two deliberately: `name` is
   *"intended for programmatic or logical use"* (the stable identifier), `title`
@@ -117,6 +140,29 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   identity to the handlers.
 
 ### Changed
+
+- **`REST_FRAMEWORK_MCP` is no longer read on the request path.** Every scalar is
+  resolved when a server is constructed. Two consequences worth knowing:
+
+  - **Mutating settings no longer reconfigures an already-built server.** If your
+    tests wrap a request in `override_settings(REST_FRAMEWORK_MCP=...)` against a
+    server built at URL-conf import, the change is now ignored — build the server
+    inside the test with `config=build_mcp_config(...)` and mount that instead.
+    (`AUTH_BACKEND` / `SESSION_STORE` already behaved this way, since they were
+    resolved in `__init__`.)
+  - **`DEFAULT_OUTPUT_FORMAT` now does something.** It was declared in the
+    settings defaults and read by nothing — a tool registered without an explicit
+    `output_format` always got JSON. It is now the real fallback. If you set it to
+    `"toon"` expecting it to work, it will now take effect.
+
+- Internal signatures gained the values they used to read from settings:
+  `paginate(page_size=)`, `is_origin_allowed(origin, allowed_origins)`,
+  `resolve_protocol_version(header, supported)`, `negotiate_protocol_version(...,
+  config=)`, `resolve_structured_output(default_output_schema=,
+  default_structured_content=)`, `validation_error_data(..., include_value=)`,
+  `check_tool_permissions_declared(..., require=)`, `call_spec_tool(..., config=)`.
+  The transport viewsets take `config=` alongside their other collaborators.
+  Only affects code calling these directly.
 
 - `SERVER_INFO` is now the **default source** for `name` / `version` rather than
   an override of them, and it is read **once, when the server is constructed**,

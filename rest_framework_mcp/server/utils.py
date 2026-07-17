@@ -7,8 +7,6 @@ from typing import Any
 
 from django.core.exceptions import ImproperlyConfigured
 
-from rest_framework_mcp.conf import get_setting
-
 
 class UnguardedToolWarning(UserWarning):
     """A tool was registered with no MCP permissions at all.
@@ -19,7 +17,9 @@ class UnguardedToolWarning(UserWarning):
     """
 
 
-def check_tool_permissions_declared(name: str, permissions: tuple[Any, ...]) -> None:
+def check_tool_permissions_declared(
+    name: str, permissions: tuple[Any, ...], *, require: bool
+) -> None:
     """Warn (or raise) when a tool binding carries no permissions.
 
     ``permissions`` is the binding's *effective* tuple — author-declared
@@ -36,9 +36,10 @@ def check_tool_permissions_declared(name: str, permissions: tuple[Any, ...]) -> 
     Deliberately emits on every unguarded registration (no warn-once
     module state — see the repo's no-module-level-mutable-state rule);
     registration happens once per server instance, so the volume is one
-    warning per unguarded tool. Set
-    ``REST_FRAMEWORK_MCP["REQUIRE_TOOL_PERMISSIONS"] = True`` to refuse
-    the registration outright.
+    warning per unguarded tool. ``require`` (the server's
+    ``MCPConfig.require_tool_permissions``) refuses the registration
+    outright instead — so one server in a project can demand guarded tools
+    while another only warns.
     """
     if permissions:
         return
@@ -52,7 +53,7 @@ def check_tool_permissions_declared(name: str, permissions: tuple[Any, ...]) -> 
         "REST_FRAMEWORK_MCP['REQUIRE_TOOL_PERMISSIONS'] = True to make this "
         "an error."
     )
-    if get_setting("REQUIRE_TOOL_PERMISSIONS"):
+    if require:
         raise ImproperlyConfigured(message)
     warnings.warn(message, UnguardedToolWarning, stacklevel=3)
 

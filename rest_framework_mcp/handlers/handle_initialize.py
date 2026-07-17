@@ -2,7 +2,6 @@ from __future__ import annotations
 
 from typing import Any
 
-from rest_framework_mcp.conf import get_setting
 from rest_framework_mcp.constants import JsonRpcErrorCode
 from rest_framework_mcp.handlers.types.context import MCPCallContext
 from rest_framework_mcp.protocol.build_server_info import build_server_info
@@ -30,7 +29,7 @@ def handle_initialize(
         )
 
     parsed: InitializeParams = InitializeParams.from_payload(params)
-    supported: list[str] = list(get_setting("PROTOCOL_VERSIONS"))
+    supported: tuple[str, ...] = context.config.protocol_versions
     chosen: str = parsed.protocol_version if parsed.protocol_version in supported else supported[0]
 
     # The owning server's identity wins: it is resolved once in

@@ -10,7 +10,7 @@ from rest_framework.request import Request
 from rest_framework.viewsets import ViewSet
 
 from rest_framework_mcp.auth.types.auth_backend import MCPAuthBackend
-from rest_framework_mcp.conf import get_setting
+from rest_framework_mcp.config.types.mcp_config import MCPConfig
 from rest_framework_mcp.constants import JsonRpcErrorCode
 from rest_framework_mcp.handlers.dispatch import dispatch
 from rest_framework_mcp.handlers.types.context import MCPCallContext
@@ -86,6 +86,9 @@ class StreamableHttpViewSet(ViewSet):
     # ``SERVER_INFO``.
     server_info: Implementation | None = None
     instructions: str | None = None
+    # The owning server's resolved scalars, supplied by MCPServer like
+    # every other collaborator — never looked up from settings here.
+    config: MCPConfig | None = None
 
     # ----- DRF action methods (mapped via ``as_view({...})``) -----
 
@@ -96,7 +99,7 @@ class StreamableHttpViewSet(ViewSet):
         if guard is not None:
             return guard
 
-        max_bytes: int = int(get_setting("MAX_REQUEST_BYTES"))
+        max_bytes: int = self._require_config().max_request_bytes
         if len(http_request.body) > max_bytes:
             return _error_response(
                 code=JsonRpcErrorCode.INVALID_REQUEST,
@@ -120,7 +123,7 @@ class StreamableHttpViewSet(ViewSet):
 
         version_header: str | None = http_request.headers.get(_VERSION_HEADER)
         negotiated: str | None = negotiate_protocol_version(
-            version_header, is_initialize=is_initialize
+            version_header, is_initialize=is_initialize, config=self._require_config()
         )
         if negotiated is None:
             return _error_response(
@@ -162,6 +165,7 @@ class StreamableHttpViewSet(ViewSet):
             session_id=session_id,
             server_info=self.server_info,
             instructions=self.instructions,
+            config=self._require_config(),
         )
 
         if isinstance(message, JsonRpcNotification):
@@ -244,7 +248,7 @@ class StreamableHttpViewSet(ViewSet):
 
     def _check_origin(self, request: Any) -> HttpResponse | None:
         origin: str | None = request.headers.get("Origin")
-        if not is_origin_allowed(origin):
+        if not is_origin_allowed(origin, self._require_config().allowed_origins):
             return _error_response(
                 code=JsonRpcErrorCode.INVALID_REQUEST,
                 message=f"Origin not allowed: {origin!r}",
@@ -271,6 +275,11 @@ class StreamableHttpViewSet(ViewSet):
         if self.auth_backend is None:  # pragma: no cover - guarded by MCPServer
             raise RuntimeError("StreamableHttpViewSet is missing an MCPAuthBackend")
         return self.auth_backend
+
+    def _require_config(self) -> MCPConfig:
+        if self.config is None:  # pragma: no cover - guarded by MCPServer
+            raise RuntimeError("StreamableHttpViewSet is missing an MCPConfig")
+        return self.config
 
     def _require_session_store(self) -> SessionStore:
         if self.session_store is None:  # pragma: no cover - guarded by MCPServer

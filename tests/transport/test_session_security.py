@@ -18,6 +18,7 @@ from django.http import HttpRequest
 from django.test import RequestFactory
 
 from rest_framework_mcp.auth.types.token_info import TokenInfo
+from rest_framework_mcp.config.build_mcp_config import build_mcp_config
 from rest_framework_mcp.registry.prompt_registry import PromptRegistry
 from rest_framework_mcp.registry.resource_registry import ResourceRegistry
 from rest_framework_mcp.registry.tool_registry import ToolRegistry
@@ -60,6 +61,7 @@ def _sync_view(store: InMemorySessionStore) -> Any:
         prompts=PromptRegistry(),
         auth_backend=_HeaderPrincipalBackend(),
         session_store=store,
+        config=build_mcp_config(),
     )
 
 
@@ -72,6 +74,7 @@ def _async_view(store: InMemorySessionStore, *, broker: InMemorySSEBroker | None
         auth_backend=_HeaderPrincipalBackend(),
         session_store=store,
         sse_broker=broker,
+        config=build_mcp_config(),
     )
 
 

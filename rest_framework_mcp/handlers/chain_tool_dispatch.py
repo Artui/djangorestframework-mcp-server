@@ -45,7 +45,7 @@ from rest_framework_services.types.selector_spec import SelectorSpec
 from rest_framework_services.types.service_spec import ServiceSpec
 
 from rest_framework_mcp._compat.acall import acall
-from rest_framework_mcp.conf import get_setting
+from rest_framework_mcp.config.types.mcp_config import MCPConfig
 from rest_framework_mcp.constants import JsonRpcErrorCode, OutputFormat
 from rest_framework_mcp.handlers.types.context import MCPCallContext
 from rest_framework_mcp.handlers.utils import (
@@ -115,7 +115,9 @@ def dispatch_chain_tool(
         return JsonRpcError(
             JsonRpcErrorCode.INVALID_PARAMS,
             "Invalid arguments",
-            data=validation_error_data(exc.detail, arguments_raw),
+            data=validation_error_data(
+                exc.detail, arguments_raw, include_value=context.config.include_validation_value
+            ),
         )
 
     ctx = ChainContext(
@@ -124,7 +126,7 @@ def dispatch_chain_tool(
         user=context.token.user,
     )
 
-    error = _run_chain(binding, ctx, otel_span)
+    error = _run_chain(binding, ctx, otel_span, context.config)
     if error is not None:
         return error
 
@@ -136,6 +138,8 @@ def dispatch_chain_tool(
         include_output_schema_override=binding.include_output_schema,
         include_structured_content_override=binding.include_structured_content,
         binding_name=binding.name,
+        default_output_schema=context.config.include_output_schema,
+        default_structured_content=context.config.include_structured_content,
     )
     return build_tool_result(
         payload,
@@ -166,32 +170,34 @@ async def dispatch_chain_tool_async(
 
 
 def _run_chain(
-    binding: ChainToolBinding, ctx: ChainContext, otel_span: Any
+    binding: ChainToolBinding, ctx: ChainContext, otel_span: Any, config: MCPConfig
 ) -> dict[str, Any] | None:
     """Run every step in order, optionally inside one transaction."""
     if binding.atomic:
         try:
             with transaction.atomic():
-                error = _run_steps(binding, ctx, otel_span)
+                error = _run_steps(binding, ctx, otel_span, config)
                 if error is not None:
                     raise _ChainAbort(error)
         except _ChainAbort as abort:
             return abort.error
         return None
-    return _run_steps(binding, ctx, otel_span)
+    return _run_steps(binding, ctx, otel_span, config)
 
 
 def _run_steps(
-    binding: ChainToolBinding, ctx: ChainContext, otel_span: Any
+    binding: ChainToolBinding, ctx: ChainContext, otel_span: Any, config: MCPConfig
 ) -> dict[str, Any] | None:
     for step in binding.steps:
-        error = _run_step(step, ctx, otel_span)
+        error = _run_step(step, ctx, otel_span, config)
         if error is not None:
             return error
     return None
 
 
-def _run_step(step: ChainStep, ctx: ChainContext, otel_span: Any) -> dict[str, Any] | None:
+def _run_step(
+    step: ChainStep, ctx: ChainContext, otel_span: Any, config: MCPConfig
+) -> dict[str, Any] | None:
     """Run one step and store its result under ``step.alias``.
 
     The pool is ``{request, user}`` plus the step's ``inputs(ctx)`` mapping
@@ -215,10 +221,15 @@ def _run_step(step: ChainStep, ctx: ChainContext, otel_span: Any) -> dict[str, A
         return build_error_tool_result(
             exc.message,
             error_type="validation_error",
-            detail={"failedStep": step.alias, **validation_error_data(exc.detail, {})},
+            detail={
+                "failedStep": step.alias,
+                **validation_error_data(
+                    exc.detail, {}, include_value=config.include_validation_value
+                ),
+            },
         ).to_dict()
     except ServiceError as exc:
-        if get_setting("RECORD_SERVICE_EXCEPTIONS"):
+        if config.record_service_exceptions:
             otel_span.record_exception(exc)
         return build_error_tool_result(
             exc.message,

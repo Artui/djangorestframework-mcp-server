@@ -23,7 +23,8 @@ from rest_framework_mcp.auth.protected_resource_metadata import ProtectedResourc
 from rest_framework_mcp.auth.types.auth_backend import MCPAuthBackend
 from rest_framework_mcp.auth.types.token_info import TokenInfo
 from rest_framework_mcp.check_removed_settings import check_removed_settings
-from rest_framework_mcp.conf import get_setting
+from rest_framework_mcp.config.build_mcp_config import build_mcp_config
+from rest_framework_mcp.config.types.mcp_config import MCPConfig
 from rest_framework_mcp.constants import ArgumentBinding, OutputFormat, UnknownArguments
 from rest_framework_mcp.handlers.call_spec_tool import call_spec_tool
 from rest_framework_mcp.handlers.handle_tools_call_async import handle_tools_call_async
@@ -103,6 +104,7 @@ class MCPServer:
         title: str | None = None,
         description: str | None = None,
         resource_url: str | None = None,
+        config: MCPConfig | None = None,
         auth_backend: MCPAuthBackend | None = None,
         session_store: SessionStore | None = None,
         sse_broker: SSEBroker | None = None,
@@ -123,6 +125,11 @@ class MCPServer:
         self.version: str = self._server_info.version
         self.title: str | None = self._server_info.title
         self.description: str | None = description
+        # The scalar settings, snapshotted once. Threaded to the transport and,
+        # via MCPCallContext, to every handler — so nothing reads settings on
+        # the request path, and two servers here can genuinely differ. Override
+        # a field with ``config=build_mcp_config(page_size=500)``.
+        self._config: MCPConfig = config if config is not None else build_mcp_config()
         self._url_namespace: str = url_namespace
         self._tools: ToolRegistry = ToolRegistry()
         self._resources: ResourceRegistry = ResourceRegistry()
@@ -236,7 +243,9 @@ class MCPServer:
             always_listed=always_listed,
             spec_kwargs_provides=spec_kwargs_provides,
         )
-        check_tool_permissions_declared(binding.name, binding.permissions)
+        check_tool_permissions_declared(
+            binding.name, binding.permissions, require=self._config.require_tool_permissions
+        )
         self._tools.register(binding)
         return binding
 
@@ -322,7 +331,9 @@ class MCPServer:
             always_listed=always_listed,
             spec_kwargs_provides=spec_kwargs_provides,
         )
-        check_tool_permissions_declared(binding.name, binding.permissions)
+        check_tool_permissions_declared(
+            binding.name, binding.permissions, require=self._config.require_tool_permissions
+        )
         self._tools.register(binding)
         return binding
 
@@ -397,7 +408,9 @@ class MCPServer:
             unknown_arguments=unknown_arguments,
             always_listed=always_listed,
         )
-        check_tool_permissions_declared(binding.name, binding.permissions)
+        check_tool_permissions_declared(
+            binding.name, binding.permissions, require=self._config.require_tool_permissions
+        )
         self._tools.register(binding)
         return binding
 
@@ -440,7 +453,9 @@ class MCPServer:
         binding = self._tools.get(name)
         if binding is None:
             raise KeyError(f"No tool registered under {name!r}.")
-        return call_spec_tool(binding, arguments or {}, user=user, request=request)
+        return call_spec_tool(
+            binding, arguments or {}, user=user, request=request, config=self._config
+        )
 
     # ----- in-process transport invocation -----
 
@@ -564,10 +579,11 @@ class MCPServer:
             tools=self._tools,
             resources=self._resources,
             prompts=self._prompts,
-            protocol_version=get_setting("PROTOCOL_VERSIONS")[0],
+            protocol_version=self._config.protocol_versions[0],
             session_id=session_id,
             server_info=self._server_info,
             instructions=self.description,
+            config=self._config,
         )
 
     def register_resource(
@@ -909,6 +925,11 @@ class MCPServer:
         return self._prompts
 
     @property
+    def config(self) -> MCPConfig:
+        """This server's resolved scalars — a frozen snapshot taken at construction."""
+        return self._config
+
+    @property
     def auth_backend(self) -> MCPAuthBackend:
         return self._auth_backend
 
@@ -983,6 +1004,7 @@ class MCPServer:
             session_store=self._session_store,
             server_info=self._server_info,
             instructions=self.description,
+            config=self._config,
         )
         return self._urls_with_view(view)
 
@@ -1008,6 +1030,7 @@ class MCPServer:
             sse_replay_buffer=self._sse_replay_buffer,
             server_info=self._server_info,
             instructions=self.description,
+            config=self._config,
         )
         return self._urls_with_view(view)
 
