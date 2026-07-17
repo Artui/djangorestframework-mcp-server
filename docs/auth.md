@@ -274,20 +274,25 @@ urlpatterns = [
 ]
 ```
 
-DCR is gated behind two settings — defaults are deliberately
-conservative so an accidental mount doesn't auto-register clients:
+DCR is gated by two knobs — defaults are deliberately conservative so an
+accidental mount doesn't auto-register clients:
 
 ```python
-REST_FRAMEWORK_MCP = {
-    "DCR_ENABLED": True,
-    "DCR_INITIAL_ACCESS_TOKEN": "share-this-with-trusted-clients",  # optional
-    # ... SERVER_INFO, etc.
-}
+*build_oauth_urlpatterns(
+    server=server,
+    include_dcr=True,
+    dcr_enabled=True,
+    dcr_initial_access_token="share-this-with-trusted-clients",  # optional
+),
 ```
 
-When `DCR_ENABLED` is `False` the DCR endpoint returns `501 Not
-Implemented`. When `DCR_INITIAL_ACCESS_TOKEN` is set, POST requests must
-present it as a bearer — per RFC 7591 §3.
+When `dcr_enabled` is `False` the DCR endpoint refuses every request. When
+`dcr_initial_access_token` is set, POST requests must present it as a bearer —
+per RFC 7591 §3.
+
+Both are resolved when the patterns are built. Omit either to take
+`REST_FRAMEWORK_MCP["DCR_ENABLED"]` / `["DCR_INITIAL_ACCESS_TOKEN"]` as the
+default; pass them to let two mounts in one project gate DCR differently.
 
 The contrib mount also surfaces AS metadata, so `AllowAnyBackend`
 deployments (which have no AS) return `501 Not Implemented` on the AS

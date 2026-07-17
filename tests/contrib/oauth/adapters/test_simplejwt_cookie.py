@@ -69,3 +69,29 @@ def test_token_without_user_id_claim_returns_none() -> None:
     token = AccessToken()
     # Default ``AccessToken`` carries no ``user_id`` until ``for_user`` populates it.
     assert SimpleJWTCookieAdapter().hydrate(_request_with_cookie(str(token))) is None
+
+
+@pytest.mark.django_db
+def test_custom_cookie_name_via_constructor() -> None:
+    """Passing the cookie name is only possible because the adapter is no longer
+    resolved from a dotted path — that contract required zero-arg construction."""
+    from rest_framework_simplejwt.tokens import AccessToken
+
+    user = get_user_model().objects.create_user(username="dave", password="x")
+    token = AccessToken.for_user(user)
+    adapter = SimpleJWTCookieAdapter(cookie_name="my-jwt")
+    resolved = adapter.hydrate(_request_with_cookie(str(token), cookie_name="my-jwt"))
+    assert resolved is not None
+    assert resolved.pk == user.pk
+
+
+@pytest.mark.django_db
+def test_constructor_wins_over_the_setting(settings) -> None:
+    from rest_framework_simplejwt.tokens import AccessToken
+
+    settings.REST_FRAMEWORK_MCP = {"SIMPLEJWT_ACCESS_COOKIE": "from-settings"}
+    user = get_user_model().objects.create_user(username="erin", password="x")
+    token = AccessToken.for_user(user)
+    adapter = SimpleJWTCookieAdapter(cookie_name="from-arg")
+    assert adapter.hydrate(_request_with_cookie(str(token), cookie_name="from-arg")) is not None
+    assert adapter.hydrate(_request_with_cookie(str(token), cookie_name="from-settings")) is None

@@ -12,7 +12,6 @@ from rest_framework_mcp.contrib.oauth.dynamic_client_registration_viewset import
     DynamicClientRegistrationViewSet,
 )
 from rest_framework_mcp.contrib.oauth.openid_discovery_viewset import OpenIDDiscoveryViewSet
-from rest_framework_mcp.contrib.oauth.resolve_auth_user_adapter import resolve_auth_user_adapter
 
 __all__ = [
     "AuthUserAdapter",
@@ -23,5 +22,4 @@ __all__ = [
     "SimpleJWTCookieAdapter",
     "build_authorize_passthrough_view",
     "build_oauth_urlpatterns",
-    "resolve_auth_user_adapter",
 ]

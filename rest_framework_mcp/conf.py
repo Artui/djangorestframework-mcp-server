@@ -78,27 +78,23 @@ DEFAULTS: dict[str, Any] = {
     # ``ServiceValidationError`` is never recorded — it represents
     # client-side input failure, not a server fault.
     "RECORD_SERVICE_EXCEPTIONS": False,
-    # Dynamic Client Registration (RFC 7591) gate. ``False`` (default) means
-    # the contrib ``/oauth/register/`` endpoint refuses every request with
-    # 403. Turn on only when you've thought through the abuse surface — an
-    # open DCR endpoint lets anyone create an OAuth client against your
-    # authorization server.
+    # Default for ``build_oauth_urlpatterns(dcr_enabled=)``. Dynamic Client
+    # Registration (RFC 7591) gate. ``False`` (default) means the contrib
+    # ``/oauth/register/`` endpoint refuses every request with 403. Turn on
+    # only when you've thought through the abuse surface — an open DCR
+    # endpoint lets anyone create an OAuth client against your authorization
+    # server.
     "DCR_ENABLED": False,
-    # Optional initial-access-token (RFC 7591 §3) that DCR clients must
-    # present in ``Authorization: Bearer <token>`` to register. ``None``
-    # means "no token check" — equivalent to "anyone who can reach the
-    # endpoint can register". Setting a static token is the simplest way
-    # to gate DCR behind shared knowledge; rotate it manually when needed.
+    # Default for ``build_oauth_urlpatterns(dcr_initial_access_token=)``. The
+    # optional initial-access-token (RFC 7591 §3) DCR clients must present in
+    # ``Authorization: Bearer <token>`` to register. ``None`` means "no token
+    # check" — equivalent to "anyone who can reach the endpoint can register".
+    # Setting a static token is the simplest way to gate DCR behind shared
+    # knowledge; rotate it manually when needed.
     "DCR_INITIAL_ACCESS_TOKEN": None,
-    # Dotted path to a :class:`AuthUserAdapter` implementation that hydrates
-    # ``request.user`` before DOT's ``AuthorizationView`` dispatches. ``None``
-    # (the default) means "no hydration; rely on Django's session middleware
-    # to populate ``request.user``". Used by the contrib ``include_authorize``
-    # passthrough wired by :func:`build_oauth_urlpatterns`.
-    "AUTH_USER_ADAPTER": None,
-    # Name of the cookie the SimpleJWT adapter reads access tokens from.
-    # Defaults to ``"access"`` which matches ``djangorestframework-simplejwt``'s
-    # documented ``AUTH_COOKIE`` default.
+    # Default for ``SimpleJWTCookieAdapter(cookie_name=)`` — the cookie it
+    # reads access tokens from. ``"access"`` matches
+    # ``djangorestframework-simplejwt``'s documented ``AUTH_COOKIE`` default.
     "SIMPLEJWT_ACCESS_COOKIE": "access",
     # When True, ``tools/list`` / ``resources/list`` /
     # ``resources/templates/list`` / ``prompts/list`` filter out bindings

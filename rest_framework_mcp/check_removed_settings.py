@@ -10,6 +10,7 @@ from django.core.exceptions import ImproperlyConfigured
 _REMOVED_SETTINGS: dict[str, str] = {
     "AUTH_BACKEND": "pass auth_backend=YourAuthBackend() to MCPServer(...)",
     "SESSION_STORE": "pass session_store=YourSessionStore() to MCPServer(...)",
+    "AUTH_USER_ADAPTER": ("pass auth_user_adapter=YourAdapter() to build_oauth_urlpatterns(...)"),
 }
 
 

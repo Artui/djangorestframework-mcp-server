@@ -55,12 +55,14 @@ probe (aliases render the canonical payload — they are not HTTP redirects).
 ::: rest_framework_mcp.contrib.oauth.types.dynamic_client_registration_request.DynamicClientRegistrationRequest
 ::: rest_framework_mcp.contrib.oauth.types.dynamic_client_registration_response.DynamicClientRegistrationResponse
 
-DCR is gated behind two settings:
+DCR is gated by two `build_oauth_urlpatterns` arguments, each defaulting to the
+matching setting when omitted:
 
-- `REST_FRAMEWORK_MCP["DCR_ENABLED"]` (default `False`) — DCR endpoint
-  returns `501 Not Implemented` while disabled.
-- `REST_FRAMEWORK_MCP["DCR_INITIAL_ACCESS_TOKEN"]` (default `None`) —
-  optional bearer required on the DCR POST, per RFC 7591 §3.
+- `dcr_enabled` (default: `REST_FRAMEWORK_MCP["DCR_ENABLED"]`, itself `False`) —
+  the DCR endpoint refuses every request while disabled.
+- `dcr_initial_access_token` (default:
+  `REST_FRAMEWORK_MCP["DCR_INITIAL_ACCESS_TOKEN"]`, itself `None`) — optional
+  bearer required on the DCR POST, per RFC 7591 §3.
 
 ## User-adapter hook (cookie-session bridge for `/authorize`)
 

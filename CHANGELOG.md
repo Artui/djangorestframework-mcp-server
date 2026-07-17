@@ -9,6 +9,28 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Removed
 
+- **`REST_FRAMEWORK_MCP["AUTH_USER_ADAPTER"]`** — the last dotted path in the
+  package. Pass the adapter to the contrib mount instead:
+
+  ```python
+  # before — settings.py
+  REST_FRAMEWORK_MCP = {"AUTH_USER_ADAPTER": "myproject.oauth.MyAdapter"}
+
+  # after — urls.py
+  *build_oauth_urlpatterns(
+      server=server,
+      include_authorize=True,
+      auth_user_adapter=MyAdapter(),
+  ),
+  ```
+
+  This also **lifts a constraint**: adapters no longer have to be constructible
+  with no arguments (a rule that existed only so a dotted path could
+  instantiate them), so they can take real configuration —
+  `SimpleJWTCookieAdapter(cookie_name="my-jwt")`.
+
+  There is now **no `import_string` anywhere in the package**.
+
 - **`REST_FRAMEWORK_MCP["AUTH_BACKEND"]` and `["SESSION_STORE"]`.** Both named a
   collaborator by dotted path — an indirection that only existed because
   `settings.py` cannot hold a live object. `urls.py` can, so pass the object:
@@ -122,6 +144,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   layers your overrides over the project's settings instead of discarding them.
 
 - `MCPServer.config`, exposing the resolved snapshot.
+- `build_oauth_urlpatterns(auth_user_adapter=, dcr_enabled=,
+  dcr_initial_access_token=)` and `SimpleJWTCookieAdapter(cookie_name=)`. The
+  DCR gates were read from settings **per request**; they now resolve when the
+  patterns are built, so two mounts in one project can gate DCR differently.
+  `DCR_ENABLED` / `DCR_INITIAL_ACCESS_TOKEN` / `SIMPLEJWT_ACCESS_COOKIE` remain
+  as the defaults. The `DynamicClientRegistrationViewSet` gates default to
+  **closed**, so a hand-wired view that forgets them refuses registrations
+  rather than opening them.
 - **`MCPServer(title=...)`** — the spec's `Implementation.title`, which this
   package did not implement. The MCP spec splits the two deliberately: `name` is
   *"intended for programmatic or logical use"* (the stable identifier), `title`
