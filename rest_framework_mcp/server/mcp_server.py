@@ -6,7 +6,6 @@ from typing import Any
 from asgiref.sync import sync_to_async
 from django.http import HttpRequest
 from django.urls import URLPattern, path
-from django.utils.module_loading import import_string
 from rest_framework.serializers import Serializer
 from rest_framework_services.types.selector_kind import SelectorKind
 from rest_framework_services.types.selector_spec import SelectorSpec
@@ -16,9 +15,13 @@ from rest_framework_mcp.adapters.chain_to_tool import chain_steps_to_tool
 from rest_framework_mcp.adapters.selector_to_resource import selector_to_resource
 from rest_framework_mcp.adapters.selector_to_tool import selector_spec_to_tool
 from rest_framework_mcp.adapters.service_to_tool import service_spec_to_tool
+from rest_framework_mcp.auth.backends.django_oauth_toolkit_backend import (
+    DjangoOAuthToolkitBackend,
+)
 from rest_framework_mcp.auth.protected_resource_metadata import ProtectedResourceMetadataViewSet
 from rest_framework_mcp.auth.types.auth_backend import MCPAuthBackend
 from rest_framework_mcp.auth.types.token_info import TokenInfo
+from rest_framework_mcp.check_removed_settings import check_removed_settings
 from rest_framework_mcp.conf import get_setting
 from rest_framework_mcp.constants import ArgumentBinding, OutputFormat, UnknownArguments
 from rest_framework_mcp.handlers.call_spec_tool import call_spec_tool
@@ -44,6 +47,7 @@ from rest_framework_mcp.transport.async_streamable_http_viewset import (
     ASYNC_STREAMABLE_HTTP_ACTION_MAP,
     AsyncStreamableHttpViewSet,
 )
+from rest_framework_mcp.transport.django_cache_session_store import DjangoCacheSessionStore
 from rest_framework_mcp.transport.in_memory_sse_broker import InMemorySSEBroker
 from rest_framework_mcp.transport.streamable_http_viewset import (
     STREAMABLE_HTTP_ACTION_MAP,
@@ -102,6 +106,7 @@ class MCPServer:
         sse_replay_buffer: SSEReplayBuffer | None = None,
         url_namespace: str = "mcp",
     ) -> None:
+        check_removed_settings()
         # Identity is resolved **once, here** — the settings read is a default
         # source for the kwargs, not a per-request lookup — so the instance is
         # the single source of truth on the wire and two servers mounted in one
@@ -116,11 +121,22 @@ class MCPServer:
         self._tools: ToolRegistry = ToolRegistry()
         self._resources: ResourceRegistry = ResourceRegistry()
         self._prompts: PromptRegistry = PromptRegistry()
-        self._auth_backend: MCPAuthBackend = auth_backend or _load_default(
-            "AUTH_BACKEND", MCPAuthBackend
+        # Collaborators are constructed, never resolved from a dotted path: the
+        # consumer passes an object, or gets the package default built here.
+        # Knowing the concrete class is what lets the session store below be
+        # namespaced — a dotted-path loader could only call ``cls()``.
+        self._auth_backend: MCPAuthBackend = (
+            auth_backend if auth_backend is not None else DjangoOAuthToolkitBackend()
         )
-        self._session_store: SessionStore = session_store or _load_default(
-            "SESSION_STORE", SessionStore
+        # Namespaced by default: the cache-backed store shares one Django cache
+        # across every server in the process, so without this a session minted
+        # at ``/public/mcp`` satisfies ``/internal/mcp``'s ownership check and a
+        # DELETE against either destroys the other's session. A store the
+        # consumer builds carries whatever namespace they gave it.
+        self._session_store: SessionStore = (
+            session_store
+            if session_store is not None
+            else DjangoCacheSessionStore(namespace=url_namespace)
         )
         # The broker is only constructed when the consumer hasn't supplied
         # one — instance state, never module-level. Multi-process deployments
@@ -977,17 +993,6 @@ class MCPServer:
             ),
         ]
         return patterns, self._url_namespace, self._url_namespace
-
-
-def _load_default(setting_name: str, expected: type) -> Any:
-    dotted: str = get_setting(setting_name)
-    cls = import_string(dotted)
-    instance: Any = cls()
-    if not isinstance(instance, expected):  # pragma: no cover - defensive
-        raise TypeError(
-            f"Configured {setting_name} {dotted!r} does not implement {expected.__name__}"
-        )
-    return instance
 
 
 __all__ = ["MCPServer"]

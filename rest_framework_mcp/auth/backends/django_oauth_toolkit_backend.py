@@ -40,7 +40,7 @@ class DjangoOAuthToolkitBackend:
             raise ImportError(
                 "DjangoOAuthToolkitBackend requires `django-oauth-toolkit`. "
                 'Install it via `pip install "djangorestframework-mcp-server[oauth]"` '
-                "or configure a different REST_FRAMEWORK_MCP['AUTH_BACKEND']."
+                "or pass a different auth_backend= to MCPServer(...)."
             ) from exc
 
         header: str = request.META.get("HTTP_AUTHORIZATION", "")

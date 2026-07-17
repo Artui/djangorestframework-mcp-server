@@ -35,14 +35,7 @@ The transport flow on every request:
 Authenticates every request as anonymous. The metadata payload is intentionally
 minimal and includes a `_warning`. Don't ship this to production.
 
-```python
-REST_FRAMEWORK_MCP = {
-    "AUTH_BACKEND":
-        "rest_framework_mcp.auth.backends.allow_any_backend.AllowAnyBackend",
-}
-```
-
-Or pass it explicitly when you build the server (useful in tests):
+Pass it when you build the server:
 
 ```python
 from rest_framework_mcp import MCPServer
@@ -69,12 +62,10 @@ INSTALLED_APPS = [
     "oauth2_provider",
 ]
 
+# DjangoOAuthToolkitBackend is the default — a server with no auth_backend=
+# gets one. Pass it explicitly only to configure it.
 REST_FRAMEWORK_MCP = {
-    "AUTH_BACKEND":
-        "rest_framework_mcp.auth.backends.django_oauth_toolkit_backend"
-        ".DjangoOAuthToolkitBackend",
     "SERVER_INFO": {
-        "name": "my-app",
         "resource": "https://example.com/mcp/",
         "authorization_servers": ["https://example.com/oauth/"],
         "scopes_supported": ["invoices:read", "invoices:write"],
@@ -90,6 +81,15 @@ The `SERVER_INFO` keys flow into both:
 - `protected_resource_metadata()` — what the PRM endpoint returns.
 - `www_authenticate_challenge()` — built from `resource_metadata_url`,
   any required scopes, and the `error="invalid_token"` code on auth failure.
+
+!!! note "`name` and `version` belong on the server"
+    `SERVER_INFO["name"]` / `["version"]` are the **fallback** for a server
+    built without `name=` / `version=`. Prefer the constructor — it is the only
+    way to give two servers in one project distinct identities:
+
+    ```python
+    MCPServer(name="internal", version="2.0.0", url_namespace="internal-mcp")
+    ```
 
 ## `MCPPermission` classes
 
@@ -192,9 +192,6 @@ carry that URL as its bound resource; tokens with a missing or mismatched
 ```python
 REST_FRAMEWORK_MCP = {
     "RESOURCE_URL": "https://example.com/mcp/",
-    "AUTH_BACKEND":
-        "rest_framework_mcp.auth.backends.django_oauth_toolkit_backend"
-        ".DjangoOAuthToolkitBackend",
     "SERVER_INFO": {
         "authorization_servers": ["https://example.com/oauth/"],
         "scopes_supported": ["invoices:read", "invoices:write"],
@@ -203,6 +200,12 @@ REST_FRAMEWORK_MCP = {
     },
 }
 ```
+
+!!! warning "One `RESOURCE_URL` for the whole project"
+    `RESOURCE_URL` is a single global, so every server in the project shares one
+    canonical resource — which means a token minted for one mount passes the
+    audience check at another. If you run more than one server, don't rely on
+    audience binding to separate them yet; a per-server resource URL is coming.
 
 `RESOURCE_URL` is also what the PRM endpoint advertises as `resource`, so the
 configuration cannot drift between "what we accept" and "what we tell clients
@@ -252,7 +255,7 @@ conservative so an accidental mount doesn't auto-register clients:
 REST_FRAMEWORK_MCP = {
     "DCR_ENABLED": True,
     "DCR_INITIAL_ACCESS_TOKEN": "share-this-with-trusted-clients",  # optional
-    # ... AUTH_BACKEND, SERVER_INFO, etc.
+    # ... SERVER_INFO, etc.
 }
 ```
 
@@ -295,9 +298,6 @@ OAUTH2_PROVIDER = {
 
 REST_FRAMEWORK_MCP = {
     "RESOURCE_URL": "https://example.com/mcp/",
-    "AUTH_BACKEND":
-        "rest_framework_mcp.auth.backends.django_oauth_toolkit_backend"
-        ".DjangoOAuthToolkitBackend",
     "ALLOWED_ORIGINS": ["https://app.example.com"],
     "SERVER_INFO": {
         "authorization_servers": ["https://example.com/oauth/"],

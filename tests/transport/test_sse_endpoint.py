@@ -191,8 +191,6 @@ async def test_delete_purges_replay_buffer() -> None:
 async def test_get_blocked_origin_returns_403(async_urlconf, settings) -> None:
     settings.REST_FRAMEWORK_MCP = {
         "ALLOWED_ORIGINS": ["https://allowed.example"],
-        "AUTH_BACKEND": "rest_framework_mcp.auth.backends.allow_any_backend.AllowAnyBackend",
-        "SESSION_STORE": "rest_framework_mcp.transport.in_memory_session_store.InMemorySessionStore",
         "SERVER_INFO": {},
     }
     client = AsyncClient()

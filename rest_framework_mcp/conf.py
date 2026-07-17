@@ -41,12 +41,6 @@ DEFAULTS: dict[str, Any] = {
     # ``structuredContent`` suppressed — is a spec violation and is
     # rejected with ``ImproperlyConfigured`` at request time.
     "INCLUDE_OUTPUT_SCHEMA": True,
-    "AUTH_BACKEND": (
-        "rest_framework_mcp.auth.backends.django_oauth_toolkit_backend.DjangoOAuthToolkitBackend"
-    ),
-    "SESSION_STORE": (
-        "rest_framework_mcp.transport.django_cache_session_store.DjangoCacheSessionStore"
-    ),
     "ALLOWED_ORIGINS": [],
     "DEFAULT_OUTPUT_FORMAT": "json",
     "SERVER_INFO": {"name": "djangorestframework-mcp-server"},

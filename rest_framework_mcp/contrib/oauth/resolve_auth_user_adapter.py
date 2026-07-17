@@ -10,10 +10,13 @@ def resolve_auth_user_adapter() -> AuthUserAdapter | None:
     """Resolve the configured :class:`AuthUserAdapter` instance, or ``None`` if unset.
 
     ``REST_FRAMEWORK_MCP['AUTH_USER_ADAPTER']`` is a dotted path to an
-    adapter class (mirrors the existing ``AUTH_BACKEND`` /
-    ``SESSION_STORE`` settings). ``None`` (the default) means "no
-    adapter; DOT's own dispatch decides the user" — typically a
-    session-based login redirect.
+    adapter class. ``None`` (the default) means "no adapter; DOT's own
+    dispatch decides the user" — typically a session-based login redirect.
+
+    This is the last dotted-path collaborator setting in the package: it
+    hangs off :func:`build_oauth_urlpatterns` (a function) rather than a
+    server object, so it needs its own answer and keeps the indirection
+    for now.
 
     Adapters MUST be safe to instantiate without arguments per the
     Protocol contract; settings-driven configuration belongs inside the

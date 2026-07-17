@@ -21,11 +21,23 @@ from invoices.serializers import (
 )
 from invoices.services import create_invoice, mark_invoice_sent
 from rest_framework_mcp import MCPServer, PromptArgument, PromptMessage
+from rest_framework_mcp.auth.backends.allow_any_backend import AllowAnyBackend
+from rest_framework_mcp.transport.in_memory_session_store import InMemorySessionStore
 
 
 def build_server() -> MCPServer:
     """Construct and populate the example MCP server."""
-    server = MCPServer(name="invoicing", description="Demo invoicing MCP surface")
+    server = MCPServer(
+        name="invoicing-example",
+        version="0.0.1",
+        description="Demo invoicing MCP surface",
+        # Dev-only: accepts any caller. Swap for the default
+        # DjangoOAuthToolkitBackend (or your own) in production.
+        auth_backend=AllowAnyBackend(),
+        # Fine for single-process dev. The default DjangoCacheSessionStore
+        # works across workers.
+        session_store=InMemorySessionStore(),
+    )
 
     # ----- Service tools (mutations) -----
 

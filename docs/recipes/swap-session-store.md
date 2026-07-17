@@ -56,13 +56,14 @@ class RedisSessionStore:
         self._redis.delete(f"mcp:session:{session_id}")
 ```
 
-Wire it through settings — the dotted path is resolved at server construction:
+Pass the instance when you build the server:
 
 ```python
-REST_FRAMEWORK_MCP = {
-    "SESSION_STORE": "myproject.mcp.RedisSessionStore",
-}
+server = MCPServer(name="my-app", session_store=RedisSessionStore(redis_client))
 ```
 
-…or pass the instance directly to `MCPServer(session_store=...)` if you need to
-inject configured collaborators.
+!!! note "Namespace it if you mount more than one server"
+    The default `DjangoCacheSessionStore` keys its entries under the server's
+    `url_namespace`, so two mounts can't see each other's sessions. A store you
+    build yourself is yours to namespace — give each server its own key space,
+    or a session minted at `/public/mcp` will satisfy `/internal/mcp`.

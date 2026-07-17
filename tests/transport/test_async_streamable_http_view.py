@@ -266,8 +266,6 @@ async def test_async_body_too_large(async_urlconf, settings) -> None:
     settings.REST_FRAMEWORK_MCP = {
         "ALLOWED_ORIGINS": ["*"],
         "MAX_REQUEST_BYTES": 10,
-        "AUTH_BACKEND": "rest_framework_mcp.auth.backends.allow_any_backend.AllowAnyBackend",
-        "SESSION_STORE": "rest_framework_mcp.transport.in_memory_session_store.InMemorySessionStore",
         "SERVER_INFO": {},
     }
     client = AsyncClient()
@@ -278,8 +276,6 @@ async def test_async_body_too_large(async_urlconf, settings) -> None:
 async def test_async_blocked_origin_post(async_urlconf, settings) -> None:
     settings.REST_FRAMEWORK_MCP = {
         "ALLOWED_ORIGINS": ["https://allowed.example"],
-        "AUTH_BACKEND": "rest_framework_mcp.auth.backends.allow_any_backend.AllowAnyBackend",
-        "SESSION_STORE": "rest_framework_mcp.transport.in_memory_session_store.InMemorySessionStore",
         "SERVER_INFO": {},
     }
     client = AsyncClient()
@@ -298,8 +294,6 @@ async def test_async_blocked_origin_post(async_urlconf, settings) -> None:
 async def test_async_blocked_origin_get(async_urlconf, settings) -> None:
     settings.REST_FRAMEWORK_MCP = {
         "ALLOWED_ORIGINS": ["https://allowed.example"],
-        "AUTH_BACKEND": "rest_framework_mcp.auth.backends.allow_any_backend.AllowAnyBackend",
-        "SESSION_STORE": "rest_framework_mcp.transport.in_memory_session_store.InMemorySessionStore",
         "SERVER_INFO": {},
     }
     client = AsyncClient()
@@ -310,8 +304,6 @@ async def test_async_blocked_origin_get(async_urlconf, settings) -> None:
 async def test_async_blocked_origin_delete(async_urlconf, settings) -> None:
     settings.REST_FRAMEWORK_MCP = {
         "ALLOWED_ORIGINS": ["https://allowed.example"],
-        "AUTH_BACKEND": "rest_framework_mcp.auth.backends.allow_any_backend.AllowAnyBackend",
-        "SESSION_STORE": "rest_framework_mcp.transport.in_memory_session_store.InMemorySessionStore",
         "SERVER_INFO": {},
     }
     client = AsyncClient()
@@ -405,8 +397,6 @@ async def test_async_initialize_with_unsupported_version_falls_back(
     settings.REST_FRAMEWORK_MCP = {
         "ALLOWED_ORIGINS": ["*"],
         "PROTOCOL_VERSIONS": ["2025-11-25"],
-        "AUTH_BACKEND": "rest_framework_mcp.auth.backends.allow_any_backend.AllowAnyBackend",
-        "SESSION_STORE": "rest_framework_mcp.transport.in_memory_session_store.InMemorySessionStore",
         "SERVER_INFO": {},
     }
     client = AsyncClient()

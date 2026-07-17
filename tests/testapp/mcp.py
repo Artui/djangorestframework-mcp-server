@@ -5,6 +5,8 @@ from rest_framework_services.types.selector_spec import SelectorSpec
 from rest_framework_services.types.service_spec import ServiceSpec
 
 from rest_framework_mcp import MCPServer
+from rest_framework_mcp.auth.backends.allow_any_backend import AllowAnyBackend
+from rest_framework_mcp.transport.in_memory_session_store import InMemorySessionStore
 from tests.testapp.serializers import InvoiceInputSerializer, InvoiceOutputSerializer
 from tests.testapp.services import create_invoice, get_invoice, list_invoices
 
@@ -15,7 +17,11 @@ def build_server() -> MCPServer:
     A factory rather than a module-level instance keeps tests independent —
     each test that needs its own configuration can build a fresh server.
     """
-    server = MCPServer(name="testapp")
+    server = MCPServer(
+        name="testapp",
+        auth_backend=AllowAnyBackend(),
+        session_store=InMemorySessionStore(),
+    )
 
     server.register_service_tool(
         name="invoices.create",

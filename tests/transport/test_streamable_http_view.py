@@ -9,8 +9,6 @@ def test_post_with_too_large_body(client: Client, settings) -> None:
     settings.REST_FRAMEWORK_MCP = {
         "ALLOWED_ORIGINS": ["*"],
         "MAX_REQUEST_BYTES": 10,
-        "AUTH_BACKEND": "rest_framework_mcp.auth.backends.allow_any_backend.AllowAnyBackend",
-        "SESSION_STORE": "rest_framework_mcp.transport.in_memory_session_store.InMemorySessionStore",
         "SERVER_INFO": {},
     }
     big_body: bytes = b"X" * 1024
@@ -43,8 +41,6 @@ def test_post_with_invalid_jsonrpc_shape(client: Client) -> None:
 def test_origin_not_allowed_returns_403(client: Client, settings) -> None:
     settings.REST_FRAMEWORK_MCP = {
         "ALLOWED_ORIGINS": ["https://allowed.example"],
-        "AUTH_BACKEND": "rest_framework_mcp.auth.backends.allow_any_backend.AllowAnyBackend",
-        "SESSION_STORE": "rest_framework_mcp.transport.in_memory_session_store.InMemorySessionStore",
         "SERVER_INFO": {},
     }
     response = client.post(
@@ -60,8 +56,6 @@ def test_origin_not_allowed_returns_403(client: Client, settings) -> None:
 def test_get_blocked_origin_returns_403(client: Client, settings) -> None:
     settings.REST_FRAMEWORK_MCP = {
         "ALLOWED_ORIGINS": ["https://allowed.example"],
-        "AUTH_BACKEND": "rest_framework_mcp.auth.backends.allow_any_backend.AllowAnyBackend",
-        "SESSION_STORE": "rest_framework_mcp.transport.in_memory_session_store.InMemorySessionStore",
         "SERVER_INFO": {},
     }
     response = client.get("/mcp/", HTTP_ORIGIN="https://blocked.example")
@@ -76,8 +70,6 @@ def test_delete_without_session_id_is_204(client: Client) -> None:
 def test_delete_blocked_origin_returns_403(client: Client, settings) -> None:
     settings.REST_FRAMEWORK_MCP = {
         "ALLOWED_ORIGINS": ["https://allowed.example"],
-        "AUTH_BACKEND": "rest_framework_mcp.auth.backends.allow_any_backend.AllowAnyBackend",
-        "SESSION_STORE": "rest_framework_mcp.transport.in_memory_session_store.InMemorySessionStore",
         "SERVER_INFO": {},
     }
     response = client.delete("/mcp/", HTTP_ORIGIN="https://blocked.example")
@@ -115,8 +107,6 @@ def test_initialize_with_unsupported_protocol_header_falls_back(client: Client, 
     settings.REST_FRAMEWORK_MCP = {
         "ALLOWED_ORIGINS": ["*"],
         "PROTOCOL_VERSIONS": ["2025-11-25"],
-        "AUTH_BACKEND": "rest_framework_mcp.auth.backends.allow_any_backend.AllowAnyBackend",
-        "SESSION_STORE": "rest_framework_mcp.transport.in_memory_session_store.InMemorySessionStore",
         "SERVER_INFO": {},
     }
     response = client.post(

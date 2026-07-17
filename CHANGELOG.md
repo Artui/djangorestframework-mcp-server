@@ -7,7 +7,50 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Removed
+
+- **`REST_FRAMEWORK_MCP["AUTH_BACKEND"]` and `["SESSION_STORE"]`.** Both named a
+  collaborator by dotted path — an indirection that only existed because
+  `settings.py` cannot hold a live object. `urls.py` can, so pass the object:
+
+  ```python
+  # before — settings.py
+  REST_FRAMEWORK_MCP = {
+      "AUTH_BACKEND": "myproject.mcp.MyBackend",
+      "SESSION_STORE": "myproject.mcp.MyStore",
+  }
+
+  # after — urls.py, where the server is built
+  server = MCPServer(
+      name="my-app",
+      auth_backend=MyBackend(),
+      session_store=MyStore(),
+  )
+  ```
+
+  Omitting either still gives you the package default (`DjangoOAuthToolkitBackend`
+  / `DjangoCacheSessionStore`) — only the *dotted-path* form is gone. Leaving
+  either key in your settings raises `ImproperlyConfigured` naming the
+  replacement, rather than being silently ignored: a dropped `AUTH_BACKEND`
+  would mean a project that believes it configured authentication has not.
+
 ### Fixed
+
+- **Cache-backed sessions are no longer shared between servers.**
+  `DjangoCacheSessionStore` keyed every entry under a flat `drf-mcp:session:`
+  prefix, so two servers mounted in one project shared one session namespace
+  over the same Django cache: a session minted at `/public/mcp` satisfied
+  `/internal/mcp`'s ownership check, and a `DELETE` against either destroyed the
+  other's session. Stores built by `MCPServer` now key under the server's
+  `url_namespace`. Not an authentication bypass — each server still validated
+  every request's bearer token through its own backend.
+
+  **On upgrade, existing cache-backed sessions stop resolving once** (the key
+  prefix changes) and clients transparently re-`initialize` — the same path
+  already taken for sessions written by pre-0.7 versions.
+
+  A store you construct yourself is yours to namespace:
+  `DjangoCacheSessionStore(namespace="internal")`.
 
 - **`MCPServer(name=...)` now reaches the wire.** `name` and `description` were
   accepted by the constructor and stored, but nothing ever read them: the

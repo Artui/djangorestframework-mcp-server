@@ -46,12 +46,10 @@ USE_TZ: bool = True
 DEFAULT_AUTO_FIELD: str = "django.db.models.BigAutoField"
 
 # MCP-specific configuration.
+# Only scalars live here. The server's collaborators (auth backend, session
+# store) and its identity (name / version / description) are constructor
+# arguments — see invoices/mcp.py.
 REST_FRAMEWORK_MCP: dict[str, object] = {
     # Allow any origin in dev. Production deployments must lock this down.
     "ALLOWED_ORIGINS": ["*"],
-    # Use the dev-only auth backend. Swap for DOT in production.
-    "AUTH_BACKEND": "rest_framework_mcp.auth.backends.allow_any_backend.AllowAnyBackend",
-    # In-memory session store for single-process dev. DjangoCacheSessionStore for multi-worker.
-    "SESSION_STORE": "rest_framework_mcp.transport.in_memory_session_store.InMemorySessionStore",
-    "SERVER_INFO": {"name": "invoicing-example", "version": "0.0.1"},
 }
