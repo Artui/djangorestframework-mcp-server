@@ -2175,7 +2175,16 @@ should translate that to a JSON-RPC <code>-32600</code> (Invalid Request) error.
 
 
 
-        <p>Identifies an MCP client or server: name + version.</p>
+        <p>Identifies an MCP client or server: name + version, with an optional title.</p>
+<p>Mirrors the spec's <code>Implementation extends BaseMetadata</code>. The two labels
+are <strong>not</strong> interchangeable, and the split is the spec's own:</p>
+<ul>
+<li>:attr:<code>name</code> is <em>"intended for programmatic or logical use"</em> — the stable
+  identifier. This is what distinguishes two servers to a client, and what
+  server-scoped state keys off.</li>
+<li>:attr:<code>title</code> is <em>"intended for UI and end-user contexts"</em> — the
+  human-readable label. Optional; clients fall back to <code>name</code> when absent.</li>
+</ul>
 
 
 

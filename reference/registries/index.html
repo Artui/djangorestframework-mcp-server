@@ -3445,6 +3445,21 @@ at 24 hours; for stricter pinning, projects can subclass and override
 single cache read. Sessions written by pre-0.7 versions stored <code>True</code>
 instead of a principal — those fail the ownership comparison and the
 client transparently re-initializes.</p>
+<p><strong>Namespacing.</strong> Every instance built by :class:<code>MCPServer</code> keys its cache
+entries under the server's <code>name</code> — the spec's programmatic identifier —
+so two servers in one project cannot see each other's sessions. Without it
+they share one flat key space over the same Django cache: a session minted
+at one satisfies the other's ownership check, and a <code>DELETE</code> against
+either destroys the other's session.</p>
+<p>The namespace is <strong>hashed</strong> into the key rather than interpolated raw:
+<code>name</code> is consumer-supplied and free-form (<code>"My Invoicing Server"</code>),
+while cache keys must survive backends like memcached that reject spaces
+and control characters and cap length at 250. Keys are therefore
+<code>drf-mcp:session:&lt;digest&gt;:&lt;token&gt;</code>.</p>
+<p>Constructing the store yourself opts out of that — you own the namespace::</p>
+<div class="language-text highlight"><pre><span></span><code>MCPServer(session_store=DjangoCacheSessionStore(namespace=&quot;internal&quot;))
+</code></pre></div>
+<p>so two hand-built stores with no <code>namespace</code> collide exactly as before.</p>
 
 
 

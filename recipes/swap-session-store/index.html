@@ -1361,13 +1361,16 @@ wrong-principal presentation exactly like an unknown session (404):</p>
 </span><span id="__span-1-22"><a id="__codelineno-1-22" name="__codelineno-1-22" href="#__codelineno-1-22"></a>    <span class="k">def</span><span class="w"> </span><span class="nf">destroy</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">session_id</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
 </span><span id="__span-1-23"><a id="__codelineno-1-23" name="__codelineno-1-23" href="#__codelineno-1-23"></a>        <span class="bp">self</span><span class="o">.</span><span class="n">_redis</span><span class="o">.</span><span class="n">delete</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;mcp:session:</span><span class="si">{</span><span class="n">session_id</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
 </span></code></pre></div>
-<p>Wire it through settings — the dotted path is resolved at server construction:</p>
-<div class="language-python highlight"><pre><span></span><code><span id="__span-2-1"><a id="__codelineno-2-1" name="__codelineno-2-1" href="#__codelineno-2-1"></a><span class="n">REST_FRAMEWORK_MCP</span> <span class="o">=</span> <span class="p">{</span>
-</span><span id="__span-2-2"><a id="__codelineno-2-2" name="__codelineno-2-2" href="#__codelineno-2-2"></a>    <span class="s2">&quot;SESSION_STORE&quot;</span><span class="p">:</span> <span class="s2">&quot;myproject.mcp.RedisSessionStore&quot;</span><span class="p">,</span>
-</span><span id="__span-2-3"><a id="__codelineno-2-3" name="__codelineno-2-3" href="#__codelineno-2-3"></a><span class="p">}</span>
+<p>Pass the instance when you build the server:</p>
+<div class="language-python highlight"><pre><span></span><code><span id="__span-2-1"><a id="__codelineno-2-1" name="__codelineno-2-1" href="#__codelineno-2-1"></a><span class="n">server</span> <span class="o">=</span> <span class="n">MCPServer</span><span class="p">(</span><span class="n">name</span><span class="o">=</span><span class="s2">&quot;my-app&quot;</span><span class="p">,</span> <span class="n">session_store</span><span class="o">=</span><span class="n">RedisSessionStore</span><span class="p">(</span><span class="n">redis_client</span><span class="p">))</span>
 </span></code></pre></div>
-<p>…or pass the instance directly to <code>MCPServer(session_store=...)</code> if you need to
-inject configured collaborators.</p>
+<div class="admonition note">
+<p class="admonition-title">Namespace it if you mount more than one server</p>
+<p>The default <code>DjangoCacheSessionStore</code> keys its entries under the server's
+<code>url_namespace</code>, so two mounts can't see each other's sessions. A store you
+build yourself is yours to namespace — give each server its own key space,
+or a session minted at <code>/public/mcp</code> will satisfy <code>/internal/mcp</code>.</p>
+</div>
 
 
 

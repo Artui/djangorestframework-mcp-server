@@ -1538,8 +1538,7 @@ and watch the response. For automated checks, a single <code>curl</code> works t
 </span></code></pre></div>
 <p>The default auth backend is <code>DjangoOAuthToolkitBackend</code>, which requires the
 <code>[oauth]</code> extra and refuses unauthenticated requests. For local development,
-swap in <code>AllowAnyBackend</code> explicitly — either via
-<code>REST_FRAMEWORK_MCP["AUTH_BACKEND"]</code> or
+swap in <code>AllowAnyBackend</code> explicitly with
 <code>MCPServer(auth_backend=AllowAnyBackend())</code>. Before going to production, leave
 the OAuth backend in place (or plug in your own) and set an <code>ALLOWED_ORIGINS</code>
 allowlist — see <a href="../auth/">Authentication</a> for the recipe.</p>

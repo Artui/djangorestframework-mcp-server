@@ -2384,11 +2384,25 @@ imported lazily inside <code>authenticate</code> because it's an optional extra
 (<code>pip install "djangorestframework-mcp-server[oauth]"</code>) — importing this module
 never blows up just because DOT is absent; the <code>ImportError</code> only fires
 when a request actually reaches authentication.</p>
-<p>Audience enforcement (RFC 8707): when <code>REST_FRAMEWORK_MCP["RESOURCE_URL"]</code>
-is configured, the token's <code>resource</code> claim must match exactly. Tokens
-without a bound resource are rejected. Setting <code>RESOURCE_URL</code> to <code>None</code>
-(the default) disables enforcement — appropriate for dev or for setups
-where audience binding is performed by an upstream gateway.</p>
+<p>Audience enforcement (RFC 8707): when <code>resource_url</code> is set, the token's
+<code>resource</code> claim must match it exactly, and tokens without a bound
+resource are rejected. <code>None</code> (the default) disables enforcement —
+appropriate for dev, or where audience binding happens at an upstream
+gateway.</p>
+<p><strong>One resource URL per server.</strong> RFC 8707 binds a token to <em>a</em> resource, so
+each server needs its own canonical URL — that binding is precisely what
+stops a token issued for one resource being replayed against another. Two
+servers sharing a single URL defeat it: a token minted for <code>/public/mcp</code>
+would satisfy <code>/internal/mcp</code>. Hence <code>resource_url</code> is per-backend and
+the <code>RESOURCE_URL</code> setting is only its default::</p>
+<div class="language-text highlight"><pre><span></span><code>MCPServer(
+    name=&quot;internal&quot;,
+    resource_url=&quot;https://example.com/internal/mcp/&quot;,
+)
+</code></pre></div>
+<p>Every value is resolved <strong>once, here</strong> — the settings reads are defaults for
+the arguments, not per-request lookups — so two backends in one process can
+genuinely differ.</p>
 
 
 
@@ -2426,13 +2440,12 @@ where audience binding is performed by an upstream gateway.</p>
 
         <p>Return the RFC 8414 metadata payload for the DOT-hosted authorization server.</p>
 <p>Pulls the issuer, endpoint URLs, supported grant / response types,
-and scopes from :setting:<code>REST_FRAMEWORK_MCP['SERVER_INFO']</code>'s
-<code>authorization_servers</code> key (first entry) plus the
-<code>contrib.oauth</code> mount convention that endpoints live at
-<code>/oauth/authorize/</code>, <code>/oauth/token/</code>, <code>/oauth/register/</code>.</p>
+and scopes from this backend's <code>authorization_servers</code> (first
+entry) plus the <code>contrib.oauth</code> mount convention that endpoints
+live at <code>/oauth/authorize/</code>, <code>/oauth/token/</code>, <code>/oauth/register/</code>.</p>
 <p>Missing values fall through as empty strings / lists so the wire
-shape is always valid JSON; consumers are expected to populate
-<code>SERVER_INFO</code> for production deployments.</p>
+shape is always valid JSON; consumers are expected to configure
+<code>authorization_servers</code> for production deployments.</p>
 
 
     </div>
@@ -3033,7 +3046,10 @@ probe (aliases render the canonical payload — they are not HTTP redirects).</p
 </span><span id="__span-0-5"><a id="__codelineno-0-5" name="__codelineno-0-5" href="#__codelineno-0-5"></a>    <span class="n">include_aliases</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">True</span><span class="p">,</span>
 </span><span id="__span-0-6"><a id="__codelineno-0-6" name="__codelineno-0-6" href="#__codelineno-0-6"></a>    <span class="n">include_openid_discovery</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">True</span><span class="p">,</span>
 </span><span id="__span-0-7"><a id="__codelineno-0-7" name="__codelineno-0-7" href="#__codelineno-0-7"></a>    <span class="n">include_authorize</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">,</span>
-</span><span id="__span-0-8"><a id="__codelineno-0-8" name="__codelineno-0-8" href="#__codelineno-0-8"></a><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">list</span><span class="p">[</span><span class="n">URLPattern</span><span class="p">]</span>
+</span><span id="__span-0-8"><a id="__codelineno-0-8" name="__codelineno-0-8" href="#__codelineno-0-8"></a>    <span class="n">auth_user_adapter</span><span class="p">:</span> <span class="n">AuthUserAdapter</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+</span><span id="__span-0-9"><a id="__codelineno-0-9" name="__codelineno-0-9" href="#__codelineno-0-9"></a>    <span class="n">dcr_enabled</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+</span><span id="__span-0-10"><a id="__codelineno-0-10" name="__codelineno-0-10" href="#__codelineno-0-10"></a>    <span class="n">dcr_initial_access_token</span><span class="p">:</span> <span class="nb">str</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+</span><span id="__span-0-11"><a id="__codelineno-0-11" name="__codelineno-0-11" href="#__codelineno-0-11"></a><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">list</span><span class="p">[</span><span class="n">URLPattern</span><span class="p">]</span>
 </span></code></pre></div>
 
     <div class="doc doc-contents first">
@@ -3107,8 +3123,8 @@ from settings so multi-server deployments work.</p>
             <td>
               <div class="doc-md-description">
                 <p>Mount <code>/oauth/register/</code>. Default <code>False</code> because
-DCR is gated behind <code>REST_FRAMEWORK_MCP['DCR_ENABLED']</code> anyway
-and consumers who don't need it shouldn't even see the URL.</p>
+DCR is gated by <code>dcr_enabled</code> anyway and consumers who don't
+need it shouldn't even see the URL.</p>
               </div>
             </td>
             <td>
@@ -3172,8 +3188,69 @@ the factory.</p>
                   <code>False</code>
             </td>
           </tr>
+          <tr class="doc-section-item">
+            <td>
+                <code>auth_user_adapter</code>
+            </td>
+            <td>
+                  <code><a class="autorefs autorefs-internal" title="AuthUserAdapter (rest_framework_mcp.contrib.oauth.adapters.types.auth_user_adapter.AuthUserAdapter)" href="#rest_framework_mcp.contrib.oauth.adapters.types.auth_user_adapter.AuthUserAdapter">AuthUserAdapter</a> | None</code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>An :class:<code>AuthUserAdapter</code> instance that hydrates
+<code>request.user</code> before DOT's <code>AuthorizationView</code> dispatches.
+<code>None</code> (the default) means "no adapter; DOT's own dispatch
+decides the user" — typically a session-based login redirect.
+Only used when <code>include_authorize</code> is on.</p>
+              </div>
+            </td>
+            <td>
+                  <code>None</code>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td>
+                <code>dcr_enabled</code>
+            </td>
+            <td>
+                  <code><span title="bool">bool</span> | None</code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Whether <code>/oauth/register/</code> accepts registrations.
+<code>None</code> takes <code>REST_FRAMEWORK_MCP['DCR_ENABLED']</code> (default
+<code>False</code> — an open DCR endpoint lets anyone create an OAuth
+client against your authorization server).</p>
+              </div>
+            </td>
+            <td>
+                  <code>None</code>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td>
+                <code>dcr_initial_access_token</code>
+            </td>
+            <td>
+                  <code><span title="str">str</span> | None</code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>RFC 7591 §3 token a DCR client must
+present. <code>None</code> takes <code>REST_FRAMEWORK_MCP
+['DCR_INITIAL_ACCESS_TOKEN']</code>, whose own default is <code>None</code> —
+meaning no token check.</p>
+              </div>
+            </td>
+            <td>
+                  <code>None</code>
+            </td>
+          </tr>
       </tbody>
     </table>
+        <p>Every value is resolved <strong>here</strong>, when the patterns are built, rather than
+on each request — the same reason <code>server</code> is a parameter: so two mounts
+in one project can differ.</p>
 
 
     </div>
@@ -3344,8 +3421,8 @@ this module remains importable without the <code>[oauth]</code> extra. A
 request that arrives with DCR enabled but DOT absent surfaces a
 clear <code>ImportError</code> at first use rather than at server startup.</p>
 <p>DRF's default auth / permission / throttling layers are disabled —
-DCR is gated by the dedicated <code>DCR_INITIAL_ACCESS_TOKEN</code> setting,
-not by DRF's session/token authenticators. The CSRF / session
+DCR is gated by its own <code>dcr_enabled</code> / <code>initial_access_token</code>
+knobs, not by DRF's session/token authenticators. The CSRF / session
 middleware is sidestepped because DRF's <code>APIView.dispatch</code> (which
 <code>ViewSet</code> inherits) wraps responses with <code>csrf_exempt</code> semantics
 when no <code>SessionAuthentication</code> class is configured.</p>
@@ -3671,12 +3748,14 @@ when the request supplied one).</p>
 
     </div>
 
-</div><p>DCR is gated behind two settings:</p>
+</div><p>DCR is gated by two <code>build_oauth_urlpatterns</code> arguments, each defaulting to the
+matching setting when omitted:</p>
 <ul>
-<li><code>REST_FRAMEWORK_MCP["DCR_ENABLED"]</code> (default <code>False</code>) — DCR endpoint
-  returns <code>501 Not Implemented</code> while disabled.</li>
-<li><code>REST_FRAMEWORK_MCP["DCR_INITIAL_ACCESS_TOKEN"]</code> (default <code>None</code>) —
-  optional bearer required on the DCR POST, per RFC 7591 §3.</li>
+<li><code>dcr_enabled</code> (default: <code>REST_FRAMEWORK_MCP["DCR_ENABLED"]</code>, itself <code>False</code>) —
+  the DCR endpoint refuses every request while disabled.</li>
+<li><code>dcr_initial_access_token</code> (default:
+  <code>REST_FRAMEWORK_MCP["DCR_INITIAL_ACCESS_TOKEN"]</code>, itself <code>None</code>) — optional
+  bearer required on the DCR POST, per RFC 7591 §3.</li>
 </ul>
 <h2 id="user-adapter-hook-cookie-session-bridge-for-authorize">User-adapter hook (cookie-session bridge for <code>/authorize</code>)<a class="headerlink" href="#user-adapter-hook-cookie-session-bridge-for-authorize" title="Permanent link">&para;</a></h2>
 
