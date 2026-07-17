@@ -9,7 +9,6 @@ from rest_framework.request import Request
 from rest_framework.response import Response
 from rest_framework.viewsets import ViewSet
 
-from rest_framework_mcp.conf import get_setting
 from rest_framework_mcp.contrib.oauth.dcr_serializer import DynamicClientRegistrationSerializer
 from rest_framework_mcp.contrib.oauth.types.dynamic_client_registration_response import (
     DynamicClientRegistrationResponse,
@@ -37,8 +36,8 @@ class DynamicClientRegistrationViewSet(ViewSet):
     clear ``ImportError`` at first use rather than at server startup.
 
     DRF's default auth / permission / throttling layers are disabled —
-    DCR is gated by the dedicated ``DCR_INITIAL_ACCESS_TOKEN`` setting,
-    not by DRF's session/token authenticators. The CSRF / session
+    DCR is gated by its own ``dcr_enabled`` / ``initial_access_token``
+    knobs, not by DRF's session/token authenticators. The CSRF / session
     middleware is sidestepped because DRF's ``APIView.dispatch`` (which
     ``ViewSet`` inherits) wraps responses with ``csrf_exempt`` semantics
     when no ``SessionAuthentication`` class is configured.
@@ -48,14 +47,20 @@ class DynamicClientRegistrationViewSet(ViewSet):
     permission_classes = (AllowAny,)
     renderer_classes = (JSONRenderer,)
 
+    # Supplied by ``build_oauth_urlpatterns`` via ``as_view``, resolved there
+    # from settings. Defaults are the *safe* ones: a hand-wired viewset that
+    # forgets to pass them refuses registrations rather than opening them.
+    dcr_enabled: bool = False
+    initial_access_token: str | None = None
+
     def create(self, request: Request) -> Response:
-        if not get_setting("DCR_ENABLED"):
+        if not self.dcr_enabled:
             return Response(
                 {"error": "invalid_request", "error_description": "DCR is disabled"},
                 status=403,
             )
 
-        expected_token: str | None = get_setting("DCR_INITIAL_ACCESS_TOKEN")
+        expected_token: str | None = self.initial_access_token
         if expected_token is not None:
             presented: str = request.META.get("HTTP_AUTHORIZATION", "")
             if presented != f"Bearer {expected_token}":

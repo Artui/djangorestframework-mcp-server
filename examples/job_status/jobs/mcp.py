@@ -12,6 +12,8 @@ from jobs.selectors import get_job, list_jobs
 from jobs.serializers import JobOutputSerializer, StartJobInputSerializer
 from jobs.services import start_job
 from rest_framework_mcp import MCPServer
+from rest_framework_mcp.auth.backends.allow_any_backend import AllowAnyBackend
+from rest_framework_mcp.transport.in_memory_session_store import InMemorySessionStore
 
 
 class JobFilterSet(django_filters.FilterSet):
@@ -23,7 +25,16 @@ class JobFilterSet(django_filters.FilterSet):
 
 
 def build_server() -> MCPServer:
-    server = MCPServer(name="job-status")
+    server = MCPServer(
+        name="job-status-example",
+        version="0.0.1",
+        # Dev-only: accepts any caller. Swap for the default
+        # DjangoOAuthToolkitBackend (or your own) in production.
+        auth_backend=AllowAnyBackend(),
+        # Fine for single-process dev. The default DjangoCacheSessionStore
+        # works across workers.
+        session_store=InMemorySessionStore(),
+    )
 
     server.register_service_tool(
         name="jobs.start",

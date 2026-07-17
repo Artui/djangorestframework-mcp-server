@@ -2,8 +2,8 @@
 
 The unit suite already covers ``SimpleJWTCookieAdapter.hydrate`` in
 isolation. This conformance test proves the adapter wiring survives the
-full URL → view → DOT delegation: configure
-``AUTH_USER_ADAPTER``, drop a real JWT cookie on the request, and
+full URL → view → DOT delegation: pass an adapter to
+``build_oauth_urlpatterns``, drop a real JWT cookie on the request, and
 verify DOT's ``AuthorizationView`` sees the authenticated user.
 
 The OAuth flow proper isn't exercised here — DOT's consent screen
@@ -20,8 +20,10 @@ from unittest.mock import patch
 import pytest
 from django.contrib.auth import get_user_model
 from django.http import HttpRequest, HttpResponse
+from django.test import override_settings
 
-pytestmark = pytest.mark.urls("tests.conformance.urls")
+from rest_framework_mcp.contrib.oauth.adapters.simplejwt_cookie import SimpleJWTCookieAdapter
+from tests.conformance.urls import conformance_urlconf
 
 
 @pytest.fixture
@@ -39,30 +41,34 @@ def _mock_dot_dispatch():
 
 
 @pytest.mark.django_db(transaction=True)
-def test_jwt_cookie_user_reaches_dot_authorize_view(client, settings, _mock_dot_dispatch) -> None:
+def test_jwt_cookie_user_reaches_dot_authorize_view(client, _mock_dot_dispatch) -> None:
     from rest_framework_simplejwt.tokens import AccessToken
-
-    settings.REST_FRAMEWORK_MCP = {
-        "AUTH_USER_ADAPTER": (
-            "rest_framework_mcp.contrib.oauth.adapters.simplejwt_cookie.SimpleJWTCookieAdapter"
-        ),
-    }
-    # The conformance URL conf was built at import time with the
-    # adapter setting at its prior value. Reload so the new setting
-    # takes effect for this test's ``build_authorize_passthrough_view``
-    # call (the view is built lazily inside the URL conf module).
-    from importlib import reload
-
-    import tests.conformance.urls as conformance_urls
-
-    reload(conformance_urls)
-    settings.ROOT_URLCONF = "tests.conformance.urls"
 
     user = get_user_model().objects.create_user(username="alice", password="x")
     token = AccessToken.for_user(user)
     client.cookies["access"] = str(token)
 
-    response = client.get("/oauth/authorize/")
+    urlconf = conformance_urlconf(auth_user_adapter=SimpleJWTCookieAdapter())
+    with override_settings(ROOT_URLCONF=urlconf):
+        response = client.get("/oauth/authorize/")
+    assert response.status_code == 200, response.content
+    assert _mock_dot_dispatch["user"].pk == user.pk
+
+
+@pytest.mark.django_db(transaction=True)
+def test_adapter_cookie_name_is_configurable_end_to_end(client, _mock_dot_dispatch) -> None:
+    """Constructing the adapter directly lets it be configured — which the
+    dotted-path contract ("adapters MUST be zero-arg constructible") forbade."""
+    from rest_framework_simplejwt.tokens import AccessToken
+
+    user = get_user_model().objects.create_user(username="bob", password="x")
+    client.cookies["custom-jwt"] = str(AccessToken.for_user(user))
+
+    urlconf = conformance_urlconf(
+        auth_user_adapter=SimpleJWTCookieAdapter(cookie_name="custom-jwt")
+    )
+    with override_settings(ROOT_URLCONF=urlconf):
+        response = client.get("/oauth/authorize/")
     assert response.status_code == 200, response.content
     assert _mock_dot_dispatch["user"].pk == user.pk
 

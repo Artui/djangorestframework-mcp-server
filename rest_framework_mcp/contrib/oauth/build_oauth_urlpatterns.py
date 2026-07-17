@@ -28,6 +28,8 @@ from typing import TYPE_CHECKING
 from django.urls import URLPattern, path
 
 from rest_framework_mcp.auth.protected_resource_metadata import ProtectedResourceMetadataViewSet
+from rest_framework_mcp.conf import get_setting
+from rest_framework_mcp.contrib.oauth.adapters.types.auth_user_adapter import AuthUserAdapter
 from rest_framework_mcp.contrib.oauth.authorization_server_metadata_viewset import (
     AuthorizationServerMetadataViewSet,
 )
@@ -38,7 +40,6 @@ from rest_framework_mcp.contrib.oauth.dynamic_client_registration_viewset import
     DynamicClientRegistrationViewSet,
 )
 from rest_framework_mcp.contrib.oauth.openid_discovery_viewset import OpenIDDiscoveryViewSet
-from rest_framework_mcp.contrib.oauth.resolve_auth_user_adapter import resolve_auth_user_adapter
 
 if TYPE_CHECKING:  # pragma: no cover - imported only for typing
     from rest_framework_mcp.server.mcp_server import MCPServer
@@ -51,6 +52,9 @@ def build_oauth_urlpatterns(
     include_aliases: bool = True,
     include_openid_discovery: bool = True,
     include_authorize: bool = False,
+    auth_user_adapter: AuthUserAdapter | None = None,
+    dcr_enabled: bool | None = None,
+    dcr_initial_access_token: str | None = None,
 ) -> list[URLPattern]:
     """Return URL patterns for the OAuth endpoint matrix.
 
@@ -89,8 +93,8 @@ def build_oauth_urlpatterns(
         all of the discovery payloads. Passed in instead of looked up
         from settings so multi-server deployments work.
       include_dcr: Mount ``/oauth/register/``. Default ``False`` because
-        DCR is gated behind ``REST_FRAMEWORK_MCP['DCR_ENABLED']`` anyway
-        and consumers who don't need it shouldn't even see the URL.
+        DCR is gated by ``dcr_enabled`` anyway and consumers who don't
+        need it shouldn't even see the URL.
       include_aliases: Mount the alias URLs alongside the canonical ones.
         Default ``True`` because clients in the wild use varied paths.
       include_openid_discovery: Mount the OIDC discovery alias. Default
@@ -103,6 +107,23 @@ def build_oauth_urlpatterns(
         the adapter wired and you're not including DOT's urls otherwise.
         Requires the ``[oauth]`` extra — DOT is imported lazily inside
         the factory.
+      auth_user_adapter: An :class:`AuthUserAdapter` instance that hydrates
+        ``request.user`` before DOT's ``AuthorizationView`` dispatches.
+        ``None`` (the default) means "no adapter; DOT's own dispatch
+        decides the user" — typically a session-based login redirect.
+        Only used when ``include_authorize`` is on.
+      dcr_enabled: Whether ``/oauth/register/`` accepts registrations.
+        ``None`` takes ``REST_FRAMEWORK_MCP['DCR_ENABLED']`` (default
+        ``False`` — an open DCR endpoint lets anyone create an OAuth
+        client against your authorization server).
+      dcr_initial_access_token: RFC 7591 §3 token a DCR client must
+        present. ``None`` takes ``REST_FRAMEWORK_MCP
+        ['DCR_INITIAL_ACCESS_TOKEN']``, whose own default is ``None`` —
+        meaning no token check.
+
+    Every value is resolved **here**, when the patterns are built, rather than
+    on each request — the same reason ``server`` is a parameter: so two mounts
+    in one project can differ.
     """
     backend = server.auth_backend
     patterns: list[URLPattern] = [
@@ -169,17 +190,26 @@ def build_oauth_urlpatterns(
         patterns.append(
             path(
                 "oauth/register/",
-                DynamicClientRegistrationViewSet.as_view({"post": "create"}),
+                DynamicClientRegistrationViewSet.as_view(
+                    {"post": "create"},
+                    dcr_enabled=(
+                        dcr_enabled if dcr_enabled is not None else bool(get_setting("DCR_ENABLED"))
+                    ),
+                    initial_access_token=(
+                        dcr_initial_access_token
+                        if dcr_initial_access_token is not None
+                        else get_setting("DCR_INITIAL_ACCESS_TOKEN")
+                    ),
+                ),
                 name="mcp-oauth-dcr",
             )
         )
 
     if include_authorize:
-        adapter = resolve_auth_user_adapter()
         patterns.append(
             path(
                 "oauth/authorize/",
-                build_authorize_passthrough_view(adapter),
+                build_authorize_passthrough_view(auth_user_adapter),
                 name="mcp-oauth-authorize",
             )
         )

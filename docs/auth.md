@@ -35,14 +35,7 @@ The transport flow on every request:
 Authenticates every request as anonymous. The metadata payload is intentionally
 minimal and includes a `_warning`. Don't ship this to production.
 
-```python
-REST_FRAMEWORK_MCP = {
-    "AUTH_BACKEND":
-        "rest_framework_mcp.auth.backends.allow_any_backend.AllowAnyBackend",
-}
-```
-
-Or pass it explicitly when you build the server (useful in tests):
+Pass it when you build the server:
 
 ```python
 from rest_framework_mcp import MCPServer
@@ -69,12 +62,10 @@ INSTALLED_APPS = [
     "oauth2_provider",
 ]
 
+# DjangoOAuthToolkitBackend is the default — a server with no auth_backend=
+# gets one. Pass it explicitly only to configure it.
 REST_FRAMEWORK_MCP = {
-    "AUTH_BACKEND":
-        "rest_framework_mcp.auth.backends.django_oauth_toolkit_backend"
-        ".DjangoOAuthToolkitBackend",
     "SERVER_INFO": {
-        "name": "my-app",
         "resource": "https://example.com/mcp/",
         "authorization_servers": ["https://example.com/oauth/"],
         "scopes_supported": ["invoices:read", "invoices:write"],
@@ -90,6 +81,15 @@ The `SERVER_INFO` keys flow into both:
 - `protected_resource_metadata()` — what the PRM endpoint returns.
 - `www_authenticate_challenge()` — built from `resource_metadata_url`,
   any required scopes, and the `error="invalid_token"` code on auth failure.
+
+!!! note "`name` and `version` belong on the server"
+    `SERVER_INFO["name"]` / `["version"]` are the **fallback** for a server
+    built without `name=` / `version=`. Prefer the constructor — it is the only
+    way to give two servers in one project distinct identities:
+
+    ```python
+    MCPServer(name="internal", version="2.0.0", url_namespace="internal-mcp")
+    ```
 
 ## `MCPPermission` classes
 
@@ -184,17 +184,14 @@ independently of `has_permission(request, token)`.
 
 ## Audience binding (RFC 8707)
 
-`DjangoOAuthToolkitBackend` enforces RFC 8707 audience binding when
-`REST_FRAMEWORK_MCP["RESOURCE_URL"]` is configured. Every accepted token must
-carry that URL as its bound resource; tokens with a missing or mismatched
-`aud` / `resource` are rejected as if the bearer were absent.
+`DjangoOAuthToolkitBackend` enforces RFC 8707 audience binding when a
+`resource_url` is configured. Every accepted token must carry that URL as its
+bound resource; tokens with a missing or mismatched `aud` / `resource` are
+rejected as if the bearer were absent.
 
 ```python
 REST_FRAMEWORK_MCP = {
     "RESOURCE_URL": "https://example.com/mcp/",
-    "AUTH_BACKEND":
-        "rest_framework_mcp.auth.backends.django_oauth_toolkit_backend"
-        ".DjangoOAuthToolkitBackend",
     "SERVER_INFO": {
         "authorization_servers": ["https://example.com/oauth/"],
         "scopes_supported": ["invoices:read", "invoices:write"],
@@ -203,6 +200,38 @@ REST_FRAMEWORK_MCP = {
     },
 }
 ```
+
+`RESOURCE_URL` is the **default** for a server that doesn't name its own. Since
+RFC 8707 binds a token to *a* resource, each server needs its own canonical URL
+— that binding is exactly what stops a token issued for one resource being
+replayed against another, and two servers sharing one URL defeat it:
+
+```python
+# urls.py
+internal = MCPServer(
+    name="internal-mcp",
+    resource_url="https://example.com/internal/mcp/",
+    url_namespace="internal-mcp",
+)
+public = MCPServer(
+    name="public-mcp",
+    resource_url="https://example.com/public/mcp/",
+    url_namespace="public-mcp",
+)
+
+urlpatterns = [
+    path("internal/mcp/", internal.urls),
+    path("public/mcp/", public.urls),
+]
+```
+
+A token minted for `public-mcp` is now rejected by `internal-mcp`. Each server's
+`WWW-Authenticate` challenge also points at **its own** PRM endpoint, derived
+from its `resource_url` — so discovery lands on the right metadata.
+
+`resource_url=` configures the default backend. If you bring your own
+`auth_backend=`, it owns its audience binding — configure it there
+(`DjangoOAuthToolkitBackend(resource_url=...)`); passing both raises.
 
 `RESOURCE_URL` is also what the PRM endpoint advertises as `resource`, so the
 configuration cannot drift between "what we accept" and "what we tell clients
@@ -245,20 +274,25 @@ urlpatterns = [
 ]
 ```
 
-DCR is gated behind two settings — defaults are deliberately
-conservative so an accidental mount doesn't auto-register clients:
+DCR is gated by two knobs — defaults are deliberately conservative so an
+accidental mount doesn't auto-register clients:
 
 ```python
-REST_FRAMEWORK_MCP = {
-    "DCR_ENABLED": True,
-    "DCR_INITIAL_ACCESS_TOKEN": "share-this-with-trusted-clients",  # optional
-    # ... AUTH_BACKEND, SERVER_INFO, etc.
-}
+*build_oauth_urlpatterns(
+    server=server,
+    include_dcr=True,
+    dcr_enabled=True,
+    dcr_initial_access_token="share-this-with-trusted-clients",  # optional
+),
 ```
 
-When `DCR_ENABLED` is `False` the DCR endpoint returns `501 Not
-Implemented`. When `DCR_INITIAL_ACCESS_TOKEN` is set, POST requests must
-present it as a bearer — per RFC 7591 §3.
+When `dcr_enabled` is `False` the DCR endpoint refuses every request. When
+`dcr_initial_access_token` is set, POST requests must present it as a bearer —
+per RFC 7591 §3.
+
+Both are resolved when the patterns are built. Omit either to take
+`REST_FRAMEWORK_MCP["DCR_ENABLED"]` / `["DCR_INITIAL_ACCESS_TOKEN"]` as the
+default; pass them to let two mounts in one project gate DCR differently.
 
 The contrib mount also surfaces AS metadata, so `AllowAnyBackend`
 deployments (which have no AS) return `501 Not Implemented` on the AS
@@ -295,9 +329,6 @@ OAUTH2_PROVIDER = {
 
 REST_FRAMEWORK_MCP = {
     "RESOURCE_URL": "https://example.com/mcp/",
-    "AUTH_BACKEND":
-        "rest_framework_mcp.auth.backends.django_oauth_toolkit_backend"
-        ".DjangoOAuthToolkitBackend",
     "ALLOWED_ORIGINS": ["https://app.example.com"],
     "SERVER_INFO": {
         "authorization_servers": ["https://example.com/oauth/"],

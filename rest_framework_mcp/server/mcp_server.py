@@ -4,9 +4,9 @@ from collections.abc import Callable, Sequence
 from typing import Any
 
 from asgiref.sync import sync_to_async
+from django.core.exceptions import ImproperlyConfigured
 from django.http import HttpRequest
 from django.urls import URLPattern, path
-from django.utils.module_loading import import_string
 from rest_framework.serializers import Serializer
 from rest_framework_services.types.selector_kind import SelectorKind
 from rest_framework_services.types.selector_spec import SelectorSpec
@@ -16,15 +16,22 @@ from rest_framework_mcp.adapters.chain_to_tool import chain_steps_to_tool
 from rest_framework_mcp.adapters.selector_to_resource import selector_to_resource
 from rest_framework_mcp.adapters.selector_to_tool import selector_spec_to_tool
 from rest_framework_mcp.adapters.service_to_tool import service_spec_to_tool
+from rest_framework_mcp.auth.backends.django_oauth_toolkit_backend import (
+    DjangoOAuthToolkitBackend,
+)
 from rest_framework_mcp.auth.protected_resource_metadata import ProtectedResourceMetadataViewSet
 from rest_framework_mcp.auth.types.auth_backend import MCPAuthBackend
 from rest_framework_mcp.auth.types.token_info import TokenInfo
-from rest_framework_mcp.conf import get_setting
+from rest_framework_mcp.check_removed_settings import check_removed_settings
+from rest_framework_mcp.config.build_mcp_config import build_mcp_config
+from rest_framework_mcp.config.types.mcp_config import MCPConfig
 from rest_framework_mcp.constants import ArgumentBinding, OutputFormat, UnknownArguments
 from rest_framework_mcp.handlers.call_spec_tool import call_spec_tool
 from rest_framework_mcp.handlers.handle_tools_call_async import handle_tools_call_async
 from rest_framework_mcp.handlers.handle_tools_list import handle_tools_list
 from rest_framework_mcp.handlers.types.context import MCPCallContext
+from rest_framework_mcp.protocol.build_server_info import build_server_info
+from rest_framework_mcp.protocol.types.implementation import Implementation
 from rest_framework_mcp.protocol.types.json_rpc_error import JsonRpcError
 from rest_framework_mcp.protocol.types.prompt_argument import PromptArgument
 from rest_framework_mcp.protocol.types.tool_result import ToolResult
@@ -42,6 +49,7 @@ from rest_framework_mcp.transport.async_streamable_http_viewset import (
     ASYNC_STREAMABLE_HTTP_ACTION_MAP,
     AsyncStreamableHttpViewSet,
 )
+from rest_framework_mcp.transport.django_cache_session_store import DjangoCacheSessionStore
 from rest_framework_mcp.transport.in_memory_sse_broker import InMemorySSEBroker
 from rest_framework_mcp.transport.streamable_http_viewset import (
     STREAMABLE_HTTP_ACTION_MAP,
@@ -91,25 +99,81 @@ class MCPServer:
     def __init__(
         self,
         *,
-        name: str = "djangorestframework-mcp-server",
+        name: str | None = None,
+        version: str | None = None,
+        title: str | None = None,
         description: str | None = None,
+        resource_url: str | None = None,
+        config: MCPConfig | None = None,
         auth_backend: MCPAuthBackend | None = None,
         session_store: SessionStore | None = None,
         sse_broker: SSEBroker | None = None,
         sse_replay_buffer: SSEReplayBuffer | None = None,
         url_namespace: str = "mcp",
     ) -> None:
-        self.name: str = name
+        check_removed_settings()
+        # Identity is resolved **once, here** — the settings read is a default
+        # source for the kwargs, not a per-request lookup — so the instance is
+        # the single source of truth on the wire and two servers mounted in one
+        # project introduce themselves differently. ``name=None`` /
+        # ``version=None`` defer to ``SERVER_INFO``, keeping the wire identity
+        # of a project that configures the setting and never passes ``name=``.
+        self._server_info: Implementation = build_server_info(
+            name=name, version=version, title=title
+        )
+        self.name: str = self._server_info.name
+        self.version: str = self._server_info.version
+        self.title: str | None = self._server_info.title
         self.description: str | None = description
+        # The scalar settings, snapshotted once. Threaded to the transport and,
+        # via MCPCallContext, to every handler — so nothing reads settings on
+        # the request path, and two servers here can genuinely differ. Override
+        # a field with ``config=build_mcp_config(page_size=500)``.
+        self._config: MCPConfig = config if config is not None else build_mcp_config()
         self._url_namespace: str = url_namespace
         self._tools: ToolRegistry = ToolRegistry()
         self._resources: ResourceRegistry = ResourceRegistry()
         self._prompts: PromptRegistry = PromptRegistry()
-        self._auth_backend: MCPAuthBackend = auth_backend or _load_default(
-            "AUTH_BACKEND", MCPAuthBackend
+        # ``resource_url`` configures the *default* backend. A custom backend
+        # owns its own audience policy (the protocol says nothing about a
+        # resource URL), so there is nowhere to forward this to — rather than
+        # drop it silently and leave audience enforcement quietly unconfigured,
+        # say so.
+        if resource_url is not None and auth_backend is not None:
+            raise ImproperlyConfigured(
+                "Pass resource_url= or auth_backend=, not both — a custom auth "
+                "backend owns its own audience binding. Configure it there, e.g. "
+                f"auth_backend=DjangoOAuthToolkitBackend(resource_url={resource_url!r})."
+            )
+        # Collaborators are constructed, never resolved from a dotted path: the
+        # consumer passes an object, or gets the package default built here.
+        # Knowing the concrete class is what lets the session store below be
+        # namespaced, and the resource URL below be handed over — a dotted-path
+        # loader could only call ``cls()``.
+        self._auth_backend: MCPAuthBackend = (
+            auth_backend
+            if auth_backend is not None
+            else DjangoOAuthToolkitBackend(resource_url=resource_url)
         )
-        self._session_store: SessionStore = session_store or _load_default(
-            "SESSION_STORE", SessionStore
+        # Namespaced by default: the cache-backed store shares one Django cache
+        # across every server in the process, so without this a session minted
+        # at ``/public/mcp`` satisfies ``/internal/mcp``'s ownership check and a
+        # DELETE against either destroys the other's session.
+        #
+        # Keyed on ``name`` — the spec's programmatic identifier — and not on
+        # ``url_namespace``, which is a *routing* detail. A server used only
+        # in-process (``acall_tool``, the django-ag-ui bridge) is never mounted,
+        # so its ``url_namespace`` is a meaningless default; keying on it would
+        # collide that server with a mounted one at the default namespace even
+        # though their names differ, and Django's duplicate-namespace check
+        # (urls.W005) cannot see an unmounted server. Keying on identity also
+        # means renaming a URL prefix doesn't silently drop every session.
+        #
+        # A store the consumer builds carries whatever namespace they gave it.
+        self._session_store: SessionStore = (
+            session_store
+            if session_store is not None
+            else DjangoCacheSessionStore(namespace=self.name)
         )
         # The broker is only constructed when the consumer hasn't supplied
         # one — instance state, never module-level. Multi-process deployments
@@ -179,7 +243,9 @@ class MCPServer:
             always_listed=always_listed,
             spec_kwargs_provides=spec_kwargs_provides,
         )
-        check_tool_permissions_declared(binding.name, binding.permissions)
+        check_tool_permissions_declared(
+            binding.name, binding.permissions, require=self._config.require_tool_permissions
+        )
         self._tools.register(binding)
         return binding
 
@@ -265,7 +331,9 @@ class MCPServer:
             always_listed=always_listed,
             spec_kwargs_provides=spec_kwargs_provides,
         )
-        check_tool_permissions_declared(binding.name, binding.permissions)
+        check_tool_permissions_declared(
+            binding.name, binding.permissions, require=self._config.require_tool_permissions
+        )
         self._tools.register(binding)
         return binding
 
@@ -340,7 +408,9 @@ class MCPServer:
             unknown_arguments=unknown_arguments,
             always_listed=always_listed,
         )
-        check_tool_permissions_declared(binding.name, binding.permissions)
+        check_tool_permissions_declared(
+            binding.name, binding.permissions, require=self._config.require_tool_permissions
+        )
         self._tools.register(binding)
         return binding
 
@@ -383,7 +453,9 @@ class MCPServer:
         binding = self._tools.get(name)
         if binding is None:
             raise KeyError(f"No tool registered under {name!r}.")
-        return call_spec_tool(binding, arguments or {}, user=user, request=request)
+        return call_spec_tool(
+            binding, arguments or {}, user=user, request=request, config=self._config
+        )
 
     # ----- in-process transport invocation -----
 
@@ -507,8 +579,11 @@ class MCPServer:
             tools=self._tools,
             resources=self._resources,
             prompts=self._prompts,
-            protocol_version=get_setting("PROTOCOL_VERSIONS")[0],
+            protocol_version=self._config.protocol_versions[0],
             session_id=session_id,
+            server_info=self._server_info,
+            instructions=self.description,
+            config=self._config,
         )
 
     def register_resource(
@@ -850,6 +925,11 @@ class MCPServer:
         return self._prompts
 
     @property
+    def config(self) -> MCPConfig:
+        """This server's resolved scalars — a frozen snapshot taken at construction."""
+        return self._config
+
+    @property
     def auth_backend(self) -> MCPAuthBackend:
         return self._auth_backend
 
@@ -922,6 +1002,9 @@ class MCPServer:
             prompts=self._prompts,
             auth_backend=self._auth_backend,
             session_store=self._session_store,
+            server_info=self._server_info,
+            instructions=self.description,
+            config=self._config,
         )
         return self._urls_with_view(view)
 
@@ -945,6 +1028,9 @@ class MCPServer:
             session_store=self._session_store,
             sse_broker=self._sse_broker,
             sse_replay_buffer=self._sse_replay_buffer,
+            server_info=self._server_info,
+            instructions=self.description,
+            config=self._config,
         )
         return self._urls_with_view(view)
 
@@ -960,17 +1046,6 @@ class MCPServer:
             ),
         ]
         return patterns, self._url_namespace, self._url_namespace
-
-
-def _load_default(setting_name: str, expected: type) -> Any:
-    dotted: str = get_setting(setting_name)
-    cls = import_string(dotted)
-    instance: Any = cls()
-    if not isinstance(instance, expected):  # pragma: no cover - defensive
-        raise TypeError(
-            f"Configured {setting_name} {dotted!r} does not implement {expected.__name__}"
-        )
-    return instance
 
 
 __all__ = ["MCPServer"]

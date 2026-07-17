@@ -6,6 +6,7 @@ from django.http import HttpRequest
 from django.test import Client, RequestFactory
 
 from rest_framework_mcp.auth.types.token_info import TokenInfo
+from rest_framework_mcp.config.build_mcp_config import build_mcp_config
 from rest_framework_mcp.registry.resource_registry import ResourceRegistry
 from rest_framework_mcp.registry.tool_registry import ToolRegistry
 from rest_framework_mcp.transport.in_memory_session_store import InMemorySessionStore
@@ -55,6 +56,7 @@ def test_unauthenticated_response_uses_backend_challenge() -> None:
         resources=ResourceRegistry(),
         auth_backend=_DenyAllBackend(),
         session_store=InMemorySessionStore(),
+        config=build_mcp_config(),
     )
     response = view(request)
     assert response.status_code == 401

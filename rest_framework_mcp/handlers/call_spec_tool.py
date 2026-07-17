@@ -35,6 +35,7 @@ from rest_framework_services import (
 from rest_framework_services.exceptions.service_error import ServiceError
 from rest_framework_services.exceptions.service_validation_error import ServiceValidationError
 
+from rest_framework_mcp.config.types.mcp_config import MCPConfig
 from rest_framework_mcp.handlers.utils import services_dispatch_policies, validation_error_data
 from rest_framework_mcp.output.error_tool_result import build_error_tool_result
 from rest_framework_mcp.output.resolve_structured_output import resolve_structured_output
@@ -51,6 +52,7 @@ def call_spec_tool(
     *,
     user: Any,
     request: Any = None,
+    config: MCPConfig,
 ) -> ToolResult:
     """Invoke a spec-backed tool through the transport-neutral dispatch core.
 
@@ -98,7 +100,9 @@ def call_spec_tool(
         return build_error_tool_result(
             exc.message,
             error_type="validation_error",
-            detail=validation_error_data(exc.detail, arguments),
+            detail=validation_error_data(
+                exc.detail, arguments, include_value=config.include_validation_value
+            ),
         )
     except ServiceError as exc:
         return build_error_tool_result(exc.message, error_type="service_error")
@@ -123,6 +127,8 @@ def call_spec_tool(
         include_output_schema_override=binding.include_output_schema,
         include_structured_content_override=binding.include_structured_content,
         binding_name=binding.name,
+        default_output_schema=config.include_output_schema,
+        default_structured_content=config.include_structured_content,
     )
     return build_tool_result(
         payload,

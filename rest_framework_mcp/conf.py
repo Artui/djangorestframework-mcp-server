@@ -41,20 +41,21 @@ DEFAULTS: dict[str, Any] = {
     # ``structuredContent`` suppressed — is a spec violation and is
     # rejected with ``ImproperlyConfigured`` at request time.
     "INCLUDE_OUTPUT_SCHEMA": True,
-    "AUTH_BACKEND": (
-        "rest_framework_mcp.auth.backends.django_oauth_toolkit_backend.DjangoOAuthToolkitBackend"
-    ),
-    "SESSION_STORE": (
-        "rest_framework_mcp.transport.django_cache_session_store.DjangoCacheSessionStore"
-    ),
     "ALLOWED_ORIGINS": [],
     "DEFAULT_OUTPUT_FORMAT": "json",
     "SERVER_INFO": {"name": "djangorestframework-mcp-server"},
     "MAX_REQUEST_BYTES": 1_048_576,
-    # The canonical resource URL of this MCP server, used for RFC 8707 audience
-    # enforcement by token-validating auth backends. ``None`` disables
-    # enforcement (suitable for development / behind a separate gateway). When
-    # set, tokens whose ``aud`` / ``resource`` claim does not match are rejected.
+    # Default canonical resource URL, used for RFC 8707 audience enforcement by
+    # token-validating auth backends. ``None`` disables enforcement (suitable
+    # for development / behind a separate gateway). When set, tokens whose
+    # ``aud`` / ``resource`` claim does not match are rejected.
+    #
+    # This is only the **default** for ``MCPServer(resource_url=...)``. RFC 8707
+    # binds a token to *a* resource, so each server in a project needs its own
+    # canonical URL — two servers sharing one URL means a token minted for one
+    # passes the audience check at the other, which is the exact replay this
+    # mechanism exists to prevent. Set it per server; leave this for the
+    # single-server case.
     "RESOURCE_URL": None,
     # Maximum number of items returned by a single list-style call
     # (``tools/list``, ``resources/list``, ``resources/templates/list``,
@@ -77,27 +78,23 @@ DEFAULTS: dict[str, Any] = {
     # ``ServiceValidationError`` is never recorded — it represents
     # client-side input failure, not a server fault.
     "RECORD_SERVICE_EXCEPTIONS": False,
-    # Dynamic Client Registration (RFC 7591) gate. ``False`` (default) means
-    # the contrib ``/oauth/register/`` endpoint refuses every request with
-    # 403. Turn on only when you've thought through the abuse surface — an
-    # open DCR endpoint lets anyone create an OAuth client against your
-    # authorization server.
+    # Default for ``build_oauth_urlpatterns(dcr_enabled=)``. Dynamic Client
+    # Registration (RFC 7591) gate. ``False`` (default) means the contrib
+    # ``/oauth/register/`` endpoint refuses every request with 403. Turn on
+    # only when you've thought through the abuse surface — an open DCR
+    # endpoint lets anyone create an OAuth client against your authorization
+    # server.
     "DCR_ENABLED": False,
-    # Optional initial-access-token (RFC 7591 §3) that DCR clients must
-    # present in ``Authorization: Bearer <token>`` to register. ``None``
-    # means "no token check" — equivalent to "anyone who can reach the
-    # endpoint can register". Setting a static token is the simplest way
-    # to gate DCR behind shared knowledge; rotate it manually when needed.
+    # Default for ``build_oauth_urlpatterns(dcr_initial_access_token=)``. The
+    # optional initial-access-token (RFC 7591 §3) DCR clients must present in
+    # ``Authorization: Bearer <token>`` to register. ``None`` means "no token
+    # check" — equivalent to "anyone who can reach the endpoint can register".
+    # Setting a static token is the simplest way to gate DCR behind shared
+    # knowledge; rotate it manually when needed.
     "DCR_INITIAL_ACCESS_TOKEN": None,
-    # Dotted path to a :class:`AuthUserAdapter` implementation that hydrates
-    # ``request.user`` before DOT's ``AuthorizationView`` dispatches. ``None``
-    # (the default) means "no hydration; rely on Django's session middleware
-    # to populate ``request.user``". Used by the contrib ``include_authorize``
-    # passthrough wired by :func:`build_oauth_urlpatterns`.
-    "AUTH_USER_ADAPTER": None,
-    # Name of the cookie the SimpleJWT adapter reads access tokens from.
-    # Defaults to ``"access"`` which matches ``djangorestframework-simplejwt``'s
-    # documented ``AUTH_COOKIE`` default.
+    # Default for ``SimpleJWTCookieAdapter(cookie_name=)`` — the cookie it
+    # reads access tokens from. ``"access"`` matches
+    # ``djangorestframework-simplejwt``'s documented ``AUTH_COOKIE`` default.
     "SIMPLEJWT_ACCESS_COOKIE": "access",
     # When True, ``tools/list`` / ``resources/list`` /
     # ``resources/templates/list`` / ``prompts/list`` filter out bindings

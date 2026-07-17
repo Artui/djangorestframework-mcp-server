@@ -39,9 +39,9 @@ CACHES: dict[str, dict[str, str]] = {
 USE_TZ: bool = True
 DEFAULT_AUTO_FIELD: str = "django.db.models.BigAutoField"
 
+# Only scalars live here. The server's collaborators (auth backend, session
+# store) and its identity (name / version) are constructor arguments — see
+# jobs/mcp.py.
 REST_FRAMEWORK_MCP: dict[str, object] = {
     "ALLOWED_ORIGINS": ["*"],
-    "AUTH_BACKEND": "rest_framework_mcp.auth.backends.allow_any_backend.AllowAnyBackend",
-    "SESSION_STORE": "rest_framework_mcp.transport.in_memory_session_store.InMemorySessionStore",
-    "SERVER_INFO": {"name": "job-status-example", "version": "0.0.1"},
 }

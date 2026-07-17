@@ -2,15 +2,14 @@ from __future__ import annotations
 
 from typing import Any
 
-from rest_framework_mcp.conf import get_setting
 from rest_framework_mcp.constants import JsonRpcErrorCode
 from rest_framework_mcp.handlers.types.context import MCPCallContext
+from rest_framework_mcp.protocol.build_server_info import build_server_info
 from rest_framework_mcp.protocol.types.implementation import Implementation
 from rest_framework_mcp.protocol.types.initialize_params import InitializeParams
 from rest_framework_mcp.protocol.types.initialize_result import InitializeResult
 from rest_framework_mcp.protocol.types.json_rpc_error import JsonRpcError
 from rest_framework_mcp.protocol.types.server_capabilities import ServerCapabilities
-from rest_framework_mcp.version import __version__ as package_version
 
 
 def handle_initialize(
@@ -30,14 +29,17 @@ def handle_initialize(
         )
 
     parsed: InitializeParams = InitializeParams.from_payload(params)
-    supported: list[str] = list(get_setting("PROTOCOL_VERSIONS"))
+    supported: tuple[str, ...] = context.config.protocol_versions
     chosen: str = parsed.protocol_version if parsed.protocol_version in supported else supported[0]
 
-    server_info_settings: dict[str, Any] = get_setting("SERVER_INFO")
-    server_info = Implementation(
-        name=server_info_settings.get("name", "djangorestframework-mcp-server"),
-        version=server_info_settings.get("version", package_version),
-    )
+    # The owning server's identity wins: it is resolved once in
+    # ``MCPServer.__init__`` (from ``name=``/``version=``, defaulting to
+    # ``SERVER_INFO``), so two servers in one project answer ``initialize``
+    # with their own names. The settings read below is the degenerate path —
+    # a context built without a server, e.g. a hand-wired viewset.
+    server_info: Implementation | None = context.server_info
+    if server_info is None:
+        server_info = build_server_info()
     # Advertise ``prompts`` only when the server has at least one registered.
     # Empty capability advertisement would tell clients to call ``prompts/list``
     # that returns nothing — harmless but noisy.
@@ -50,6 +52,7 @@ def handle_initialize(
         protocol_version=chosen,
         capabilities=capabilities,
         server_info=server_info,
+        instructions=context.instructions,
     )
 
 

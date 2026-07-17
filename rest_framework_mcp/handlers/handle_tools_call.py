@@ -14,7 +14,6 @@ from rest_framework_services.exceptions.service_error import ServiceError
 from rest_framework_services.exceptions.service_validation_error import ServiceValidationError
 
 from rest_framework_mcp._compat.tracing import span
-from rest_framework_mcp.conf import get_setting
 from rest_framework_mcp.constants import JsonRpcErrorCode, OutputFormat
 from rest_framework_mcp.handlers.chain_tool_dispatch import dispatch_chain_tool
 from rest_framework_mcp.handlers.selector_tool_dispatch import dispatch_selector_tool
@@ -127,7 +126,9 @@ def handle_tools_call(
             return JsonRpcError(
                 JsonRpcErrorCode.INVALID_PARAMS,
                 "Invalid arguments",
-                data=validation_error_data(exc.detail, arguments_raw),
+                data=validation_error_data(
+                    exc.detail, arguments_raw, include_value=context.config.include_validation_value
+                ),
             )
         except PermissionDenied:
             return JsonRpcError(JsonRpcErrorCode.FORBIDDEN, "Insufficient permission")
@@ -138,13 +139,15 @@ def handle_tools_call(
             return build_error_tool_result(
                 exc.message,
                 error_type="validation_error",
-                detail=validation_error_data(exc.detail, arguments_raw),
+                detail=validation_error_data(
+                    exc.detail, arguments_raw, include_value=context.config.include_validation_value
+                ),
             ).to_dict()
         except ServiceError as exc:
             # The "real failure" channel — recorded on the active span when the
             # consumer opted in. ``ServiceValidationError`` is deliberately not
             # recorded (input-shape feedback, not a server fault).
-            if get_setting("RECORD_SERVICE_EXCEPTIONS"):
+            if context.config.record_service_exceptions:
                 otel_span.record_exception(exc)
             return build_error_tool_result(exc.message, error_type="service_error").to_dict()
 
@@ -161,6 +164,8 @@ def handle_tools_call(
             include_output_schema_override=binding.include_output_schema,
             include_structured_content_override=binding.include_structured_content,
             binding_name=binding.name,
+            default_output_schema=context.config.include_output_schema,
+            default_structured_content=context.config.include_structured_content,
         )
         return build_tool_result(
             payload,

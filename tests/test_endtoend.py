@@ -3,7 +3,12 @@ from __future__ import annotations
 import json
 
 import pytest
-from django.test import Client
+from django.test import Client, override_settings
+
+from rest_framework_mcp.config.build_mcp_config import build_mcp_config
+from tests.conftest import post_jsonrpc
+from tests.testapp.mcp import build_server
+from tests.testapp.urlconf_for import urlconf_for
 
 
 def test_initialize_returns_session_id_and_capabilities(jsonrpc) -> None:
@@ -107,20 +112,32 @@ def test_call_without_protocol_version_returns_400(client: Client) -> None:
     assert response.status_code == 400
 
 
-def test_call_without_protocol_version_accepted_when_disabled(
-    client: Client, initialized_session: str, settings
-) -> None:
-    """Setting REQUIRE_PROTOCOL_VERSION_HEADER=False lets header-omitting clients through."""
-    settings.REST_FRAMEWORK_MCP = {
-        **settings.REST_FRAMEWORK_MCP,
-        "REQUIRE_PROTOCOL_VERSION_HEADER": False,
-    }
-    response = client.post(
-        "/mcp/",
-        data=json.dumps({"jsonrpc": "2.0", "id": 1, "method": "tools/list"}),
-        content_type="application/json",
-        HTTP_MCP_SESSION_ID=initialized_session,
+def test_call_without_protocol_version_accepted_when_disabled(client: Client) -> None:
+    """require_protocol_version_header=False lets header-omitting clients through.
+
+    Builds and mounts its own server: the flag is resolved once at construction,
+    and the session has to be minted against that same server's store.
+    """
+    server = build_server(
+        config=build_mcp_config(allowed_origins=["*"], require_protocol_version_header=False)
     )
+    with override_settings(ROOT_URLCONF=urlconf_for(server)):
+        session_id = post_jsonrpc(
+            client,
+            method="initialize",
+            params={
+                "protocolVersion": "2025-11-25",
+                "capabilities": {},
+                "clientInfo": {"name": "pytest", "version": "0.0"},
+            },
+            protocol_version=None,
+        )["Mcp-Session-Id"]
+        response = client.post(
+            "/mcp/",
+            data=json.dumps({"jsonrpc": "2.0", "id": 1, "method": "tools/list"}),
+            content_type="application/json",
+            HTTP_MCP_SESSION_ID=session_id,
+        )
     assert response.status_code == 200
     assert "result" in response.json()
 

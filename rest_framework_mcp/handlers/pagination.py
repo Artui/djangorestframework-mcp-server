@@ -4,8 +4,6 @@ import base64
 from collections.abc import Sequence
 from typing import Any
 
-from rest_framework_mcp.conf import get_setting
-
 # Cursor scheme: base64url-encoded ``offset:N``. Opaque to clients (the spec
 # requires they treat it as a black box) but trivially debuggable when needed.
 # A custom prefix lets us reject cursors crafted for a different list endpoint
@@ -40,8 +38,10 @@ def _decode_cursor(cursor: str) -> int:
 def paginate(
     items: Sequence[Any],
     cursor: str | None,
+    *,
+    page_size: int,
 ) -> tuple[list[Any], str | None]:
-    """Slice ``items`` per the configured ``PAGE_SIZE`` starting at ``cursor``.
+    """Slice ``items`` into a page of at most ``page_size``, starting at ``cursor``.
 
     Returns ``(page, next_cursor)``. ``next_cursor`` is ``None`` when the page
     reaches the end of the sequence — that's the spec-compliant signal that
@@ -50,7 +50,6 @@ def paginate(
     The function is pure: callers handle the JSON-RPC error translation when
     ``ValueError`` propagates from a malformed cursor.
     """
-    page_size: int = int(get_setting("PAGE_SIZE"))
     offset: int = _decode_cursor(cursor) if cursor else 0
     if offset < 0:
         raise ValueError(f"Cursor offset must be non-negative: {offset}")

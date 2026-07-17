@@ -23,6 +23,19 @@ def test_implementation_to_dict() -> None:
     assert Implementation(name="x", version="1").to_dict() == {"name": "x", "version": "1"}
 
 
+def test_implementation_title_is_omitted_when_absent() -> None:
+    """``title`` is optional per the spec; clients fall back to ``name``."""
+    assert "title" not in Implementation(name="x", version="1").to_dict()
+
+
+def test_implementation_carries_title_when_given() -> None:
+    assert Implementation(name="x", version="1", title="Nice Name").to_dict() == {
+        "name": "x",
+        "version": "1",
+        "title": "Nice Name",
+    }
+
+
 def test_client_capabilities_empty() -> None:
     assert ClientCapabilities().to_dict() == {}
 

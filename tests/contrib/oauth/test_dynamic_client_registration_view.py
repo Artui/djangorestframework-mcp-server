@@ -12,7 +12,18 @@ from rest_framework_mcp.contrib.oauth.dynamic_client_registration_viewset import
 )
 
 
-def _post(body: bytes | str, *, auth_header: str | None = None) -> object:
+def _post(
+    body: bytes | str,
+    *,
+    auth_header: str | None = None,
+    dcr_enabled: bool = True,
+    initial_access_token: str | None = None,
+) -> object:
+    """Drive the DCR view with its gates set explicitly.
+
+    ``build_oauth_urlpatterns`` resolves these from settings once and passes
+    them via ``as_view``; a hand-wired view supplies its own.
+    """
     factory = RequestFactory()
     request = factory.post(
         "/oauth/register/",
@@ -21,49 +32,46 @@ def _post(body: bytes | str, *, auth_header: str | None = None) -> object:
     )
     if auth_header is not None:
         request.META["HTTP_AUTHORIZATION"] = auth_header
-    return DynamicClientRegistrationViewSet.as_view({"post": "create"})(request)
+    view = DynamicClientRegistrationViewSet.as_view(
+        {"post": "create"},
+        dcr_enabled=dcr_enabled,
+        initial_access_token=initial_access_token,
+    )
+    return view(request)
 
 
-def test_disabled_by_default_returns_403(settings) -> None:
-    settings.REST_FRAMEWORK_MCP = {}  # DCR_ENABLED defaults to False
-    response = _post('{"redirect_uris": ["https://x/cb"]}')
+def test_disabled_by_default_returns_403() -> None:
+    """The view's own default is off — a hand-wired view that forgets the gate
+    refuses registrations rather than opening them."""
+    response = _post('{"redirect_uris": ["https://x/cb"]}', dcr_enabled=False)
     assert response.status_code == 403
     assert response.data["error"] == "invalid_request"
 
 
-def test_initial_access_token_required_when_set(settings) -> None:
-    settings.REST_FRAMEWORK_MCP = {
-        "DCR_ENABLED": True,
-        "DCR_INITIAL_ACCESS_TOKEN": "secret",
-    }
-    response = _post('{"redirect_uris": ["https://x/cb"]}')
+def test_initial_access_token_required_when_set() -> None:
+    response = _post('{"redirect_uris": ["https://x/cb"]}', initial_access_token="secret")
     assert response.status_code == 401
     body = response.data
     assert body["error"] == "invalid_token"
 
 
-def test_initial_access_token_wrong_value_returns_401(settings) -> None:
-    settings.REST_FRAMEWORK_MCP = {
-        "DCR_ENABLED": True,
-        "DCR_INITIAL_ACCESS_TOKEN": "secret",
-    }
+def test_initial_access_token_wrong_value_returns_401() -> None:
     response = _post(
         '{"redirect_uris": ["https://x/cb"]}',
         auth_header="Bearer wrong",
+        initial_access_token="secret",
     )
     assert response.status_code == 401
 
 
-def test_invalid_json_returns_400(settings) -> None:
-    settings.REST_FRAMEWORK_MCP = {"DCR_ENABLED": True}
+def test_invalid_json_returns_400() -> None:
     response = _post("not-json")
     assert response.status_code == 400
     assert response.data["error"] == "invalid_request"
 
 
-def test_invalid_schema_returns_400_with_detail(settings) -> None:
+def test_invalid_schema_returns_400_with_detail() -> None:
     """Missing required ``redirect_uris`` → 400 with per-field detail."""
-    settings.REST_FRAMEWORK_MCP = {"DCR_ENABLED": True}
     response = _post("{}")
     assert response.status_code == 400
     body = response.data
@@ -72,8 +80,7 @@ def test_invalid_schema_returns_400_with_detail(settings) -> None:
 
 
 @pytest.mark.django_db
-def test_happy_path_creates_dot_application_and_returns_credentials(settings) -> None:
-    settings.REST_FRAMEWORK_MCP = {"DCR_ENABLED": True}
+def test_happy_path_creates_dot_application_and_returns_credentials() -> None:
     response = _post(
         json.dumps(
             {
@@ -98,8 +105,7 @@ def test_happy_path_creates_dot_application_and_returns_credentials(settings) ->
 
 
 @pytest.mark.django_db
-def test_happy_path_echoes_scope_when_provided(settings) -> None:
-    settings.REST_FRAMEWORK_MCP = {"DCR_ENABLED": True}
+def test_happy_path_echoes_scope_when_provided() -> None:
     response = _post(
         json.dumps({"redirect_uris": ["https://client.example/cb"], "scope": "mcp:read mcp:write"})
     )
@@ -109,8 +115,7 @@ def test_happy_path_echoes_scope_when_provided(settings) -> None:
 
 
 @pytest.mark.django_db
-def test_happy_path_respects_explicit_client_type(settings) -> None:
-    settings.REST_FRAMEWORK_MCP = {"DCR_ENABLED": True}
+def test_happy_path_respects_explicit_client_type() -> None:
     from oauth2_provider.models import Application
 
     response = _post(
@@ -127,32 +132,24 @@ def test_happy_path_respects_explicit_client_type(settings) -> None:
 
 
 @pytest.mark.django_db
-def test_happy_path_with_matching_initial_access_token(settings) -> None:
+def test_happy_path_with_matching_initial_access_token() -> None:
     """Token gating: present + correct → fall through to validation."""
-    settings.REST_FRAMEWORK_MCP = {
-        "DCR_ENABLED": True,
-        "DCR_INITIAL_ACCESS_TOKEN": "secret",
-    }
     response = _post(
         json.dumps({"redirect_uris": ["https://client.example/cb"]}),
         auth_header="Bearer secret",
+        initial_access_token="secret",
     )
     assert response.status_code == 201
 
 
 @pytest.mark.django_db
-def test_happy_path_without_initial_access_token(settings) -> None:
-    """``DCR_INITIAL_ACCESS_TOKEN=None`` skips the token check entirely."""
-    settings.REST_FRAMEWORK_MCP = {
-        "DCR_ENABLED": True,
-        "DCR_INITIAL_ACCESS_TOKEN": None,
-    }
+def test_happy_path_without_initial_access_token() -> None:
+    """``initial_access_token=None`` skips the token check entirely."""
     response = _post(json.dumps({"redirect_uris": ["https://client.example/cb"]}))
     assert response.status_code == 201
 
 
-def test_invalid_client_type_choice_returns_400(settings) -> None:
-    settings.REST_FRAMEWORK_MCP = {"DCR_ENABLED": True}
+def test_invalid_client_type_choice_returns_400() -> None:
     response = _post(
         json.dumps({"redirect_uris": ["https://x/cb"], "client_type": "not-a-real-type"})
     )

@@ -7,6 +7,7 @@ import pytest
 from django.test import AsyncClient, RequestFactory, override_settings
 
 from rest_framework_mcp.auth.backends.allow_any_backend import AllowAnyBackend
+from rest_framework_mcp.config.build_mcp_config import build_mcp_config
 from rest_framework_mcp.registry.resource_registry import ResourceRegistry
 from rest_framework_mcp.registry.tool_registry import ToolRegistry
 from rest_framework_mcp.transport.async_streamable_http_viewset import (
@@ -15,6 +16,8 @@ from rest_framework_mcp.transport.async_streamable_http_viewset import (
 )
 from rest_framework_mcp.transport.in_memory_session_store import InMemorySessionStore
 from rest_framework_mcp.transport.in_memory_sse_broker import InMemorySSEBroker
+from tests.testapp.mcp import build_server
+from tests.testapp.urlconf_for import urlconf_for
 
 
 @pytest.fixture
@@ -83,6 +86,7 @@ async def test_published_payload_reaches_open_stream() -> None:
         auth_backend=AllowAnyBackend(),
         session_store=store,
         sse_broker=broker,
+        config=build_mcp_config(),
     )
     response = await view(request)
     assert response.status_code == 200
@@ -142,6 +146,7 @@ async def test_resume_replays_buffered_events_then_live() -> None:
         session_store=store,
         sse_broker=broker,
         sse_replay_buffer=buffer,
+        config=build_mcp_config(),
     )
     response = await view(request)
     assert response.status_code == 200
@@ -177,6 +182,7 @@ async def test_delete_purges_replay_buffer() -> None:
         session_store=store,
         sse_broker=broker,
         sse_replay_buffer=buffer,
+        config=build_mcp_config(),
     )
     response = await view(request)
     assert response.status_code == 204
@@ -188,13 +194,8 @@ async def test_delete_purges_replay_buffer() -> None:
     assert out == []
 
 
-async def test_get_blocked_origin_returns_403(async_urlconf, settings) -> None:
-    settings.REST_FRAMEWORK_MCP = {
-        "ALLOWED_ORIGINS": ["https://allowed.example"],
-        "AUTH_BACKEND": "rest_framework_mcp.auth.backends.allow_any_backend.AllowAnyBackend",
-        "SESSION_STORE": "rest_framework_mcp.transport.in_memory_session_store.InMemorySessionStore",
-        "SERVER_INFO": {},
-    }
-    client = AsyncClient()
-    response = await client.get("/mcp/", headers={"Origin": "https://blocked.example"})
+async def test_get_blocked_origin_returns_403() -> None:
+    server = build_server(config=build_mcp_config(allowed_origins=["https://allowed.example"]))
+    with override_settings(ROOT_URLCONF=urlconf_for(server, is_async=True)):
+        response = await AsyncClient().get("/mcp/", headers={"Origin": "https://blocked.example"})
     assert response.status_code == 403

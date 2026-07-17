@@ -128,9 +128,11 @@ jobs:
                   "rest_framework",
               ],
               DATABASES={"default": {"ENGINE": "django.db.backends.sqlite3", "NAME": ":memory:"}},
+              # Only scalars. The auth backend and session store are
+              # constructor arguments, so building a bare server exercises the
+              # real defaults — including that constructing
+              # DjangoOAuthToolkitBackend needs no DOT.
               REST_FRAMEWORK_MCP={
-                  "AUTH_BACKEND": "rest_framework_mcp.auth.backends.allow_any_backend.AllowAnyBackend",
-                  "SESSION_STORE": "rest_framework_mcp.transport.in_memory_session_store.InMemorySessionStore",
                   "ALLOWED_ORIGINS": ["*"],
                   "SERVER_INFO": {},
               },
@@ -138,12 +140,23 @@ jobs:
           django.setup()
 
           from rest_framework_mcp import MCPServer
+          from rest_framework_mcp.auth.backends.django_oauth_toolkit_backend import (
+              DjangoOAuthToolkitBackend,
+          )
           from rest_framework_mcp.output.encode_toon import encode_toon
+          from rest_framework_mcp.transport.django_cache_session_store import (
+              DjangoCacheSessionStore,
+          )
           from rest_framework_services.types.service_spec import ServiceSpec
 
           server = MCPServer(name="smoke")
           server.register_service_tool(name="noop", spec=ServiceSpec(service=lambda: None))
           assert server.tools.get("noop") is not None
+
+          # A bare server constructs its own defaults — neither may reach for an
+          # optional extra at construction.
+          assert isinstance(server.auth_backend, DjangoOAuthToolkitBackend)
+          assert isinstance(server.session_store, DjangoCacheSessionStore)
 
           with warnings.catch_warnings(record=True) as caught:
               warnings.simplefilter("always")
@@ -152,12 +165,8 @@ jobs:
                   "Expected TOON fallback warning when extra is missing"
               )
 
-          # The OAuth backend module imports fine without oauth2_provider — the
-          # ImportError only fires if a request actually hits authenticate().
-          from rest_framework_mcp.auth.backends.django_oauth_toolkit_backend import (
-              DjangoOAuthToolkitBackend,
-          )
-          backend = DjangoOAuthToolkitBackend()
+          # Guard the guard: if the smoke env ever gained the extra, everything
+          # below would pass for the wrong reason.
           try:
               import oauth2_provider  # noqa: F401
               raise SystemExit("smoke environment unexpectedly has oauth2_provider installed")

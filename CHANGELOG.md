@@ -7,6 +7,225 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.12.0] — 2026-07-17
+
+Configuration is now **per-server**: everything that identifies or configures a
+server is a constructor argument, and `REST_FRAMEWORK_MCP` is no longer read on
+the request path at all. This makes running more than one MCP server in one
+project actually work — previously two mounts would serve, but they could not
+differ and silently shared state.
+
+**Breaking**, with a small migration: three settings that named a class by
+dotted path are removed (they raise if left in place, naming the replacement),
+and settings now resolve when a server is built rather than per request. Every
+other setting survives as a **default**, so a single-server project that
+configures settings and passes nothing keeps working.
+
+The security-relevant fix: RFC 8707 audience binding was defeated across two
+servers, because one global `RESOURCE_URL` meant a token minted for one mount
+passed the audience check at another.
+
+See [Multiple servers in one project](https://artui.github.io/djangorestframework-mcp-server/auth/)
+for the two-server recipe.
+
+### Added
+
+- **`MCPConfig` + `build_mcp_config()` — the scalar settings are now per-server.**
+  Twelve settings were read from `REST_FRAMEWORK_MCP` **on every request**, deep
+  in the handlers. Read there they could only ever be global, so no two servers
+  in one project could differ on any of them. They are now resolved **once**, in
+  `MCPServer.__init__`, into a frozen `MCPConfig` threaded to the transport and
+  to every handler via `MCPCallContext.config`:
+
+  ```python
+  MCPServer(name="internal", config=build_mcp_config(page_size=500))
+  ```
+
+  `REST_FRAMEWORK_MCP` remains the **default source** for every one of them, so
+  a single-server project that configures settings and passes no `config=` is
+  unaffected. Covers `PROTOCOL_VERSIONS`, `REQUIRE_PROTOCOL_VERSION_HEADER`,
+  `INCLUDE_STRUCTURED_CONTENT`, `INCLUDE_OUTPUT_SCHEMA`, `ALLOWED_ORIGINS`,
+  `DEFAULT_OUTPUT_FORMAT`, `MAX_REQUEST_BYTES`, `PAGE_SIZE`,
+  `INCLUDE_VALIDATION_VALUE`, `RECORD_SERVICE_EXCEPTIONS`,
+  `FILTER_LISTINGS_BY_PERMISSIONS`, `REQUIRE_TOOL_PERMISSIONS`.
+
+  Use `build_mcp_config(**overrides)` rather than `MCPConfig(...)` directly — it
+  layers your overrides over the project's settings instead of discarding them.
+
+- `MCPServer.config`, exposing the resolved snapshot.
+- `build_oauth_urlpatterns(auth_user_adapter=, dcr_enabled=,
+  dcr_initial_access_token=)` and `SimpleJWTCookieAdapter(cookie_name=)`. The
+  DCR gates were read from settings **per request**; they now resolve when the
+  patterns are built, so two mounts in one project can gate DCR differently.
+  `DCR_ENABLED` / `DCR_INITIAL_ACCESS_TOKEN` / `SIMPLEJWT_ACCESS_COOKIE` remain
+  as the defaults. The `DynamicClientRegistrationViewSet` gates default to
+  **closed**, so a hand-wired view that forgets them refuses registrations
+  rather than opening them.
+- **`MCPServer(title=...)`** — the spec's `Implementation.title`, which this
+  package did not implement. The MCP spec splits the two deliberately: `name` is
+  *"intended for programmatic or logical use"* (the stable identifier), `title`
+  is *"intended for UI and end-user contexts"* (human-readable, optional, with
+  clients falling back to `name`). Omitted from the wire when unset.
+- `DjangoOAuthToolkitBackend(resource_url=..., authorization_servers=...,
+  scopes_supported=..., resource_documentation=..., resource_metadata_url=...)`
+  — all previously read from settings at request time, all now resolved once at
+  construction, so two backends in one process can genuinely differ.
+- `MCPServer(version=...)`, to go with `name=` — the wire version was previously
+  only settable through `SERVER_INFO`.
+- `MCPServer(description=...)` is now surfaced as the `initialize` response's
+  `instructions` field (the MCP spec's slot for a server describing itself to a
+  client). Omitted entirely when no description is given.
+- `MCPCallContext.server_info` / `.instructions`, carrying the owning server's
+  identity to the handlers.
+
+### Changed
+
+- **`REST_FRAMEWORK_MCP` is no longer read on the request path.** Every scalar is
+  resolved when a server is constructed. Two consequences worth knowing:
+
+  - **Mutating settings no longer reconfigures an already-built server.** If your
+    tests wrap a request in `override_settings(REST_FRAMEWORK_MCP=...)` against a
+    server built at URL-conf import, the change is now ignored — build the server
+    inside the test with `config=build_mcp_config(...)` and mount that instead.
+    (`AUTH_BACKEND` / `SESSION_STORE` already behaved this way, since they were
+    resolved in `__init__`.)
+  - **`DEFAULT_OUTPUT_FORMAT` now does something.** It was declared in the
+    settings defaults and read by nothing — a tool registered without an explicit
+    `output_format` always got JSON. It is now the real fallback. If you set it to
+    `"toon"` expecting it to work, it will now take effect.
+
+- Internal signatures gained the values they used to read from settings:
+  `paginate(page_size=)`, `is_origin_allowed(origin, allowed_origins)`,
+  `resolve_protocol_version(header, supported)`, `negotiate_protocol_version(...,
+  config=)`, `resolve_structured_output(default_output_schema=,
+  default_structured_content=)`, `validation_error_data(..., include_value=)`,
+  `check_tool_permissions_declared(..., require=)`, `call_spec_tool(..., config=)`.
+  The transport viewsets take `config=` alongside their other collaborators.
+  Only affects code calling these directly.
+
+- `SERVER_INFO` is now the **default source** for `name` / `version` rather than
+  an override of them, and it is read **once, when the server is constructed**,
+  instead of on every `initialize`. A project that configures `SERVER_INFO` and
+  never passes `name=` keeps its current wire identity; a project that passes
+  `name=` now gets what it asked for.
+- `MCPServer(name=...)` defaults to `None` (meaning "take it from `SERVER_INFO`")
+  rather than to the literal `"djangorestframework-mcp-server"`. Reading
+  `server.name` still returns a resolved string. Only affects code that
+  introspected `.name` on a server constructed without one — a value that was
+  inert on the wire regardless.
+
+### Removed
+
+- **`REST_FRAMEWORK_MCP["AUTH_USER_ADAPTER"]`** — the last dotted path in the
+  package. Pass the adapter to the contrib mount instead:
+
+  ```python
+  # before — settings.py
+  REST_FRAMEWORK_MCP = {"AUTH_USER_ADAPTER": "myproject.oauth.MyAdapter"}
+
+  # after — urls.py
+  *build_oauth_urlpatterns(
+      server=server,
+      include_authorize=True,
+      auth_user_adapter=MyAdapter(),
+  ),
+  ```
+
+  This also **lifts a constraint**: adapters no longer have to be constructible
+  with no arguments (a rule that existed only so a dotted path could
+  instantiate them), so they can take real configuration —
+  `SimpleJWTCookieAdapter(cookie_name="my-jwt")`.
+
+  There is now **no `import_string` anywhere in the package**.
+
+- **`REST_FRAMEWORK_MCP["AUTH_BACKEND"]` and `["SESSION_STORE"]`.** Both named a
+  collaborator by dotted path — an indirection that only existed because
+  `settings.py` cannot hold a live object. `urls.py` can, so pass the object:
+
+  ```python
+  # before — settings.py
+  REST_FRAMEWORK_MCP = {
+      "AUTH_BACKEND": "myproject.mcp.MyBackend",
+      "SESSION_STORE": "myproject.mcp.MyStore",
+  }
+
+  # after — urls.py, where the server is built
+  server = MCPServer(
+      name="my-app",
+      auth_backend=MyBackend(),
+      session_store=MyStore(),
+  )
+  ```
+
+  Omitting either still gives you the package default (`DjangoOAuthToolkitBackend`
+  / `DjangoCacheSessionStore`) — only the *dotted-path* form is gone. Leaving
+  either key in your settings raises `ImproperlyConfigured` naming the
+  replacement, rather than being silently ignored: a dropped `AUTH_BACKEND`
+  would mean a project that believes it configured authentication has not.
+
+### Fixed
+
+- **Cache-backed sessions are no longer shared between servers.**
+  `DjangoCacheSessionStore` keyed every entry under a flat `drf-mcp:session:`
+  prefix, so two servers mounted in one project shared one session namespace
+  over the same Django cache: a session minted at `/public/mcp` satisfied
+  `/internal/mcp`'s ownership check, and a `DELETE` against either destroyed the
+  other's session. Stores built by `MCPServer` now key under the server's
+  `url_namespace`. Not an authentication bypass — each server still validated
+  every request's bearer token through its own backend.
+
+  **On upgrade, existing cache-backed sessions stop resolving once** (the key
+  prefix changes) and clients transparently re-`initialize` — the same path
+  already taken for sessions written by pre-0.7 versions.
+
+  A store you construct yourself is yours to namespace:
+  `DjangoCacheSessionStore(namespace="internal")`.
+
+  The namespace is the server's **`name`**, not its `url_namespace`: a server
+  used only in-process (`acall_tool`, the `django-ag-ui` bridge) is never
+  mounted, so its `url_namespace` is a meaningless default that would collide
+  with a mounted server at the default namespace *even when their names differ*
+  — and Django's duplicate-namespace check (`urls.W005`) cannot see a server
+  that isn't in the URL conf. Keying on identity also means renaming a URL
+  prefix is no longer a silent session purge. The namespace is hashed into the
+  cache key, so a free-form `name` ("My Invoicing Server") still yields a key
+  that is valid on backends like memcached.
+
+- **`MCPServer(name=...)` now reaches the wire.** `name` and `description` were
+  accepted by the constructor and stored, but nothing ever read them: the
+  `initialize` response built its `serverInfo` from the global
+  `REST_FRAMEWORK_MCP["SERVER_INFO"]` setting instead. Every server in a project
+  therefore introduced itself with the same name, and a project mounting two
+  servers had no way to tell them apart. The server instance is now the source
+  of truth for its own identity.
+
+### Security
+
+- **RFC 8707 audience binding now works with more than one server.**
+  `RESOURCE_URL` was a single global read at request time, so every server in a
+  project claimed the same canonical resource and a token minted for
+  `/public/mcp` passed the audience check at `/internal/mcp` — defeating the
+  precise mechanism that exists to stop cross-resource token replay. The
+  canonical URL is now per-server:
+
+  ```python
+  internal = MCPServer(name="internal-mcp", resource_url="https://example.com/internal/mcp/")
+  public = MCPServer(name="public-mcp", resource_url="https://example.com/public/mcp/")
+  ```
+
+  `RESOURCE_URL` remains the default for a server that doesn't name its own, so
+  single-server projects are unaffected. `resource_url=` configures the default
+  auth backend; passing it *and* a custom `auth_backend=` raises, since a custom
+  backend owns its own audience policy and the value would otherwise be dropped
+  in silence.
+
+- **A 401 challenge now points at the issuing server's own metadata.**
+  `resource_metadata` in `WWW-Authenticate` came from the global
+  `SERVER_INFO["resource_metadata_url"]`, so with two servers it could only ever
+  be correct for one. It is now derived from each server's `resource_url`
+  (the PRM endpoint mounts under the server's own prefix); an explicit
+  `resource_metadata_url=` still overrides.
+
 ## [0.11.3] — 2026-07-16
 
 ### Changed
@@ -1213,7 +1432,8 @@ Pinned to `djangorestframework-services==0.6.0`.
 - 100% line + branch coverage enforced by pytest (**451 tests** at
   release).
 
-[Unreleased]: https://github.com/Artui/djangorestframework-mcp-server/compare/v0.11.3...HEAD
+[Unreleased]: https://github.com/Artui/djangorestframework-mcp-server/compare/v0.12.0...HEAD
+[0.12.0]: https://github.com/Artui/djangorestframework-mcp-server/compare/v0.11.3...v0.12.0
 [0.11.3]: https://github.com/Artui/djangorestframework-mcp-server/compare/v0.11.2...v0.11.3
 [0.11.2]: https://github.com/Artui/djangorestframework-mcp-server/compare/v0.11.1...v0.11.2
 [0.11.1]: https://github.com/Artui/djangorestframework-mcp-server/compare/v0.11.0...v0.11.1

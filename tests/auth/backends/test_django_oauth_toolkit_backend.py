@@ -267,3 +267,80 @@ def test_authorization_server_metadata_strips_trailing_slash_in_issuer(settings)
     md = DjangoOAuthToolkitBackend().authorization_server_metadata()
     # Trailing slash is normalised so endpoints don't double-slash.
     assert md.token_endpoint == "https://issuer.example/oauth/oauth/token/"
+
+
+# ----- per-server resource URL (RFC 8707 audience binding) -----
+
+
+def test_explicit_resource_url_wins_over_the_global_setting(monkeypatch, settings) -> None:
+    settings.REST_FRAMEWORK_MCP = {"RESOURCE_URL": "https://example.com/public/mcp/"}
+    _patch_loader(
+        monkeypatch,
+        lambda _t: _FakeToken(
+            scope="read", user="alice", valid=True, resource="https://example.com/internal/mcp/"
+        ),
+    )
+    backend = DjangoOAuthToolkitBackend(resource_url="https://example.com/internal/mcp/")
+    assert backend.authenticate(_request_with_auth("Bearer x")) is not None
+
+
+def test_a_token_for_one_server_is_rejected_by_another(monkeypatch, settings) -> None:
+    """The point of RFC 8707: audience binding stops cross-resource replay.
+
+    With a single global RESOURCE_URL both servers claimed the same canonical
+    resource, so a token minted for the public server sailed through the
+    internal one — defeating the mechanism meant to prevent exactly that.
+    """
+    settings.REST_FRAMEWORK_MCP = {}
+    _patch_loader(
+        monkeypatch,
+        lambda _t: _FakeToken(
+            scope="read", user="alice", valid=True, resource="https://example.com/public/mcp/"
+        ),
+    )
+    public = DjangoOAuthToolkitBackend(resource_url="https://example.com/public/mcp/")
+    internal = DjangoOAuthToolkitBackend(resource_url="https://example.com/internal/mcp/")
+
+    request = _request_with_auth("Bearer public-token")
+    assert public.authenticate(request) is not None
+    assert internal.authenticate(request) is None
+
+
+def test_protected_resource_metadata_is_per_backend(settings) -> None:
+    settings.REST_FRAMEWORK_MCP = {"RESOURCE_URL": "https://example.com/public/mcp/"}
+    internal = DjangoOAuthToolkitBackend(
+        resource_url="https://example.com/internal/mcp/",
+        scopes_supported=["internal:read"],
+    )
+    md = internal.protected_resource_metadata()
+    assert md.resource == "https://example.com/internal/mcp/"
+    assert md.scopes_supported == ["internal:read"]
+
+
+def test_challenge_points_at_this_servers_metadata(settings) -> None:
+    """The PRM endpoint mounts under each server's own prefix, so the 401's
+    resource_metadata pointer has to be derived per server — taken from the
+    global SERVER_INFO it could only ever be right for one of them."""
+    settings.REST_FRAMEWORK_MCP = {}
+    internal = DjangoOAuthToolkitBackend(resource_url="https://example.com/internal/mcp/")
+    challenge = internal.www_authenticate_challenge()
+    assert (
+        'resource_metadata="https://example.com/internal/mcp/'
+        '.well-known/oauth-protected-resource"' in challenge
+    )
+
+
+def test_explicit_metadata_url_overrides_the_derived_one(settings) -> None:
+    settings.REST_FRAMEWORK_MCP = {}
+    backend = DjangoOAuthToolkitBackend(
+        resource_url="https://example.com/internal/mcp/",
+        resource_metadata_url="https://cdn.example/prm.json",
+    )
+    assert (
+        'resource_metadata="https://cdn.example/prm.json"' in backend.www_authenticate_challenge()
+    )
+
+
+def test_no_resource_url_means_no_metadata_pointer(settings) -> None:
+    settings.REST_FRAMEWORK_MCP = {}
+    assert "resource_metadata" not in DjangoOAuthToolkitBackend().www_authenticate_challenge()

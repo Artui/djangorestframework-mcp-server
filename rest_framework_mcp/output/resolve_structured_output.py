@@ -2,14 +2,14 @@ from __future__ import annotations
 
 from django.core.exceptions import ImproperlyConfigured
 
-from rest_framework_mcp.conf import get_setting
-
 
 def resolve_structured_output(
     *,
     include_output_schema_override: bool | None,
     include_structured_content_override: bool | None,
     binding_name: str,
+    default_output_schema: bool,
+    default_structured_content: bool,
 ) -> tuple[bool, bool]:
     """Collapse the structured-output tri-state overrides against globals.
 
@@ -17,10 +17,9 @@ def resolve_structured_output(
     booleans for whether the binding should advertise ``outputSchema`` in
     ``tools/list`` and emit ``structuredContent`` in ``tools/call``.
 
-    Each override is tri-state: ``None`` defers to the corresponding
-    ``REST_FRAMEWORK_MCP`` setting (``INCLUDE_OUTPUT_SCHEMA`` /
-    ``INCLUDE_STRUCTURED_CONTENT``), ``True`` / ``False`` force the
-    behaviour regardless of the global.
+    Each override is tri-state: ``None`` defers to the server-level default
+    (``MCPConfig.include_output_schema`` / ``.include_structured_content``,
+    passed in), ``True`` / ``False`` force the behaviour regardless.
 
     The MCP spec (2025-06-18) requires that any tool which declares an
     ``outputSchema`` always returns conforming ``structuredContent``. The
@@ -33,12 +32,12 @@ def resolve_structured_output(
     output_schema: bool = (
         include_output_schema_override
         if include_output_schema_override is not None
-        else bool(get_setting("INCLUDE_OUTPUT_SCHEMA"))
+        else default_output_schema
     )
     structured_content: bool = (
         include_structured_content_override
         if include_structured_content_override is not None
-        else bool(get_setting("INCLUDE_STRUCTURED_CONTENT"))
+        else default_structured_content
     )
     if output_schema and not structured_content:
         raise ImproperlyConfigured(

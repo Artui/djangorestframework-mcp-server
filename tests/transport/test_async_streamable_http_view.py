@@ -7,6 +7,7 @@ from django.http import HttpRequest
 from django.test import AsyncClient, RequestFactory, override_settings
 
 from rest_framework_mcp.auth.types.token_info import TokenInfo
+from rest_framework_mcp.config.build_mcp_config import build_mcp_config
 from rest_framework_mcp.registry.resource_registry import ResourceRegistry
 from rest_framework_mcp.registry.tool_registry import ToolRegistry
 from rest_framework_mcp.transport.async_streamable_http_viewset import (
@@ -14,6 +15,8 @@ from rest_framework_mcp.transport.async_streamable_http_viewset import (
     AsyncStreamableHttpViewSet,
 )
 from rest_framework_mcp.transport.in_memory_session_store import InMemorySessionStore
+from tests.testapp.mcp import build_server
+from tests.testapp.urlconf_for import urlconf_for
 
 
 @pytest.fixture
@@ -153,6 +156,7 @@ async def test_async_get_without_broker_returns_405() -> None:
         auth_backend=AllowAnyBackend(),
         session_store=InMemorySessionStore(),
         sse_broker=None,
+        config=build_mcp_config(),
     )
     response = await view(request)
     assert response.status_code == 405
@@ -225,97 +229,75 @@ async def test_async_missing_protocol_version(async_urlconf) -> None:
     assert response.status_code == 400
 
 
-async def test_async_post_missing_protocol_version_allowed_when_disabled(
-    async_urlconf, settings
-) -> None:
-    settings.REST_FRAMEWORK_MCP = {
-        **settings.REST_FRAMEWORK_MCP,
-        "REQUIRE_PROTOCOL_VERSION_HEADER": False,
-    }
-    client = AsyncClient()
-    sid = await _initialize(client)
-    response = await client.post(
-        "/mcp/",
-        data=json.dumps({"jsonrpc": "2.0", "id": 81, "method": "tools/list"}),
-        content_type="application/json",
-        headers={"Mcp-Session-Id": sid},
+async def test_async_post_missing_protocol_version_allowed_when_disabled() -> None:
+    server = build_server(
+        config=build_mcp_config(allowed_origins=["*"], require_protocol_version_header=False)
     )
+    with override_settings(ROOT_URLCONF=urlconf_for(server, is_async=True)):
+        client = AsyncClient()
+        sid = await _initialize(client)
+        response = await client.post(
+            "/mcp/",
+            data=json.dumps({"jsonrpc": "2.0", "id": 81, "method": "tools/list"}),
+            content_type="application/json",
+            headers={"Mcp-Session-Id": sid},
+        )
     assert response.status_code == 200
     assert "result" in response.json()
 
 
-async def test_async_get_missing_protocol_version_allowed_when_disabled(
-    async_urlconf, settings
-) -> None:
+async def test_async_get_missing_protocol_version_allowed_when_disabled() -> None:
     """The GET (SSE) path mirrors POST when the relaxation is enabled.
 
-    With the setting off, a header-less GET would 400 on the version check.
-    With it on, the request progresses past that check and 404s on the
-    missing session id instead — which is what we assert here.
+    With the flag off, a header-less GET would 400 on the version check. With it
+    on, the request progresses past that check and 404s on the missing session
+    id instead — which is what we assert here.
     """
-    settings.REST_FRAMEWORK_MCP = {
-        **settings.REST_FRAMEWORK_MCP,
-        "REQUIRE_PROTOCOL_VERSION_HEADER": False,
-    }
-    client = AsyncClient()
-    response = await client.get("/mcp/")
+    server = build_server(
+        config=build_mcp_config(allowed_origins=["*"], require_protocol_version_header=False)
+    )
+    with override_settings(ROOT_URLCONF=urlconf_for(server, is_async=True)):
+        response = await AsyncClient().get("/mcp/")
     assert response.status_code == 404
 
 
-async def test_async_body_too_large(async_urlconf, settings) -> None:
-    settings.REST_FRAMEWORK_MCP = {
-        "ALLOWED_ORIGINS": ["*"],
-        "MAX_REQUEST_BYTES": 10,
-        "AUTH_BACKEND": "rest_framework_mcp.auth.backends.allow_any_backend.AllowAnyBackend",
-        "SESSION_STORE": "rest_framework_mcp.transport.in_memory_session_store.InMemorySessionStore",
-        "SERVER_INFO": {},
-    }
-    client = AsyncClient()
-    response = await client.post("/mcp/", data=b"X" * 256, content_type="application/json")
+async def test_async_body_too_large() -> None:
+    server = build_server(config=build_mcp_config(allowed_origins=["*"], max_request_bytes=10))
+    with override_settings(ROOT_URLCONF=urlconf_for(server, is_async=True)):
+        response = await AsyncClient().post(
+            "/mcp/", data=b"X" * 256, content_type="application/json"
+        )
     assert response.status_code == 413
 
 
-async def test_async_blocked_origin_post(async_urlconf, settings) -> None:
-    settings.REST_FRAMEWORK_MCP = {
-        "ALLOWED_ORIGINS": ["https://allowed.example"],
-        "AUTH_BACKEND": "rest_framework_mcp.auth.backends.allow_any_backend.AllowAnyBackend",
-        "SESSION_STORE": "rest_framework_mcp.transport.in_memory_session_store.InMemorySessionStore",
-        "SERVER_INFO": {},
-    }
-    client = AsyncClient()
-    response = await client.post(
-        "/mcp/",
-        data=json.dumps({"jsonrpc": "2.0", "id": 9, "method": "ping"}),
-        content_type="application/json",
-        headers={
-            "Origin": "https://blocked.example",
-            "Mcp-Protocol-Version": "2025-11-25",
-        },
-    )
+async def test_async_blocked_origin_post() -> None:
+    server = build_server(config=build_mcp_config(allowed_origins=["https://allowed.example"]))
+    with override_settings(ROOT_URLCONF=urlconf_for(server, is_async=True)):
+        response = await AsyncClient().post(
+            "/mcp/",
+            data=json.dumps({"jsonrpc": "2.0", "id": 9, "method": "ping"}),
+            content_type="application/json",
+            headers={
+                "Origin": "https://blocked.example",
+                "Mcp-Protocol-Version": "2025-11-25",
+            },
+        )
     assert response.status_code == 403
 
 
-async def test_async_blocked_origin_get(async_urlconf, settings) -> None:
-    settings.REST_FRAMEWORK_MCP = {
-        "ALLOWED_ORIGINS": ["https://allowed.example"],
-        "AUTH_BACKEND": "rest_framework_mcp.auth.backends.allow_any_backend.AllowAnyBackend",
-        "SESSION_STORE": "rest_framework_mcp.transport.in_memory_session_store.InMemorySessionStore",
-        "SERVER_INFO": {},
-    }
-    client = AsyncClient()
-    response = await client.get("/mcp/", headers={"Origin": "https://blocked.example"})
+async def test_async_blocked_origin_get() -> None:
+    server = build_server(config=build_mcp_config(allowed_origins=["https://allowed.example"]))
+    with override_settings(ROOT_URLCONF=urlconf_for(server, is_async=True)):
+        response = await AsyncClient().get("/mcp/", headers={"Origin": "https://blocked.example"})
     assert response.status_code == 403
 
 
-async def test_async_blocked_origin_delete(async_urlconf, settings) -> None:
-    settings.REST_FRAMEWORK_MCP = {
-        "ALLOWED_ORIGINS": ["https://allowed.example"],
-        "AUTH_BACKEND": "rest_framework_mcp.auth.backends.allow_any_backend.AllowAnyBackend",
-        "SESSION_STORE": "rest_framework_mcp.transport.in_memory_session_store.InMemorySessionStore",
-        "SERVER_INFO": {},
-    }
-    client = AsyncClient()
-    response = await client.delete("/mcp/", headers={"Origin": "https://blocked.example"})
+async def test_async_blocked_origin_delete() -> None:
+    server = build_server(config=build_mcp_config(allowed_origins=["https://allowed.example"]))
+    with override_settings(ROOT_URLCONF=urlconf_for(server, is_async=True)):
+        response = await AsyncClient().delete(
+            "/mcp/", headers={"Origin": "https://blocked.example"}
+        )
     assert response.status_code == 403
 
 
@@ -356,6 +338,7 @@ async def test_async_unauthenticated_returns_401() -> None:
         resources=ResourceRegistry(),
         auth_backend=_Deny(),
         session_store=InMemorySessionStore(),
+        config=build_mcp_config(),
     )
     response = await view(request)
     assert response.status_code == 401
@@ -405,8 +388,6 @@ async def test_async_initialize_with_unsupported_version_falls_back(
     settings.REST_FRAMEWORK_MCP = {
         "ALLOWED_ORIGINS": ["*"],
         "PROTOCOL_VERSIONS": ["2025-11-25"],
-        "AUTH_BACKEND": "rest_framework_mcp.auth.backends.allow_any_backend.AllowAnyBackend",
-        "SESSION_STORE": "rest_framework_mcp.transport.in_memory_session_store.InMemorySessionStore",
         "SERVER_INFO": {},
     }
     client = AsyncClient()

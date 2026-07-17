@@ -26,9 +26,16 @@ class SimpleJWTCookieAdapter:
     surfaces a clear ``ImportError`` at first request, not at import.
     """
 
+    def __init__(self, *, cookie_name: str | None = None) -> None:
+        # Resolved once. ``None`` takes SIMPLEJWT_ACCESS_COOKIE, so a project
+        # that configures the setting and constructs the adapter bare keeps
+        # working.
+        self._cookie_name: str = (
+            cookie_name if cookie_name is not None else get_setting("SIMPLEJWT_ACCESS_COOKIE")
+        )
+
     def hydrate(self, request: HttpRequest) -> AbstractBaseUser | None:
-        cookie_name: str = get_setting("SIMPLEJWT_ACCESS_COOKIE")
-        token_str: str | None = request.COOKIES.get(cookie_name)
+        token_str: str | None = request.COOKIES.get(self._cookie_name)
         if not token_str:
             return None
 
@@ -40,7 +47,7 @@ class SimpleJWTCookieAdapter:
             raise ImportError(
                 "SimpleJWTCookieAdapter requires `djangorestframework-simplejwt`. "
                 'Install it via `pip install "djangorestframework-mcp-server[jwt]"` '
-                "or configure a different AUTH_USER_ADAPTER."
+                "or pass a different auth_user_adapter= to build_oauth_urlpatterns."
             ) from exc
 
         try:

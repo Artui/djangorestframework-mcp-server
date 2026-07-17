@@ -5,7 +5,6 @@ from typing import Any
 from rest_framework_services import build_offline_context, resolve_callable_kwargs
 
 from rest_framework_mcp._compat.tracing import span
-from rest_framework_mcp.conf import get_setting
 from rest_framework_mcp.constants import JsonRpcErrorCode
 from rest_framework_mcp.handlers.handle_tools_call import _span_attrs
 from rest_framework_mcp.handlers.render_prompt_messages import normalize_render_result
@@ -54,7 +53,7 @@ def handle_prompts_get(
         # Shape stays ``{"missing": [...]}`` for backward compat; only
         # the value-echo augments it.
         data: dict[str, Any] = {"missing": missing}
-        if get_setting("INCLUDE_VALIDATION_VALUE"):
+        if context.config.include_validation_value:
             data["value"] = arguments_raw
         return JsonRpcError(
             JsonRpcErrorCode.INVALID_PARAMS,
