@@ -7,6 +7,39 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- **`MCPServer(name=...)` now reaches the wire.** `name` and `description` were
+  accepted by the constructor and stored, but nothing ever read them: the
+  `initialize` response built its `serverInfo` from the global
+  `REST_FRAMEWORK_MCP["SERVER_INFO"]` setting instead. Every server in a project
+  therefore introduced itself with the same name, and a project mounting two
+  servers had no way to tell them apart. The server instance is now the source
+  of truth for its own identity.
+
+### Added
+
+- `MCPServer(version=...)`, to go with `name=` — the wire version was previously
+  only settable through `SERVER_INFO`.
+- `MCPServer(description=...)` is now surfaced as the `initialize` response's
+  `instructions` field (the MCP spec's slot for a server describing itself to a
+  client). Omitted entirely when no description is given.
+- `MCPCallContext.server_info` / `.instructions`, carrying the owning server's
+  identity to the handlers.
+
+### Changed
+
+- `SERVER_INFO` is now the **default source** for `name` / `version` rather than
+  an override of them, and it is read **once, when the server is constructed**,
+  instead of on every `initialize`. A project that configures `SERVER_INFO` and
+  never passes `name=` keeps its current wire identity; a project that passes
+  `name=` now gets what it asked for.
+- `MCPServer(name=...)` defaults to `None` (meaning "take it from `SERVER_INFO`")
+  rather than to the literal `"djangorestframework-mcp-server"`. Reading
+  `server.name` still returns a resolved string. Only affects code that
+  introspected `.name` on a server constructed without one — a value that was
+  inert on the wire regardless.
+
 ## [0.11.3] — 2026-07-16
 
 ### Changed

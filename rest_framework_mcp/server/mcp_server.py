@@ -25,6 +25,8 @@ from rest_framework_mcp.handlers.call_spec_tool import call_spec_tool
 from rest_framework_mcp.handlers.handle_tools_call_async import handle_tools_call_async
 from rest_framework_mcp.handlers.handle_tools_list import handle_tools_list
 from rest_framework_mcp.handlers.types.context import MCPCallContext
+from rest_framework_mcp.protocol.build_server_info import build_server_info
+from rest_framework_mcp.protocol.types.implementation import Implementation
 from rest_framework_mcp.protocol.types.json_rpc_error import JsonRpcError
 from rest_framework_mcp.protocol.types.prompt_argument import PromptArgument
 from rest_framework_mcp.protocol.types.tool_result import ToolResult
@@ -91,7 +93,8 @@ class MCPServer:
     def __init__(
         self,
         *,
-        name: str = "djangorestframework-mcp-server",
+        name: str | None = None,
+        version: str | None = None,
         description: str | None = None,
         auth_backend: MCPAuthBackend | None = None,
         session_store: SessionStore | None = None,
@@ -99,7 +102,15 @@ class MCPServer:
         sse_replay_buffer: SSEReplayBuffer | None = None,
         url_namespace: str = "mcp",
     ) -> None:
-        self.name: str = name
+        # Identity is resolved **once, here** — the settings read is a default
+        # source for the kwargs, not a per-request lookup — so the instance is
+        # the single source of truth on the wire and two servers mounted in one
+        # project introduce themselves differently. ``name=None`` /
+        # ``version=None`` defer to ``SERVER_INFO``, keeping the wire identity
+        # of a project that configures the setting and never passes ``name=``.
+        self._server_info: Implementation = build_server_info(name=name, version=version)
+        self.name: str = self._server_info.name
+        self.version: str = self._server_info.version
         self.description: str | None = description
         self._url_namespace: str = url_namespace
         self._tools: ToolRegistry = ToolRegistry()
@@ -509,6 +520,8 @@ class MCPServer:
             prompts=self._prompts,
             protocol_version=get_setting("PROTOCOL_VERSIONS")[0],
             session_id=session_id,
+            server_info=self._server_info,
+            instructions=self.description,
         )
 
     def register_resource(
@@ -922,6 +935,8 @@ class MCPServer:
             prompts=self._prompts,
             auth_backend=self._auth_backend,
             session_store=self._session_store,
+            server_info=self._server_info,
+            instructions=self.description,
         )
         return self._urls_with_view(view)
 
@@ -945,6 +960,8 @@ class MCPServer:
             session_store=self._session_store,
             sse_broker=self._sse_broker,
             sse_replay_buffer=self._sse_replay_buffer,
+            server_info=self._server_info,
+            instructions=self.description,
         )
         return self._urls_with_view(view)
 

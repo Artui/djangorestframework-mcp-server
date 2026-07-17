@@ -15,6 +15,7 @@ from rest_framework_mcp.constants import JsonRpcErrorCode
 from rest_framework_mcp.handlers.dispatch import dispatch
 from rest_framework_mcp.handlers.types.context import MCPCallContext
 from rest_framework_mcp.protocol.parse_message import parse_message
+from rest_framework_mcp.protocol.types.implementation import Implementation
 from rest_framework_mcp.protocol.types.json_rpc_error import JsonRpcError
 from rest_framework_mcp.protocol.types.json_rpc_notification import JsonRpcNotification
 from rest_framework_mcp.protocol.types.json_rpc_request import JsonRpcRequest
@@ -79,6 +80,12 @@ class StreamableHttpViewSet(ViewSet):
     prompts: PromptRegistry | None = None
     auth_backend: MCPAuthBackend | None = None
     session_store: SessionStore | None = None
+    # Identity the owning server resolved at construction. Unlike the
+    # collaborators above these stay optional at dispatch: a hand-wired viewset
+    # with no server still answers ``initialize``, falling back to
+    # ``SERVER_INFO``.
+    server_info: Implementation | None = None
+    instructions: str | None = None
 
     # ----- DRF action methods (mapped via ``as_view({...})``) -----
 
@@ -153,6 +160,8 @@ class StreamableHttpViewSet(ViewSet):
             prompts=self._require_prompts(),
             protocol_version=protocol_version,
             session_id=session_id,
+            server_info=self.server_info,
+            instructions=self.instructions,
         )
 
         if isinstance(message, JsonRpcNotification):
