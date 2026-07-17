@@ -184,10 +184,10 @@ independently of `has_permission(request, token)`.
 
 ## Audience binding (RFC 8707)
 
-`DjangoOAuthToolkitBackend` enforces RFC 8707 audience binding when
-`REST_FRAMEWORK_MCP["RESOURCE_URL"]` is configured. Every accepted token must
-carry that URL as its bound resource; tokens with a missing or mismatched
-`aud` / `resource` are rejected as if the bearer were absent.
+`DjangoOAuthToolkitBackend` enforces RFC 8707 audience binding when a
+`resource_url` is configured. Every accepted token must carry that URL as its
+bound resource; tokens with a missing or mismatched `aud` / `resource` are
+rejected as if the bearer were absent.
 
 ```python
 REST_FRAMEWORK_MCP = {
@@ -201,11 +201,37 @@ REST_FRAMEWORK_MCP = {
 }
 ```
 
-!!! warning "One `RESOURCE_URL` for the whole project"
-    `RESOURCE_URL` is a single global, so every server in the project shares one
-    canonical resource — which means a token minted for one mount passes the
-    audience check at another. If you run more than one server, don't rely on
-    audience binding to separate them yet; a per-server resource URL is coming.
+`RESOURCE_URL` is the **default** for a server that doesn't name its own. Since
+RFC 8707 binds a token to *a* resource, each server needs its own canonical URL
+— that binding is exactly what stops a token issued for one resource being
+replayed against another, and two servers sharing one URL defeat it:
+
+```python
+# urls.py
+internal = MCPServer(
+    name="internal-mcp",
+    resource_url="https://example.com/internal/mcp/",
+    url_namespace="internal-mcp",
+)
+public = MCPServer(
+    name="public-mcp",
+    resource_url="https://example.com/public/mcp/",
+    url_namespace="public-mcp",
+)
+
+urlpatterns = [
+    path("internal/mcp/", internal.urls),
+    path("public/mcp/", public.urls),
+]
+```
+
+A token minted for `public-mcp` is now rejected by `internal-mcp`. Each server's
+`WWW-Authenticate` challenge also points at **its own** PRM endpoint, derived
+from its `resource_url` — so discovery lands on the right metadata.
+
+`resource_url=` configures the default backend. If you bring your own
+`auth_backend=`, it owns its audience binding — configure it there
+(`DjangoOAuthToolkitBackend(resource_url=...)`); passing both raises.
 
 `RESOURCE_URL` is also what the PRM endpoint advertises as `resource`, so the
 configuration cannot drift between "what we accept" and "what we tell clients

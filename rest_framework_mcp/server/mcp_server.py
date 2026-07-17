@@ -4,6 +4,7 @@ from collections.abc import Callable, Sequence
 from typing import Any
 
 from asgiref.sync import sync_to_async
+from django.core.exceptions import ImproperlyConfigured
 from django.http import HttpRequest
 from django.urls import URLPattern, path
 from rest_framework.serializers import Serializer
@@ -99,7 +100,9 @@ class MCPServer:
         *,
         name: str | None = None,
         version: str | None = None,
+        title: str | None = None,
         description: str | None = None,
+        resource_url: str | None = None,
         auth_backend: MCPAuthBackend | None = None,
         session_store: SessionStore | None = None,
         sse_broker: SSEBroker | None = None,
@@ -113,30 +116,57 @@ class MCPServer:
         # project introduce themselves differently. ``name=None`` /
         # ``version=None`` defer to ``SERVER_INFO``, keeping the wire identity
         # of a project that configures the setting and never passes ``name=``.
-        self._server_info: Implementation = build_server_info(name=name, version=version)
+        self._server_info: Implementation = build_server_info(
+            name=name, version=version, title=title
+        )
         self.name: str = self._server_info.name
         self.version: str = self._server_info.version
+        self.title: str | None = self._server_info.title
         self.description: str | None = description
         self._url_namespace: str = url_namespace
         self._tools: ToolRegistry = ToolRegistry()
         self._resources: ResourceRegistry = ResourceRegistry()
         self._prompts: PromptRegistry = PromptRegistry()
+        # ``resource_url`` configures the *default* backend. A custom backend
+        # owns its own audience policy (the protocol says nothing about a
+        # resource URL), so there is nowhere to forward this to — rather than
+        # drop it silently and leave audience enforcement quietly unconfigured,
+        # say so.
+        if resource_url is not None and auth_backend is not None:
+            raise ImproperlyConfigured(
+                "Pass resource_url= or auth_backend=, not both — a custom auth "
+                "backend owns its own audience binding. Configure it there, e.g. "
+                f"auth_backend=DjangoOAuthToolkitBackend(resource_url={resource_url!r})."
+            )
         # Collaborators are constructed, never resolved from a dotted path: the
         # consumer passes an object, or gets the package default built here.
         # Knowing the concrete class is what lets the session store below be
-        # namespaced — a dotted-path loader could only call ``cls()``.
+        # namespaced, and the resource URL below be handed over — a dotted-path
+        # loader could only call ``cls()``.
         self._auth_backend: MCPAuthBackend = (
-            auth_backend if auth_backend is not None else DjangoOAuthToolkitBackend()
+            auth_backend
+            if auth_backend is not None
+            else DjangoOAuthToolkitBackend(resource_url=resource_url)
         )
         # Namespaced by default: the cache-backed store shares one Django cache
         # across every server in the process, so without this a session minted
         # at ``/public/mcp`` satisfies ``/internal/mcp``'s ownership check and a
-        # DELETE against either destroys the other's session. A store the
-        # consumer builds carries whatever namespace they gave it.
+        # DELETE against either destroys the other's session.
+        #
+        # Keyed on ``name`` — the spec's programmatic identifier — and not on
+        # ``url_namespace``, which is a *routing* detail. A server used only
+        # in-process (``acall_tool``, the django-ag-ui bridge) is never mounted,
+        # so its ``url_namespace`` is a meaningless default; keying on it would
+        # collide that server with a mounted one at the default namespace even
+        # though their names differ, and Django's duplicate-namespace check
+        # (urls.W005) cannot see an unmounted server. Keying on identity also
+        # means renaming a URL prefix doesn't silently drop every session.
+        #
+        # A store the consumer builds carries whatever namespace they gave it.
         self._session_store: SessionStore = (
             session_store
             if session_store is not None
-            else DjangoCacheSessionStore(namespace=url_namespace)
+            else DjangoCacheSessionStore(namespace=self.name)
         )
         # The broker is only constructed when the consumer hasn't supplied
         # one — instance state, never module-level. Multi-process deployments

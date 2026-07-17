@@ -52,8 +52,28 @@ def test_each_server_reports_its_own_identity(multi_urlconf) -> None:
     internal = _initialize(Client(), INTERNAL).json()["result"]
     public = _initialize(Client(), PUBLIC).json()["result"]
 
-    assert internal["serverInfo"] == {"name": "internal-mcp", "version": "2.0.0"}
+    assert internal["serverInfo"] == {
+        "name": "internal-mcp",
+        "version": "2.0.0",
+        "title": "Internal Tools",
+    }
     assert public["serverInfo"] == {"name": "public-mcp", "version": "1.0.0"}
+
+
+def test_title_is_the_human_label_and_name_stays_the_identifier(multi_urlconf) -> None:
+    """The spec's split: ``name`` is "intended for programmatic or logical use",
+    ``title`` is "intended for UI and end-user contexts". A server with a title
+    keeps its identifier — the title does not replace it."""
+    result = _initialize(Client(), INTERNAL).json()["result"]
+
+    assert result["serverInfo"]["name"] == "internal-mcp"
+    assert result["serverInfo"]["title"] == "Internal Tools"
+
+
+def test_title_omitted_when_not_given(multi_urlconf) -> None:
+    """Optional per the spec — clients fall back to ``name``."""
+    result = _initialize(Client(), PUBLIC).json()["result"]
+    assert "title" not in result["serverInfo"]
 
 
 def test_server_name_is_not_shadowed_by_the_server_info_setting(multi_urlconf) -> None:

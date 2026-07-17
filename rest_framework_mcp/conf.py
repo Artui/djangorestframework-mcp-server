@@ -45,10 +45,17 @@ DEFAULTS: dict[str, Any] = {
     "DEFAULT_OUTPUT_FORMAT": "json",
     "SERVER_INFO": {"name": "djangorestframework-mcp-server"},
     "MAX_REQUEST_BYTES": 1_048_576,
-    # The canonical resource URL of this MCP server, used for RFC 8707 audience
-    # enforcement by token-validating auth backends. ``None`` disables
-    # enforcement (suitable for development / behind a separate gateway). When
-    # set, tokens whose ``aud`` / ``resource`` claim does not match are rejected.
+    # Default canonical resource URL, used for RFC 8707 audience enforcement by
+    # token-validating auth backends. ``None`` disables enforcement (suitable
+    # for development / behind a separate gateway). When set, tokens whose
+    # ``aud`` / ``resource`` claim does not match are rejected.
+    #
+    # This is only the **default** for ``MCPServer(resource_url=...)``. RFC 8707
+    # binds a token to *a* resource, so each server in a project needs its own
+    # canonical URL — two servers sharing one URL means a token minted for one
+    # passes the audience check at the other, which is the exact replay this
+    # mechanism exists to prevent. Set it per server; leave this for the
+    # single-server case.
     "RESOURCE_URL": None,
     # Maximum number of items returned by a single list-style call
     # (``tools/list``, ``resources/list``, ``resources/templates/list``,

@@ -15,6 +15,7 @@ from rest_framework_mcp.transport.in_memory_session_store import InMemorySession
 internal = MCPServer(
     name="internal-mcp",
     version="2.0.0",
+    title="Internal Tools",
     description="Internal tools. Staff only.",
     url_namespace="internal-mcp",
     auth_backend=AllowAnyBackend(),

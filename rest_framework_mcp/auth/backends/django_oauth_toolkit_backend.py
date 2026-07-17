@@ -23,12 +23,74 @@ class DjangoOAuthToolkitBackend:
     never blows up just because DOT is absent; the ``ImportError`` only fires
     when a request actually reaches authentication.
 
-    Audience enforcement (RFC 8707): when ``REST_FRAMEWORK_MCP["RESOURCE_URL"]``
-    is configured, the token's ``resource`` claim must match exactly. Tokens
-    without a bound resource are rejected. Setting ``RESOURCE_URL`` to ``None``
-    (the default) disables enforcement — appropriate for dev or for setups
-    where audience binding is performed by an upstream gateway.
+    Audience enforcement (RFC 8707): when ``resource_url`` is set, the token's
+    ``resource`` claim must match it exactly, and tokens without a bound
+    resource are rejected. ``None`` (the default) disables enforcement —
+    appropriate for dev, or where audience binding happens at an upstream
+    gateway.
+
+    **One resource URL per server.** RFC 8707 binds a token to *a* resource, so
+    each server needs its own canonical URL — that binding is precisely what
+    stops a token issued for one resource being replayed against another. Two
+    servers sharing a single URL defeat it: a token minted for ``/public/mcp``
+    would satisfy ``/internal/mcp``. Hence ``resource_url`` is per-backend and
+    the ``RESOURCE_URL`` setting is only its default::
+
+        MCPServer(
+            name="internal",
+            resource_url="https://example.com/internal/mcp/",
+        )
+
+    Every value is resolved **once, here** — the settings reads are defaults for
+    the arguments, not per-request lookups — so two backends in one process can
+    genuinely differ.
     """
+
+    def __init__(
+        self,
+        *,
+        resource_url: str | None = None,
+        authorization_servers: list[str] | None = None,
+        scopes_supported: list[str] | None = None,
+        resource_documentation: str | None = None,
+        resource_metadata_url: str | None = None,
+    ) -> None:
+        server_info: dict[str, Any] = get_setting("SERVER_INFO")
+        # RESOURCE_URL is preferred over SERVER_INFO["resource"] — the former is
+        # also what audience enforcement reads, so one configuration mistake
+        # can't produce metadata that disagrees with the check.
+        self._resource_url: str | None = (
+            resource_url
+            if resource_url is not None
+            else get_setting("RESOURCE_URL") or server_info.get("resource") or None
+        )
+        self._authorization_servers: list[str] = list(
+            authorization_servers
+            if authorization_servers is not None
+            else server_info.get("authorization_servers", [])
+        )
+        self._scopes_supported: list[str] = list(
+            scopes_supported
+            if scopes_supported is not None
+            else server_info.get("scopes_supported", [])
+        )
+        self._resource_documentation: str | None = (
+            resource_documentation
+            if resource_documentation is not None
+            else server_info.get("documentation")
+        )
+        # Derived from this server's own resource URL when not given outright:
+        # the PRM endpoint mounts under the server's prefix, so a server at
+        # ``https://x/internal/mcp/`` serves it at
+        # ``https://x/internal/mcp/.well-known/oauth-protected-resource``.
+        # Taking it from the global SERVER_INFO instead would point every
+        # server's 401 challenge at one server's metadata.
+        self._resource_metadata_url: str | None = (
+            resource_metadata_url
+            if resource_metadata_url is not None
+            else server_info.get("resource_metadata_url")
+            or _derive_metadata_url(self._resource_url)
+        )
 
     def authenticate(self, request: HttpRequest) -> TokenInfo | None:
         try:
@@ -59,8 +121,7 @@ class DjangoOAuthToolkitBackend:
             return None
 
         token_audience: str | None = getattr(token, "resource", None)
-        expected: str | None = get_setting("RESOURCE_URL")
-        if not audience_matches(token_audience, expected):
+        if not audience_matches(token_audience, self._resource_url):
             return None
 
         scopes: tuple[str, ...] = tuple(token.scope.split()) if token.scope else ()
@@ -72,35 +133,27 @@ class DjangoOAuthToolkitBackend:
         )
 
     def protected_resource_metadata(self) -> ProtectedResourceMetadata:
-        server_info: dict[str, Any] = get_setting("SERVER_INFO")
-        # Prefer the explicit RESOURCE_URL setting over SERVER_INFO["resource"]
-        # — the former is also what audience enforcement reads from, so a
-        # single configuration mistake can't produce inconsistent metadata.
-        resource: str | None = get_setting("RESOURCE_URL") or server_info.get("resource") or None
-        documentation: str | None = server_info.get("documentation")
         return ProtectedResourceMetadata(
-            resource=resource or "",
-            authorization_servers=list(server_info.get("authorization_servers", [])),
+            resource=self._resource_url or "",
+            authorization_servers=list(self._authorization_servers),
             bearer_methods_supported=["header"],
-            scopes_supported=list(server_info.get("scopes_supported", [])),
-            resource_documentation=documentation,
+            scopes_supported=list(self._scopes_supported),
+            resource_documentation=self._resource_documentation,
         )
 
     def authorization_server_metadata(self) -> AuthorizationServerMetadata:
         """Return the RFC 8414 metadata payload for the DOT-hosted authorization server.
 
         Pulls the issuer, endpoint URLs, supported grant / response types,
-        and scopes from :setting:`REST_FRAMEWORK_MCP['SERVER_INFO']`'s
-        ``authorization_servers`` key (first entry) plus the
-        ``contrib.oauth`` mount convention that endpoints live at
-        ``/oauth/authorize/``, ``/oauth/token/``, ``/oauth/register/``.
+        and scopes from this backend's ``authorization_servers`` (first
+        entry) plus the ``contrib.oauth`` mount convention that endpoints
+        live at ``/oauth/authorize/``, ``/oauth/token/``, ``/oauth/register/``.
 
         Missing values fall through as empty strings / lists so the wire
-        shape is always valid JSON; consumers are expected to populate
-        ``SERVER_INFO`` for production deployments.
+        shape is always valid JSON; consumers are expected to configure
+        ``authorization_servers`` for production deployments.
         """
-        server_info: dict[str, Any] = get_setting("SERVER_INFO")
-        as_list: list[str] = server_info.get("authorization_servers") or []
+        as_list: list[str] = self._authorization_servers
         issuer: str = as_list[0] if as_list else ""
         # ``base`` is the issuer with no trailing slash so we can build
         # endpoint URLs by string concatenation without doubling slashes.
@@ -110,22 +163,33 @@ class DjangoOAuthToolkitBackend:
             authorization_endpoint=f"{base}/oauth/authorize/" if base else "",
             token_endpoint=f"{base}/oauth/token/" if base else "",
             registration_endpoint=f"{base}/oauth/register/" if base else "",
-            scopes_supported=list(server_info.get("scopes_supported", [])),
+            scopes_supported=list(self._scopes_supported),
         )
 
     def www_authenticate_challenge(
         self, *, scopes: list[str] | None = None, error: str | None = None
     ) -> str:
-        server_info: dict[str, Any] = get_setting("SERVER_INFO")
         parts: list[str] = ['Bearer realm="mcp"']
-        metadata_url: str | None = server_info.get("resource_metadata_url")
-        if metadata_url:
-            parts.append(f'resource_metadata="{metadata_url}"')
+        if self._resource_metadata_url:
+            parts.append(f'resource_metadata="{self._resource_metadata_url}"')
         if error:
             parts.append(f'error="{error}"')
         if scopes:
             parts.append(f'scope="{" ".join(scopes)}"')
         return ", ".join(parts)
+
+
+def _derive_metadata_url(resource_url: str | None) -> str | None:
+    """Point a 401 challenge at *this* server's PRM endpoint.
+
+    :class:`MCPServer` mounts the metadata view under its own prefix, so a
+    server whose canonical URL is ``https://x/internal/mcp/`` serves it at
+    ``https://x/internal/mcp/.well-known/oauth-protected-resource``. Deriving it
+    keeps the pointer correct for every server without each one restating it.
+    """
+    if not resource_url:
+        return None
+    return f"{resource_url.rstrip('/')}/.well-known/oauth-protected-resource"
 
 
 __all__ = ["DjangoOAuthToolkitBackend"]

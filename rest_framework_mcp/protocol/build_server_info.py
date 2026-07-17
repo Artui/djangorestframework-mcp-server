@@ -7,7 +7,11 @@ from rest_framework_mcp.protocol.types.implementation import Implementation
 from rest_framework_mcp.version import __version__ as package_version
 
 
-def build_server_info(name: str | None = None, version: str | None = None) -> Implementation:
+def build_server_info(
+    name: str | None = None,
+    version: str | None = None,
+    title: str | None = None,
+) -> Implementation:
     """Resolve a server's wire identity, falling back to the ``SERVER_INFO`` setting.
 
     Called once per server from :meth:`MCPServer.__init__`, so the settings read
@@ -15,9 +19,11 @@ def build_server_info(name: str | None = None, version: str | None = None) -> Im
     then the single source of truth and two servers mounted in one project answer
     with their own names.
 
-    Either field may be ``None`` to take that value from ``SERVER_INFO`` (and,
+    Any field may be ``None`` to take that value from ``SERVER_INFO`` (and,
     failing that, the package defaults), so a project that configures
     ``SERVER_INFO`` and never passes ``name=`` keeps its current wire identity.
+    ``title`` has no default — absent means absent, and the client falls back to
+    ``name`` per the spec.
 
     Lives here rather than beside ``handle_initialize`` because ``MCPServer``
     also needs it, and ``server`` already imports ``handlers`` — the other
@@ -31,6 +37,7 @@ def build_server_info(name: str | None = None, version: str | None = None) -> Im
         version=version
         if version is not None
         else server_info_settings.get("version", package_version),
+        title=title if title is not None else server_info_settings.get("title"),
     )
 
 

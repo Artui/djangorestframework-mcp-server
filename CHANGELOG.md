@@ -52,6 +52,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   A store you construct yourself is yours to namespace:
   `DjangoCacheSessionStore(namespace="internal")`.
 
+  The namespace is the server's **`name`**, not its `url_namespace`: a server
+  used only in-process (`acall_tool`, the `django-ag-ui` bridge) is never
+  mounted, so its `url_namespace` is a meaningless default that would collide
+  with a mounted server at the default namespace *even when their names differ*
+  — and Django's duplicate-namespace check (`urls.W005`) cannot see a server
+  that isn't in the URL conf. Keying on identity also means renaming a URL
+  prefix is no longer a silent session purge. The namespace is hashed into the
+  cache key, so a free-form `name` ("My Invoicing Server") still yields a key
+  that is valid on backends like memcached.
+
 - **`MCPServer(name=...)` now reaches the wire.** `name` and `description` were
   accepted by the constructor and stored, but nothing ever read them: the
   `initialize` response built its `serverInfo` from the global
@@ -60,8 +70,44 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   servers had no way to tell them apart. The server instance is now the source
   of truth for its own identity.
 
+### Security
+
+- **RFC 8707 audience binding now works with more than one server.**
+  `RESOURCE_URL` was a single global read at request time, so every server in a
+  project claimed the same canonical resource and a token minted for
+  `/public/mcp` passed the audience check at `/internal/mcp` — defeating the
+  precise mechanism that exists to stop cross-resource token replay. The
+  canonical URL is now per-server:
+
+  ```python
+  internal = MCPServer(name="internal-mcp", resource_url="https://example.com/internal/mcp/")
+  public = MCPServer(name="public-mcp", resource_url="https://example.com/public/mcp/")
+  ```
+
+  `RESOURCE_URL` remains the default for a server that doesn't name its own, so
+  single-server projects are unaffected. `resource_url=` configures the default
+  auth backend; passing it *and* a custom `auth_backend=` raises, since a custom
+  backend owns its own audience policy and the value would otherwise be dropped
+  in silence.
+
+- **A 401 challenge now points at the issuing server's own metadata.**
+  `resource_metadata` in `WWW-Authenticate` came from the global
+  `SERVER_INFO["resource_metadata_url"]`, so with two servers it could only ever
+  be correct for one. It is now derived from each server's `resource_url`
+  (the PRM endpoint mounts under the server's own prefix); an explicit
+  `resource_metadata_url=` still overrides.
+
 ### Added
 
+- **`MCPServer(title=...)`** — the spec's `Implementation.title`, which this
+  package did not implement. The MCP spec splits the two deliberately: `name` is
+  *"intended for programmatic or logical use"* (the stable identifier), `title`
+  is *"intended for UI and end-user contexts"* (human-readable, optional, with
+  clients falling back to `name`). Omitted from the wire when unset.
+- `DjangoOAuthToolkitBackend(resource_url=..., authorization_servers=...,
+  scopes_supported=..., resource_documentation=..., resource_metadata_url=...)`
+  — all previously read from settings at request time, all now resolved once at
+  construction, so two backends in one process can genuinely differ.
 - `MCPServer(version=...)`, to go with `name=` — the wire version was previously
   only settable through `SERVER_INFO`.
 - `MCPServer(description=...)` is now surfaced as the `initialize` response's
