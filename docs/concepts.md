@@ -102,6 +102,45 @@ URI-template variables. Same wire shape as the
 HTTP transport's `ServiceView`, so providers can be shared between
 transports.
 
+### URL kwargs — route values a provider reads off `view.kwargs`
+
+On a **tool** call, `view.kwargs` is empty by default (a tool has no URL). So a
+provider shared with an HTTP view that scopes by a route capture — e.g.
+`view.kwargs["project_pk"]` behind a tenant/role lookup — would return its
+fallback (usually `None`) over MCP and **mis-scope for every caller**. Register a
+[`UrlKwarg`](reference/registries.md) so the model can supply that route value: it is
+advertised as a tool argument, popped at dispatch, and seeded into the off-HTTP
+`view.kwargs` — from where drf-services spreads it into the dispatch pools
+(authoritative over the spec params, below the `spec.kwargs` provider).
+
+```python
+from rest_framework_mcp import UrlKwarg
+from rest_framework_services import ServiceSpec
+
+
+def scope_by_project(view, request) -> dict:
+    # Over HTTP this reads a URL capture; over MCP it reads the UrlKwarg the
+    # model supplied — same code, both transports.
+    return {"role": role_in_project(request.user, view.kwargs.get("project_pk"))}
+
+
+server.register_service_tool(
+    name="policies.update",
+    spec=ServiceSpec(service=update_policy, kwargs=scope_by_project),
+    url_kwargs=(UrlKwarg("project_pk", type="integer", description="owning project"),),
+)
+```
+
+Because a URL kwarg is popped before the spec sees the arguments, it never counts
+as an unknown argument (the `REJECT` policy ignores it) and never lands in the
+service's validated payload — it routes **only** through `view.kwargs`. A name
+can't collide with a reserved transport key (`ordering` / `page` / `limit`, or the
+`request` / `user` / `data` / `instance` / `serializer` pool seeds); colliding
+with an ordinary spec input is allowed and is the intended way to route a
+route-capture the spec *also* reads directly. Requires
+`djangorestframework-services>=0.26`, which delivers the view `kwargs` into the
+off-HTTP dispatch pools.
+
 ### `SelectorSpec` for resources
 
 `register_resource(selector=...)` requires a

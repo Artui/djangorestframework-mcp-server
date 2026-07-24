@@ -19,6 +19,7 @@ from rest_framework_mcp.handlers.utils import (
     check_permissions,
     consume_rate_limits,
     services_dispatch_policies,
+    split_url_kwargs,
     validation_error_data,
 )
 from rest_framework_mcp.output.error_tool_result import build_error_tool_result
@@ -92,18 +93,21 @@ async def handle_tools_call_async(
                 data={"retryAfter": retry_after},
             )
 
+        # See the sync sibling: URL kwargs route through the view, not the params.
+        spec_params, url_kwarg_values = split_url_kwargs(arguments_raw, binding.url_kwargs)
         offline = build_offline_context(
             context.token.user,
-            arguments_raw,
+            spec_params,
             http_request=context.http_request,
             action=binding.name,
+            kwargs=url_kwarg_values or None,
         )
         argument_binding, unknown_arguments = services_dispatch_policies(binding)
         try:
             result = await adispatch_spec(
                 binding.spec,
                 user=context.token.user,
-                params=arguments_raw,
+                params=spec_params,
                 request=offline.request,
                 view=offline.view,
                 argument_binding=argument_binding,

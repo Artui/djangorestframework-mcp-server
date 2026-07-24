@@ -65,6 +65,7 @@ from rest_framework_mcp.handlers.utils import (
     consume_rate_limits,
     invoke_context_provider,
     services_dispatch_policies,
+    split_url_kwargs,
     validate_input_against_serializer,
     validation_error_data,
 )
@@ -267,6 +268,9 @@ def _selector_tool_additional_known_keys(binding: SelectorToolBinding) -> frozen
     if binding.paginate:
         known.add("page")
         known.add("limit")
+    # Registered URL kwargs are advertised in the inputSchema and popped into
+    # ``view.kwargs`` at dispatch — known, not "unknown", to the arg check.
+    known.update(url_kwarg.name for url_kwarg in binding.url_kwargs)
     return frozenset(known)
 
 
@@ -381,11 +385,17 @@ def _dispatch_kwargs(
 ) -> dict[str, Any]:
     """Keyword args for ``dispatch_spec`` / ``adispatch_spec`` on a selector tool."""
     argument_binding, unknown_arguments = services_dispatch_policies(binding)
+    # URL kwargs route through ``view.kwargs`` (from where drf-services spreads
+    # them, authoritative over params), not the selector's params — so strip them
+    # before building the spread and seed the offline view with their values.
+    spec_params, url_kwarg_values = split_url_kwargs(arguments_raw, binding.url_kwargs)
     return {
         "user": context.token.user,
-        "params": _selector_dispatch_params(arguments_raw, validated),
+        "params": _selector_dispatch_params(spec_params, validated),
         "request": drf_request,
-        "view": OfflineServiceView(request=drf_request, action=binding.name),
+        "view": OfflineServiceView(
+            request=drf_request, action=binding.name, kwargs=url_kwarg_values
+        ),
         "argument_binding": argument_binding,
         "unknown_arguments": unknown_arguments,
     }

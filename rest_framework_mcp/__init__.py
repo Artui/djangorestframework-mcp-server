@@ -37,6 +37,7 @@ from rest_framework_mcp.registry.types.chain_step import ChainStep
 from rest_framework_mcp.registry.types.selector_defaults import SelectorDefaults
 from rest_framework_mcp.registry.types.service_defaults import ServiceDefaults
 from rest_framework_mcp.registry.types.tool_definition import ToolDefinition
+from rest_framework_mcp.registry.types.url_kwarg import UrlKwarg
 from rest_framework_mcp.server.mcp_server import MCPServer
 from rest_framework_mcp.transport.django_cache_session_store import DjangoCacheSessionStore
 from rest_framework_mcp.transport.in_memory_session_store import InMemorySessionStore
@@ -87,6 +88,7 @@ __all__ = [
     "ToolRegistry",
     "UnknownArguments",
     "UpdateService",
+    "UrlKwarg",
     "register_tools",
     "__version__",
 ]

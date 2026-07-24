@@ -22,6 +22,7 @@ from rest_framework_mcp.handlers.utils import (
     check_permissions,
     consume_rate_limits,
     services_dispatch_policies,
+    split_url_kwargs,
     validation_error_data,
 )
 from rest_framework_mcp.output.error_tool_result import build_error_tool_result
@@ -103,18 +104,23 @@ def handle_tools_call(
         # real HTTP request + MCP-supplied arguments, then dispatch through the
         # neutral core. ``enforce_permissions`` is the object-permission hook —
         # it runs ``spec.permission_classes`` against the resolved target.
+        # URL kwargs (a scoping ``spec.kwargs`` provider's ``view.kwargs`` inputs)
+        # route through the view, not the params — stripped from what the spec
+        # validates / spreads, seeded into ``build_offline_context(kwargs=…)``.
+        spec_params, url_kwarg_values = split_url_kwargs(arguments_raw, binding.url_kwargs)
         offline = build_offline_context(
             context.token.user,
-            arguments_raw,
+            spec_params,
             http_request=context.http_request,
             action=binding.name,
+            kwargs=url_kwarg_values or None,
         )
         argument_binding, unknown_arguments = services_dispatch_policies(binding)
         try:
             result = dispatch_spec(
                 binding.spec,
                 user=context.token.user,
-                params=arguments_raw,
+                params=spec_params,
                 request=offline.request,
                 view=offline.view,
                 argument_binding=argument_binding,

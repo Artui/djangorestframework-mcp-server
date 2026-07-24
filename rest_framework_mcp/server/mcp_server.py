@@ -44,6 +44,7 @@ from rest_framework_mcp.registry.types.prompt_binding import PromptBinding
 from rest_framework_mcp.registry.types.resource_binding import ResourceBinding
 from rest_framework_mcp.registry.types.selector_tool_binding import SelectorToolBinding
 from rest_framework_mcp.registry.types.tool_binding import ToolBinding
+from rest_framework_mcp.registry.types.url_kwarg import UrlKwarg
 from rest_framework_mcp.server.utils import check_tool_permissions_declared
 from rest_framework_mcp.transport.async_streamable_http_viewset import (
     ASYNC_STREAMABLE_HTTP_ACTION_MAP,
@@ -209,6 +210,7 @@ class MCPServer:
         unknown_arguments: UnknownArguments = UnknownArguments.REJECT,
         always_listed: bool = False,
         spec_kwargs_provides: tuple[str, ...] = (),
+        url_kwargs: tuple[UrlKwarg, ...] = (),
     ) -> ToolBinding:
         """Register a :class:`ServiceSpec` as an MCP **mutation** tool.
 
@@ -242,6 +244,7 @@ class MCPServer:
             unknown_arguments=unknown_arguments,
             always_listed=always_listed,
             spec_kwargs_provides=spec_kwargs_provides,
+            url_kwargs=tuple(url_kwargs),
         )
         check_tool_permissions_declared(
             binding.name, binding.permissions, require=self._config.require_tool_permissions
@@ -271,6 +274,7 @@ class MCPServer:
         unknown_arguments: UnknownArguments = UnknownArguments.REJECT,
         always_listed: bool = False,
         spec_kwargs_provides: tuple[str, ...] = (),
+        url_kwargs: tuple[UrlKwarg, ...] = (),
     ) -> SelectorToolBinding:
         """Register a :class:`SelectorSpec` as an MCP **read** tool.
 
@@ -330,6 +334,7 @@ class MCPServer:
             unknown_arguments=unknown_arguments,
             always_listed=always_listed,
             spec_kwargs_provides=spec_kwargs_provides,
+            url_kwargs=tuple(url_kwargs),
         )
         check_tool_permissions_declared(
             binding.name, binding.permissions, require=self._config.require_tool_permissions
@@ -694,6 +699,7 @@ class MCPServer:
         unknown_arguments: UnknownArguments = UnknownArguments.REJECT,
         always_listed: bool = False,
         spec_kwargs_provides: tuple[str, ...] = (),
+        url_kwargs: tuple[UrlKwarg, ...] = (),
     ) -> Callable[[Callable[..., Any]], Callable[..., Any]]:
         """Decorator form of :meth:`register_service_tool`.
 
@@ -737,6 +743,7 @@ class MCPServer:
                 unknown_arguments=unknown_arguments,
                 always_listed=always_listed,
                 spec_kwargs_provides=spec_kwargs_provides,
+                url_kwargs=url_kwargs,
             )
             return fn
 
@@ -764,6 +771,7 @@ class MCPServer:
         unknown_arguments: UnknownArguments = UnknownArguments.REJECT,
         always_listed: bool = False,
         spec_kwargs_provides: tuple[str, ...] = (),
+        url_kwargs: tuple[UrlKwarg, ...] = (),
     ) -> Callable[[Callable[..., Any]], Callable[..., Any]]:
         """Decorator form of :meth:`register_selector_tool`.
 
@@ -814,6 +822,7 @@ class MCPServer:
                 unknown_arguments=unknown_arguments,
                 always_listed=always_listed,
                 spec_kwargs_provides=spec_kwargs_provides,
+                url_kwargs=url_kwargs,
             )
             return fn
 

@@ -8,6 +8,7 @@ from django.core.exceptions import ImproperlyConfigured
 from rest_framework_services.types.service_spec import ServiceSpec
 
 from rest_framework_mcp.constants import ArgumentBinding, OutputFormat, UnknownArguments
+from rest_framework_mcp.registry.types.url_kwarg import UrlKwarg
 
 InputT = TypeVar("InputT")
 ResultT = TypeVar("ResultT")
@@ -80,6 +81,13 @@ class ToolBinding(Generic[InputT, ResultT, ExtraT]):
     # back into the listing — useful as a discovery aid for admin tools
     # the caller can see but not invoke (``tools/call`` still 403s).
     always_listed: bool = False
+    # URL-derived values the model supplies as tool args, seeded into the
+    # off-HTTP view's ``kwargs`` (from where drf-services spreads them into the
+    # dispatch pools — e.g. a scoping ``spec.kwargs`` provider reading
+    # ``view.kwargs``) rather than reaching the service as ordinary params. See
+    # :class:`UrlKwarg`. Advertised in the ``inputSchema`` and stripped from the
+    # dispatched params.
+    url_kwargs: tuple[UrlKwarg, ...] = ()
 
     def __post_init__(self) -> None:
         if self.include_output_schema is True and self.include_structured_content is False:

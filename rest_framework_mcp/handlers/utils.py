@@ -22,10 +22,40 @@ from rest_framework_mcp.constants import (
 )
 from rest_framework_mcp.registry.types.chain_tool_binding import ChainToolBinding
 from rest_framework_mcp.registry.types.selector_tool_binding import SelectorToolBinding
+from rest_framework_mcp.registry.types.url_kwarg import UrlKwarg
 
 _SPREAD_BINDINGS = frozenset(
     {ArgumentBinding.SPREAD_AUTHOR_WINS, ArgumentBinding.SPREAD_CALLER_WINS}
 )
+
+
+def split_url_kwargs(
+    arguments: dict[str, Any], url_kwargs: tuple[UrlKwarg, ...]
+) -> tuple[dict[str, Any], dict[str, Any]]:
+    """Split ``arguments`` into ``(params, url_kwarg_values)``.
+
+    ``url_kwarg_values`` carries each declared :class:`UrlKwarg`'s value — the one
+    the model supplied, else its ``default`` when set, else absent — to seed into
+    ``build_offline_context(kwargs=…)`` / ``OfflineServiceView.kwargs``. ``params``
+    is ``arguments`` with the URL-kwarg names removed, so a value routes **only**
+    through the view kwargs (from where drf-services spreads it, authoritative
+    over params) and never reaches the spec as an ordinary input.
+
+    Non-mutating. When ``url_kwargs`` is empty the original ``arguments`` dict is
+    returned as ``params`` unchanged (no copy), preserving the pre-feature
+    behaviour exactly.
+    """
+    if not url_kwargs:
+        return arguments, {}
+    names = {uk.name for uk in url_kwargs}
+    values: dict[str, Any] = {}
+    for url_kwarg in url_kwargs:
+        if url_kwarg.name in arguments:
+            values[url_kwarg.name] = arguments[url_kwarg.name]
+        elif url_kwarg.default is not None:
+            values[url_kwarg.name] = url_kwarg.default
+    params = {key: value for key, value in arguments.items() if key not in names}
+    return params, values
 
 
 def binding_input_serializer(binding: Any) -> type | None:
@@ -318,6 +348,7 @@ __all__ = [
     "consume_rate_limits",
     "invoke_context_provider",
     "services_dispatch_policies",
+    "split_url_kwargs",
     "validate_input_against_serializer",
     "validation_error_data",
 ]
