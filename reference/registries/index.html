@@ -1196,6 +1196,34 @@
 </li>
       
         <li class="md-nav__item">
+  <a href="#rest_framework_mcp.registry.types.url_kwarg.UrlKwarg" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        UrlKwarg
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="UrlKwarg">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#rest_framework_mcp.registry.types.url_kwarg.UrlKwarg.json_schema" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        json_schema
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
   <a href="#rest_framework_mcp.registry.tool_registry.ToolRegistry" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -1769,6 +1797,34 @@
     <span class="md-ellipsis">
       
         filter_set
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#rest_framework_mcp.registry.types.url_kwarg.UrlKwarg" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        UrlKwarg
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="UrlKwarg">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#rest_framework_mcp.registry.types.url_kwarg.UrlKwarg.json_schema" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        json_schema
       
     </span>
   </a>
@@ -2458,6 +2514,102 @@ import here.</p>
 
 
 
+<h2 id="rest_framework_mcp.registry.types.url_kwarg.UrlKwarg" class="doc doc-heading">
+            <span class="doc doc-object-name doc-class-name">UrlKwarg</span>
+
+
+  <span class="doc doc-labels">
+      <small class="doc doc-label doc-label-dataclass"><code>dataclass</code></small>
+  </span>
+
+<a href="#rest_framework_mcp.registry.types.url_kwarg.UrlKwarg" class="headerlink" title="Permanent link">&para;</a></h2>
+
+
+    <div class="doc doc-contents first">
+
+
+
+        <p>A URL-derived value a tool advertises and seeds into the off-HTTP view <code>kwargs</code>.</p>
+<p>The MCP counterpart of a nested route's URL captures (the <code>project_pk</code> of
+<code>/projects/{project_pk}/widgets/</code>). Over HTTP such a value comes from the
+route and reaches a spec through <code>view.kwargs</code> — directly, or through a
+<code>spec.kwargs</code> provider that scopes by it (a tenant/role lookup). Over MCP
+there is no route, so the model supplies it as a tool argument: the tool
+advertises it in its <code>inputSchema</code>, the dispatcher pops it out of the
+arguments and seeds it into <code>build_offline_context(kwargs=…)</code> /
+<code>OfflineServiceView.kwargs</code>, and drf-services spreads it into the selector /
+target pools (authoritative over the spec params, below a <code>spec.kwargs</code>
+provider). It never reaches the spec as an ordinary input, so the
+unknown-argument policy never flags it.</p>
+<p>Reach for a <code>UrlKwarg</code> when the value is a URL-derived input a spec depends
+on that is <strong>not</strong> an ordinary tool argument — most commonly a scoping
+<code>spec.kwargs</code> provider that reads <code>view.kwargs</code> (over MCP that mapping is
+otherwise empty, so the provider mis-scopes for every caller).</p>
+<ul>
+<li><code>name</code> — the tool-argument / view-kwarg key. Must not collide with a
+  reserved transport key (<code>ordering</code> / <code>page</code> / <code>limit</code> pagination knobs,
+  or the <code>request</code> / <code>user</code> / <code>data</code> / <code>instance</code> / <code>serializer</code> pool
+  seeds).</li>
+<li><code>type</code> — the JSON-Schema type advertised to the model (<code>"string"</code> by
+  default; <code>"integer"</code> / <code>"number"</code> / <code>"boolean"</code> …).</li>
+<li><code>description</code> — optional help text shown to the model.</li>
+<li><code>default</code> — optional value seeded when the model omits the argument; also
+  surfaced as the schema <code>default</code>.</li>
+</ul>
+
+
+
+
+
+
+
+
+
+
+
+<div class="doc doc-children">
+
+
+
+
+
+
+
+
+
+
+<div class="doc doc-object doc-function">
+
+
+<h3 id="rest_framework_mcp.registry.types.url_kwarg.UrlKwarg.json_schema" class="doc doc-heading">
+            <span class="doc doc-object-name doc-function-name">json_schema</span>
+
+
+<a href="#rest_framework_mcp.registry.types.url_kwarg.UrlKwarg.json_schema" class="headerlink" title="Permanent link">&para;</a></h3>
+<div class="language-python doc-signature highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="nf">json_schema</span><span class="p">()</span> <span class="o">-&gt;</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]</span>
+</span></code></pre></div>
+
+    <div class="doc doc-contents ">
+
+        <p>The JSON-Schema property this kwarg contributes to a tool's <code>inputSchema</code>.</p>
+
+
+    </div>
+
+</div>
+
+
+
+  </div>
+
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-class">
+
+
+
 <h2 id="rest_framework_mcp.registry.tool_registry.ToolRegistry" class="doc doc-heading">
             <span class="doc doc-object-name doc-class-name">ToolRegistry</span>
 
@@ -2863,7 +3015,8 @@ default if neither is set.</p>
 </span><span id="__span-0-16"><a id="__codelineno-0-16" name="__codelineno-0-16" href="#__codelineno-0-16"></a>    <span class="n">unknown_arguments</span><span class="p">:</span> <span class="n">UnknownArguments</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
 </span><span id="__span-0-17"><a id="__codelineno-0-17" name="__codelineno-0-17" href="#__codelineno-0-17"></a>    <span class="n">always_listed</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
 </span><span id="__span-0-18"><a id="__codelineno-0-18" name="__codelineno-0-18" href="#__codelineno-0-18"></a>    <span class="n">spec_kwargs_provides</span><span class="p">:</span> <span class="n">Sequence</span><span class="p">[</span><span class="nb">str</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
-</span><span id="__span-0-19"><a id="__codelineno-0-19" name="__codelineno-0-19" href="#__codelineno-0-19"></a><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">ToolDefinition</span>
+</span><span id="__span-0-19"><a id="__codelineno-0-19" name="__codelineno-0-19" href="#__codelineno-0-19"></a>    <span class="n">url_kwargs</span><span class="p">:</span> <span class="n">Sequence</span><span class="p">[</span><span class="n">UrlKwarg</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+</span><span id="__span-0-20"><a id="__codelineno-0-20" name="__codelineno-0-20" href="#__codelineno-0-20"></a><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">ToolDefinition</span>
 </span></code></pre></div>
 
     <div class="doc doc-contents ">
@@ -2908,7 +3061,8 @@ default if neither is set.</p>
 </span><span id="__span-0-19"><a id="__codelineno-0-19" name="__codelineno-0-19" href="#__codelineno-0-19"></a>    <span class="n">unknown_arguments</span><span class="p">:</span> <span class="n">UnknownArguments</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
 </span><span id="__span-0-20"><a id="__codelineno-0-20" name="__codelineno-0-20" href="#__codelineno-0-20"></a>    <span class="n">always_listed</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
 </span><span id="__span-0-21"><a id="__codelineno-0-21" name="__codelineno-0-21" href="#__codelineno-0-21"></a>    <span class="n">spec_kwargs_provides</span><span class="p">:</span> <span class="n">Sequence</span><span class="p">[</span><span class="nb">str</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
-</span><span id="__span-0-22"><a id="__codelineno-0-22" name="__codelineno-0-22" href="#__codelineno-0-22"></a><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">ToolDefinition</span>
+</span><span id="__span-0-22"><a id="__codelineno-0-22" name="__codelineno-0-22" href="#__codelineno-0-22"></a>    <span class="n">url_kwargs</span><span class="p">:</span> <span class="n">Sequence</span><span class="p">[</span><span class="n">UrlKwarg</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+</span><span id="__span-0-23"><a id="__codelineno-0-23" name="__codelineno-0-23" href="#__codelineno-0-23"></a><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">ToolDefinition</span>
 </span></code></pre></div>
 
     <div class="doc doc-contents ">
