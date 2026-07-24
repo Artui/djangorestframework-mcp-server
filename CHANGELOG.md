@@ -7,6 +7,27 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- **Selector tool `inputSchema` now reflects the selector's own signature.**
+  `build_selector_tool_input_schema` folds in drf-services'
+  `spec_to_json_schema` (0.26) — the *same* reflection the Pydantic-AI
+  `SpecToolset` consumes — so a selector's declared parameters and an
+  `**extras: Unpack[TypedDict]` (each key one property, the TypedDict's required
+  keys marked required, the `request` / `user` / `view` seeds skipped) are
+  advertised over MCP. Previously only an explicit `input_serializer`,
+  `filter_set`, or `UrlKwarg` surfaced a selector argument, so a scoping value a
+  selector read from its `extras` (a nested route's `parent_pk`) was invisible
+  to the model over MCP even though it already reached PAI tool schemas — the
+  two transports now advertise the same shape. The reflected keys are also added
+  to the selector-tool unknown-argument "known" set, so a closed selector
+  (`input_serializer` under `REJECT`) accepts them instead of flagging them as
+  unknown — no more advertised-but-rejected argument. Explicit sources still win
+  on a name collision: an `input_serializer` field or a registered `UrlKwarg`
+  overrides a reflected key of the same name. An explicit `UrlKwarg` is still
+  required only for a value that never appears in the selector signature — one a
+  scoping `spec.kwargs` provider reads off `view.kwargs`.
+
 ## [0.13.0] — 2026-07-24
 
 ### Added

@@ -43,11 +43,14 @@ these dispatch policies); import them from `rest_framework_mcp.constants`.
 ## Selector-tool schema
 
 Builds the merged `inputSchema` for selector tools — exposed for projects
-that want to introspect filter / ordering / pagination property generation
-outside of the registration flow. The FilterSet → JSON-Schema mapping is
-delegated to `djangorestframework-services`'
-[`filterset_to_json_schema`](https://github.com/Artui/djangorestframework-services),
-so the filterable shape is described the same way across transports.
+that want to introspect property generation outside of the registration flow.
+The selector's own signature (its declared parameters and an `**extras:
+Unpack[TypedDict]`, plus the FilterSet fields) is reflected via
+`djangorestframework-services`'
+[`spec_to_json_schema`](https://github.com/Artui/djangorestframework-services)
+— the same reflection the Pydantic-AI toolset consumes — with ordering /
+pagination knobs and any explicit `input_serializer` / `UrlKwarg` layered on
+top, so the shape is described the same way across transports.
 
 ::: rest_framework_mcp.schema.selector_tool_schema.build_selector_tool_input_schema
 
