@@ -13,9 +13,9 @@ from rest_framework_mcp.protocol.types.tool import Tool
 from rest_framework_mcp.registry.types.chain_tool_binding import ChainToolBinding
 from rest_framework_mcp.registry.types.selector_tool_binding import SelectorToolBinding
 from rest_framework_mcp.schema.chain_tool_schema import build_chain_tool_input_schema
-from rest_framework_mcp.schema.input_schema import build_input_schema
 from rest_framework_mcp.schema.output_schema import build_output_schema
 from rest_framework_mcp.schema.selector_tool_schema import build_selector_tool_input_schema
+from rest_framework_mcp.schema.service_tool_schema import build_service_tool_input_schema
 
 
 def handle_tools_list(
@@ -60,12 +60,9 @@ def handle_tools_list(
         elif isinstance(binding, SelectorToolBinding):
             input_schema = build_selector_tool_input_schema(binding)
         else:
-            # ``spec.partial is True`` (sister-repo 0.16) relaxes validation
-            # to partial, so the advertised schema must drop ``required``.
-            input_schema = build_input_schema(
-                binding.spec.input_serializer,
-                partial=binding.spec.partial is True,
-            )
+            # ``spec.partial is True`` (sister-repo 0.16) relaxes validation to
+            # partial, dropping ``required``; any registered URL kwargs merge in.
+            input_schema = build_service_tool_input_schema(binding)
         # Stamp ``additionalProperties`` to match what the runtime actually
         # enforces. A closed schema (``false``) is advertised only when the
         # dispatch path really rejects unknown keys — ``REJECT`` *and* a

@@ -9,6 +9,7 @@ from rest_framework_services.types.selector_kind import SelectorKind
 from rest_framework_services.types.selector_spec import SelectorSpec
 
 from rest_framework_mcp.constants import ArgumentBinding, OutputFormat, UnknownArguments
+from rest_framework_mcp.registry.types.url_kwarg import UrlKwarg
 
 ResultT = TypeVar("ResultT")
 ExtraT = TypeVar("ExtraT", bound=dict[str, Any])
@@ -112,6 +113,12 @@ class SelectorToolBinding(Generic[ResultT, ExtraT]):
     # See ``ToolBinding.always_listed`` — same opt-back-in semantics for
     # selector tools when ``FILTER_LISTINGS_BY_PERMISSIONS`` is enabled.
     always_listed: bool = False
+    # URL-derived values the model supplies as tool args, seeded into the
+    # off-HTTP view's ``kwargs`` (from where drf-services spreads them into the
+    # selector / target pools) rather than reaching the selector as ordinary
+    # params. See :class:`UrlKwarg`. Advertised in the ``inputSchema``, exempt
+    # from the unknown-argument check, and stripped from the dispatched params.
+    url_kwargs: tuple[UrlKwarg, ...] = ()
 
     def __post_init__(self) -> None:
         if self.include_output_schema is True and self.include_structured_content is False:

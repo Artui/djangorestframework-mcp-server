@@ -7,6 +7,37 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- **`UrlKwarg` — expose a URL route capture as a tool argument.** The MCP
+  counterpart of a nested route's URL captures (the `project_pk` of
+  `/projects/{project_pk}/widgets/`). Register them on a service or selector tool
+  — `register_service_tool(url_kwargs=…)` / `register_selector_tool(…)`, the
+  `@service_tool` / `@selector_tool` decorators, or a declarative
+  `ToolDefinition`. Each is advertised in the tool's `inputSchema`, popped from
+  the arguments at dispatch, and seeded into `build_offline_context(kwargs=…)` /
+  `OfflineServiceView.kwargs` — from where drf-services spreads it into the
+  selector / target pools (authoritative over the spec params, below a
+  `spec.kwargs` provider). Because it is popped, it never reaches the spec as an
+  ordinary input, so the unknown-argument policy never flags it. Its headline use
+  is a scoping `spec.kwargs` provider that reads `view.kwargs`: over MCP that
+  mapping was always empty, so such a provider mis-scoped (returned its fallback)
+  for every caller — a `UrlKwarg` is how the model-supplied route value reaches
+  it. A name cannot collide with a reserved transport key (`ordering` / `page` /
+  `limit` pagination knobs or the `request` / `user` / `data` / `instance` /
+  `serializer` pool seeds) or be declared twice; colliding with an ordinary spec
+  input is *allowed* and is the intended way to route a route-capture the spec
+  also reads (the value flows through `view.kwargs`, drf-services spreads it
+  authoritatively). Works on both the JSON-RPC transport (sync + async) and the
+  in-process `MCPServer.call_tool` surface.
+
+### Changed
+
+- **Raise the `djangorestframework-services` floor from `>=0.24.1` to `>=0.26`**
+  (ceiling `<0.26` → `<0.27`). `UrlKwarg` relies on drf-services 0.26 spreading
+  the off-HTTP view's `kwargs` into the dispatch pools. Tested ceiling raised to
+  0.26.x.
+
 ## [0.12.0] — 2026-07-17
 
 Configuration is now **per-server**: everything that identifies or configures a

@@ -7,10 +7,12 @@ from rest_framework_services.types.service_spec import ServiceSpec
 from rest_framework_mcp.adapters.utils import (
     merge_tool_annotations,
     validate_input_serializer_against_callable,
+    validate_url_kwargs,
 )
 from rest_framework_mcp.auth.permissions.wrap_spec_permissions import wrap_spec_permissions
 from rest_framework_mcp.constants import ArgumentBinding, OutputFormat, UnknownArguments
 from rest_framework_mcp.registry.types.tool_binding import ToolBinding
+from rest_framework_mcp.registry.types.url_kwarg import UrlKwarg
 
 
 def service_spec_to_tool(
@@ -31,6 +33,7 @@ def service_spec_to_tool(
     unknown_arguments: UnknownArguments = UnknownArguments.REJECT,
     always_listed: bool = False,
     spec_kwargs_provides: tuple[str, ...] = (),
+    url_kwargs: tuple[UrlKwarg, ...] = (),
 ) -> ToolBinding:
     """Lift a ``ServiceSpec`` into a :class:`ToolBinding`.
 
@@ -59,6 +62,7 @@ def service_spec_to_tool(
             and spec.collection_selector_spec.selector is not None
         ),
     )
+    validate_url_kwargs(label=f"service tool {name!r}", url_kwargs=url_kwargs)
     spec_perms: tuple[Any, ...] = wrap_spec_permissions(spec.permission_classes, label=name)
     effective_perms: tuple[Any, ...] = spec_perms + tuple(permissions)
     return ToolBinding(
@@ -77,6 +81,7 @@ def service_spec_to_tool(
         argument_binding=argument_binding,
         unknown_arguments=unknown_arguments,
         always_listed=always_listed,
+        url_kwargs=url_kwargs,
     )
 
 

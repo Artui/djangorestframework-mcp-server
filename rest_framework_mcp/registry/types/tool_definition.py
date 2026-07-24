@@ -13,6 +13,7 @@ from rest_framework_mcp.constants import (
     ToolKind,
     UnknownArguments,
 )
+from rest_framework_mcp.registry.types.url_kwarg import UrlKwarg
 
 
 @dataclass(frozen=True)
@@ -77,6 +78,10 @@ class ToolDefinition:
     # a sequence to acknowledge that the provider is the static source
     # for those names.
     spec_kwargs_provides: Sequence[str] | None = None
+    # URL-derived values the model supplies as tool args, seeded into the
+    # off-HTTP ``view.kwargs`` at dispatch (see :class:`UrlKwarg`). ``None``
+    # means "use the registration default" (no URL kwargs).
+    url_kwargs: Sequence[UrlKwarg] | None = None
 
     @classmethod
     def service(
@@ -98,6 +103,7 @@ class ToolDefinition:
         unknown_arguments: UnknownArguments | None = None,
         always_listed: bool | None = None,
         spec_kwargs_provides: Sequence[str] | None = None,
+        url_kwargs: Sequence[UrlKwarg] | None = None,
     ) -> ToolDefinition:
         """Typed entry point for service-tool definitions."""
         return cls(
@@ -118,6 +124,7 @@ class ToolDefinition:
             unknown_arguments=unknown_arguments,
             always_listed=always_listed,
             spec_kwargs_provides=spec_kwargs_provides,
+            url_kwargs=url_kwargs,
         )
 
     @classmethod
@@ -143,6 +150,7 @@ class ToolDefinition:
         unknown_arguments: UnknownArguments | None = None,
         always_listed: bool | None = None,
         spec_kwargs_provides: Sequence[str] | None = None,
+        url_kwargs: Sequence[UrlKwarg] | None = None,
     ) -> ToolDefinition:
         """Typed entry point for selector-tool definitions.
 
@@ -172,6 +180,7 @@ class ToolDefinition:
             unknown_arguments=unknown_arguments,
             always_listed=always_listed,
             spec_kwargs_provides=spec_kwargs_provides,
+            url_kwargs=url_kwargs,
         )
 
 

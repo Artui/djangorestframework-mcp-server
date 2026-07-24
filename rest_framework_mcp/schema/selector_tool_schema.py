@@ -47,6 +47,11 @@ def build_selector_tool_input_schema(binding: SelectorToolBinding) -> dict[str, 
         properties["page"] = {"type": "integer", "minimum": 1}
         properties["limit"] = {"type": "integer", "minimum": 1}
 
+    for url_kwarg in binding.url_kwargs:
+        # URL-derived args — model-supplied, seeded into ``view.kwargs`` at
+        # dispatch (never a selector param). Optional, like filter args.
+        properties[url_kwarg.name] = url_kwarg.json_schema()
+
     out: dict[str, Any] = {"type": "object", "properties": properties}
     if required:
         out["required"] = required

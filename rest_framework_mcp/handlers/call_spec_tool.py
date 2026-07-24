@@ -36,7 +36,11 @@ from rest_framework_services.exceptions.service_error import ServiceError
 from rest_framework_services.exceptions.service_validation_error import ServiceValidationError
 
 from rest_framework_mcp.config.types.mcp_config import MCPConfig
-from rest_framework_mcp.handlers.utils import services_dispatch_policies, validation_error_data
+from rest_framework_mcp.handlers.utils import (
+    services_dispatch_policies,
+    split_url_kwargs,
+    validation_error_data,
+)
 from rest_framework_mcp.output.error_tool_result import build_error_tool_result
 from rest_framework_mcp.output.resolve_structured_output import resolve_structured_output
 from rest_framework_mcp.output.tool_result import build_tool_result
@@ -75,7 +79,16 @@ def call_spec_tool(
             "over the HTTP / JSON-RPC transport instead."
         )
     spec = binding.spec
-    context = build_offline_context(user, arguments, http_request=request, action=binding.name)
+    # URL kwargs route through the view (a scoping ``spec.kwargs`` provider's
+    # ``view.kwargs`` inputs), not the spec params — see :class:`UrlKwarg`.
+    spec_params, url_kwarg_values = split_url_kwargs(arguments, binding.url_kwargs)
+    context = build_offline_context(
+        user,
+        spec_params,
+        http_request=request,
+        action=binding.name,
+        kwargs=url_kwarg_values or None,
+    )
     # Class-level ``permission_classes``, enforced upfront and unconditionally.
     # ``dispatch_spec`` never consults ``permission_classes`` (authz is the
     # caller's job), and the ``on_target_resolved`` hook only adds *object-level*
@@ -89,7 +102,7 @@ def call_spec_tool(
         result = dispatch_spec(
             spec,
             user=user,
-            params=arguments,
+            params=spec_params,
             request=context.request,
             view=context.view,
             argument_binding=argument_binding,

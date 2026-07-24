@@ -28,6 +28,31 @@ from rest_framework_mcp.constants import (
     RESERVED_POST_FETCH_KEYS,
     ArgumentBinding,
 )
+from rest_framework_mcp.registry.types.url_kwarg import UrlKwarg
+
+
+def validate_url_kwargs(*, label: str, url_kwargs: tuple[UrlKwarg, ...]) -> None:
+    """Fail-fast at registration time on a bad ``url_kwargs`` declaration.
+
+    A URL kwarg is popped into the off-HTTP ``view.kwargs`` and stripped from the
+    spec params, so its name must not collide with a reserved transport key —
+    the post-fetch pagination knobs (``ordering`` / ``page`` / ``limit``) or the
+    pool seeds (``request`` / ``user`` / ``data`` / ``instance`` / ``serializer``)
+    — nor be declared twice. Colliding with an ordinary spec input is *allowed*:
+    that is the intended way to route a route-capture the spec also reads (the
+    value flows through ``view.kwargs``, drf-services spreads it authoritatively).
+    """
+    names = [url_kwarg.name for url_kwarg in url_kwargs]
+    reserved = sorted(set(names) & (RESERVED_POOL_SEEDS | RESERVED_POST_FETCH_KEYS))
+    if reserved:
+        raise ImproperlyConfigured(
+            f"{label}: url_kwargs name(s) {reserved} collide with reserved transport "
+            "keys (pagination ordering/page/limit or pool seeds "
+            "request/user/data/instance/serializer). Rename them."
+        )
+    duplicates = sorted({name for name in names if names.count(name) > 1})
+    if duplicates:
+        raise ImproperlyConfigured(f"{label}: duplicate url_kwargs name(s) {duplicates}.")
 
 
 def validate_input_serializer_against_callable(
@@ -319,4 +344,8 @@ def _serializer_field_names(input_serializer: type) -> Iterable[str]:
     return ()
 
 
-__all__ = ["merge_tool_annotations", "validate_input_serializer_against_callable"]
+__all__ = [
+    "merge_tool_annotations",
+    "validate_input_serializer_against_callable",
+    "validate_url_kwargs",
+]
