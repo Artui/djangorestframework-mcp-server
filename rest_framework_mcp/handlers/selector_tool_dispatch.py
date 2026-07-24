@@ -44,8 +44,8 @@ from rest_framework_services import (
     adispatch_spec,
     build_offline_context,
     dispatch_spec,
-    filterset_to_json_schema,
     is_queryset,
+    spec_to_json_schema,
 )
 from rest_framework_services.exceptions.service_error import ServiceError
 from rest_framework_services.exceptions.service_validation_error import ServiceValidationError
@@ -246,23 +246,23 @@ def _build_request_and_validate(
 def _selector_tool_additional_known_keys(binding: SelectorToolBinding) -> frozenset[str]:
     """Compute the keys a selector tool's pipeline knobs claim from ``arguments``.
 
-    The post-fetch pipeline (filter / order / paginate) reads its inputs
-    directly from ``arguments`` rather than going through
-    ``input_serializer``. Surfacing them here lets the unknown-argument
-    policy treat them as "known" without forcing every selector binding to
-    restate them on its serializer. Filter-set property names come from
-    ``rest_framework_services.filterset_to_json_schema`` so an arbitrary
-    ``django-filter`` shape is supported.
+    The reflected selector shape (callable parameters, an ``**extras:
+    Unpack[TypedDict]`` expanded per key, and the ``filter_set`` fields) and
+    the post-fetch pipeline knobs (order / paginate) read their inputs directly
+    from ``arguments`` rather than going through ``input_serializer``. Surfacing
+    them here lets the unknown-argument policy treat them as "known" without
+    forcing every selector binding to restate them on its serializer. The
+    reflected names come from the *same* ``spec_to_json_schema`` call that drives
+    ``build_selector_tool_input_schema``, so the validation-side known set and
+    the wire-side advertised schema never drift.
 
     Returns a ``frozenset`` for cheap union with the serializer's
     declared fields.
     """
     known: set[str] = set()
-    if binding.filter_set is not None:
-        # Same helper that drives ``inputSchema`` generation, so the
-        # validation-side known set and the wire-side advertised schema
-        # never drift.
-        known.update(filterset_to_json_schema(binding.filter_set).keys())
+    # ``phase="input"`` never returns ``None``; ``or {}`` only narrows the type.
+    reflected: dict[str, Any] = spec_to_json_schema(binding.spec, phase="input") or {}
+    known.update(reflected.get("properties", {}).keys())
     if binding.ordering_fields:
         known.add("ordering")
     if binding.paginate:
