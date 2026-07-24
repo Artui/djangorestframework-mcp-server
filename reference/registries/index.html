@@ -3420,11 +3420,14 @@ naming an argument after one of them.</p>
 
 </div><h2 id="selector-tool-schema">Selector-tool schema<a class="headerlink" href="#selector-tool-schema" title="Permanent link">&para;</a></h2>
 <p>Builds the merged <code>inputSchema</code> for selector tools — exposed for projects
-that want to introspect filter / ordering / pagination property generation
-outside of the registration flow. The FilterSet → JSON-Schema mapping is
-delegated to <code>djangorestframework-services</code>'
-<a href="https://github.com/Artui/djangorestframework-services"><code>filterset_to_json_schema</code></a>,
-so the filterable shape is described the same way across transports.</p>
+that want to introspect property generation outside of the registration flow.
+The selector's own signature (its declared parameters and an <code>**extras:
+Unpack[TypedDict]</code>, plus the FilterSet fields) is reflected via
+<code>djangorestframework-services</code>'
+<a href="https://github.com/Artui/djangorestframework-services"><code>spec_to_json_schema</code></a>
+— the same reflection the Pydantic-AI toolset consumes — with ordering /
+pagination knobs and any explicit <code>input_serializer</code> / <code>UrlKwarg</code> layered on
+top, so the shape is described the same way across transports.</p>
 
 
 <div class="doc doc-object doc-function">
@@ -3441,18 +3444,30 @@ so the filterable shape is described the same way across transports.</p>
     <div class="doc doc-contents first">
 
         <p>Build the JSON Schema for a selector tool's <code>inputSchema</code>.</p>
-<p>Merges four sources, in order of precedence (later sources override
+<p>Merges five sources, in order of precedence (later sources override
 earlier ones on key collision):</p>
 <ol>
-<li><strong><code>spec.input_serializer</code></strong> — any explicit input shape declared
-   by the consumer (e.g. for tool-specific args that aren't filter
-   params). All required-marked fields stay required.</li>
-<li><strong><code>filter_set</code></strong> — properties derived from
-   <code>django-filter</code> filter declarations. All optional.</li>
+<li><strong>Reflected <code>spec</code> shape</strong> — the selector callable's own parameters
+   (an <code>**extras: Unpack[TypedDict]</code> expanded into one property per key,
+   the TypedDict's required keys populating <code>required</code>, the
+   <code>request</code> / <code>user</code> / <code>view</code> transport seeds skipped) plus the
+   <code>filter_set</code> fields — via drf-services' :func:<code>spec_to_json_schema</code>,
+   the <em>same</em> reflection the Pydantic-AI <code>SpecToolset</code> consumes, so both
+   transports advertise the same shape. This is what makes a URL kwarg a
+   selector reads from its <code>extras</code> (a nested route's <code>parent_pk</code>)
+   discoverable over MCP without an explicit <code>UrlKwarg</code>.</li>
+<li><strong><code>spec.input_serializer</code></strong> — any explicit input shape declared by the
+   consumer (tool-specific args that aren't reflected selector params). A
+   <code>SelectorSpec</code> carries no input serializer, so this is MCP-only; its
+   curated fields win over a reflected param of the same name, and all
+   required-marked fields stay required.</li>
 <li><strong><code>ordering_fields</code></strong> — adds an <code>ordering</code> property as an enum
    of <code>"&lt;field&gt;"</code> and <code>"-&lt;field&gt;"</code> values. Optional.</li>
 <li><strong><code>paginate=True</code></strong> — adds optional <code>page</code> (positive integer)
    and <code>limit</code> (positive integer) properties.</li>
+<li><strong><code>url_kwargs</code></strong> — each registered :class:<code>UrlKwarg</code>'s advertised
+   schema; wins over a reflected key of the same name (it is the
+   intentional, authoritative declaration).</li>
 </ol>
 <p>The final schema is always an object with <code>"type": "object"</code>,
 <code>"properties": {...}</code>, and <code>"required": [...]</code> only when at
