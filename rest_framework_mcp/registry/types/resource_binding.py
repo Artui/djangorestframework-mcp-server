@@ -50,6 +50,10 @@ class ResourceBinding(Generic[ResultT]):
     permissions: tuple[Any, ...] = ()
     rate_limits: tuple[Any, ...] = ()
     annotations: dict[str, Any] = field(default_factory=dict)
+    # See ``ToolBinding.meta`` — free-form ``_meta`` bundle for this
+    # resource's ``resources/list`` (or ``resources/templates/list``) entry
+    # and for the ``contents`` block ``resources/read`` returns.
+    meta: dict[str, Any] = field(default_factory=dict)
     title: str | None = None
     # The signature is intentionally loose — ``Callable[..., Any]`` rather
     # than ``Callable[[ServiceView, Request], dict]`` — so providers typed

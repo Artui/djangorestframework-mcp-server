@@ -4,7 +4,7 @@ from typing import Any
 
 from rest_framework_services.types.selector_spec import SelectorSpec
 
-from rest_framework_mcp.adapters.utils import merge_tool_annotations
+from rest_framework_mcp.adapters.utils import merge_meta, merge_tool_annotations
 from rest_framework_mcp.auth.permissions.wrap_spec_permissions import wrap_spec_permissions
 from rest_framework_mcp.constants import OutputFormat, UnknownArguments
 from rest_framework_mcp.registry.types.chain_step import ChainStep
@@ -27,6 +27,7 @@ def chain_steps_to_tool(
     permissions: tuple[Any, ...] = (),
     rate_limits: tuple[Any, ...] = (),
     annotations: dict[str, Any] | None = None,
+    meta: dict[str, Any] | None = None,
     include_structured_content: bool | None = None,
     include_output_schema: bool | None = None,
     unknown_arguments: UnknownArguments = UnknownArguments.REJECT,
@@ -44,6 +45,9 @@ def chain_steps_to_tool(
     chain" semantics — without running any step. Structural validation
     (non-empty, unique aliases, known ``output_alias``, spec types) happens
     in :meth:`ChainToolBinding.__post_init__`.
+
+    ``meta`` is the base-protocol ``_meta`` bundle the tool's ``tools/list``
+    entry carries — see :func:`service_spec_to_tool`.
     """
     step_perms: tuple[Any, ...] = ()
     for step in steps:
@@ -69,6 +73,7 @@ def chain_steps_to_tool(
         permissions=effective_perms,
         rate_limits=rate_limits,
         annotations=merge_tool_annotations(annotations, read_only=read_only),
+        meta=merge_meta(meta),
         include_structured_content=include_structured_content,
         include_output_schema=include_output_schema,
         unknown_arguments=unknown_arguments,

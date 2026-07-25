@@ -261,6 +261,38 @@ server.register_service_tool(
 The merged bundle lands on `binding.annotations` and on the `tools/list`
 wire payload.
 
+### Generic `_meta`
+
+Separate from `annotations` — which is a closed, spec-defined set of
+client hints — the base protocol gives most wire objects a free-form
+`_meta` object. It is the extension namespace: each protocol extension
+owns a top-level key inside it, and a server may add its own.
+
+Pass `meta=` at any registration surface (`register_service_tool`,
+`register_selector_tool`, `register_chain_tool`, `register_resource`,
+`register_prompt`, the matching decorators, or a `ToolDefinition` /
+`SelectorDefaults` / `ServiceDefaults`):
+
+```python
+server.register_selector_tool(
+    name="invoices.list",
+    spec=list_invoices_spec,
+    meta={"example.com/panel": {"href": "panel://invoices"}},
+)
+```
+
+The bundle lands on `binding.meta` and is emitted verbatim under the
+`"_meta"` key of the binding's listing entry — `tools/list`,
+`resources/list`, `resources/templates/list`, `prompts/list` — and, for a
+resource, on the `contents` block `resources/read` returns. It is
+omitted entirely when empty.
+
+Nothing here validates, reserves, or rewrites a key: the whole point of
+`_meta` is that its contents are opaque to the transport. On the
+`tools/call` result envelope `_meta` is per-call rather than per-binding,
+so it is a `build_tool_result(..., meta=...)` argument instead of
+something sourced from the binding.
+
 ### Bulk registration
 
 For projects that register many tools in one place, the

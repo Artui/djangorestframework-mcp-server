@@ -63,6 +63,9 @@ class ChainToolBinding:
     permissions: tuple[Any, ...] = ()
     rate_limits: tuple[Any, ...] = ()
     annotations: dict[str, Any] = field(default_factory=dict)
+    # See ``ToolBinding.meta`` — free-form ``_meta`` bundle for this tool's
+    # ``tools/list`` entry.
+    meta: dict[str, Any] = field(default_factory=dict)
     title: str | None = None
     include_structured_content: bool | None = None
     include_output_schema: bool | None = None

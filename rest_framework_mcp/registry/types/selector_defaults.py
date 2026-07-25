@@ -32,6 +32,7 @@ class SelectorDefaults:
     permissions: Sequence[Any] | None = None
     rate_limits: Sequence[Any] | None = None
     annotations: dict[str, Any] | None = None
+    meta: dict[str, Any] | None = None
     ordering_fields: Sequence[str] | None = None
     paginate: bool | None = None
     include_structured_content: bool | None = None

@@ -39,6 +39,7 @@ def handle_resources_templates_list(
             title=binding.title,
             mime_type=binding.mime_type,
             annotations=dict(binding.annotations) or None,
+            meta=dict(binding.meta) or None,
         )
         templates.append(tpl.to_dict())
     response: dict[str, Any] = {"resourceTemplates": templates}

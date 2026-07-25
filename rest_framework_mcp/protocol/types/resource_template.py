@@ -18,6 +18,10 @@ class ResourceTemplate:
     mime_type: str | None = None
     title: str | None = None
     annotations: dict[str, Any] | None = None
+    # Base-protocol ``_meta`` bundle. Free-form dict at this wire boundary
+    # because ``_meta`` is MCP's open extension namespace (see
+    # :class:`~rest_framework_mcp.protocol.types.tool.Tool`).
+    meta: dict[str, Any] | None = None
 
     def to_dict(self) -> dict[str, Any]:
         out: dict[str, Any] = {"uriTemplate": self.uri_template, "name": self.name}
@@ -29,6 +33,8 @@ class ResourceTemplate:
             out["mimeType"] = self.mime_type
         if self.annotations is not None:
             out["annotations"] = self.annotations
+        if self.meta:
+            out["_meta"] = self.meta
         return out
 
 

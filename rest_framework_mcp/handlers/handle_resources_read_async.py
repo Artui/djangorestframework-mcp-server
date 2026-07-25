@@ -102,6 +102,7 @@ async def handle_resources_read_async(
             uri=uri,
             mime_type=binding.mime_type,
             text=encode_json(payload),
+            meta=dict(binding.meta) or None,
         )
         return {"contents": [contents.to_dict()]}
 

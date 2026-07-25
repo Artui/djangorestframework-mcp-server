@@ -31,6 +31,7 @@ class ServiceDefaults:
     permissions: Sequence[Any] | None = None
     rate_limits: Sequence[Any] | None = None
     annotations: dict[str, Any] | None = None
+    meta: dict[str, Any] | None = None
     include_structured_content: bool | None = None
     include_output_schema: bool | None = None
     argument_binding: ArgumentBinding | None = None

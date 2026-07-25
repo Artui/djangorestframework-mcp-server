@@ -17,6 +17,7 @@ from rest_framework_mcp.adapters.chain_to_tool import chain_steps_to_tool
 from rest_framework_mcp.adapters.selector_to_resource import selector_to_resource
 from rest_framework_mcp.adapters.selector_to_tool import selector_spec_to_tool
 from rest_framework_mcp.adapters.service_to_tool import service_spec_to_tool
+from rest_framework_mcp.adapters.utils import merge_meta
 from rest_framework_mcp.auth.backends.django_oauth_toolkit_backend import (
     DjangoOAuthToolkitBackend,
 )
@@ -205,6 +206,7 @@ class MCPServer:
         permissions: list[Any] | None = None,
         rate_limits: list[Any] | None = None,
         annotations: dict[str, Any] | None = None,
+        meta: dict[str, Any] | None = None,
         include_structured_content: bool | None = None,
         include_output_schema: bool | None = None,
         argument_binding: ArgumentBinding = ArgumentBinding.BUNDLE,
@@ -227,6 +229,14 @@ class MCPServer:
         / ordering / pagination) use :meth:`register_selector_tool`
         instead — selectors return raw querysets and the tool layer owns
         the post-fetch pipeline.
+
+        ``meta`` is the base protocol's generic ``_meta`` bundle: an
+        open extension namespace emitted verbatim under the ``"_meta"``
+        key of this tool's ``tools/list`` entry (omitted entirely when
+        empty). It is *not* the ``annotations`` hint bundle — those are a
+        closed, spec-defined set of client hints; ``_meta`` is where
+        protocol extensions put their own keys. Passed through as given:
+        this layer neither validates the keys nor reserves any.
         """
         binding = service_spec_to_tool(
             name=name,
@@ -239,6 +249,7 @@ class MCPServer:
             permissions=tuple(permissions or ()),
             rate_limits=tuple(rate_limits or ()),
             annotations=annotations,
+            meta=meta,
             include_structured_content=include_structured_content,
             include_output_schema=include_output_schema,
             argument_binding=argument_binding,
@@ -267,6 +278,7 @@ class MCPServer:
         permissions: list[Any] | None = None,
         rate_limits: list[Any] | None = None,
         annotations: dict[str, Any] | None = None,
+        meta: dict[str, Any] | None = None,
         ordering_fields: list[str] | tuple[str, ...] | None = None,
         paginate: bool = False,
         include_structured_content: bool | None = None,
@@ -314,6 +326,9 @@ class MCPServer:
         ``paginate``) and renders with ``many=True``; ``RETRIEVE``
         rejects those pipeline knobs at registration and renders the
         result with ``many=False``.
+
+        ``meta`` is the generic ``_meta`` bundle for this tool's
+        ``tools/list`` entry — see :meth:`register_service_tool`.
         """
         binding = selector_spec_to_tool(
             name=name,
@@ -327,6 +342,7 @@ class MCPServer:
             permissions=tuple(permissions or ()),
             rate_limits=tuple(rate_limits or ()),
             annotations=annotations,
+            meta=meta,
             ordering_fields=tuple(ordering_fields or ()),
             paginate=paginate,
             include_structured_content=include_structured_content,
@@ -431,6 +447,7 @@ class MCPServer:
         permissions: list[Any] | None = None,
         rate_limits: list[Any] | None = None,
         annotations: dict[str, Any] | None = None,
+        meta: dict[str, Any] | None = None,
         include_structured_content: bool | None = None,
         include_output_schema: bool | None = None,
         unknown_arguments: UnknownArguments = UnknownArguments.REJECT,
@@ -464,6 +481,9 @@ class MCPServer:
         Chains deliberately do not run the selector post-fetch pipeline
         (filter / order / paginate); for that, expose the selector as its
         own :meth:`register_selector_tool`.
+
+        ``meta`` is the generic ``_meta`` bundle for this tool's
+        ``tools/list`` entry — see :meth:`register_service_tool`.
         """
         binding = chain_steps_to_tool(
             name=name,
@@ -480,6 +500,7 @@ class MCPServer:
             permissions=tuple(permissions or ()),
             rate_limits=tuple(rate_limits or ()),
             annotations=annotations,
+            meta=meta,
             include_structured_content=include_structured_content,
             include_output_schema=include_output_schema,
             unknown_arguments=unknown_arguments,
@@ -676,6 +697,7 @@ class MCPServer:
         permissions: list[Any] | None = None,
         rate_limits: list[Any] | None = None,
         annotations: dict[str, Any] | None = None,
+        meta: dict[str, Any] | None = None,
         always_listed: bool = False,
     ) -> ResourceBinding:
         """Register a :class:`SelectorSpec` as an MCP resource.
@@ -696,6 +718,12 @@ class MCPServer:
         ``selector.kind`` and drives the ``many=`` flag on
         ``output_serializer`` at dispatch. ``RETRIEVE`` is the typical
         case for a URI-template lookup.
+
+        ``meta`` is the generic ``_meta`` bundle (see
+        :meth:`register_service_tool`) for this resource's listing entry —
+        ``resources/list`` for a concrete URI, ``resources/templates/list``
+        for a template — and for the ``contents`` block ``resources/read``
+        returns.
         """
         binding = selector_to_resource(
             name=name,
@@ -708,6 +736,7 @@ class MCPServer:
             permissions=tuple(permissions or ()),
             rate_limits=tuple(rate_limits or ()),
             annotations=annotations,
+            meta=meta,
             always_listed=always_listed,
         )
         self._resources.register(binding)
@@ -724,6 +753,7 @@ class MCPServer:
         permissions: list[Any] | None = None,
         rate_limits: list[Any] | None = None,
         annotations: dict[str, Any] | None = None,
+        meta: dict[str, Any] | None = None,
         always_listed: bool = False,
     ) -> PromptBinding:
         """Register a render callable as an MCP prompt.
@@ -732,6 +762,9 @@ class MCPServer:
         and ``user`` if it declares them) and returns either a string, a
         list of strings, a list of :class:`PromptMessage`, or a coroutine
         yielding any of those — the dispatch layer normalises the result.
+
+        ``meta`` is the generic ``_meta`` bundle for this prompt's
+        ``prompts/list`` entry — see :meth:`register_service_tool`.
         """
         binding = PromptBinding(
             name=name,
@@ -742,6 +775,7 @@ class MCPServer:
             permissions=tuple(permissions or ()),
             rate_limits=tuple(rate_limits or ()),
             annotations=annotations or {},
+            meta=merge_meta(meta),
             always_listed=always_listed,
         )
         self._prompts.register(binding)
@@ -765,6 +799,7 @@ class MCPServer:
         permissions: list[Any] | None = None,
         rate_limits: list[Any] | None = None,
         annotations: dict[str, Any] | None = None,
+        meta: dict[str, Any] | None = None,
         include_structured_content: bool | None = None,
         include_output_schema: bool | None = None,
         argument_binding: ArgumentBinding = ArgumentBinding.BUNDLE,
@@ -809,6 +844,7 @@ class MCPServer:
                 permissions=permissions,
                 rate_limits=rate_limits,
                 annotations=annotations,
+                meta=meta,
                 include_structured_content=include_structured_content,
                 include_output_schema=include_output_schema,
                 argument_binding=argument_binding,
@@ -835,6 +871,7 @@ class MCPServer:
         permissions: list[Any] | None = None,
         rate_limits: list[Any] | None = None,
         annotations: dict[str, Any] | None = None,
+        meta: dict[str, Any] | None = None,
         ordering_fields: list[str] | tuple[str, ...] | None = None,
         paginate: bool = False,
         include_structured_content: bool | None = None,
@@ -886,6 +923,7 @@ class MCPServer:
                 permissions=permissions,
                 rate_limits=rate_limits,
                 annotations=annotations,
+                meta=meta,
                 ordering_fields=ordering_fields,
                 paginate=paginate,
                 include_structured_content=include_structured_content,
@@ -914,6 +952,7 @@ class MCPServer:
         permissions: list[Any] | None = None,
         rate_limits: list[Any] | None = None,
         annotations: dict[str, Any] | None = None,
+        meta: dict[str, Any] | None = None,
         always_listed: bool = False,
     ) -> Callable[[Callable[..., Any]], Callable[..., Any]]:
         """Decorator form: register the wrapped callable as a resource.
@@ -955,6 +994,7 @@ class MCPServer:
                 permissions=permissions,
                 rate_limits=rate_limits,
                 annotations=annotations,
+                meta=meta,
                 always_listed=always_listed,
             )
             return fn
@@ -971,6 +1011,7 @@ class MCPServer:
         permissions: list[Any] | None = None,
         rate_limits: list[Any] | None = None,
         annotations: dict[str, Any] | None = None,
+        meta: dict[str, Any] | None = None,
         always_listed: bool = False,
     ) -> Callable[[Callable[..., Any]], Callable[..., Any]]:
         """Decorator form: register the wrapped callable as a prompt."""
@@ -985,6 +1026,7 @@ class MCPServer:
                 permissions=permissions,
                 rate_limits=rate_limits,
                 annotations=annotations,
+                meta=meta,
                 always_listed=always_listed,
             )
             return fn
