@@ -519,6 +519,8 @@
       
         
       
+        
+      
     
     
     
@@ -918,6 +920,34 @@
   
   
     <li class="md-nav__item">
+      <a href="../../recipes/interactive-view/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Render a DRF list as an interactive table
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
       <a href="../../recipes/register-from-spec-registry/" class="md-nav__link">
         
   
@@ -1256,6 +1286,23 @@
       
     </span>
   </a>
+  
+    <nav class="md-nav" aria-label="ClientCapabilities">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#rest_framework_mcp.protocol.types.client_capabilities.ClientCapabilities.extensions" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        extensions
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
   
 </li>
       
@@ -1713,6 +1760,23 @@
       
     </span>
   </a>
+  
+    <nav class="md-nav" aria-label="ClientCapabilities">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#rest_framework_mcp.protocol.types.client_capabilities.ClientCapabilities.extensions" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        extensions
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
   
 </li>
       
@@ -2316,6 +2380,38 @@ future capability sub-keys. We round-trip them verbatim.</p>
 
 
 
+<div class="doc doc-object doc-attribute">
+
+
+
+<h3 id="rest_framework_mcp.protocol.types.client_capabilities.ClientCapabilities.extensions" class="doc doc-heading">
+            <span class="doc doc-object-name doc-attribute-name">extensions</span>
+
+
+  <span class="doc doc-labels">
+      <small class="doc doc-label doc-label-class-attribute"><code>class-attribute</code></small>
+      <small class="doc doc-label doc-label-instance-attribute"><code>instance-attribute</code></small>
+  </span>
+
+<a href="#rest_framework_mcp.protocol.types.client_capabilities.ClientCapabilities.extensions" class="headerlink" title="Permanent link">&para;</a></h3>
+<div class="language-python doc-signature highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="n">extensions</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span>
+</span></code></pre></div>
+
+    <div class="doc doc-contents ">
+
+        <p>Protocol extensions the client implements, keyed by extension id — how a
+client says it supports MCP Apps (<code>io.modelcontextprotocol/ui</code>).</p>
+<p><strong>Advertisement is one-directional, client → server</strong>: the spec defines no
+matching server capability, so nothing is sent back. Parsed here for
+introspection only. Nothing gates on it — the spec merely <em>SHOULD</em>-s a
+check, and remembering it per session would mean widening the pluggable
+<code>SessionStore</code> Protocol, which is a breaking change not worth making for
+metadata that unsupporting clients are required to ignore anyway.</p>
+
+    </div>
+
+</div>
+
 
 
 
@@ -2502,6 +2598,10 @@ future capability sub-keys. We round-trip them verbatim.</p>
 <p><code>input_schema</code> and <code>output_schema</code> are JSON Schema documents.
 <code>annotations</code> carries the MCP ToolAnnotations hint bundle (e.g.
 <code>readOnlyHint</code>, <code>destructiveHint</code>).</p>
+<p><code>meta</code> is the base-protocol <code>_meta</code> bundle — distinct from the
+<code>annotations</code> hint bundle above, which is a closed, spec-defined set
+of client hints. <code>_meta</code> is where protocol <em>extensions</em> put their
+keys.</p>
 
 
 
@@ -2610,6 +2710,8 @@ encoder produces (JSON or TOON, etc.).</p>
 <p><code>is_error</code> is <code>True</code> when the tool itself reported failure — it is
 distinct from a JSON-RPC protocol error: the JSON-RPC envelope is still
 a successful response, the failure detail lives inside the result.</p>
+<p><code>meta</code> is the base-protocol <code>_meta</code> bundle on the <em>result envelope</em>
+— per-call, unlike the static <code>_meta</code> a <code>tools/list</code> entry carries.</p>
 
 
 
