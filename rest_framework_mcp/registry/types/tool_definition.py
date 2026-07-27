@@ -60,6 +60,9 @@ class ToolDefinition:
     permissions: Sequence[Any] | None = None
     rate_limits: Sequence[Any] | None = None
     annotations: dict[str, Any] | None = None
+    # Generic ``_meta`` bundle forwarded to the registration method. ``None``
+    # means "no override" like every other field here.
+    meta: dict[str, Any] | None = None
     include_structured_content: bool | None = None
     include_output_schema: bool | None = None
     argument_binding: ArgumentBinding | None = None
@@ -103,6 +106,7 @@ class ToolDefinition:
         permissions: Sequence[Any] | None = None,
         rate_limits: Sequence[Any] | None = None,
         annotations: dict[str, Any] | None = None,
+        meta: dict[str, Any] | None = None,
         include_structured_content: bool | None = None,
         include_output_schema: bool | None = None,
         argument_binding: ArgumentBinding | None = None,
@@ -124,6 +128,7 @@ class ToolDefinition:
             permissions=permissions,
             rate_limits=rate_limits,
             annotations=annotations,
+            meta=meta,
             include_structured_content=include_structured_content,
             include_output_schema=include_output_schema,
             argument_binding=argument_binding,
@@ -148,6 +153,7 @@ class ToolDefinition:
         permissions: Sequence[Any] | None = None,
         rate_limits: Sequence[Any] | None = None,
         annotations: dict[str, Any] | None = None,
+        meta: dict[str, Any] | None = None,
         ordering_fields: Sequence[str] | None = None,
         paginate: bool | None = None,
         include_structured_content: bool | None = None,
@@ -178,6 +184,7 @@ class ToolDefinition:
             permissions=permissions,
             rate_limits=rate_limits,
             annotations=annotations,
+            meta=meta,
             ordering_fields=ordering_fields,
             paginate=paginate,
             include_structured_content=include_structured_content,

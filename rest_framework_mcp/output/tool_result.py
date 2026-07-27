@@ -35,6 +35,7 @@ def build_tool_result(
     output_format: OutputFormat = OutputFormat.JSON,
     is_error: bool = False,
     include_structured_content: bool = True,
+    meta: dict[str, Any] | None = None,
 ) -> ToolResult:
     """Build a :class:`ToolResult` for a successful (or tool-level error) call.
 
@@ -48,6 +49,12 @@ def build_tool_result(
     ``structuredContent`` field is omitted from the response. The text
     rendering in ``content[0]`` still carries the full payload, so clients
     that don't consume the structured field lose nothing.
+
+    ``meta`` is the base protocol's generic ``_meta`` bundle on the *result
+    envelope* — genuinely per-call, so it is a parameter here rather than
+    something sourced from the binding: a tool's static ``_meta`` is already
+    advertised on its ``tools/list`` entry and repeating it on every result
+    would be redundant. Omitted from the payload when empty.
     """
     resolved: OutputFormat = _resolve_format(payload, output_format)
     if resolved is OutputFormat.TOON:
@@ -58,6 +65,7 @@ def build_tool_result(
         content=[ToolContentBlock(type="text", text=text)],
         structured_content=payload if include_structured_content else None,
         is_error=is_error,
+        meta=meta,
     )
 
 

@@ -5,6 +5,7 @@ from typing import Any
 from rest_framework_services.types.service_spec import ServiceSpec
 
 from rest_framework_mcp.adapters.utils import (
+    merge_meta,
     merge_tool_annotations,
     validate_input_serializer_against_callable,
     validate_url_kwargs,
@@ -27,6 +28,7 @@ def service_spec_to_tool(
     permissions: tuple[Any, ...] = (),
     rate_limits: tuple[Any, ...] = (),
     annotations: dict[str, Any] | None = None,
+    meta: dict[str, Any] | None = None,
     include_structured_content: bool | None = None,
     include_output_schema: bool | None = None,
     argument_binding: ArgumentBinding = ArgumentBinding.BUNDLE,
@@ -46,6 +48,10 @@ def service_spec_to_tool(
     prepended to the per-binding ``permissions`` tuple. Author-declared
     contracts on the spec run before transport-level ``MCPPermission``
     instances, AND-combined.
+
+    ``meta`` is the base-protocol ``_meta`` bundle the tool's ``tools/list``
+    entry carries. It goes through :func:`merge_meta` so a later
+    framework-derived contribution slots in at this one call site.
     """
     validate_input_serializer_against_callable(
         label=f"service tool {name!r}",
@@ -76,6 +82,7 @@ def service_spec_to_tool(
         permissions=effective_perms,
         rate_limits=rate_limits,
         annotations=merge_tool_annotations(annotations, read_only=False),
+        meta=merge_meta(meta),
         include_structured_content=include_structured_content,
         include_output_schema=include_output_schema,
         argument_binding=argument_binding,

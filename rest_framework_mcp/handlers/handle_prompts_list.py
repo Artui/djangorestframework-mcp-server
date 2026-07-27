@@ -42,6 +42,7 @@ def handle_prompts_list(
             title=binding.title,
             arguments=list(binding.arguments),
             annotations=dict(binding.annotations) or None,
+            meta=dict(binding.meta) or None,
         )
         items.append(prompt.to_dict())
     response: dict[str, Any] = {"prompts": items}

@@ -75,3 +75,17 @@ def test_build_tool_result_omits_structured_content_when_disabled() -> None:
 def test_build_tool_result_includes_structured_content_by_default() -> None:
     res = build_tool_result({"a": 1})
     assert res.to_dict()["structuredContent"] == {"a": 1}
+
+
+def test_tool_result_carries_per_call_meta() -> None:
+    """``_meta`` on the *result envelope* is per-call, so it is a parameter.
+
+    A tool's static ``_meta`` is already advertised on its ``tools/list``
+    entry; nothing sources this from the binding.
+    """
+    result = build_tool_result({"ok": True}, meta={"example.com/trace": "abc"})
+    assert result.to_dict()["_meta"] == {"example.com/trace": "abc"}
+
+
+def test_tool_result_omits_meta_by_default() -> None:
+    assert "_meta" not in build_tool_result({"ok": True}).to_dict()

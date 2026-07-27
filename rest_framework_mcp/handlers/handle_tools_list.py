@@ -114,6 +114,7 @@ def handle_tools_list(
             input_schema=input_schema,
             output_schema=(output_schema if emit_output_schema else None),
             annotations=dict(binding.annotations) or None,
+            meta=dict(binding.meta) or None,
         )
         tools.append(tool.to_dict())
     response: dict[str, Any] = {"tools": tools}

@@ -31,6 +31,9 @@ class PromptBinding:
     permissions: tuple[Any, ...] = ()
     rate_limits: tuple[Any, ...] = ()
     annotations: dict[str, Any] = field(default_factory=dict)
+    # See ``ToolBinding.meta`` — free-form ``_meta`` bundle for this
+    # prompt's ``prompts/list`` entry.
+    meta: dict[str, Any] = field(default_factory=dict)
     title: str | None = None
     always_listed: bool = False
     """Opt this prompt back into ``prompts/list`` when

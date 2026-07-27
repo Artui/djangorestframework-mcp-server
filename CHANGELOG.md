@@ -7,6 +7,27 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- **Generic `_meta` passthrough on the wire types and every registration
+  surface.** The base MCP protocol gives most wire objects a free-form `_meta`
+  object — the open extension namespace, distinct from the closed
+  `annotations` hint bundle — and the package had no way to populate it. Pass
+  `meta=` to `register_service_tool` / `register_selector_tool` /
+  `register_chain_tool` / `register_resource` / `register_prompt`, to the
+  `@service_tool` / `@selector_tool` / `@resource` / `@prompt` decorators, or
+  to a `ToolDefinition` / `SelectorDefaults` / `ServiceDefaults`, and the
+  bundle lands on the binding (`binding.meta`) and is emitted verbatim under
+  the `"_meta"` key of that binding's listing entry (`tools/list`,
+  `resources/list`, `resources/templates/list`, `prompts/list`) and — for a
+  resource — on the `contents` block `resources/read` returns, on both the sync
+  and async transports. Omitted entirely when empty, so existing payloads are
+  byte-identical. Keys are passed through untouched: nothing is validated,
+  reserved, or rewritten. Contributions are combined by `merge_meta` (shallow,
+  later wins), the single seam a future feature injects its own key through.
+  On the `tools/call` result envelope `_meta` is per-call rather than
+  per-binding, so it is a `build_tool_result(..., meta=…)` argument.
+
 ## [0.15.0] — 2026-07-27
 
 ### Added

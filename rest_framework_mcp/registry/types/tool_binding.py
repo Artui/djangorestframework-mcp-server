@@ -48,6 +48,15 @@ class ToolBinding(Generic[InputT, ResultT, ExtraT]):
     permissions: tuple[Any, ...] = ()
     rate_limits: tuple[Any, ...] = ()
     annotations: dict[str, Any] = field(default_factory=dict)
+    # Base-protocol ``_meta`` for this tool's ``tools/list`` entry, emitted
+    # verbatim under the ``"_meta"`` wire key. Stays a free-form dict — and
+    # not a closed dataclass — because ``_meta`` is MCP's open extension
+    # namespace: each extension owns its own top-level key, so the set of
+    # valid keys is unbounded by design. Typed helpers belong *above* this
+    # field (a caller builds a typed object and merges its ``to_dict()`` in
+    # via :func:`~rest_framework_mcp.adapters.utils.merge_meta`), not in
+    # place of it.
+    meta: dict[str, Any] = field(default_factory=dict)
     title: str | None = None
     include_structured_content: bool | None = None
     """Tri-state override for whether this tool's ``tools/call`` response

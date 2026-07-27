@@ -5,6 +5,7 @@ from typing import Any
 
 from rest_framework_services.types.selector_spec import SelectorSpec
 
+from rest_framework_mcp.adapters.utils import merge_meta
 from rest_framework_mcp.auth.permissions.wrap_spec_permissions import wrap_spec_permissions
 from rest_framework_mcp.registry.types.resource_binding import ResourceBinding
 
@@ -21,6 +22,7 @@ def selector_to_resource(
     permissions: tuple[Any, ...] = (),
     rate_limits: tuple[Any, ...] = (),
     annotations: dict[str, Any] | None = None,
+    meta: dict[str, Any] | None = None,
     always_listed: bool = False,
 ) -> ResourceBinding:
     """Lift a :class:`SelectorSpec` into a :class:`ResourceBinding`.
@@ -35,6 +37,10 @@ def selector_to_resource(
     The selector is dispatched at ``resources/read`` time via
     ``run_selector`` / ``arun_selector`` so async selectors work
     transparently.
+
+    ``meta`` is the base-protocol ``_meta`` bundle the resource's listing
+    entry and its ``resources/read`` contents block carry — see
+    :func:`~rest_framework_mcp.adapters.service_to_tool.service_spec_to_tool`.
     """
     if not isinstance(selector, SelectorSpec):
         raise TypeError(
@@ -69,6 +75,7 @@ def selector_to_resource(
         permissions=effective_perms,
         rate_limits=rate_limits,
         annotations=annotations or {},
+        meta=merge_meta(meta),
         kwargs_provider=kwargs_provider,
         always_listed=always_listed,
     )

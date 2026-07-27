@@ -19,6 +19,10 @@ class Resource:
     size: int | None = None
     title: str | None = None
     annotations: dict[str, Any] | None = None
+    # Base-protocol ``_meta`` bundle. Free-form dict at this wire boundary
+    # because ``_meta`` is MCP's open extension namespace (see
+    # :class:`~rest_framework_mcp.protocol.types.tool.Tool`).
+    meta: dict[str, Any] | None = None
 
     def to_dict(self) -> dict[str, Any]:
         out: dict[str, Any] = {"uri": self.uri, "name": self.name}
@@ -32,6 +36,8 @@ class Resource:
             out["size"] = self.size
         if self.annotations is not None:
             out["annotations"] = self.annotations
+        if self.meta:
+            out["_meta"] = self.meta
         return out
 
 

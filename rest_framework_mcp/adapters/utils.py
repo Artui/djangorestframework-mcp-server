@@ -11,13 +11,16 @@ Two pieces of shared logic live here:
 - :func:`merge_tool_annotations` — auto-derives the MCP ``ToolAnnotations``
   hint bundle from a tool's mutation profile (read vs. write), with any
   explicitly-registered hints taking precedence.
+- :func:`merge_meta` — shallow-merges the base-protocol ``_meta`` bundles a
+  binding assembles from several sources into the single dict the wire
+  types emit.
 """
 
 from __future__ import annotations
 
 import dataclasses
 import inspect
-from collections.abc import Iterable
+from collections.abc import Iterable, Mapping
 from typing import Any
 
 from django.core.exceptions import ImproperlyConfigured
@@ -321,6 +324,39 @@ def merge_tool_annotations(explicit: dict[str, Any] | None, *, read_only: bool) 
     return {**derived, **(explicit or {})}
 
 
+def merge_meta(*pieces: Mapping[str, Any] | None) -> dict[str, Any]:
+    """Shallow-merge ``_meta`` contributions into one bundle, later wins.
+
+    ``_meta`` is the base protocol's open extension namespace: each
+    extension owns a top-level key inside it, and several sources may want
+    to contribute at once — the ``meta=`` a consumer passes at registration
+    plus whatever a framework feature derives for itself. This is the single
+    place those get combined, so a later feature injects its key by adding
+    one argument at the adapter call site instead of touching every binding.
+
+    Semantics, deliberately narrow:
+
+    - **Shallow**, one level deep. A later piece replaces an earlier piece's
+      value for the same top-level key outright; it does not deep-merge into
+      it. Extension keys are opaque bundles owned by one extension, so
+      splicing two of them together would produce a shape neither owner
+      declared.
+    - **Later wins**, so call sites read as precedence order (put the
+      framework-derived piece first and the consumer's ``meta=`` last for
+      "consumer overrides", or the reverse when the framework must win).
+      Mirrors :func:`merge_tool_annotations`, where the explicit hints
+      likewise override the derived ones.
+    - ``None`` and empty pieces are skipped, and the result is always a new
+      dict — no piece is mutated and no caller ends up sharing a mutable
+      default.
+    """
+    merged: dict[str, Any] = {}
+    for piece in pieces:
+        if piece:
+            merged.update(piece)
+    return merged
+
+
 def _accepts_var_keyword(sig: inspect.Signature) -> bool:
     return any(p.kind == inspect.Parameter.VAR_KEYWORD for p in sig.parameters.values())
 
@@ -345,6 +381,7 @@ def _serializer_field_names(input_serializer: type) -> Iterable[str]:
 
 
 __all__ = [
+    "merge_meta",
     "merge_tool_annotations",
     "validate_input_serializer_against_callable",
     "validate_url_kwargs",
