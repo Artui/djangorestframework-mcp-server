@@ -20,7 +20,7 @@ server = MCPServer(name="my-app")
 
 server.register_service_tool(
     name="invoices.create",
-    spec=ServiceSpec(service=create_invoice, ...),
+    spec=ServiceSpec(service=create_invoice),  # …plus the rest of your spec
     rate_limits=[
         FixedWindowRateLimit(max_calls=120, per_seconds=60, namespace="burst"),
         FixedWindowRateLimit(max_calls=10_000, per_seconds=86_400, namespace="daily"),

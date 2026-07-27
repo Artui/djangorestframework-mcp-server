@@ -44,6 +44,27 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `>=0.26,<0.27`) — `SpecRegistry` is imported at module level by
   `register_specs`.
 
+### Documentation
+
+- **New [Settings reference](https://artui.github.io/djangorestframework-mcp-server/reference/settings/)
+  — every `REST_FRAMEWORK_MCP` key in one place.** Settings were previously
+  documented ad hoc, wherever a key happened to be relevant (`auth.md`,
+  `concepts.md`, `observability.md`), so coverage was accidental and three live
+  keys had never been documented at all: `MAX_REQUEST_BYTES` (the 1 MiB request
+  body limit), `DEFAULT_OUTPUT_FORMAT`, and `SIMPLEJWT_ACCESS_COOKIE`. The page
+  is now the single home for all 17, each with its default, the reason behind
+  it, and the per-server override — including the one combination the MCP spec
+  forbids (`INCLUDE_OUTPUT_SCHEMA` without `INCLUDE_STRUCTURED_CONTENT`) and
+  the three removed collaborator keys that now raise `ImproperlyConfigured`.
+- **Chain-tool types gained reference entries.** `ChainStep`, `ChainContext`
+  and `ChainToolBinding` had none — `ChainContext` was never even named in the
+  docs, although the chain recipe has readers writing `inputs=lambda ctx: …`
+  against it.
+- **A snippet in the rate-limiting recipe is valid Python again.**
+  `ServiceSpec(service=…, ...)` put a bare `...` after a keyword argument,
+  which is a `SyntaxError` — so the snippet couldn't be copied, and the whole
+  fence was invisible to doc-checking tooling.
+
 ## [0.14.0] — 2026-07-24
 
 ### Changed

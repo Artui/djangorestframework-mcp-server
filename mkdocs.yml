@@ -101,5 +101,6 @@ nav:
       - MCPServer: reference/mcp-server.md
       - Protocol types: reference/protocol.md
       - Registries: reference/registries.md
+      - Settings: reference/settings.md
       - Auth: reference/auth.md
       - Output: reference/output.md
