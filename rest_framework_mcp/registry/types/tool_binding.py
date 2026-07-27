@@ -35,59 +35,70 @@ class ToolBinding(Generic[InputT, ResultT, ExtraT]):
     name: str
     description: str | None
     spec: ServiceSpec[InputT, ResultT, ExtraT]
-    # Consumer-only display metadata — never emitted on the MCP wire
-    # (``tools/list`` ignores them). Provided so a downstream library can
-    # render a richer label / blurb than the protocol ``title`` /
-    # ``description``. ``None`` means "unset".
     display_name: str | None = None
+    """Consumer-only label — **never emitted on the MCP wire** (``tools/list``
+    ignores it). Provided so a downstream library can render a richer label
+    than the protocol ``title``. ``None`` means "unset"."""
+
     display_description: str | None = None
+    """Consumer-only blurb, the sibling of :attr:`display_name` — also never
+    emitted on the MCP wire. Lets a downstream library show more than the
+    protocol ``description``. ``None`` means "unset"."""
     output_format: OutputFormat = OutputFormat.JSON
     permissions: tuple[Any, ...] = ()
     rate_limits: tuple[Any, ...] = ()
     annotations: dict[str, Any] = field(default_factory=dict)
     title: str | None = None
-    # Tri-state override for whether this tool's ``tools/call`` response
-    # includes a ``structuredContent`` field. ``None`` (the default) defers
-    # to the ``INCLUDE_STRUCTURED_CONTENT`` setting; ``True`` / ``False``
-    # force the behavior regardless of the global.
     include_structured_content: bool | None = None
-    # Tri-state override for whether this tool's ``tools/list`` entry
-    # carries an ``outputSchema``. ``None`` (the default) defers to the
-    # ``INCLUDE_OUTPUT_SCHEMA`` setting; ``True`` / ``False`` force the
-    # behavior regardless of the global. The MCP spec forbids advertising
-    # ``outputSchema`` while suppressing ``structuredContent``, so setting
-    # ``include_output_schema=True`` with ``include_structured_content=False``
-    # is rejected at construction time.
+    """Tri-state override for whether this tool's ``tools/call`` response
+    includes a ``structuredContent`` field. ``None`` (the default) defers to the
+    ``INCLUDE_STRUCTURED_CONTENT`` setting; ``True`` / ``False`` force the
+    behaviour regardless of the global."""
+
     include_output_schema: bool | None = None
-    # How MCP ``arguments`` flow into the kwarg pool. Defaults to
-    # ``BUNDLE`` for service tools: mutation services typically take
-    # a single ``input_serializer``-validated ``data`` payload, so
-    # spreading the dict as top-level kwargs would conflict with that
-    # historical shape.
+    """Tri-state override for whether this tool's ``tools/list`` entry carries
+    an ``outputSchema``. ``None`` (the default) defers to the
+    ``INCLUDE_OUTPUT_SCHEMA`` setting; ``True`` / ``False`` force the behaviour
+    regardless of the global.
+
+    The MCP spec forbids advertising ``outputSchema`` while suppressing
+    ``structuredContent``, so ``include_output_schema=True`` together with
+    ``include_structured_content=False`` is rejected at construction time."""
+
     argument_binding: ArgumentBinding = ArgumentBinding.BUNDLE
-    # How unknown ``arguments`` keys are handled relative to the binding's
-    # ``inputSchema``. ``REJECT`` (default) rejects unknown keys with ``-32602``
-    # and advertises ``additionalProperties: false`` — but only when there is an
-    # ``input_serializer`` to validate against; a serializer-less binding has no
-    # declared field set, so ``REJECT`` can't fire and its schema stays open
-    # (``additionalProperties: true``). ``PASSTHROUGH`` advertises
-    # ``additionalProperties: true`` and merges unknown keys into the validated
-    # payload. ``IGNORE`` advertises ``additionalProperties: true`` and silently
-    # drops them.
+    """How MCP ``arguments`` flow into the kwarg pool. Defaults to ``BUNDLE``
+    for service tools: mutation services typically take a single
+    ``input_serializer``-validated ``data`` payload, so spreading the dict as
+    top-level kwargs would conflict with that shape."""
+
     unknown_arguments: UnknownArguments = UnknownArguments.REJECT
-    # When ``FILTER_LISTINGS_BY_PERMISSIONS`` is enabled, this binding is
-    # normally dropped from ``tools/list`` if any of its ``permissions``
-    # deny the caller. Setting ``always_listed=True`` opts the binding
-    # back into the listing — useful as a discovery aid for admin tools
-    # the caller can see but not invoke (``tools/call`` still 403s).
+    """How unknown ``arguments`` keys are handled relative to the binding's
+    ``inputSchema``.
+
+    - ``REJECT`` (default) rejects unknown keys with ``-32602`` and advertises
+      ``additionalProperties: false`` — but **only** when there is an
+      ``input_serializer`` to validate against. A serializer-less binding has no
+      declared field set, so ``REJECT`` can't fire and its schema stays open
+      (``additionalProperties: true``).
+    - ``PASSTHROUGH`` advertises ``additionalProperties: true`` and merges
+      unknown keys into the validated payload.
+    - ``IGNORE`` advertises ``additionalProperties: true`` and silently drops
+      them."""
+
     always_listed: bool = False
-    # URL-derived values the model supplies as tool args, seeded into the
-    # off-HTTP view's ``kwargs`` (from where drf-services spreads them into the
-    # dispatch pools — e.g. a scoping ``spec.kwargs`` provider reading
-    # ``view.kwargs``) rather than reaching the service as ordinary params. See
-    # :class:`UrlKwarg`. Advertised in the ``inputSchema`` and stripped from the
-    # dispatched params.
+    """Opt this binding back into listings it would otherwise be filtered out
+    of. When ``FILTER_LISTINGS_BY_PERMISSIONS`` is enabled, a binding is
+    normally dropped from ``tools/list`` if any of its ``permissions`` deny the
+    caller; ``True`` keeps it visible — useful as a discovery aid for admin
+    tools the caller can see but not invoke (``tools/call`` still 403s)."""
+
     url_kwargs: tuple[UrlKwarg, ...] = ()
+    """URL-derived values the model supplies as tool args, seeded into the
+    off-HTTP view's ``kwargs`` rather than reaching the service as ordinary
+    params — from there drf-services spreads them into the dispatch pools, so a
+    scoping ``spec.kwargs`` provider reading ``view.kwargs`` sees them. See
+    :class:`UrlKwarg`. Advertised in the ``inputSchema`` and stripped from the
+    dispatched params."""
 
     def __post_init__(self) -> None:
         if self.include_output_schema is True and self.include_structured_content is False:

@@ -32,9 +32,10 @@ class PromptBinding:
     rate_limits: tuple[Any, ...] = ()
     annotations: dict[str, Any] = field(default_factory=dict)
     title: str | None = None
-    # See ``ToolBinding.always_listed`` — same opt-back-in semantics for
-    # prompts when ``FILTER_LISTINGS_BY_PERMISSIONS`` is enabled.
     always_listed: bool = False
+    """Opt this prompt back into ``prompts/list`` when
+    ``FILTER_LISTINGS_BY_PERMISSIONS`` would otherwise hide it — same semantics
+    as :attr:`ToolBinding.always_listed`."""
 
 
 __all__ = ["PromptBinding"]

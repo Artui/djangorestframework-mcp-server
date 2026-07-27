@@ -56,35 +56,44 @@ class SelectorToolBinding(Generic[ResultT, ExtraT]):
     name: str
     description: str | None
     spec: SelectorSpec[ResultT, ExtraT]
-    # Consumer-only display metadata — never emitted on the MCP wire
-    # (``tools/list`` ignores them). Provided so a downstream library can
-    # render a richer label / blurb than the protocol ``title`` /
-    # ``description``. ``None`` means "unset".
     display_name: str | None = None
+    """Consumer-only label — **never emitted on the MCP wire** (``tools/list``
+    ignores it). Provided so a downstream library can render a richer label
+    than the protocol ``title``. ``None`` means "unset"."""
+
     display_description: str | None = None
-    # ``SelectorSpec`` from the sister repo doesn't carry an input
-    # serializer (selectors only describe how to fetch; the HTTP transport
-    # validates the URL/query separately). For MCP, where every tool call
-    # carries a JSON ``arguments`` dict, custom non-filter args live here.
+    """Consumer-only blurb, the sibling of :attr:`display_name` — also never
+    emitted on the MCP wire. Lets a downstream library show more than the
+    protocol ``description``. ``None`` means "unset"."""
+
     input_serializer: type | None = None
+    """Custom non-filter tool arguments, declared MCP-side.
+
+    ``SelectorSpec`` carries no input serializer of its own — a selector only
+    describes how to fetch, and the HTTP transport validates the URL / query
+    separately. MCP has no such split (every tool call is one JSON
+    ``arguments`` dict), so arguments that aren't filter / ordering /
+    pagination knobs are declared here."""
     output_format: OutputFormat = OutputFormat.JSON
     permissions: tuple[Any, ...] = ()
     rate_limits: tuple[Any, ...] = ()
     annotations: dict[str, Any] = field(default_factory=dict)
     title: str | None = None
-    # Tri-state override for whether this tool's ``tools/call`` response
-    # includes a ``structuredContent`` field. ``None`` (the default) defers
-    # to the ``INCLUDE_STRUCTURED_CONTENT`` setting; ``True`` / ``False``
-    # force the behavior regardless of the global.
     include_structured_content: bool | None = None
-    # Tri-state override for whether this tool's ``tools/list`` entry
-    # carries an ``outputSchema``. ``None`` (the default) defers to the
-    # ``INCLUDE_OUTPUT_SCHEMA`` setting; ``True`` / ``False`` force the
-    # behavior regardless of the global. The MCP spec forbids advertising
-    # ``outputSchema`` while suppressing ``structuredContent``, so the
-    # combination ``include_output_schema=True`` with
-    # ``include_structured_content=False`` is rejected at construction time.
+    """Tri-state override for whether this tool's ``tools/call`` response
+    includes a ``structuredContent`` field. ``None`` (the default) defers to the
+    ``INCLUDE_STRUCTURED_CONTENT`` setting; ``True`` / ``False`` force the
+    behaviour regardless of the global."""
+
     include_output_schema: bool | None = None
+    """Tri-state override for whether this tool's ``tools/list`` entry carries
+    an ``outputSchema``. ``None`` (the default) defers to the
+    ``INCLUDE_OUTPUT_SCHEMA`` setting; ``True`` / ``False`` force the behaviour
+    regardless of the global.
+
+    The MCP spec forbids advertising ``outputSchema`` while suppressing
+    ``structuredContent``, so ``include_output_schema=True`` together with
+    ``include_structured_content=False`` is rejected at construction time."""
     # ----- read-shaped pipeline knobs -----
     # ``filter_set`` is no longer stored here — it is sourced from
     # ``spec.filter_set`` via the property below (the spec is the single
@@ -98,27 +107,31 @@ class SelectorToolBinding(Generic[ResultT, ExtraT]):
     # pagination metadata (``items`` / ``page`` / ``totalPages`` /
     # ``hasNext``). When False, the queryset is rendered as-is.
     paginate: bool = False
-    # How MCP ``arguments`` flow into the kwarg pool. Defaults to
-    # ``SPREAD_AUTHOR_WINS`` for selector tools: selectors typically declare their
-    # query parameters as individual function arguments
-    # (``def list_drafts(*, project_id, page=1, limit=10)``), so the
-    # MCP layer spreads the validated/raw arguments across the pool.
     argument_binding: ArgumentBinding = ArgumentBinding.SPREAD_AUTHOR_WINS
-    # How unknown ``arguments`` keys are handled relative to the binding's
-    # merged ``inputSchema`` (input_serializer fields + filter_set
-    # properties + ordering + pagination). ``REJECT`` (default) rejects
-    # unknown keys with ``-32602``; ``PASSTHROUGH`` merges them into the
-    # validated payload; ``IGNORE`` silently drops them.
+    """How MCP ``arguments`` flow into the kwarg pool. Defaults to
+    ``SPREAD_AUTHOR_WINS`` for selector tools: selectors typically declare their
+    query parameters as individual function arguments
+    (``def list_drafts(*, project_id, page=1, limit=10)``), so the MCP layer
+    spreads the validated / raw arguments across the pool."""
+
     unknown_arguments: UnknownArguments = UnknownArguments.REJECT
-    # See ``ToolBinding.always_listed`` — same opt-back-in semantics for
-    # selector tools when ``FILTER_LISTINGS_BY_PERMISSIONS`` is enabled.
+    """How unknown ``arguments`` keys are handled relative to the binding's
+    merged ``inputSchema`` (``input_serializer`` fields + ``filter_set``
+    properties + ordering + pagination). ``REJECT`` (default) rejects unknown
+    keys with ``-32602``; ``PASSTHROUGH`` merges them into the validated
+    payload; ``IGNORE`` silently drops them."""
+
     always_listed: bool = False
-    # URL-derived values the model supplies as tool args, seeded into the
-    # off-HTTP view's ``kwargs`` (from where drf-services spreads them into the
-    # selector / target pools) rather than reaching the selector as ordinary
-    # params. See :class:`UrlKwarg`. Advertised in the ``inputSchema``, exempt
-    # from the unknown-argument check, and stripped from the dispatched params.
+    """Opt this binding back into listings it would otherwise be filtered out
+    of — same semantics as :attr:`ToolBinding.always_listed`, applied to
+    selector tools when ``FILTER_LISTINGS_BY_PERMISSIONS`` is enabled."""
+
     url_kwargs: tuple[UrlKwarg, ...] = ()
+    """URL-derived values the model supplies as tool args, seeded into the
+    off-HTTP view's ``kwargs`` rather than reaching the selector as ordinary
+    params — from there drf-services spreads them into the selector / target
+    pools. See :class:`UrlKwarg`. Advertised in the ``inputSchema``, exempt from
+    the unknown-argument check, and stripped from the dispatched params."""
 
     def __post_init__(self) -> None:
         if self.include_output_schema is True and self.include_structured_content is False:

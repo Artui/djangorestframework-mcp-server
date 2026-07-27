@@ -60,6 +60,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   and `ChainToolBinding` had none — `ChainContext` was never even named in the
   docs, although the chain recipe has readers writing `inputs=lambda ctx: …`
   against it.
+- **Field-level documentation on the binding types now reaches the published
+  reference.** 23 fields across `ToolBinding`, `SelectorToolBinding`,
+  `ChainToolBinding`, `ResourceBinding`, `PromptBinding` and `ToolDefinition`
+  were explained by `#` comments, which `mkdocstrings` does not render — so the
+  reference showed bare names with no explanation for
+  `display_name` / `display_description`, `include_structured_content`,
+  `include_output_schema`, `argument_binding`, `unknown_arguments`,
+  `always_listed`, `url_kwargs`, `spec_kwargs_provides`, `input_serializer`
+  and `ResourceBinding.kind`, even though the source explained every one. They
+  are attribute docstrings now. Comments that head a *group* of fields
+  (`# Both kinds:`, `# Selector-only:`) stay comments — they document the
+  grouping, not a field. No behaviour change.
 - **A snippet in the rate-limiting recipe is valid Python again.**
   `ServiceSpec(service=…, ...)` put a bare `...` after a keyword argument,
   which is a `SyntaxError` — so the snippet couldn't be copied, and the whole
