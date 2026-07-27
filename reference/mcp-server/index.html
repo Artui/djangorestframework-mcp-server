@@ -517,6 +517,8 @@
       
         
       
+        
+      
     
     
     
@@ -916,6 +918,34 @@
   
   
     <li class="md-nav__item">
+      <a href="../../recipes/register-from-spec-registry/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Register tools from a spec registry
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
       <a href="../../recipes/migrating/" class="md-nav__link">
         
   
@@ -957,6 +987,8 @@
       
         
           
+        
+      
         
       
         
@@ -1150,6 +1182,17 @@
     <span class="md-ellipsis">
       
         register_selector_tool
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#rest_framework_mcp.server.mcp_server.MCPServer.register_specs" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        register_specs
       
     </span>
   </a>
@@ -1365,6 +1408,34 @@
   
   
     <li class="md-nav__item">
+      <a href="../settings/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Settings
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
       <a href="../auth/" class="md-nav__link">
         
   
@@ -1508,6 +1579,17 @@
     <span class="md-ellipsis">
       
         register_selector_tool
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#rest_framework_mcp.server.mcp_server.MCPServer.register_specs" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        register_specs
       
     </span>
   </a>
@@ -1946,6 +2028,65 @@ post-fetch pipeline (<code>spec.filter_set</code> / <code>ordering_fields</code>
 <code>paginate</code>) and renders with <code>many=True</code>; <code>RETRIEVE</code>
 rejects those pipeline knobs at registration and renders the
 result with <code>many=False</code>.</p>
+
+
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-function">
+
+
+<h3 id="rest_framework_mcp.server.mcp_server.MCPServer.register_specs" class="doc doc-heading">
+            <span class="doc doc-object-name doc-function-name">register_specs</span>
+
+
+<a href="#rest_framework_mcp.server.mcp_server.MCPServer.register_specs" class="headerlink" title="Permanent link">&para;</a></h3>
+<div class="language-python doc-signature highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="nf">register_specs</span><span class="p">(</span>
+</span><span id="__span-0-2"><a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a>    <span class="n">registry</span><span class="p">:</span> <span class="n">SpecRegistry</span><span class="p">,</span> <span class="o">*</span><span class="p">,</span> <span class="n">overrides</span><span class="p">:</span> <span class="n">Mapping</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Mapping</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span>
+</span><span id="__span-0-3"><a id="__codelineno-0-3" name="__codelineno-0-3" href="#__codelineno-0-3"></a><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">tuple</span><span class="p">[</span><span class="n">ToolBinding</span> <span class="o">|</span> <span class="n">SelectorToolBinding</span><span class="p">,</span> <span class="o">...</span><span class="p">]</span>
+</span></code></pre></div>
+
+    <div class="doc doc-contents ">
+
+        <p>Register every spec in a <code>SpecRegistry</code> as a tool, in order.</p>
+<p>A project exposing the same operations over more than one transport
+keeps its spec set in a
+:class:<code>~rest_framework_services.registry.spec_registry.SpecRegistry</code>
+(<code>djangorestframework-services</code> 0.27+) so each transport reads one
+source instead of enumerating the specs again. This is the MCP end of
+that: it walks the registry and calls
+:meth:<code>register_service_tool</code> / :meth:<code>register_selector_tool</code> per
+entry, discriminating on the spec type.</p>
+<p>It is a <strong>source for</strong> this server's own <code>ToolRegistry</code>, not a
+replacement for it — every tool still lands as a normal binding, and
+names still share the one tool namespace (a collision raises, as
+always). The spec registry carries only what is invariant across
+transports (which spec, its canonical name, its tags); every MCP knob
+stays here, per tool, via <code>overrides</code>::</p>
+<div class="language-text highlight"><pre><span></span><code>server.register_specs(
+    registry.by_tag(&quot;public&quot;),
+    overrides={
+        &quot;list_orders&quot;: {&quot;paginate&quot;: True, &quot;ordering_fields&quot;: [&quot;created_at&quot;]},
+        &quot;refund_order&quot;: {&quot;annotations&quot;: {&quot;destructiveHint&quot;: True}},
+    },
+)
+</code></pre></div>
+<p><code>overrides</code> maps a registered name to the keyword arguments handed to
+that entry's registration method. It stays a plain mapping rather than
+a dataclass because the two methods take different knobs — a single
+record would duplicate both signatures and drift from them. The keys
+are therefore checked against each method's own signature, which means
+a knob used on the wrong spec kind (<code>paginate</code> on a <code>ServiceSpec</code>)
+raises :exc:<code>TypeError</code> from that method. An <code>overrides</code> key naming a
+spec the registry doesn't hold raises :exc:<code>ValueError</code> here — that is
+a typo, not an intentional no-op.</p>
+<p>Registration is not transactional: a failure partway leaves the
+earlier entries registered. That is harmless in the intended use —
+registration happens at configuration time, so a raise aborts startup
+anyway.</p>
+<p>Returns the bindings in registration order, mirroring the per-tool
+methods that each return theirs.</p>
 
 
     </div>
