@@ -431,6 +431,79 @@ server.register_resource(
 Concrete URIs (no placeholders) appear in `resources/list`; templated ones
 appear in `resources/templates/list` so clients can fill them in.
 
+## Resource body encoding
+
+A resource advertises a `mime_type` and returns a body. Those are two separate
+decisions, so `encoding=` is declared rather than inferred from the mime type —
+sniffing would silently change the body for anyone already advertising
+something other than JSON.
+
+```python
+server.register_resource(
+    name="changelog",
+    uri_template="docs://changelog",
+    selector=SelectorSpec(kind=SelectorKind.RETRIEVE, selector=read_changelog),
+    mime_type="text/markdown",
+    encoding=ResourceEncoding.TEXT,
+)
+```
+
+`ResourceEncoding.JSON` (the default) pretty-prints the selector's return
+value. `ResourceEncoding.TEXT` returns it verbatim, which is what Markdown,
+CSV, plain text and HTML need — under JSON the document would come back
+wrapped in a quoted string literal instead of as itself. A `TEXT` resource's
+selector must return a `str`; anything else is reported as a JSON-RPC error on
+the read rather than raising through the transport.
+
+## Interactive views (MCP Apps)
+
+A tool can declare an HTML view that an MCP **host** renders inline in the
+chat, under the [MCP Apps](https://github.com/modelcontextprotocol/ext-apps)
+extension. It layers over the base protocol this package already speaks, so
+there is no protocol bump and no transport change.
+
+The host/server split is the whole shape of it. This package **declares**:
+
+```python
+server.register_ui_resource(
+    name="invoices_table",
+    uri="ui://invoices/table.html",
+    template_name="mcp/invoices_table.html",
+    ui=UIResourceMeta(
+        csp=UICsp(connect_domains=["https://api.example.com"]),
+        prefers_border=True,
+    ),
+)
+```
+
+The **host** renders: it builds the sandboxed iframe, constructs and enforces
+the CSP from what you declared, and runs the `ui/*` postMessage bridge. None of
+that is implemented here, and none of it should be.
+
+A view is an ordinary resource — one URI namespace with your data resources,
+listed in `resources/list`, and guardable with `permissions=` — with three
+things fixed for you: the `text/html;profile=mcp-app` mime type, `TEXT` body
+encoding, and a `_meta` bundle under the extension's key. Give it exactly one
+content source: `template_name=` (a Django template, the idiomatic choice),
+`html=` (a literal document), or `selector=` (a zero-argument callable).
+
+Views are **unguarded by default**. The MCP session is already authenticated,
+a view is a static asset rather than tenant data, and hosts may prefetch one
+before any tool call. Pass `permissions=` if your project wants otherwise.
+
+!!! warning "Keep tenant data out of the view"
+
+    Hosts may prefetch and cache a view, so it is a *shell* that hydrates
+    itself at runtime from tool results — which is why the template renders
+    with no context. This is a house rule, not a spec rule, and it is the one
+    thing a Django author's instinct gets wrong: rendering the queryset into
+    the template is normally the right answer, and here it would leak data
+    across the host's cache.
+
+Linking a tool to a view — so the host knows which view renders which result —
+is not wired up yet; `register_ui_resource` currently declares the view and
+serves it.
+
 ## Dispatch flow
 
 The MCP package owns its own dispatch flow. It does **not** import

@@ -7,7 +7,6 @@ from rest_framework_services import (
     build_offline_context,
     resolve_callable_kwargs,
 )
-from rest_framework_services.types.selector_kind import SelectorKind
 
 from rest_framework_mcp._compat.acall import acall
 from rest_framework_mcp._compat.tracing import span
@@ -19,9 +18,8 @@ from rest_framework_mcp.handlers.utils import (
     check_permissions,
     consume_rate_limits,
 )
-from rest_framework_mcp.output.encode_json import encode_json
+from rest_framework_mcp.output.build_resource_contents import build_resource_contents
 from rest_framework_mcp.protocol.types.json_rpc_error import JsonRpcError
-from rest_framework_mcp.protocol.types.resource_contents import ResourceContents
 
 
 async def handle_resources_read_async(
@@ -30,8 +28,9 @@ async def handle_resources_read_async(
 ) -> dict[str, Any] | JsonRpcError:
     """Async sibling of :func:`handle_resources_read`.
 
-    Same shape — resolve the URI, check permissions, run the selector,
-    render through ``output_serializer`` if set — but routes the selector
+    Same shape — resolve the URI, check permissions, run the selector, then
+    render and encode through the shared :func:`build_resource_contents` —
+    but routes the selector
     through :func:`arun_selector_sync_safe` so genuinely async selectors run
     native and sync selectors are bridged via ``sync_to_async`` (preventing
     ``SynchronousOnlyOperation`` from any ORM call inside).
@@ -92,18 +91,9 @@ async def handle_resources_read_async(
         kwargs: dict[str, Any] = resolve_callable_kwargs(binding.selector, pool)
         raw: Any = await arun_selector_sync_safe(binding.selector, kwargs)
 
-        payload: Any
-        if binding.output_serializer is not None:
-            payload = binding.output_serializer(raw, many=binding.kind is SelectorKind.LIST).data
-        else:
-            payload = raw
-
-        contents = ResourceContents(
-            uri=uri,
-            mime_type=binding.mime_type,
-            text=encode_json(payload),
-            meta=dict(binding.meta) or None,
-        )
+        contents = build_resource_contents(binding=binding, uri=uri, raw=raw)
+        if isinstance(contents, JsonRpcError):
+            return contents
         return {"contents": [contents.to_dict()]}
 
 

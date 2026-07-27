@@ -22,6 +22,17 @@ DATABASES = {
 
 MIDDLEWARE: list[str] = []
 
+# Only ``register_ui_resource(template_name=...)`` needs an engine — the rest of
+# the package renders nothing. Kept minimal and app-dirs-only so the UI-view
+# tests load `tests/testapp/templates/`.
+TEMPLATES = [
+    {
+        "BACKEND": "django.template.backends.django.DjangoTemplates",
+        "APP_DIRS": True,
+        "OPTIONS": {},
+    }
+]
+
 ROOT_URLCONF = "tests.testapp.urls"
 
 CACHES = {

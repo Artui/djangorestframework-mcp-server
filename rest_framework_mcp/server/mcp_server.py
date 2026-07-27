@@ -17,6 +17,7 @@ from rest_framework_mcp.adapters.chain_to_tool import chain_steps_to_tool
 from rest_framework_mcp.adapters.selector_to_resource import selector_to_resource
 from rest_framework_mcp.adapters.selector_to_tool import selector_spec_to_tool
 from rest_framework_mcp.adapters.service_to_tool import service_spec_to_tool
+from rest_framework_mcp.adapters.ui_to_resource import ui_view_to_resource
 from rest_framework_mcp.adapters.utils import merge_meta
 from rest_framework_mcp.auth.backends.django_oauth_toolkit_backend import (
     DjangoOAuthToolkitBackend,
@@ -27,7 +28,13 @@ from rest_framework_mcp.auth.types.token_info import TokenInfo
 from rest_framework_mcp.check_removed_settings import check_removed_settings
 from rest_framework_mcp.config.build_mcp_config import build_mcp_config
 from rest_framework_mcp.config.types.mcp_config import MCPConfig
-from rest_framework_mcp.constants import ArgumentBinding, OutputFormat, UnknownArguments
+from rest_framework_mcp.constants import (
+    UI_RESOURCE_MIME_TYPE,
+    ArgumentBinding,
+    OutputFormat,
+    ResourceEncoding,
+    UnknownArguments,
+)
 from rest_framework_mcp.handlers.call_spec_tool import call_spec_tool
 from rest_framework_mcp.handlers.handle_tools_call_async import handle_tools_call_async
 from rest_framework_mcp.handlers.handle_tools_list import handle_tools_list
@@ -46,6 +53,7 @@ from rest_framework_mcp.registry.types.prompt_binding import PromptBinding
 from rest_framework_mcp.registry.types.resource_binding import ResourceBinding
 from rest_framework_mcp.registry.types.selector_tool_binding import SelectorToolBinding
 from rest_framework_mcp.registry.types.tool_binding import ToolBinding
+from rest_framework_mcp.registry.types.ui_resource_meta import UIResourceMeta
 from rest_framework_mcp.registry.types.url_kwarg import UrlKwarg
 from rest_framework_mcp.server.utils import check_tool_permissions_declared
 from rest_framework_mcp.transport.async_streamable_http_viewset import (
@@ -694,6 +702,7 @@ class MCPServer:
         title: str | None = None,
         output_serializer: type | None = None,
         mime_type: str = "application/json",
+        encoding: ResourceEncoding = ResourceEncoding.JSON,
         permissions: list[Any] | None = None,
         rate_limits: list[Any] | None = None,
         annotations: dict[str, Any] | None = None,
@@ -724,6 +733,13 @@ class MCPServer:
         ``resources/list`` for a concrete URI, ``resources/templates/list``
         for a template — and for the ``contents`` block ``resources/read``
         returns.
+
+        ``encoding`` decides how the selector's value becomes the read body:
+        ``JSON`` (the default) pretty-prints it, ``TEXT`` returns it verbatim.
+        Anything whose ``mime_type`` is not JSON — Markdown, CSV, plain text —
+        wants ``TEXT``, or the document comes back wrapped in a quoted string
+        literal. For an HTML view use :meth:`register_ui_resource`, which sets
+        both.
         """
         binding = selector_to_resource(
             name=name,
@@ -732,6 +748,75 @@ class MCPServer:
             description=description,
             title=title,
             output_serializer=output_serializer,
+            mime_type=mime_type,
+            encoding=encoding,
+            permissions=tuple(permissions or ()),
+            rate_limits=tuple(rate_limits or ()),
+            annotations=annotations,
+            meta=meta,
+            always_listed=always_listed,
+        )
+        self._resources.register(binding)
+        return binding
+
+    def register_ui_resource(
+        self,
+        *,
+        name: str,
+        uri: str,
+        template_name: str | None = None,
+        html: str | None = None,
+        selector: Callable[[], str] | None = None,
+        description: str | None = None,
+        title: str | None = None,
+        ui: UIResourceMeta | None = None,
+        mime_type: str = UI_RESOURCE_MIME_TYPE,
+        permissions: list[Any] | None = None,
+        rate_limits: list[Any] | None = None,
+        annotations: dict[str, Any] | None = None,
+        meta: dict[str, Any] | None = None,
+        always_listed: bool = False,
+    ) -> ResourceBinding:
+        """Register an interactive HTML view (an MCP App) as a resource.
+
+        A tool links to the view and a **host** renders it inline in the chat,
+        inside a sandboxed iframe it constructs itself. This server's whole job
+        is to *declare*: serve the document, and describe what it needs in
+        ``_meta``. The iframe, the CSP enforcement and the ``ui/*`` postMessage
+        bridge are the host's, and are deliberately not implemented here.
+
+        Give exactly one content source — ``template_name`` (a Django template,
+        the idiomatic choice), ``html`` (a literal document), or ``selector``
+        (a zero-argument callable returning one).
+
+        **Keep tenant data out of the view.** Hosts may prefetch and cache a
+        view before any tool call, so it is a shell that hydrates itself at
+        runtime from tool results — which is also why the template renders with
+        no context. This is a house rule rather than a spec rule, and it is the
+        one thing a Django author's instinct gets wrong, because rendering the
+        queryset into the template is normally the right answer.
+
+        ``ui=`` is the typed :class:`UIResourceMeta` — CSP origins, browser
+        permissions, publisher ``domain``, border preference — which serialises
+        into ``_meta`` under the extension's key. ``meta=`` remains available
+        for *other* extensions; passing both ``ui=`` and that same key inside
+        ``meta=`` raises, rather than letting one silently win.
+
+        The result is an ordinary :class:`ResourceBinding`, so it shares one
+        URI namespace with data resources (a collision raises as always),
+        appears in ``resources/list``, and honours ``permissions`` /
+        ``always_listed``. Views default to **unguarded** — the MCP session is
+        already authenticated and a view is a static asset, not tenant data.
+        """
+        binding = ui_view_to_resource(
+            name=name,
+            uri=uri,
+            template_name=template_name,
+            html=html,
+            selector=selector,
+            description=description,
+            title=title,
+            ui=ui,
             mime_type=mime_type,
             permissions=tuple(permissions or ()),
             rate_limits=tuple(rate_limits or ()),
@@ -949,6 +1034,7 @@ class MCPServer:
         title: str | None = None,
         output_serializer: type[Serializer] | None = None,
         mime_type: str = "application/json",
+        encoding: ResourceEncoding = ResourceEncoding.JSON,
         permissions: list[Any] | None = None,
         rate_limits: list[Any] | None = None,
         annotations: dict[str, Any] | None = None,
@@ -991,6 +1077,7 @@ class MCPServer:
                 title=title,
                 output_serializer=output_serializer,
                 mime_type=mime_type,
+                encoding=encoding,
                 permissions=permissions,
                 rate_limits=rate_limits,
                 annotations=annotations,

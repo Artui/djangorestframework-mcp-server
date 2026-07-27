@@ -15,8 +15,21 @@ pipeline knobs — `filter_set` is read from the spec; `ordering_fields` /
 ::: rest_framework_mcp.registry.tool_registry.ToolRegistry
 ::: rest_framework_mcp.registry.types.resource_binding.ResourceBinding
 ::: rest_framework_mcp.registry.resource_registry.ResourceRegistry
+::: rest_framework_mcp.constants.ResourceEncoding
 ::: rest_framework_mcp.registry.types.prompt_binding.PromptBinding
 ::: rest_framework_mcp.registry.prompt_registry.PromptRegistry
+
+## Interactive views (MCP Apps)
+
+`MCPServer.register_ui_resource(...)` declares an HTML view for an MCP host to
+render inline in the chat. The view is an ordinary `ResourceBinding` with the
+Apps mime type, `TEXT` encoding, and a `_meta` bundle built from
+`UIResourceMeta`. See [Interactive views](../concepts.md#interactive-views-mcp-apps)
+for the host/server split and the keep-tenant-data-out rule.
+
+::: rest_framework_mcp.registry.types.ui_resource_meta.UIResourceMeta
+::: rest_framework_mcp.registry.types.ui_csp.UICsp
+::: rest_framework_mcp.constants.UIPermission
 
 ## Bulk registration
 

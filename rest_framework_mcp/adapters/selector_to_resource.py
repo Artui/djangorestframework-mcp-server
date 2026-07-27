@@ -7,6 +7,7 @@ from rest_framework_services.types.selector_spec import SelectorSpec
 
 from rest_framework_mcp.adapters.utils import merge_meta
 from rest_framework_mcp.auth.permissions.wrap_spec_permissions import wrap_spec_permissions
+from rest_framework_mcp.constants import ResourceEncoding
 from rest_framework_mcp.registry.types.resource_binding import ResourceBinding
 
 
@@ -19,6 +20,7 @@ def selector_to_resource(
     title: str | None = None,
     output_serializer: type | None = None,
     mime_type: str = "application/json",
+    encoding: ResourceEncoding = ResourceEncoding.JSON,
     permissions: tuple[Any, ...] = (),
     rate_limits: tuple[Any, ...] = (),
     annotations: dict[str, Any] | None = None,
@@ -72,6 +74,7 @@ def selector_to_resource(
         kind=selector.kind,
         output_serializer=output_serializer,
         mime_type=mime_type,
+        encoding=encoding,
         permissions=effective_perms,
         rate_limits=rate_limits,
         annotations=annotations or {},
