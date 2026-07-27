@@ -46,11 +46,15 @@ class ToolDefinition:
     spec: ServiceSpec | SelectorSpec
     description: str | None = None
     title: str | None = None
-    # Consumer-only display metadata — never emitted on the MCP wire. Carried
-    # onto the resulting binding so a downstream library can render a richer
-    # label / blurb than the protocol ``title`` / ``description``.
     display_name: str | None = None
+    """Consumer-only label — **never emitted on the MCP wire**. Carried onto the
+    resulting binding so a downstream library can render a richer label than the
+    protocol ``title``."""
+
     display_description: str | None = None
+    """Consumer-only blurb, the sibling of :attr:`display_name` — also never
+    emitted on the MCP wire, and likewise carried onto the binding."""
+
     # Both kinds:
     output_format: OutputFormat | None = None
     permissions: Sequence[Any] | None = None
@@ -64,24 +68,26 @@ class ToolDefinition:
     input_serializer: type | None = None
     ordering_fields: Sequence[str] | None = None
     paginate: bool | None = None
-    # Per-binding opt-back-in to ``tools/list`` when
-    # ``FILTER_LISTINGS_BY_PERMISSIONS`` would otherwise hide this
-    # binding. ``None`` means "use the registration default" (which is
-    # ``False``); ``True``/``False`` force the behaviour.
     always_listed: bool | None = None
-    # Explicit opt-in declaring that ``spec.kwargs(view, request)``
-    # supplies these required callable parameters at dispatch time.
-    # Trust must be declared per-transport because ``spec.kwargs`` is a
-    # runtime callable whose output depends on the view context (URL
-    # path params in DRF, URI template vars in MCP resources, neither
-    # in MCP tools). ``None`` means "no kwargs provider opt-in"; supply
-    # a sequence to acknowledge that the provider is the static source
-    # for those names.
+    """Per-binding opt-back-in to ``tools/list`` when
+    ``FILTER_LISTINGS_BY_PERMISSIONS`` would otherwise hide this binding.
+    ``None`` means "use the registration default" (``False``); ``True`` /
+    ``False`` force the behaviour."""
+
     spec_kwargs_provides: Sequence[str] | None = None
-    # URL-derived values the model supplies as tool args, seeded into the
-    # off-HTTP ``view.kwargs`` at dispatch (see :class:`UrlKwarg`). ``None``
-    # means "use the registration default" (no URL kwargs).
+    """Explicit opt-in declaring that ``spec.kwargs(view, request)`` supplies
+    these required callable parameters at dispatch time.
+
+    Trust has to be declared **per transport**, because ``spec.kwargs`` is a
+    runtime callable whose output depends on the view context — URL path params
+    under DRF, URI template vars for MCP resources, neither for MCP tools.
+    ``None`` means no opt-in; supply a sequence to acknowledge that the provider
+    is the static source for those names."""
+
     url_kwargs: Sequence[UrlKwarg] | None = None
+    """URL-derived values the model supplies as tool args, seeded into the
+    off-HTTP ``view.kwargs`` at dispatch (see :class:`UrlKwarg`). ``None`` means
+    "use the registration default" (no URL kwargs)."""
 
     @classmethod
     def service(

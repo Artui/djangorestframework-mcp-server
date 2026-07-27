@@ -7,6 +7,76 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.15.0] — 2026-07-27
+
+### Added
+
+- **`MCPServer.register_specs(registry, *, overrides=None)`** — bulk-register
+  every spec in a `SpecRegistry` (`djangorestframework-services` 0.27+) as a
+  tool. A project that exposes the same specs over MCP *and* another transport
+  (an agent toolset, HTTP views) otherwise writes the list once per transport,
+  and the lists drift. The registry is the one declaration site; this is the
+  MCP end of it. Entries are walked in registration order and dispatched by
+  spec type — `ServiceSpec` through `register_service_tool`, `SelectorSpec`
+  through `register_selector_tool`.
+  - **A source for the server's `ToolRegistry`, not a replacement.** Every tool
+    still lands as a normal binding and names still share the one MCP tool
+    namespace, so a collision raises exactly as before.
+  - **MCP knobs stay MCP-side** via `overrides`, a per-name mapping of the
+    keyword arguments handed to that entry's registration method — the spec
+    registry carries only what is invariant across transports. An `overrides`
+    key naming a spec the registry doesn't hold raises `ValueError` (a typo is
+    not a silent no-op), and a knob belonging to the other spec kind
+    (`paginate` on a `ServiceSpec`) raises `TypeError` from that method.
+  - **Filtered views feed multiple mounts** — `registry.by_tag("public")`
+    returns a new registry, so two servers can be given different projections
+    with no shared state.
+  - **Permission guards are not bypassed.** Registration runs through the same
+    per-tool methods, so an unguarded spec still raises `UnguardedToolWarning`
+    (or `ImproperlyConfigured` under `REQUIRE_TOOL_PERMISSIONS`). A spec that
+    can't declare `permission_classes` can be guarded at the binding through
+    `overrides`.
+  - Returns the bindings in registration order, mirroring the per-tool methods.
+
+### Changed
+
+- **`djangorestframework-services` floor raised to `>=0.27,<0.28`** (from
+  `>=0.26,<0.27`) — `SpecRegistry` is imported at module level by
+  `register_specs`.
+
+### Documentation
+
+- **New [Settings reference](https://artui.github.io/djangorestframework-mcp-server/reference/settings/)
+  — every `REST_FRAMEWORK_MCP` key in one place.** Settings were previously
+  documented ad hoc, wherever a key happened to be relevant (`auth.md`,
+  `concepts.md`, `observability.md`), so coverage was accidental and three live
+  keys had never been documented at all: `MAX_REQUEST_BYTES` (the 1 MiB request
+  body limit), `DEFAULT_OUTPUT_FORMAT`, and `SIMPLEJWT_ACCESS_COOKIE`. The page
+  is now the single home for all 17, each with its default, the reason behind
+  it, and the per-server override — including the one combination the MCP spec
+  forbids (`INCLUDE_OUTPUT_SCHEMA` without `INCLUDE_STRUCTURED_CONTENT`) and
+  the three removed collaborator keys that now raise `ImproperlyConfigured`.
+- **Chain-tool types gained reference entries.** `ChainStep`, `ChainContext`
+  and `ChainToolBinding` had none — `ChainContext` was never even named in the
+  docs, although the chain recipe has readers writing `inputs=lambda ctx: …`
+  against it.
+- **Field-level documentation on the binding types now reaches the published
+  reference.** 23 fields across `ToolBinding`, `SelectorToolBinding`,
+  `ChainToolBinding`, `ResourceBinding`, `PromptBinding` and `ToolDefinition`
+  were explained by `#` comments, which `mkdocstrings` does not render — so the
+  reference showed bare names with no explanation for
+  `display_name` / `display_description`, `include_structured_content`,
+  `include_output_schema`, `argument_binding`, `unknown_arguments`,
+  `always_listed`, `url_kwargs`, `spec_kwargs_provides`, `input_serializer`
+  and `ResourceBinding.kind`, even though the source explained every one. They
+  are attribute docstrings now. Comments that head a *group* of fields
+  (`# Both kinds:`, `# Selector-only:`) stay comments — they document the
+  grouping, not a field. No behaviour change.
+- **A snippet in the rate-limiting recipe is valid Python again.**
+  `ServiceSpec(service=…, ...)` put a bare `...` after a keyword argument,
+  which is a `SyntaxError` — so the snippet couldn't be copied, and the whole
+  fence was invisible to doc-checking tooling.
+
 ## [0.14.0] — 2026-07-24
 
 ### Changed
@@ -1488,7 +1558,8 @@ Pinned to `djangorestframework-services==0.6.0`.
 - 100% line + branch coverage enforced by pytest (**451 tests** at
   release).
 
-[Unreleased]: https://github.com/Artui/djangorestframework-mcp-server/compare/v0.14.0...HEAD
+[Unreleased]: https://github.com/Artui/djangorestframework-mcp-server/compare/v0.15.0...HEAD
+[0.15.0]: https://github.com/Artui/djangorestframework-mcp-server/compare/v0.14.0...v0.15.0
 [0.14.0]: https://github.com/Artui/djangorestframework-mcp-server/compare/v0.13.0...v0.14.0
 [0.13.0]: https://github.com/Artui/djangorestframework-mcp-server/compare/v0.12.0...v0.13.0
 [0.12.0]: https://github.com/Artui/djangorestframework-mcp-server/compare/v0.11.3...v0.12.0

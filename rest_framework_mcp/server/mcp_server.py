@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from collections.abc import Callable, Sequence
+from collections.abc import Callable, Mapping, Sequence
 from typing import Any
 
 from asgiref.sync import sync_to_async
@@ -8,6 +8,7 @@ from django.core.exceptions import ImproperlyConfigured
 from django.http import HttpRequest
 from django.urls import URLPattern, path
 from rest_framework.serializers import Serializer
+from rest_framework_services.registry.spec_registry import SpecRegistry
 from rest_framework_services.types.selector_kind import SelectorKind
 from rest_framework_services.types.selector_spec import SelectorSpec
 from rest_framework_services.types.service_spec import ServiceSpec
@@ -341,6 +342,77 @@ class MCPServer:
         )
         self._tools.register(binding)
         return binding
+
+    def register_specs(
+        self,
+        registry: SpecRegistry,
+        *,
+        overrides: Mapping[str, Mapping[str, Any]] | None = None,
+    ) -> tuple[ToolBinding | SelectorToolBinding, ...]:
+        """Register every spec in a ``SpecRegistry`` as a tool, in order.
+
+        A project exposing the same operations over more than one transport
+        keeps its spec set in a
+        :class:`~rest_framework_services.registry.spec_registry.SpecRegistry`
+        (``djangorestframework-services`` 0.27+) so each transport reads one
+        source instead of enumerating the specs again. This is the MCP end of
+        that: it walks the registry and calls
+        :meth:`register_service_tool` / :meth:`register_selector_tool` per
+        entry, discriminating on the spec type.
+
+        It is a **source for** this server's own ``ToolRegistry``, not a
+        replacement for it — every tool still lands as a normal binding, and
+        names still share the one tool namespace (a collision raises, as
+        always). The spec registry carries only what is invariant across
+        transports (which spec, its canonical name, its tags); every MCP knob
+        stays here, per tool, via ``overrides``::
+
+            server.register_specs(
+                registry.by_tag("public"),
+                overrides={
+                    "list_orders": {"paginate": True, "ordering_fields": ["created_at"]},
+                    "refund_order": {"annotations": {"destructiveHint": True}},
+                },
+            )
+
+        ``overrides`` maps a registered name to the keyword arguments handed to
+        that entry's registration method. It stays a plain mapping rather than
+        a dataclass because the two methods take different knobs — a single
+        record would duplicate both signatures and drift from them. The keys
+        are therefore checked against each method's own signature, which means
+        a knob used on the wrong spec kind (``paginate`` on a ``ServiceSpec``)
+        raises :exc:`TypeError` from that method. An ``overrides`` key naming a
+        spec the registry doesn't hold raises :exc:`ValueError` here — that is
+        a typo, not an intentional no-op.
+
+        Registration is not transactional: a failure partway leaves the
+        earlier entries registered. That is harmless in the intended use —
+        registration happens at configuration time, so a raise aborts startup
+        anyway.
+
+        Returns the bindings in registration order, mirroring the per-tool
+        methods that each return theirs.
+        """
+        override_map = dict(overrides or {})
+        unknown = sorted(name for name in override_map if name not in registry)
+        if unknown:
+            raise ValueError(
+                f"overrides name specs not in this SpecRegistry: {unknown}. "
+                f"Registered names: {sorted(entry.name for entry in registry.all())}."
+            )
+
+        bindings: list[ToolBinding | SelectorToolBinding] = []
+        for entry in registry.all():
+            knobs = dict(override_map.get(entry.name, {}))
+            if isinstance(entry.spec, ServiceSpec):
+                bindings.append(
+                    self.register_service_tool(name=entry.name, spec=entry.spec, **knobs)
+                )
+            else:
+                bindings.append(
+                    self.register_selector_tool(name=entry.name, spec=entry.spec, **knobs)
+                )
+        return tuple(bindings)
 
     def register_chain_tool(
         self,

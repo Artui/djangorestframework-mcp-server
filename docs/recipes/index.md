@@ -25,5 +25,8 @@ that solves a single concrete problem. Browse the list:
 - [Expose a polymorphic action as tools](polymorphic-action.md) — expand a
   drf-services `PolymorphicServiceSpec` into one flat tool per variant
   instead of a `anyOf` union.
+- [Register tools from a shared spec registry](register-from-spec-registry.md)
+  — when the same specs are exposed over MCP *and* another transport, declare
+  them once in a `SpecRegistry` and bulk-register with `register_specs`.
 - [Migrate from `fastapi-mcp` / hand-rolled MCP](migrating.md) — step
   by step from a custom Django MCP view or a `fastapi-mcp` app.

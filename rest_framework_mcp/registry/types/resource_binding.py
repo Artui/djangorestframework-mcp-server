@@ -38,13 +38,13 @@ class ResourceBinding(Generic[ResultT]):
     uri_template: str
     description: str | None
     selector: Callable[..., ResultT]
-    # Required — no default. Pulled out of ``SelectorSpec.kind`` by the
-    # adapter so the binding doesn't carry a reference to the whole spec.
-    # ``LIST`` invokes the output serializer with ``many=True``;
-    # ``RETRIEVE`` (the common case for URI-template resources) invokes it
-    # with ``many=False``. Resources have no post-fetch pipeline, so both
-    # kinds are unconditionally accepted.
     kind: SelectorKind
+    """Required, no default. Pulled out of ``SelectorSpec.kind`` by the adapter
+    so the binding doesn't carry a reference to the whole spec. ``LIST`` invokes
+    the output serializer with ``many=True``; ``RETRIEVE`` (the common case for
+    URI-template resources) invokes it with ``many=False``. Resources have no
+    post-fetch pipeline, so both kinds are unconditionally accepted."""
+
     output_serializer: type | None = None
     mime_type: str = "application/json"
     permissions: tuple[Any, ...] = ()
@@ -56,13 +56,13 @@ class ResourceBinding(Generic[ResultT]):
     # against the upstream ``SelectorSpec.kwargs`` field (which uses generic
     # ``ExtraT`` bounds) are accepted without contravariance friction.
     kwargs_provider: Callable[..., Any] | None = None
-    # See ``ToolBinding.always_listed`` — when
-    # ``FILTER_LISTINGS_BY_PERMISSIONS`` is enabled, the resource is
-    # normally dropped from ``resources/list`` (and
-    # ``resources/templates/list`` for templates) if any binding
-    # permission denies the caller. ``always_listed=True`` opts it back
-    # in as a discovery aid.
     always_listed: bool = False
+    """Opt this resource back into listings it would otherwise be filtered out
+    of. With ``FILTER_LISTINGS_BY_PERMISSIONS`` enabled, a resource is normally
+    dropped from ``resources/list`` (and ``resources/templates/list`` for
+    templates) if any binding permission denies the caller; ``True`` keeps it
+    visible as a discovery aid. Same semantics as
+    :attr:`ToolBinding.always_listed`."""
 
     @property
     def is_template(self) -> bool:
