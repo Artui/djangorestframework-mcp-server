@@ -7,7 +7,38 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.16.0] — 2026-07-27
+
 ### Added
+
+- **Tools link to interactive views.** `ui=UIToolMeta(resource_uri="ui://…")`
+  on `register_service_tool` / `register_selector_tool` /
+  `register_chain_tool` (and the `@service_tool` / `@selector_tool`
+  decorators) emits `_meta.ui` on the tool's `tools/list` entry, so an MCP
+  host renders that tool's result inside the view instead of showing raw JSON.
+  This closes the MCP Apps round trip started by `register_ui_resource`.
+  - **The render payload is the `structuredContent` the tool already emits** —
+    no second serialisation path, pagination envelope included. A `tools/call`
+    the view makes arrives at the ordinary endpoint, so `permission_classes`,
+    per-binding `MCPPermission`s and rate limits all apply unchanged.
+  - `visibility` (`UIVisibility.MODEL` / `APP`) declares who may call the tool.
+    **Host-enforced** — a host must not offer the model a tool whose visibility
+    omits `MODEL` — so this server declares the field and does not filter
+    `tools/list` on it.
+  - **Three ways a link can be wrong are refused at registration**, because all
+    three fail identically at runtime: a view that silently never renders.
+    (1) `resource_uri` names no view on this server — so a view must be
+    registered *before* the tool linking to it; (2) the tool doesn't emit
+    `structuredContent`, checked against the *effective* value so a project
+    that disabled it globally is caught too; (3) both `ui=` and a `"ui"` key in
+    `meta=`, which would silently overwrite each other.
+- **`ClientCapabilities.extensions`** — a client's `initialize` now round-trips
+  the protocol extensions it advertises (MCP Apps arrives as
+  `io.modelcontextprotocol/ui`). Parsed for introspection only: **advertisement
+  is one-directional, client → server**, the spec defines no matching server
+  capability, and nothing gates on it — remembering it per session would mean a
+  breaking change to the pluggable `SessionStore` Protocol, for metadata
+  non-supporting clients are required to ignore anyway.
 
 - **Interactive views — the server half of
   [MCP Apps](https://github.com/modelcontextprotocol/ext-apps).** A tool can
@@ -1625,7 +1656,8 @@ Pinned to `djangorestframework-services==0.6.0`.
 - 100% line + branch coverage enforced by pytest (**451 tests** at
   release).
 
-[Unreleased]: https://github.com/Artui/djangorestframework-mcp-server/compare/v0.15.0...HEAD
+[Unreleased]: https://github.com/Artui/djangorestframework-mcp-server/compare/v0.16.0...HEAD
+[0.16.0]: https://github.com/Artui/djangorestframework-mcp-server/compare/v0.15.0...v0.16.0
 [0.15.0]: https://github.com/Artui/djangorestframework-mcp-server/compare/v0.14.0...v0.15.0
 [0.14.0]: https://github.com/Artui/djangorestframework-mcp-server/compare/v0.13.0...v0.14.0
 [0.13.0]: https://github.com/Artui/djangorestframework-mcp-server/compare/v0.12.0...v0.13.0

@@ -26,6 +26,7 @@ class InitializeParams:
                 sampling=caps_raw.get("sampling"),
                 elicitation=caps_raw.get("elicitation"),
                 experimental=caps_raw.get("experimental"),
+                extensions=caps_raw.get("extensions"),
             ),
             client_info=Implementation(
                 name=str(info_raw.get("name", "")),

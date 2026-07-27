@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from rest_framework_mcp.constants import JsonRpcErrorCode
+from rest_framework_mcp.constants import UI_EXTENSION_ID, JsonRpcErrorCode
 from rest_framework_mcp.protocol.parse_message import parse_message
 from rest_framework_mcp.protocol.types.client_capabilities import ClientCapabilities
 from rest_framework_mcp.protocol.types.implementation import Implementation
@@ -42,7 +42,11 @@ def test_client_capabilities_empty() -> None:
 
 def test_client_capabilities_full() -> None:
     caps = ClientCapabilities(
-        roots={"list": True}, sampling={}, elicitation={"x": 1}, experimental={"y": 2}
+        roots={"list": True},
+        sampling={},
+        elicitation={"x": 1},
+        experimental={"y": 2},
+        extensions={UI_EXTENSION_ID: {}},
     )
     out = caps.to_dict()
     assert out == {
@@ -50,7 +54,28 @@ def test_client_capabilities_full() -> None:
         "sampling": {},
         "elicitation": {"x": 1},
         "experimental": {"y": 2},
+        "extensions": {UI_EXTENSION_ID: {}},
     }
+
+
+def test_client_extensions_are_parsed_from_initialize() -> None:
+    """How a client says it supports MCP Apps. Parsed for introspection —
+    nothing gates on it, since advertisement is client→server only and the
+    spec defines no server-side counterpart."""
+    params = InitializeParams.from_payload(
+        {
+            "protocolVersion": "2025-11-25",
+            "capabilities": {"extensions": {UI_EXTENSION_ID: {}}},
+            "clientInfo": {"name": "c", "version": "1"},
+        }
+    )
+
+    assert params.capabilities.extensions == {UI_EXTENSION_ID: {}}
+
+
+def test_a_client_advertising_no_extensions_parses_to_none() -> None:
+    params = InitializeParams.from_payload({"protocolVersion": "2025-11-25"})
+    assert params.capabilities.extensions is None
 
 
 def test_server_capabilities_full() -> None:

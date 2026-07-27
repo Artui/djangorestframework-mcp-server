@@ -54,8 +54,9 @@ from rest_framework_mcp.registry.types.resource_binding import ResourceBinding
 from rest_framework_mcp.registry.types.selector_tool_binding import SelectorToolBinding
 from rest_framework_mcp.registry.types.tool_binding import ToolBinding
 from rest_framework_mcp.registry.types.ui_resource_meta import UIResourceMeta
+from rest_framework_mcp.registry.types.ui_tool_meta import UIToolMeta
 from rest_framework_mcp.registry.types.url_kwarg import UrlKwarg
-from rest_framework_mcp.server.utils import check_tool_permissions_declared
+from rest_framework_mcp.server.utils import build_ui_tool_meta, check_tool_permissions_declared
 from rest_framework_mcp.transport.async_streamable_http_viewset import (
     ASYNC_STREAMABLE_HTTP_ACTION_MAP,
     AsyncStreamableHttpViewSet,
@@ -215,6 +216,7 @@ class MCPServer:
         rate_limits: list[Any] | None = None,
         annotations: dict[str, Any] | None = None,
         meta: dict[str, Any] | None = None,
+        ui: UIToolMeta | None = None,
         include_structured_content: bool | None = None,
         include_output_schema: bool | None = None,
         argument_binding: ArgumentBinding = ArgumentBinding.BUNDLE,
@@ -245,7 +247,22 @@ class MCPServer:
         closed, spec-defined set of client hints; ``_meta`` is where
         protocol extensions put their own keys. Passed through as given:
         this layer neither validates the keys nor reserves any.
+
+        ``ui`` links this tool to an interactive view registered with
+        :meth:`register_ui_resource`, so a host renders the result inline
+        instead of showing raw JSON. The view must already be registered on
+        this server, and the tool must emit ``structuredContent`` — that is
+        what the view renders from — or the link is refused at registration
+        rather than shipping a view that comes up blank.
         """
+        ui_meta = build_ui_tool_meta(
+            name=name,
+            ui=ui,
+            meta=meta,
+            resources=self._resources,
+            include_structured_content=include_structured_content,
+            default_structured_content=self._config.include_structured_content,
+        )
         binding = service_spec_to_tool(
             name=name,
             spec=spec,
@@ -257,7 +274,7 @@ class MCPServer:
             permissions=tuple(permissions or ()),
             rate_limits=tuple(rate_limits or ()),
             annotations=annotations,
-            meta=meta,
+            meta=merge_meta(ui_meta, meta),
             include_structured_content=include_structured_content,
             include_output_schema=include_output_schema,
             argument_binding=argument_binding,
@@ -287,6 +304,7 @@ class MCPServer:
         rate_limits: list[Any] | None = None,
         annotations: dict[str, Any] | None = None,
         meta: dict[str, Any] | None = None,
+        ui: UIToolMeta | None = None,
         ordering_fields: list[str] | tuple[str, ...] | None = None,
         paginate: bool = False,
         include_structured_content: bool | None = None,
@@ -336,8 +354,17 @@ class MCPServer:
         result with ``many=False``.
 
         ``meta`` is the generic ``_meta`` bundle for this tool's
-        ``tools/list`` entry — see :meth:`register_service_tool`.
+        ``tools/list`` entry, and ``ui`` links it to an interactive view —
+        both as on :meth:`register_service_tool`.
         """
+        ui_meta = build_ui_tool_meta(
+            name=name,
+            ui=ui,
+            meta=meta,
+            resources=self._resources,
+            include_structured_content=include_structured_content,
+            default_structured_content=self._config.include_structured_content,
+        )
         binding = selector_spec_to_tool(
             name=name,
             spec=spec,
@@ -350,7 +377,7 @@ class MCPServer:
             permissions=tuple(permissions or ()),
             rate_limits=tuple(rate_limits or ()),
             annotations=annotations,
-            meta=meta,
+            meta=merge_meta(ui_meta, meta),
             ordering_fields=tuple(ordering_fields or ()),
             paginate=paginate,
             include_structured_content=include_structured_content,
@@ -456,6 +483,7 @@ class MCPServer:
         rate_limits: list[Any] | None = None,
         annotations: dict[str, Any] | None = None,
         meta: dict[str, Any] | None = None,
+        ui: UIToolMeta | None = None,
         include_structured_content: bool | None = None,
         include_output_schema: bool | None = None,
         unknown_arguments: UnknownArguments = UnknownArguments.REJECT,
@@ -491,8 +519,17 @@ class MCPServer:
         own :meth:`register_selector_tool`.
 
         ``meta`` is the generic ``_meta`` bundle for this tool's
-        ``tools/list`` entry — see :meth:`register_service_tool`.
+        ``tools/list`` entry, and ``ui`` links it to an interactive view —
+        both as on :meth:`register_service_tool`.
         """
+        ui_meta = build_ui_tool_meta(
+            name=name,
+            ui=ui,
+            meta=meta,
+            resources=self._resources,
+            include_structured_content=include_structured_content,
+            default_structured_content=self._config.include_structured_content,
+        )
         binding = chain_steps_to_tool(
             name=name,
             steps=tuple(steps),
@@ -508,7 +545,7 @@ class MCPServer:
             permissions=tuple(permissions or ()),
             rate_limits=tuple(rate_limits or ()),
             annotations=annotations,
-            meta=meta,
+            meta=merge_meta(ui_meta, meta),
             include_structured_content=include_structured_content,
             include_output_schema=include_output_schema,
             unknown_arguments=unknown_arguments,
@@ -885,6 +922,7 @@ class MCPServer:
         rate_limits: list[Any] | None = None,
         annotations: dict[str, Any] | None = None,
         meta: dict[str, Any] | None = None,
+        ui: UIToolMeta | None = None,
         include_structured_content: bool | None = None,
         include_output_schema: bool | None = None,
         argument_binding: ArgumentBinding = ArgumentBinding.BUNDLE,
@@ -930,6 +968,7 @@ class MCPServer:
                 rate_limits=rate_limits,
                 annotations=annotations,
                 meta=meta,
+                ui=ui,
                 include_structured_content=include_structured_content,
                 include_output_schema=include_output_schema,
                 argument_binding=argument_binding,
@@ -957,6 +996,7 @@ class MCPServer:
         rate_limits: list[Any] | None = None,
         annotations: dict[str, Any] | None = None,
         meta: dict[str, Any] | None = None,
+        ui: UIToolMeta | None = None,
         ordering_fields: list[str] | tuple[str, ...] | None = None,
         paginate: bool = False,
         include_structured_content: bool | None = None,
@@ -1009,6 +1049,7 @@ class MCPServer:
                 rate_limits=rate_limits,
                 annotations=annotations,
                 meta=meta,
+                ui=ui,
                 ordering_fields=ordering_fields,
                 paginate=paginate,
                 include_structured_content=include_structured_content,

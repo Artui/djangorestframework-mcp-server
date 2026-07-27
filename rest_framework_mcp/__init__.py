@@ -19,6 +19,7 @@ from rest_framework_mcp.auth.permissions.types.mcp_permission import MCPPermissi
 from rest_framework_mcp.auth.types.auth_backend import MCPAuthBackend
 from rest_framework_mcp.auth.types.token_info import TokenInfo
 from rest_framework_mcp.constants import (
+    UI_EXTENSION_ID,
     UI_RESOURCE_MIME_TYPE,
     ArgumentBinding,
     JsonRpcErrorCode,
@@ -26,6 +27,7 @@ from rest_framework_mcp.constants import (
     ResourceEncoding,
     ToolKind,
     UIPermission,
+    UIVisibility,
     UnknownArguments,
 )
 from rest_framework_mcp.protocol.types.json_rpc_error import JsonRpcError
@@ -42,6 +44,7 @@ from rest_framework_mcp.registry.types.service_defaults import ServiceDefaults
 from rest_framework_mcp.registry.types.tool_definition import ToolDefinition
 from rest_framework_mcp.registry.types.ui_csp import UICsp
 from rest_framework_mcp.registry.types.ui_resource_meta import UIResourceMeta
+from rest_framework_mcp.registry.types.ui_tool_meta import UIToolMeta
 from rest_framework_mcp.registry.types.url_kwarg import UrlKwarg
 from rest_framework_mcp.server.mcp_server import MCPServer
 from rest_framework_mcp.transport.django_cache_session_store import DjangoCacheSessionStore
@@ -54,6 +57,7 @@ from rest_framework_mcp.transport.types.sse_replay_buffer import SSEReplayBuffer
 from rest_framework_mcp.version import __version__
 
 __all__ = [
+    "UI_EXTENSION_ID",
     "UI_RESOURCE_MIME_TYPE",
     "ArgumentBinding",
     "ChainContext",
@@ -96,6 +100,8 @@ __all__ = [
     "UICsp",
     "UIPermission",
     "UIResourceMeta",
+    "UIToolMeta",
+    "UIVisibility",
     "UnknownArguments",
     "UpdateService",
     "UrlKwarg",
