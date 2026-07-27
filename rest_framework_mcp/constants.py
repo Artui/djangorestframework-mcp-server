@@ -208,10 +208,39 @@ class UIPermission(str, Enum):
     CLIPBOARD_WRITE = "clipboardWrite"
 
 
+class UIVisibility(str, Enum):
+    """Who may call a tool that is linked to an interactive view.
+
+    Declared per tool in ``_meta.ui.visibility`` and **enforced by the host**,
+    which the spec requires not to offer the model a tool whose visibility
+    omits ``MODEL``. This server only declares it — nothing here filters
+    ``tools/list`` on it, because a client that does not implement the
+    extension would not honour the rule anyway.
+
+    - ``MODEL``: the agent may call it — ordinary tool behaviour.
+    - ``APP``: the view may call it. An ``APP``-only tool is a fine-grained
+      operation that exists to serve the view rather than the conversation.
+    """
+
+    MODEL = "model"
+    APP = "app"
+
+
+UI_EXTENSION_ID: str = "io.modelcontextprotocol/ui"
+"""Identifier a client uses to advertise MCP Apps support.
+
+Advertisement is **client → server only** — it arrives under
+``capabilities.extensions`` in the ``initialize`` request, and the spec
+defines no matching server-side capability. Parsed for introspection; nothing
+gates on it (see :class:`UIVisibility`).
+"""
+
+
 __all__ = [
     "JSONRPC_VERSION",
     "RESERVED_POOL_SEEDS",
     "RESERVED_POST_FETCH_KEYS",
+    "UI_EXTENSION_ID",
     "UI_META_KEY",
     "UI_RESOURCE_MIME_TYPE",
     "ArgumentBinding",
@@ -221,5 +250,6 @@ __all__ = [
     "ResourceEncoding",
     "ToolKind",
     "UIPermission",
+    "UIVisibility",
     "UnknownArguments",
 ]

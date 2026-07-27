@@ -22,6 +22,9 @@ that solves a single concrete problem. Browse the list:
 - [Selector tool with FilterSet](selector-tool-with-filterset.md) —
   expose a list-shaped read tool with `django-filter`, ordering, and
   pagination, generated `inputSchema` and all.
+- [Render a DRF list as an interactive table](interactive-view.md) — MCP Apps:
+  declare a `ui://` view, link a selector tool to it, and a host draws the
+  results inline in the chat instead of reading JSON aloud.
 - [Expose a polymorphic action as tools](polymorphic-action.md) — expand a
   drf-services `PolymorphicServiceSpec` into one flat tool per variant
   instead of a `anyOf` union.

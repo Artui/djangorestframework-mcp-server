@@ -500,9 +500,45 @@ before any tool call. Pass `permissions=` if your project wants otherwise.
     the template is normally the right answer, and here it would leak data
     across the host's cache.
 
-Linking a tool to a view — so the host knows which view renders which result —
-is not wired up yet; `register_ui_resource` currently declares the view and
-serves it.
+A tool then points at the view, and the host renders that tool's result inside
+it instead of showing raw JSON:
+
+```python
+server.register_selector_tool(
+    name="list_invoices",
+    spec=list_invoices_spec,
+    ui=UIToolMeta(resource_uri="ui://invoices/table.html"),
+)
+```
+
+The render payload is the `structuredContent` the tool **already emits** — no
+second serialisation path — and a `tools/call` the view makes comes back
+through the ordinary endpoint, inheriting your auth, `MCPPermission`s and rate
+limits unchanged.
+
+Three ways a link can be wrong all fail the same way at runtime — a view that
+silently never renders — so all three are refused at registration:
+
+| Mistake | Why it's caught |
+| --- | --- |
+| `resource_uri` names no view on this server | The host resolves it against the same server, so a typo reaches it as a dangling reference. Register the view **before** the tool that links to it. |
+| The tool has `include_structured_content=False` | That *is* the render payload; the view would come up blank. Checked against the effective value, so a project that turned it off globally is caught too. |
+| Both `ui=` and a `"ui"` key in `meta=` | Both write the same `_meta` key, so one would quietly overwrite the other. |
+
+`visibility` declares who may call the tool — `UIVisibility.MODEL`, `APP`, or
+both. It is **host-enforced**: a host is required not to offer the model a tool
+whose visibility omits `MODEL`, which makes an `APP`-only tool a useful shape
+for a fine-grained operation that exists to serve the view rather than the
+conversation. This server declares the field and does not filter `tools/list`
+on it — a client that doesn't implement the extension wouldn't honour the rule
+anyway.
+
+A client advertises Apps support as `capabilities.extensions` on `initialize`,
+which is parsed onto `ClientCapabilities.extensions`. **Advertisement is
+one-directional, client → server** — the spec defines no matching server
+capability, so nothing is sent back, and `_meta.ui` is emitted unconditionally.
+Unknown `_meta` keys are ignorable by design, so a client that doesn't
+implement Apps is unaffected.
 
 ## Dispatch flow
 

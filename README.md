@@ -83,9 +83,12 @@ See the [quickstart](docs/quickstart.md) for the full end-to-end recipe.
   listing entry (and on the `contents` of `resources/read`). Passed through
   verbatim, so protocol extensions have somewhere to live.
 - **Interactive views (MCP Apps)** — `register_ui_resource(...)` declares an
-  HTML view a host renders inline in the chat, with typed CSP / permission
-  metadata. An extension over base MCP, so no protocol bump. We declare; the
-  host sandboxes and renders.
+  HTML view with typed CSP / permission metadata; `ui=UIToolMeta(...)` on a
+  tool links its result to that view, and a host renders it inline in the chat.
+  The render payload is the `structuredContent` you already emit, and a view's
+  own `tools/call`s inherit your auth, permissions and rate limits. An
+  extension over base MCP, so no protocol bump. We declare; the host sandboxes
+  and renders.
 - **Pluggable auth** — `DjangoOAuthToolkitBackend` (default) and
   `AllowAnyBackend` (dev only). Per-binding `MCPPermission` classes
   (`ScopeRequired`, `DjangoPermRequired`) plus your own.
