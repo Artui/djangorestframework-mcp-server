@@ -94,6 +94,7 @@ nav:
       - Selector tool with FilterSet: recipes/selector-tool-with-filterset.md
       - Expose a polymorphic action as tools: recipes/polymorphic-action.md
       - Chain specs into one tool: recipes/chain-tools.md
+      - Register tools from a spec registry: recipes/register-from-spec-registry.md
       - Migrate from fastapi-mcp / hand-rolled: recipes/migrating.md
   - Reference:
       - reference/index.md

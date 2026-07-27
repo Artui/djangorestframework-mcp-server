@@ -7,6 +7,41 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- **`MCPServer.register_specs(registry, *, overrides=None)`** — bulk-register
+  every spec in a `SpecRegistry` (`djangorestframework-services` 0.27+) as a
+  tool. A project that exposes the same specs over MCP *and* another transport
+  (an agent toolset, HTTP views) otherwise writes the list once per transport,
+  and the lists drift. The registry is the one declaration site; this is the
+  MCP end of it. Entries are walked in registration order and dispatched by
+  spec type — `ServiceSpec` through `register_service_tool`, `SelectorSpec`
+  through `register_selector_tool`.
+  - **A source for the server's `ToolRegistry`, not a replacement.** Every tool
+    still lands as a normal binding and names still share the one MCP tool
+    namespace, so a collision raises exactly as before.
+  - **MCP knobs stay MCP-side** via `overrides`, a per-name mapping of the
+    keyword arguments handed to that entry's registration method — the spec
+    registry carries only what is invariant across transports. An `overrides`
+    key naming a spec the registry doesn't hold raises `ValueError` (a typo is
+    not a silent no-op), and a knob belonging to the other spec kind
+    (`paginate` on a `ServiceSpec`) raises `TypeError` from that method.
+  - **Filtered views feed multiple mounts** — `registry.by_tag("public")`
+    returns a new registry, so two servers can be given different projections
+    with no shared state.
+  - **Permission guards are not bypassed.** Registration runs through the same
+    per-tool methods, so an unguarded spec still raises `UnguardedToolWarning`
+    (or `ImproperlyConfigured` under `REQUIRE_TOOL_PERMISSIONS`). A spec that
+    can't declare `permission_classes` can be guarded at the binding through
+    `overrides`.
+  - Returns the bindings in registration order, mirroring the per-tool methods.
+
+### Changed
+
+- **`djangorestframework-services` floor raised to `>=0.27,<0.28`** (from
+  `>=0.26,<0.27`) — `SpecRegistry` is imported at module level by
+  `register_specs`.
+
 ## [0.14.0] — 2026-07-24
 
 ### Changed
