@@ -121,6 +121,17 @@ class TestOverrides:
         assert binding.paginate is True
         assert binding.ordering_fields == ("id",)
 
+    def test_meta_rides_the_overrides_map(self) -> None:
+        """``_meta`` is per-transport, so it is a binding knob rather than
+        something the shared registry could carry."""
+        server = _make()
+        (binding,) = server.register_specs(
+            _read_only(),
+            overrides={"list_orders": {"meta": {"example.com/panel": {"href": "p://x"}}}},
+        )
+
+        assert binding.meta == {"example.com/panel": {"href": "p://x"}}
+
     def test_entries_without_an_override_use_defaults(self) -> None:
         server = _make()
         bindings = server.register_specs(
