@@ -6,6 +6,8 @@ from typing import Any, Generic, TypeVar
 
 from rest_framework_services.types.selector_kind import SelectorKind
 
+from rest_framework_mcp.constants import ResourceEncoding
+
 ResultT = TypeVar("ResultT")
 
 
@@ -47,6 +49,13 @@ class ResourceBinding(Generic[ResultT]):
 
     output_serializer: type | None = None
     mime_type: str = "application/json"
+    encoding: ResourceEncoding = ResourceEncoding.JSON
+    """How the selector's value becomes the ``resources/read`` body. ``JSON``
+    (the default) pretty-prints it; ``TEXT`` returns it verbatim, which is what
+    an HTML / Markdown / CSV resource needs. Declared rather than inferred from
+    ``mime_type``, so advertising a new mime type never silently changes how the
+    body is encoded."""
+
     permissions: tuple[Any, ...] = ()
     rate_limits: tuple[Any, ...] = ()
     annotations: dict[str, Any] = field(default_factory=dict)

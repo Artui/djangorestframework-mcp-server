@@ -9,6 +9,44 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **Interactive views — the server half of
+  [MCP Apps](https://github.com/modelcontextprotocol/ext-apps).** A tool can
+  declare an HTML view that an MCP *host* renders inline in the chat.
+  `MCPServer.register_ui_resource(name=…, uri="ui://…", template_name=…)`
+  serves the document with the `text/html;profile=mcp-app` mime type and a
+  `_meta` bundle built from the typed `UIResourceMeta` — CSP origins (`UICsp`),
+  browser `UIPermission`s, publisher `domain`, border preference.
+  - **We declare; hosts render.** The sandboxed iframe, CSP *enforcement* and
+    the `ui/*` postMessage bridge belong to the host and are deliberately not
+    implemented here. Apps is an *extension* over base MCP `2025-11-25`, which
+    this package already speaks, so there is **no protocol bump**, no transport
+    change and no new capability to advertise.
+  - **A view is an ordinary resource.** It shares one URI namespace with data
+    resources (a collision raises as always), appears in `resources/list`, and
+    honours `permissions=` / `always_listed`. Views are **unguarded by
+    default**: the MCP session is already authenticated, a view is a static
+    asset rather than tenant data, and hosts may prefetch one before any tool
+    call.
+  - Exactly one content source — `template_name=` (a Django template, rendered
+    per read so an edit needs no restart), `html=`, or a zero-argument
+    `selector=`. **The template renders with no context**: because hosts
+    prefetch and cache views, a view is a shell that hydrates itself from tool
+    results, and rendering a queryset into it would leak data across that
+    cache.
+  - `meta=` stays available for other extensions. Passing both the typed `ui=`
+    and that same key inside `meta=` raises at registration rather than letting
+    one silently win — the symptom would be a view that never renders.
+- **`ResourceEncoding` — a resource declares how its body is encoded.**
+  `register_resource(..., encoding=ResourceEncoding.TEXT)` returns the
+  selector's value verbatim instead of JSON-encoding it. **This fixes a live
+  bug for any non-JSON resource:** `mime_type=` has always accepted anything,
+  but both read handlers JSON-encoded unconditionally, so a Markdown, CSV,
+  plain-text or HTML resource came back as a *quoted JSON string literal*
+  rather than the document. Declared rather than sniffed from `mime_type`, so
+  advertising a new type never silently changes the body. A `TEXT` resource
+  whose selector returns a non-`str` comes back as a JSON-RPC error on the read
+  rather than raising through the transport.
+
 - **Generic `_meta` passthrough on the wire types and every registration
   surface.** The base MCP protocol gives most wire objects a free-form `_meta`
   object — the open extension namespace, distinct from the closed
@@ -27,6 +65,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   later wins), the single seam a future feature injects its own key through.
   On the `tools/call` result envelope `_meta` is per-call rather than
   per-binding, so it is a `build_tool_result(..., meta=…)` argument.
+
+### Changed
+
+- **`resources/read` renders and encodes through one shared builder.** The sync
+  and async read handlers are full parallel implementations, not wrappers, so
+  the serializer/encoding step now lives in
+  `output.build_resource_contents.build_resource_contents` and the two
+  transports cannot drift apart on it. No wire change.
 
 ## [0.15.0] — 2026-07-27
 

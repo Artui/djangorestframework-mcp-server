@@ -154,14 +154,72 @@ validated input serializer) joined the reserved set with the sister-repo
 """
 
 
+# ---------- Resource body encoding ----------
+
+
+class ResourceEncoding(str, Enum):
+    """How a resource's selector return value becomes the ``text`` body.
+
+    ``resources/read`` advertises ``mimeType`` from the binding but the body
+    encoding is a separate decision, so it is declared separately rather than
+    sniffed from the mime type — sniffing would silently change behaviour for
+    anyone already advertising a non-JSON type.
+
+    - ``JSON``: pretty-print the value as JSON. The default, and what every
+      selector-backed data resource wants.
+    - ``TEXT``: the value is already the body. Used for HTML, Markdown, CSV,
+      plain text — anything where JSON-encoding would wrap the payload in a
+      quoted string literal instead of returning it. The selector must return
+      a ``str``.
+    """
+
+    JSON = "json"
+    TEXT = "text"
+
+
+# ---------- MCP Apps (interactive UI) ----------
+
+UI_RESOURCE_MIME_TYPE: str = "text/html;profile=mcp-app"
+"""Mime type identifying a resource as an interactive HTML view.
+
+Defined by the MCP Apps extension over the base protocol. A host that does
+not implement the extension sees an ordinary HTML resource.
+"""
+
+UI_META_KEY: str = "ui"
+"""The ``_meta`` key MCP Apps owns on a resource or tool descriptor.
+
+``_meta`` is a namespace shared by every extension, each owning one
+top-level key; this is Apps'.
+"""
+
+
+class UIPermission(str, Enum):
+    """A browser capability an interactive view asks the host to grant.
+
+    The host decides — this only declares what the view would use, in the
+    resource's ``_meta.ui.permissions``. Anything not declared is denied by
+    the iframe sandbox the host builds.
+    """
+
+    CAMERA = "camera"
+    MICROPHONE = "microphone"
+    GEOLOCATION = "geolocation"
+    CLIPBOARD_WRITE = "clipboardWrite"
+
+
 __all__ = [
     "JSONRPC_VERSION",
     "RESERVED_POOL_SEEDS",
     "RESERVED_POST_FETCH_KEYS",
+    "UI_META_KEY",
+    "UI_RESOURCE_MIME_TYPE",
     "ArgumentBinding",
     "JsonRpcErrorCode",
     "JsonRpcId",
     "OutputFormat",
+    "ResourceEncoding",
     "ToolKind",
+    "UIPermission",
     "UnknownArguments",
 ]

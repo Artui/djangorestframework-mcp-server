@@ -8,7 +8,6 @@ from rest_framework_services import (
     resolve_callable_kwargs,
     run_selector,
 )
-from rest_framework_services.types.selector_kind import SelectorKind
 
 from rest_framework_mcp._compat.tracing import span
 from rest_framework_mcp.constants import JsonRpcErrorCode
@@ -18,9 +17,8 @@ from rest_framework_mcp.handlers.utils import (
     check_permissions,
     consume_rate_limits,
 )
-from rest_framework_mcp.output.encode_json import encode_json
+from rest_framework_mcp.output.build_resource_contents import build_resource_contents
 from rest_framework_mcp.protocol.types.json_rpc_error import JsonRpcError
-from rest_framework_mcp.protocol.types.resource_contents import ResourceContents
 
 
 def handle_resources_read(
@@ -33,7 +31,8 @@ def handle_resources_read(
     template variables and request context, runs the selector via
     :func:`run_selector` (transparently bridging async selectors), and
     returns one ``ResourceContents`` block. Output is rendered through
-    ``output_serializer`` if declared, then JSON-encoded.
+    ``output_serializer`` if declared, then encoded per the binding's
+    ``encoding`` — see :func:`build_resource_contents`.
     """
     if not isinstance(params, dict):
         return JsonRpcError(
@@ -92,18 +91,9 @@ def handle_resources_read(
         kwargs: dict[str, Any] = resolve_callable_kwargs(binding.selector, pool)
         raw: Any = run_selector(binding.selector, kwargs)
 
-        payload: Any
-        if binding.output_serializer is not None:
-            payload = binding.output_serializer(raw, many=binding.kind is SelectorKind.LIST).data
-        else:
-            payload = raw
-
-        contents = ResourceContents(
-            uri=uri,
-            mime_type=binding.mime_type,
-            text=encode_json(payload),
-            meta=dict(binding.meta) or None,
-        )
+        contents = build_resource_contents(binding=binding, uri=uri, raw=raw)
+        if isinstance(contents, JsonRpcError):
+            return contents
         return {"contents": [contents.to_dict()]}
 
 
