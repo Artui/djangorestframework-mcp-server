@@ -309,3 +309,166 @@ def test_duplicate_url_kwarg_name_rejected() -> None:
             spec=ServiceSpec(service=_echo_scope_service, atomic=False),
             url_kwargs=(UrlKwarg("project_pk"), UrlKwarg("project_pk", type="integer")),
         )
+
+
+# ---------- required URL kwargs (drf-services 0.28) ----------
+
+
+def test_service_tool_schema_marks_a_required_url_kwarg() -> None:
+    binding = ToolBinding(
+        name="t",
+        description=None,
+        spec=ServiceSpec(service=_echo_scope_service, atomic=False),
+        url_kwargs=(UrlKwarg("project_pk", type="integer", required=True),),
+    )
+    schema = build_service_tool_input_schema(binding)
+    assert schema["required"] == ["project_pk"]
+
+
+def test_service_tool_schema_required_survives_a_partial_spec() -> None:
+    # ``partial`` relaxes the *payload* the serializer validates; a URL kwarg is
+    # not part of that payload, so it stays required.
+    binding = ToolBinding(
+        name="t",
+        description=None,
+        spec=ServiceSpec(service=_echo_scope_service, atomic=False, partial=True),
+        url_kwargs=(UrlKwarg("project_pk", required=True),),
+    )
+    assert build_service_tool_input_schema(binding)["required"] == ["project_pk"]
+
+
+def test_service_tool_schema_omits_required_when_none_are() -> None:
+    binding = ToolBinding(
+        name="t",
+        description=None,
+        spec=ServiceSpec(service=_echo_scope_service, atomic=False),
+        url_kwargs=(UrlKwarg("project_pk"),),
+    )
+    assert "required" not in build_service_tool_input_schema(binding)
+
+
+def test_selector_tool_schema_marks_a_required_url_kwarg() -> None:
+    binding = SelectorToolBinding(
+        name="t",
+        description=None,
+        spec=SelectorSpec(kind=SelectorKind.LIST, selector=lambda user: []),
+        url_kwargs=(UrlKwarg("project_pk", required=True),),
+    )
+    assert build_selector_tool_input_schema(binding)["required"] == ["project_pk"]
+
+
+def test_omitting_a_required_url_kwarg_is_a_validation_tool_result() -> None:
+    # Schema ``required`` is a hint models routinely ignore, so the runtime has
+    # to fail legibly: an ``isError`` tool result the caller can act on, not a
+    # transport-level error.
+    tools = ToolRegistry()
+    tools.register(
+        ToolBinding(
+            name="t",
+            description=None,
+            spec=ServiceSpec(service=_echo_scope_service, atomic=False, kwargs=_scope_provider),
+            url_kwargs=(UrlKwarg("project_pk", required=True),),
+        )
+    )
+    out = handle_tools_call({"name": "t", "arguments": {}}, _ctx(tools=tools))
+    assert isinstance(out, dict)
+    assert out["isError"] is True
+    assert "project_pk" in out["content"][0]["text"]
+
+
+def test_supplying_a_required_url_kwarg_dispatches_normally() -> None:
+    tools = ToolRegistry()
+    tools.register(
+        ToolBinding(
+            name="t",
+            description=None,
+            spec=ServiceSpec(service=_echo_scope_service, atomic=False, kwargs=_scope_provider),
+            url_kwargs=(UrlKwarg("project_pk", required=True),),
+        )
+    )
+    out = handle_tools_call({"name": "t", "arguments": {"project_pk": "P9"}}, _ctx(tools=tools))
+    assert isinstance(out, dict)
+    assert out["structuredContent"] == {"scope": "P9"}
+
+
+def test_registration_rejects_required_together_with_a_default() -> None:
+    server = MCPServer(auth_backend=AllowAnyBackend())
+    with pytest.raises(ImproperlyConfigured, match="cannot also be required"):
+        server.register_service_tool(
+            name="t",
+            spec=ServiceSpec(service=_echo_scope_service, atomic=False),
+            url_kwargs=(UrlKwarg("project_pk", default="P1", required=True),),
+            permissions=[],
+        )
+
+
+def test_registration_still_rejects_a_reserved_pool_seed() -> None:
+    # ``collection`` is only reserved because the seed set is now the sister
+    # repo's — the local copy this replaced would have let it through.
+    server = MCPServer(auth_backend=AllowAnyBackend())
+    with pytest.raises(ImproperlyConfigured, match="reserved transport keys"):
+        server.register_service_tool(
+            name="t",
+            spec=ServiceSpec(service=_echo_scope_service, atomic=False),
+            url_kwargs=(UrlKwarg("collection"),),
+            permissions=[],
+        )
+
+
+def test_in_process_call_tool_maps_a_missing_required_url_kwarg() -> None:
+    # ``call_tool`` builds its offline context before enforcing permissions, so
+    # the split cannot sit inside the dispatch ``try`` — this pins that the
+    # in-process surface still returns a tool result rather than raising.
+    server = MCPServer(auth_backend=AllowAnyBackend())
+    server.register_service_tool(
+        name="t",
+        spec=ServiceSpec(service=_echo_scope_service, atomic=False, kwargs=_scope_provider),
+        url_kwargs=(UrlKwarg("project_pk", required=True),),
+        permissions=[],
+    )
+    result = server.call_tool("t", {}, user="alice")
+    assert result.is_error is True
+    assert "project_pk" in result.content[0].text
+
+
+def test_in_process_call_tool_succeeds_when_supplied() -> None:
+    server = MCPServer(auth_backend=AllowAnyBackend())
+    server.register_service_tool(
+        name="t",
+        spec=ServiceSpec(service=_echo_scope_service, atomic=False, kwargs=_scope_provider),
+        url_kwargs=(UrlKwarg("project_pk", required=True),),
+        permissions=[],
+    )
+    result = server.call_tool("t", {"project_pk": "P4"}, user="alice")
+    assert result.is_error is False
+    assert result.structured_content == {"scope": "P4"}
+
+
+async def test_async_handler_maps_a_missing_required_url_kwarg() -> None:
+    tools = ToolRegistry()
+    tools.register(
+        ToolBinding(
+            name="t",
+            description=None,
+            spec=ServiceSpec(service=_echo_scope_service, atomic=False, kwargs=_scope_provider),
+            url_kwargs=(UrlKwarg("project_pk", required=True),),
+        )
+    )
+    out = await handle_tools_call_async({"name": "t", "arguments": {}}, _ctx(tools=tools))
+    assert isinstance(out, dict)
+    assert out["isError"] is True
+
+
+def test_selector_tool_maps_a_missing_required_url_kwarg() -> None:
+    tools = ToolRegistry()
+    tools.register(
+        SelectorToolBinding(
+            name="t",
+            description=None,
+            spec=SelectorSpec(kind=SelectorKind.LIST, selector=lambda user, **kw: []),
+            url_kwargs=(UrlKwarg("project_pk", required=True),),
+        )
+    )
+    out = handle_tools_call({"name": "t", "arguments": {}}, _ctx(tools=tools))
+    assert isinstance(out, dict)
+    assert out["isError"] is True

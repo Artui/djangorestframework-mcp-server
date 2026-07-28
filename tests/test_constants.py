@@ -85,7 +85,14 @@ def test_reserved_post_fetch_keys_shape() -> None:
 
 
 def test_reserved_pool_seeds_shape() -> None:
-    assert frozenset({"request", "user", "data", "instance", "serializer"}) == RESERVED_POOL_SEEDS
+    # Re-exported from drf-services, which owns the set. The local copy this
+    # replaced had fallen a key behind it (``collection``) — pinning the shape
+    # here is what would have caught that, so keep asserting the full set rather
+    # than deferring to the import.
+    assert (
+        frozenset({"request", "user", "data", "instance", "serializer", "collection"})
+        == RESERVED_POOL_SEEDS
+    )
 
 
 def test_reserved_sets_are_disjoint() -> None:

@@ -7,6 +7,45 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.17.0] — 2026-07-28
+
+### Added
+
+- **`UrlKwarg(required=True)` — advertise a route capture the spec can't run
+  without.** The name joins the tool's `inputSchema` `required` list, so a model
+  is told up front instead of discovering it through a failed call. `spec.partial`
+  does not relax it: partial validation is about the payload the serializer
+  checks, and a URL kwarg is never part of that payload.
+- **A missing required URL kwarg is an `isError` validation tool result**, on
+  every path — the sync and async JSON-RPC handlers, the selector tool, and the
+  in-process `call_tool` / `acall_tool` surface. Schema `required` is only a hint
+  and models omit required arguments routinely, so advertising it without
+  enforcing it would have changed nothing. The message names the missing
+  argument, so the caller can retry.
+
+### Changed
+
+- **`UrlKwarg` now comes from `djangorestframework-services`** (0.28), which owns
+  the single definition. This package and `djangorestframework-pydantic-ai` each
+  carried a copy, and the copies had **already drifted**: they validated the same
+  declaration against different reserved-name sets, so `UrlKwarg("order")` was
+  legal here and rejected there, and `UrlKwarg("user")` the reverse.
+  `from rest_framework_mcp import UrlKwarg` keeps working — the import path is
+  preserved permanently, so consumers need only a version bump.
+- **`validate_url_kwargs` delegates to drf-services' `validate_channel_names`**,
+  which owns the pool-seed half of the reserved set; only the pagination names
+  (`ordering` / `page` / `limit`) are contributed here. It also now rejects
+  `required=True` paired with a `default`.
+- **Requires `djangorestframework-services>=0.28.1,<0.29`** (was `>=0.27,<0.28`).
+
+### Fixed
+
+- **`RESERVED_POOL_SEEDS` was a key behind the set it mirrored.** The local copy
+  omitted `collection`, so a `UrlKwarg("collection")` — a name that *does*
+  override a dispatcher-controlled pool seed — passed registration here while
+  being rejected upstream. It is now re-exported from drf-services rather than
+  duplicated. The stable `rest_framework_mcp.constants` import path is preserved.
+
 ## [0.16.0] — 2026-07-27
 
 ### Added
@@ -1656,7 +1695,8 @@ Pinned to `djangorestframework-services==0.6.0`.
 - 100% line + branch coverage enforced by pytest (**451 tests** at
   release).
 
-[Unreleased]: https://github.com/Artui/djangorestframework-mcp-server/compare/v0.16.0...HEAD
+[Unreleased]: https://github.com/Artui/djangorestframework-mcp-server/compare/v0.17.0...HEAD
+[0.17.0]: https://github.com/Artui/djangorestframework-mcp-server/compare/v0.16.0...v0.17.0
 [0.16.0]: https://github.com/Artui/djangorestframework-mcp-server/compare/v0.15.0...v0.16.0
 [0.15.0]: https://github.com/Artui/djangorestframework-mcp-server/compare/v0.14.0...v0.15.0
 [0.14.0]: https://github.com/Artui/djangorestframework-mcp-server/compare/v0.13.0...v0.14.0

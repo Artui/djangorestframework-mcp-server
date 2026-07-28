@@ -107,16 +107,20 @@ def handle_tools_call(
         # URL kwargs (a scoping ``spec.kwargs`` provider's ``view.kwargs`` inputs)
         # route through the view, not the params — stripped from what the spec
         # validates / spreads, seeded into ``build_offline_context(kwargs=…)``.
-        spec_params, url_kwarg_values = split_url_kwargs(arguments_raw, binding.url_kwargs)
-        offline = build_offline_context(
-            context.token.user,
-            spec_params,
-            http_request=context.http_request,
-            action=binding.name,
-            kwargs=url_kwarg_values or None,
-        )
         argument_binding, unknown_arguments = services_dispatch_policies(binding)
+        # Inside the ``try``: ``split_url_kwargs`` raises ``ServiceValidationError``
+        # when a ``required=True`` URL kwarg was omitted, and that must reach the
+        # same ``isError`` mapping as any other dispatch-time validation failure
+        # rather than escaping as an unhandled 500.
         try:
+            spec_params, url_kwarg_values = split_url_kwargs(arguments_raw, binding.url_kwargs)
+            offline = build_offline_context(
+                context.token.user,
+                spec_params,
+                http_request=context.http_request,
+                action=binding.name,
+                kwargs=url_kwarg_values or None,
+            )
             result = dispatch_spec(
                 binding.spec,
                 user=context.token.user,

@@ -25,6 +25,7 @@ from typing import Any
 
 from django.core.exceptions import ImproperlyConfigured
 from rest_framework import serializers as drf_serializers
+from rest_framework_services.types.validate_channel_names import validate_channel_names
 
 from rest_framework_mcp.constants import (
     RESERVED_POOL_SEEDS,
@@ -40,22 +41,24 @@ def validate_url_kwargs(*, label: str, url_kwargs: tuple[UrlKwarg, ...]) -> None
     A URL kwarg is popped into the off-HTTP ``view.kwargs`` and stripped from the
     spec params, so its name must not collide with a reserved transport key —
     the post-fetch pagination knobs (``ordering`` / ``page`` / ``limit``) or the
-    pool seeds (``request`` / ``user`` / ``data`` / ``instance`` / ``serializer``)
-    — nor be declared twice. Colliding with an ordinary spec input is *allowed*:
-    that is the intended way to route a route-capture the spec also reads (the
-    value flows through ``view.kwargs``, drf-services spreads it authoritatively).
+    dispatcher's pool seeds — nor be declared twice, nor claim to be ``required``
+    while carrying a ``default``. Colliding with an ordinary spec input is
+    *allowed*: that is the intended way to route a route-capture the spec also
+    reads (the value flows through ``view.kwargs``, drf-services spreads it
+    authoritatively).
+
+    The checks themselves live in drf-services' ``validate_channel_names``, which
+    always folds in the pool seeds it owns; only the pagination names are ours to
+    contribute. Sharing the check is what stops this package's notion of a valid
+    declaration drifting from the agent toolset's again — they had already
+    diverged on both the seed set and the pagination names.
     """
-    names = [url_kwarg.name for url_kwarg in url_kwargs]
-    reserved = sorted(set(names) & (RESERVED_POOL_SEEDS | RESERVED_POST_FETCH_KEYS))
-    if reserved:
-        raise ImproperlyConfigured(
-            f"{label}: url_kwargs name(s) {reserved} collide with reserved transport "
-            "keys (pagination ordering/page/limit or pool seeds "
-            "request/user/data/instance/serializer). Rename them."
-        )
-    duplicates = sorted({name for name in names if names.count(name) > 1})
-    if duplicates:
-        raise ImproperlyConfigured(f"{label}: duplicate url_kwargs name(s) {duplicates}.")
+    validate_channel_names(
+        label=label,
+        kind="url_kwargs",
+        declarations=url_kwargs,
+        reserved=RESERVED_POST_FETCH_KEYS,
+    )
 
 
 def validate_input_serializer_against_callable(

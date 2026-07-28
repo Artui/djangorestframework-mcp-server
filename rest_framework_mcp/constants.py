@@ -21,6 +21,17 @@ from enum import Enum, IntEnum
 # policies, so MCP consumes them rather than maintaining a parallel copy. The
 # stable import path (``rest_framework_mcp.constants``) is preserved.
 from rest_framework_services import ArgumentBinding, UnknownArguments
+from rest_framework_services.types.reserved_pool_seeds import RESERVED_POOL_SEEDS
+
+"""Keys carrying transport-controlled pool seeds — re-exported from the sister
+repo, which owns the set. A client-supplied argument with one of these names
+would override the transport's authoritative values (a credential-spoofing
+footgun), so the spread silently drops them. The dispatched callable is free to
+*declare* a parameter of that name; it receives the seed, the documented idiom.
+
+Previously a local copy, which had silently fallen a key behind the set it
+mirrored (``collection``). The stable import path is preserved.
+"""
 
 # ---------- JSON-RPC envelope ----------
 
@@ -135,22 +146,6 @@ FilterSet, ordering, and pagination read these out of the MCP arguments
 dict directly; they must not also leak into the kwarg pool of the
 dispatched selector, or the selector would receive surprise kwargs it
 never declared.
-"""
-
-RESERVED_POOL_SEEDS: frozenset[str] = frozenset(
-    {"request", "user", "data", "instance", "serializer"}
-)
-"""Keys carrying transport-controlled pool seeds.
-
-A client-supplied argument with one of these names would override the
-transport's authoritative values (a credential-spoofing footgun). The
-spread silently drops them so the pool seeds always win. The dispatched
-callable is free to *declare* parameters named ``request`` / ``user`` /
-``data`` / ``instance`` / ``serializer``; those receive the pool seeds,
-which is the documented sister-repo idiom. ``instance`` (the row resolved
-by ``spec.instance_selector_spec``) and ``serializer`` (the bound,
-validated input serializer) joined the reserved set with the sister-repo
-0.16 adoption.
 """
 
 

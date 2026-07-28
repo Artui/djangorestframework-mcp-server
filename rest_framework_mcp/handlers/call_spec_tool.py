@@ -81,7 +81,22 @@ def call_spec_tool(
     spec = binding.spec
     # URL kwargs route through the view (a scoping ``spec.kwargs`` provider's
     # ``view.kwargs`` inputs), not the spec params — see :class:`UrlKwarg`.
-    spec_params, url_kwarg_values = split_url_kwargs(arguments, binding.url_kwargs)
+    # Mapped here rather than in the ``dispatch_spec`` try below: the offline
+    # context this feeds is also what ``enforce_permissions`` needs, so the split
+    # cannot move down without dragging the permission check into a block that
+    # turns exceptions into tool results. A missing ``required=True`` URL kwarg
+    # must still surface as an ``isError`` result on this in-process surface, the
+    # same as over the wire.
+    try:
+        spec_params, url_kwarg_values = split_url_kwargs(arguments, binding.url_kwargs)
+    except ServiceValidationError as exc:
+        return build_error_tool_result(
+            exc.message,
+            error_type="validation_error",
+            detail=validation_error_data(
+                exc.detail, arguments, include_value=config.include_validation_value
+            ),
+        )
     context = build_offline_context(
         user,
         spec_params,
