@@ -1451,7 +1451,7 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#rest_framework_mcp.registry.types.url_kwarg.UrlKwarg" class="md-nav__link">
+  <a href="#rest_framework_services.types.url_kwarg.UrlKwarg" class="md-nav__link">
     <span class="md-ellipsis">
       
         UrlKwarg
@@ -1463,7 +1463,7 @@
       <ul class="md-nav__list">
         
           <li class="md-nav__item">
-  <a href="#rest_framework_mcp.registry.types.url_kwarg.UrlKwarg.json_schema" class="md-nav__link">
+  <a href="#rest_framework_services.types.url_kwarg.UrlKwarg.json_schema" class="md-nav__link">
     <span class="md-ellipsis">
       
         json_schema
@@ -2629,7 +2629,7 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#rest_framework_mcp.registry.types.url_kwarg.UrlKwarg" class="md-nav__link">
+  <a href="#rest_framework_services.types.url_kwarg.UrlKwarg" class="md-nav__link">
     <span class="md-ellipsis">
       
         UrlKwarg
@@ -2641,7 +2641,7 @@
       <ul class="md-nav__list">
         
           <li class="md-nav__item">
-  <a href="#rest_framework_mcp.registry.types.url_kwarg.UrlKwarg.json_schema" class="md-nav__link">
+  <a href="#rest_framework_services.types.url_kwarg.UrlKwarg.json_schema" class="md-nav__link">
     <span class="md-ellipsis">
       
         json_schema
@@ -4172,7 +4172,7 @@ import here.</p>
 
 
 
-<h2 id="rest_framework_mcp.registry.types.url_kwarg.UrlKwarg" class="doc doc-heading">
+<h2 id="rest_framework_services.types.url_kwarg.UrlKwarg" class="doc doc-heading">
             <span class="doc doc-object-name doc-class-name">UrlKwarg</span>
 
 
@@ -4180,40 +4180,58 @@ import here.</p>
       <small class="doc doc-label doc-label-dataclass"><code>dataclass</code></small>
   </span>
 
-<a href="#rest_framework_mcp.registry.types.url_kwarg.UrlKwarg" class="headerlink" title="Permanent link">&para;</a></h2>
+<a href="#rest_framework_services.types.url_kwarg.UrlKwarg" class="headerlink" title="Permanent link">&para;</a></h2>
 
 
     <div class="doc doc-contents first">
 
 
 
-        <p>A URL-derived value a tool advertises and seeds into the off-HTTP view <code>kwargs</code>.</p>
-<p>The MCP counterpart of a nested route's URL captures (the <code>project_pk</code> of
-<code>/projects/{project_pk}/widgets/</code>). Over HTTP such a value comes from the
-route and reaches a spec through <code>view.kwargs</code> — directly, or through a
-<code>spec.kwargs</code> provider that scopes by it (a tenant/role lookup). Over MCP
-there is no route, so the model supplies it as a tool argument: the tool
-advertises it in its <code>inputSchema</code>, the dispatcher pops it out of the
-arguments and seeds it into <code>build_offline_context(kwargs=…)</code> /
-<code>OfflineServiceView.kwargs</code>, and drf-services spreads it into the selector /
-target pools (authoritative over the spec params, below a <code>spec.kwargs</code>
-provider). It never reaches the spec as an ordinary input, so the
-unknown-argument policy never flags it.</p>
+        <p>A URL route capture exposed as a caller-supplied argument off-HTTP.</p>
+<p>Over HTTP a nested route's captures (the <code>project_pk</code> of
+<code>/projects/{project_pk}/widgets/</code>) reach a spec through <code>view.kwargs</code> —
+directly, or through a <code>spec.kwargs</code> provider that scopes by them.
+Off-HTTP there is no route, so the caller supplies the value as an ordinary
+argument: the transport advertises it in the tool / operation schema, pops it
+out of the arguments, and hands it to <code>build_offline_context(kwargs=…)</code>,
+from where :func:<code>~rest_framework_services.dispatch_spec</code> spreads it into the
+selector / target pools — authoritative over the spec params, below a
+<code>spec.kwargs</code> provider. It never reaches the spec as an ordinary input, so
+the unknown-argument policy never flags it.</p>
+<p><strong>This type is declared here, not in each adapter, on purpose.</strong> It is the
+same declaration whichever transport carries it, and two independent copies
+had already drifted into validating the same declaration against different
+reserved-name sets. Adapters import it and pair it with
+:func:<code>~rest_framework_services.validate_channel_names</code>.</p>
 <p>Reach for a <code>UrlKwarg</code> when the value is a URL-derived input a spec depends
-on that is <strong>not</strong> an ordinary tool argument — most commonly a scoping
-<code>spec.kwargs</code> provider that reads <code>view.kwargs</code> (over MCP that mapping is
-otherwise empty, so the provider mis-scopes for every caller).</p>
+on that is <strong>not</strong> already an ordinary argument — most commonly a scoping
+<code>spec.kwargs</code> provider reading <code>view.kwargs</code> (off-HTTP that mapping is
+otherwise empty, so the provider mis-scopes for every caller), or a
+closed-surface spec whose route capture must be caller-suppliable.</p>
+<p>A selector that reads the value from its own <code>**extras: Unpack[TypedDict]</code>
+needs <strong>no</strong> <code>UrlKwarg</code>: drf-services reflects the key into the schema and
+<code>params</code> delivers it. A key can be <em>both</em> reflected and registered — the
+explicit <code>UrlKwarg</code> wins the adapter's schema merge, registration pops the
+argument into <code>kwargs=</code>, and the authoritative spread still delivers it to
+the selector pool, so both readers see it.</p>
 <ul>
-<li><code>name</code> — the tool-argument / view-kwarg key. Must not collide with a
-  reserved transport key (<code>ordering</code> / <code>page</code> / <code>limit</code> pagination knobs,
-  or the <code>request</code> / <code>user</code> / <code>data</code> / <code>instance</code> / <code>serializer</code> pool
-  seeds).</li>
-<li><code>type</code> — the JSON-Schema type advertised to the model (<code>"string"</code> by
+<li><code>name</code> — the argument / view-kwarg key. Must not collide with a reserved
+  transport key; see :func:<code>~rest_framework_services.validate_channel_names</code>.</li>
+<li><code>type</code> — the JSON-Schema type advertised to the caller (<code>"string"</code> by
   default; <code>"integer"</code> / <code>"number"</code> / <code>"boolean"</code> …).</li>
-<li><code>description</code> — optional help text shown to the model.</li>
-<li><code>default</code> — optional value seeded when the model omits the argument; also
-  surfaced as the schema <code>default</code>.</li>
+<li><code>description</code> — optional help text shown to the caller.</li>
+<li><code>default</code> — optional value seeded when the caller omits the argument;
+  also surfaced as the schema <code>default</code>.</li>
+<li><code>required</code> — advertise the key in the schema's <code>required</code> list. Use it
+  for a route capture the spec genuinely cannot run without, so a caller is
+  told up front instead of failing mid-dispatch. Setting both <code>required</code>
+  and a <code>default</code> is contradictory and raises in
+  :func:<code>~rest_framework_services.validate_channel_names</code>.</li>
 </ul>
+<p><code>required</code> here is the registered-declaration counterpart of the
+:data:<code>~rest_framework_services.InputRequired</code> marker, which does the same
+job for a key the callable's own <code>TypedDict</code> declares. Both end up in the
+schema's <code>required</code>; they differ only in where the key is declared.</p>
 
 
 
@@ -4239,17 +4257,17 @@ otherwise empty, so the provider mis-scopes for every caller).</p>
 <div class="doc doc-object doc-function">
 
 
-<h3 id="rest_framework_mcp.registry.types.url_kwarg.UrlKwarg.json_schema" class="doc doc-heading">
+<h3 id="rest_framework_services.types.url_kwarg.UrlKwarg.json_schema" class="doc doc-heading">
             <span class="doc doc-object-name doc-function-name">json_schema</span>
 
 
-<a href="#rest_framework_mcp.registry.types.url_kwarg.UrlKwarg.json_schema" class="headerlink" title="Permanent link">&para;</a></h3>
+<a href="#rest_framework_services.types.url_kwarg.UrlKwarg.json_schema" class="headerlink" title="Permanent link">&para;</a></h3>
 <div class="language-python doc-signature highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="nf">json_schema</span><span class="p">()</span> <span class="o">-&gt;</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]</span>
 </span></code></pre></div>
 
     <div class="doc doc-contents ">
 
-        <p>The JSON-Schema property this kwarg contributes to a tool's <code>inputSchema</code>.</p>
+        <p>The JSON-Schema property this kwarg contributes to an input schema.</p>
 
 
     </div>
