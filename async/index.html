@@ -448,6 +448,17 @@
 </li>
       
         <li class="md-nav__item">
+  <a href="#middleware" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Middleware
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
   <a href="#sync-collaborators-are-bridged-automatically" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -1428,6 +1439,17 @@
 </li>
       
         <li class="md-nav__item">
+  <a href="#middleware" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Middleware
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
   <a href="#sync-collaborators-are-bridged-automatically" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -1568,6 +1590,18 @@ many concurrent MCP calls without a thread pool.</p>
 </span></code></pre></div>
 <p>A standard <code>myproject/asgi.py</code> from <code>django-admin startproject</code> works without
 modification — Django's <code>get_asgi_application()</code> happily serves async views.</p>
+<h2 id="middleware">Middleware<a class="headerlink" href="#middleware" title="Permanent link">&para;</a></h2>
+<p>Both mounts sit outside Django's browser-session machinery, because MCP is a
+bearer-token transport with no CSRF token and no login page to redirect to:</p>
+<ul>
+<li><strong><code>CsrfViewMiddleware</code></strong> — the endpoint is <code>csrf_exempt</code>, so <code>POST</code> and
+  <code>DELETE</code> are not rejected for a missing token.</li>
+<li><strong><code>LoginRequiredMiddleware</code></strong> (Django 5.1+) — the endpoint sets
+  <code>login_required = False</code>; authentication is the MCP auth backend's job, and
+  an unauthenticated call gets a JSON <code>401</code> with a <code>WWW-Authenticate</code>
+  challenge rather than a <code>302</code>.</li>
+</ul>
+<p>Everything else in <code>MIDDLEWARE</code> applies normally.</p>
 <h2 id="sync-collaborators-are-bridged-automatically">Sync collaborators are bridged automatically<a class="headerlink" href="#sync-collaborators-are-bridged-automatically" title="Permanent link">&para;</a></h2>
 <p><code>AsyncStreamableHttpViewSet</code> accepts the same auth backend and session store as
 the sync view. Sync methods on those collaborators are wrapped in
