@@ -66,8 +66,13 @@ def build_selector_tool_input_schema(binding: SelectorToolBinding) -> dict[str, 
 
     for url_kwarg in binding.url_kwargs:
         # URL-derived args — model-supplied, seeded into ``view.kwargs`` at
-        # dispatch (never a selector param). Optional, like filter args.
+        # dispatch (never a selector param). Optional unless the registration
+        # says otherwise: a route capture the spec cannot run without is worth
+        # advertising as required, so the model learns it up front instead of
+        # through a failed call.
         properties[url_kwarg.name] = url_kwarg.json_schema()
+        if url_kwarg.required and url_kwarg.name not in required:
+            required.append(url_kwarg.name)
 
     out: dict[str, Any] = {"type": "object", "properties": properties}
     if required:

@@ -9,6 +9,9 @@ from django.http import HttpRequest
 from rest_framework import serializers as drf_serializers
 from rest_framework.request import Request
 from rest_framework_dataclasses.serializers import DataclassSerializer
+from rest_framework_services.exceptions.service_validation_error import (
+    ServiceValidationError,
+)
 from rest_framework_services.types.service_spec import ServiceSpec
 
 from rest_framework_mcp.auth.permissions.types.mcp_permission import MCPPermission
@@ -41,6 +44,15 @@ def split_url_kwargs(
     through the view kwargs (from where drf-services spreads it, authoritative
     over params) and never reaches the spec as an ordinary input.
 
+    A kwarg registered ``required=True`` that the model omitted raises
+    :exc:`ServiceValidationError`, which the handlers already map to an
+    ``isError: true`` validation tool result. Advertising ``required`` in the
+    schema is only a hint — models omit required arguments routinely — so
+    without this the value would simply be missing at dispatch and the spec
+    would fail somewhere less legible. (Registration forbids pairing
+    ``required`` with a ``default``, so a required kwarg is never satisfiable
+    from the declaration itself.)
+
     Non-mutating. When ``url_kwargs`` is empty the original ``arguments`` dict is
     returned as ``params`` unchanged (no copy), preserving the pre-feature
     behaviour exactly.
@@ -49,11 +61,19 @@ def split_url_kwargs(
         return arguments, {}
     names = {uk.name for uk in url_kwargs}
     values: dict[str, Any] = {}
+    missing: list[str] = []
     for url_kwarg in url_kwargs:
         if url_kwarg.name in arguments:
             values[url_kwarg.name] = arguments[url_kwarg.name]
         elif url_kwarg.default is not None:
             values[url_kwarg.name] = url_kwarg.default
+        elif url_kwarg.required:
+            missing.append(url_kwarg.name)
+    if missing:
+        names_repr = ", ".join(repr(name) for name in sorted(missing))
+        raise ServiceValidationError(
+            {"non_field_errors": [f"Missing required argument(s): {names_repr}."]}
+        )
     params = {key: value for key, value in arguments.items() if key not in names}
     return params, values
 

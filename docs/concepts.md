@@ -135,11 +135,29 @@ Because a URL kwarg is popped before the spec sees the arguments, it never count
 as an unknown argument (the `REJECT` policy ignores it) and never lands in the
 service's validated payload — it routes **only** through `view.kwargs`. A name
 can't collide with a reserved transport key (`ordering` / `page` / `limit`, or the
-`request` / `user` / `data` / `instance` / `serializer` pool seeds); colliding
-with an ordinary spec input is allowed and is the intended way to route a
-route-capture the spec *also* reads directly. Requires
-`djangorestframework-services>=0.26`, which delivers the view `kwargs` into the
-off-HTTP dispatch pools.
+`request` / `user` / `data` / `instance` / `serializer` / `collection` pool
+seeds); colliding with an ordinary spec input is allowed and is the intended way
+to route a route-capture the spec *also* reads directly.
+
+A capture the spec genuinely cannot run without takes `required=True`:
+
+```python
+UrlKwarg("project_pk", type="integer", required=True)
+```
+
+The name joins the tool's `inputSchema` `required` list, so the model is told up
+front — and, because a schema hint is only a hint, a call that omits it comes back
+as an `isError` validation result naming the missing argument rather than failing
+somewhere less legible. `required` can't be combined with a `default` (a default
+always satisfies the argument, so requiring it would be a no-op); that raises at
+registration.
+
+`UrlKwarg` is
+[drf-services' type](https://github.com/Artui/djangorestframework-services/blob/main/rest_framework_services/types/url_kwarg.py),
+re-exported here — the declaration is the same whichever transport carries it, and
+the two adapters that each had a copy had already drifted apart on which names
+they reserved. `from rest_framework_mcp import UrlKwarg` keeps working.
+Requires `djangorestframework-services>=0.28.1`.
 
 ### `SelectorSpec` for resources
 

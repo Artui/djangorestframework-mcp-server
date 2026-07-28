@@ -93,17 +93,19 @@ async def handle_tools_call_async(
                 data={"retryAfter": retry_after},
             )
 
-        # See the sync sibling: URL kwargs route through the view, not the params.
-        spec_params, url_kwarg_values = split_url_kwargs(arguments_raw, binding.url_kwargs)
-        offline = build_offline_context(
-            context.token.user,
-            spec_params,
-            http_request=context.http_request,
-            action=binding.name,
-            kwargs=url_kwarg_values or None,
-        )
+        # See the sync sibling: URL kwargs route through the view, not the params,
+        # and the split runs inside the ``try`` so a missing ``required=True``
+        # kwarg reaches the ``isError`` mapping instead of escaping.
         argument_binding, unknown_arguments = services_dispatch_policies(binding)
         try:
+            spec_params, url_kwarg_values = split_url_kwargs(arguments_raw, binding.url_kwargs)
+            offline = build_offline_context(
+                context.token.user,
+                spec_params,
+                http_request=context.http_request,
+                action=binding.name,
+                kwargs=url_kwarg_values or None,
+            )
             result = await adispatch_spec(
                 binding.spec,
                 user=context.token.user,
