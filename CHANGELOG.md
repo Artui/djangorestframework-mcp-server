@@ -7,6 +7,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- **`server.async_urls` no longer 403s every `POST` and `DELETE` under
+  `CsrfViewMiddleware`.** `AsyncStreamableHttpViewSet.as_view()` wraps DRF's
+  sync view in an async callable, and Django's CSRF middleware reads
+  `csrf_exempt` off the *resolved* callable — the wrapper, which wasn't
+  carrying the flag DRF sets. An MCP client authenticating with a bearer token
+  has no CSRF token to present, so the transport was unusable on any project
+  with Django's default middleware; `GET` looked healthy because it's a safe
+  method. The sync mount was never affected. Reported against 0.11.3, present
+  since the async transport shipped. Consumers who worked around it by
+  `csrf_exempt`-ing the mounted patterns can drop that wrapper.
+- **The same wrapper now also carries `login_required = False`** (Django 5.1+),
+  so `LoginRequiredMiddleware` no longer 302s MCP calls to the login page.
+  Authentication belongs to the MCP auth backend, which answers with a JSON
+  `401` and a `WWW-Authenticate` challenge. Every attribute DRF and Django set
+  on the sync view is now copied wholesale rather than by allowlist, so a
+  future flag can't go missing the same way.
+
 ## [0.17.0] — 2026-07-28
 
 ### Added
