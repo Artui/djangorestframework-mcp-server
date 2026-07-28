@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.17.0] — 2026-07-28
+
 ### Added
 
 - **`UrlKwarg(required=True)` — advertise a route capture the spec can't run
@@ -1693,7 +1695,8 @@ Pinned to `djangorestframework-services==0.6.0`.
 - 100% line + branch coverage enforced by pytest (**451 tests** at
   release).
 
-[Unreleased]: https://github.com/Artui/djangorestframework-mcp-server/compare/v0.16.0...HEAD
+[Unreleased]: https://github.com/Artui/djangorestframework-mcp-server/compare/v0.17.0...HEAD
+[0.17.0]: https://github.com/Artui/djangorestframework-mcp-server/compare/v0.16.0...v0.17.0
 [0.16.0]: https://github.com/Artui/djangorestframework-mcp-server/compare/v0.15.0...v0.16.0
 [0.15.0]: https://github.com/Artui/djangorestframework-mcp-server/compare/v0.14.0...v0.15.0
 [0.14.0]: https://github.com/Artui/djangorestframework-mcp-server/compare/v0.13.0...v0.14.0
