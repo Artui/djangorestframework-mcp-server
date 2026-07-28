@@ -39,6 +39,20 @@ hypercorn myproject.asgi:application --bind 0.0.0.0:8000
 A standard `myproject/asgi.py` from `django-admin startproject` works without
 modification — Django's `get_asgi_application()` happily serves async views.
 
+## Middleware
+
+Both mounts sit outside Django's browser-session machinery, because MCP is a
+bearer-token transport with no CSRF token and no login page to redirect to:
+
+- **`CsrfViewMiddleware`** — the endpoint is `csrf_exempt`, so `POST` and
+  `DELETE` are not rejected for a missing token.
+- **`LoginRequiredMiddleware`** (Django 5.1+) — the endpoint sets
+  `login_required = False`; authentication is the MCP auth backend's job, and
+  an unauthenticated call gets a JSON `401` with a `WWW-Authenticate`
+  challenge rather than a `302`.
+
+Everything else in `MIDDLEWARE` applies normally.
+
 ## Sync collaborators are bridged automatically
 
 `AsyncStreamableHttpViewSet` accepts the same auth backend and session store as

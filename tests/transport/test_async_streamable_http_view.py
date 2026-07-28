@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 
 import pytest
+from django import VERSION as DJANGO_VERSION
 from django.http import HttpRequest
 from django.test import AsyncClient, RequestFactory, override_settings
 
@@ -504,3 +505,59 @@ async def test_async_dispatch_routes_exceptions_through_handle_exception() -> No
     # DRF's default ``handle_exception`` maps ``APIException`` to its
     # configured status (500 for the base class without ``status_code``).
     assert response.status_code == 500
+
+
+# ----- middleware opt-out flags -----
+#
+# Django's ``CsrfViewMiddleware`` and ``LoginRequiredMiddleware`` read their
+# opt-out flags off the *resolved* callable — the async wrapper, not the sync
+# view DRF built underneath it. The wrapper has to carry them or POST/DELETE
+# to the MCP endpoint 403s (no CSRF token) or 302s to a login page, neither of
+# which a bearer-token transport can satisfy.
+
+_CSRF_MIDDLEWARE = ["django.middleware.csrf.CsrfViewMiddleware"]
+
+
+def _async_view():
+    return AsyncStreamableHttpViewSet.as_view(
+        ASYNC_STREAMABLE_HTTP_ACTION_MAP,
+        tools=ToolRegistry(),
+        resources=ResourceRegistry(),
+        session_store=InMemorySessionStore(),
+    )
+
+
+def test_async_view_is_csrf_exempt() -> None:
+    assert _async_view().csrf_exempt is True
+
+
+@pytest.mark.skipif(DJANGO_VERSION < (5, 1), reason="LoginRequiredMiddleware lands in Django 5.1")
+def test_async_view_opts_out_of_login_required() -> None:
+    assert _async_view().login_required is False
+
+
+def test_async_view_keeps_drf_introspection_attributes() -> None:
+    view = _async_view()
+    assert view.cls is AsyncStreamableHttpViewSet
+    assert view.actions == ASYNC_STREAMABLE_HTTP_ACTION_MAP
+    # ``__wrapped__`` is deliberately *not* carried over: it would point
+    # introspection at the sync view through the async wrapper.
+    assert not hasattr(view, "__wrapped__")
+
+
+async def test_async_post_passes_csrf_middleware(async_urlconf) -> None:
+    with override_settings(MIDDLEWARE=_CSRF_MIDDLEWARE):
+        client = AsyncClient(enforce_csrf_checks=True)
+        sid = await _initialize(client)
+    assert sid
+
+
+async def test_async_delete_passes_csrf_middleware(async_urlconf) -> None:
+    client = AsyncClient(enforce_csrf_checks=True)
+    sid = await _initialize(client)
+    with override_settings(MIDDLEWARE=_CSRF_MIDDLEWARE):
+        response = await client.delete(
+            "/mcp/",
+            headers={"Mcp-Protocol-Version": "2025-11-25", "Mcp-Session-Id": sid},
+        )
+    assert response.status_code == 204

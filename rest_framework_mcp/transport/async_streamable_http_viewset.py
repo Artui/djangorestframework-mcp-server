@@ -112,12 +112,30 @@ class AsyncStreamableHttpViewSet(ViewSet):
             # stub's ``Response`` return-type narrowing.
             return await cast(Any, sync_view(request, *args, **kwargs))
 
-        # Copy DRF's ViewSet introspection attributes so downstream code
-        # (URL reversing, test introspection of ``view_initkwargs``) keeps
-        # working through the async wrapper.
-        for attr in ("view_class", "view_initkwargs", "cls", "actions", "initkwargs"):
-            if hasattr(sync_view, attr):
-                setattr(async_view, attr, getattr(sync_view, attr))
+        # Carry over every attribute DRF and Django hung on the sync view.
+        # Two kinds live here and both matter:
+        #
+        # * introspection — ``view_class`` / ``view_initkwargs`` / ``cls`` /
+        #   ``actions`` / ``initkwargs``, used by URL reversing and tests;
+        # * middleware opt-out flags — ``csrf_exempt`` (DRF wraps every
+        #   ``as_view`` result in :func:`django.views.decorators.csrf.csrf_exempt`)
+        #   and, on Django 5.1+, ``login_required = False``.
+        #
+        # The flags are the load-bearing half: ``CsrfViewMiddleware`` and
+        # ``LoginRequiredMiddleware`` read them off the *resolved callable*,
+        # which is this wrapper, not the sync view underneath. Without them a
+        # POST or DELETE to the MCP endpoint 403s on a missing CSRF token or
+        # 302s to the login page — for a bearer-token transport that has no
+        # CSRF token and no session to present. The sync ViewSet is exempt
+        # via DRF, so this is what keeps the two transports at parity.
+        #
+        # Copied wholesale rather than by allowlist so a future DRF/Django
+        # attribute doesn't silently go missing here. Dunders are skipped:
+        # ``__wrapped__`` (set by ``functools.wraps`` inside ``csrf_exempt``)
+        # would point introspection at the sync view through the async one.
+        for attr, value in sync_view.__dict__.items():
+            if not attr.startswith("__"):
+                setattr(async_view, attr, value)
         # Tag as a coroutine so ``django.core.handlers.base`` awaits it.
         # ``asyncio.coroutines._is_coroutine`` is Django's documented marker
         # for "this callable returns a coroutine"; the underscore-prefixed
