@@ -515,6 +515,17 @@
   
 </li>
         
+          <li class="md-nav__item">
+  <a href="#id-tokens-and-openid" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        ID tokens and openid
+      
+    </span>
+  </a>
+  
+</li>
+        
       </ul>
     </nav>
   
@@ -1600,6 +1611,17 @@
   
 </li>
         
+          <li class="md-nav__item">
+  <a href="#id-tokens-and-openid" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        ID tokens and openid
+      
+    </span>
+  </a>
+  
+</li>
+        
       </ul>
     </nav>
   
@@ -2020,6 +2042,29 @@ independently: <code>authorization_code</code> → <code>["code"]</code>, <code>
 the <code>client_credentials</code> / <code>password</code> grants never reach the authorization
 endpoint, so <code>[]</code>. Supply it to assert the same thing and it is accepted;
 supply something inconsistent and you get a <code>400</code>.</p>
+<h3 id="id-tokens-and-openid">ID tokens and <code>openid</code><a class="headerlink" href="#id-tokens-and-openid" title="Permanent link">&para;</a></h3>
+<p>If your DOT deployment sets <code>OIDC_ENABLED</code>, <code>openid</code> appears in <code>scopes_supported</code>
+and clients will request it. The exchange then routes through the OpenID grant and
+DOT tries to sign an ID token with the registered client's <code>algorithm</code>.</p>
+<p>Registration resolves that algorithm rather than leaving it unset:</p>
+<ul>
+<li><code>id_token_signed_response_alg: "RS256"</code> — honoured when
+  <code>OAUTH2_PROVIDER["OIDC_RSA_PRIVATE_KEY"]</code> is configured, and a <code>400</code> naming that
+  setting when it isn't.</li>
+<li><strong>Omitted</strong> — takes RS256 when the server has a key, and otherwise registers no
+  algorithm at all, which is the right outcome for a deployment not doing OIDC.</li>
+<li><code>id_token_signed_response_alg: "HS256"</code> — always refused. HS256 signs the ID
+  token with <code>client_secret</code>, and this endpoint leaves DOT's <code>hash_client_secret</code>
+  at its default, so the stored column holds a PBKDF2 digest rather than the
+  secret the client was handed. Signing with the digest produces a token whose
+  signature can never verify.</li>
+<li>OIDC's <code>none</code> (an unsigned ID token) is not offered — DOT cannot mint one.</li>
+</ul>
+<p><code>/.well-known/openid-configuration</code> reports
+<code>id_token_signing_alg_values_supported</code> derived from the same key, so it is empty
+on a server that cannot sign. <strong>If you want ID tokens, configure
+<code>OIDC_RSA_PRIVATE_KEY</code></strong> — without it, clients that request <code>openid</code> register
+successfully and get no ID token.</p>
 <p><code>scope</code> is checked against DOT's own scopes backend — the same set
 <code>validate_scopes</code> uses at authorize time, which by default is
 <code>OAUTH2_PROVIDER["SCOPES"]</code>. A registration naming a scope the server doesn't

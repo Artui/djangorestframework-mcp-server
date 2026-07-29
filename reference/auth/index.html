@@ -3472,11 +3472,17 @@ endpoint.</p>
 <ul>
 <li><code>subject_types_supported: ["public"]</code> — DOT-style pseudonymous
   identifiers.</li>
-<li><code>id_token_signing_alg_values_supported: ["RS256"]</code> — the most
-  common OIDC algorithm, advertised even though we don't actually
-  mint ID tokens (clients that walk this list and pick one work
-  fine because they only use it for verification — which they
-  never get to do without an ID-token endpoint anyway).</li>
+<li><code>id_token_signing_alg_values_supported</code> — <strong>derived</strong>, not fixed.
+  This used to be a hardcoded <code>["RS256"]</code>, on the reasoning that
+  the value is inert because "we don't actually mint ID tokens". That
+  reasoning was wrong wherever DOT <em>is</em> the authorization server with
+  <code>OIDC_ENABLED</code>: DOT's token endpoint mints ID tokens, so a client
+  that read this list, saw RS256 and requested <code>openid</code> reached
+  <code>Application.jwk_key</code> on a DCR-registered client that had no
+  algorithm — <code>ImproperlyConfigured</code>, surfacing as a 500 after the
+  user had already logged in and consented. It now reports what the
+  server can genuinely sign with, which is empty when no RSA key is
+  configured.</li>
 <li><code>response_modes_supported: ["query"]</code> — standard.</li>
 </ul>
 <p>Backends that don't host an authorization server raise
@@ -3844,6 +3850,12 @@ downstream reads a consistent set. <code>response_types</code> has no DOT
 counterpart at all — RFC 7591 §2.1 makes it a function of the grant,
 so it is derived rather than stored, and an explicit value that
 contradicts the grant is rejected.</p>
+<p><code>id_token_signed_response_alg</code> maps to DOT's <code>Application.algorithm</code>,
+which decides whether an ID token can be signed at all. Only the
+viewset can resolve it, because whether an algorithm is <em>usable</em>
+depends on server configuration (an RSA key) and on the client type
+(HS256 signs with the client secret, which a public client does not
+have) — neither of which is visible from the payload alone.</p>
 <p>RFC 7591 fields the server doesn't understand (<code>contacts</code>,
 <code>logo_uri</code>, <code>jwks</code>, …) are ignored, which §2 requires — DOT has
 nowhere to put them, and echoing metadata the authorization server

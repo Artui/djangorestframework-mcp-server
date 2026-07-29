@@ -539,6 +539,45 @@
 </li>
       
         <li class="md-nav__item">
+  <a href="#documenting-tools" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Documenting tools
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Documenting tools">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#the-tool-description" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        The tool description
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#per-argument-descriptions" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Per-argument descriptions
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
   <a href="#tools-vs-resources" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -1751,6 +1790,45 @@
 </li>
       
         <li class="md-nav__item">
+  <a href="#documenting-tools" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Documenting tools
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Documenting tools">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#the-tool-description" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        The tool description
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#per-argument-descriptions" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Per-argument descriptions
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
   <a href="#tools-vs-resources" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -2313,6 +2391,50 @@ is synthesised when <code>request</code> is <code>None</code>). <code>JsonRpcErr
 are re-exported from the package root so a consumer can branch on faults. This is
 the surface the <code>django-ag-ui</code> bridge consumes to run drf-mcp tools in-process
 with HTTP-equivalent semantics.</p>
+<h2 id="documenting-tools">Documenting tools<a class="headerlink" href="#documenting-tools" title="Permanent link">&para;</a></h2>
+<p>A tool's description and its argument descriptions are the entire contract a
+model has to work from. Both have a channel; neither is filled in for you.</p>
+<h3 id="the-tool-description">The tool description<a class="headerlink" href="#the-tool-description" title="Permanent link">&para;</a></h3>
+<p><code>description=</code> on any <code>register_*</code> call. There is <strong>no docstring fallback</strong> for
+spec registration — a docstring is written for the next developer, not for a
+model choosing between tools, so promoting one silently would ship prose nobody
+reviewed for that audience.</p>
+<p>Registering without one emits <code>UndescribedToolWarning</code>, and
+<code>REST_FRAMEWORK_MCP["REQUIRE_TOOL_DESCRIPTIONS"] = True</code> turns that into an
+<code>ImproperlyConfigured</code>. This mirrors <code>REQUIRE_TOOL_PERMISSIONS</code>: two properties
+are equally required for a tool to be usable — something must gate the call, and
+something must say what the call does.</p>
+<h3 id="per-argument-descriptions">Per-argument descriptions<a class="headerlink" href="#per-argument-descriptions" title="Permanent link">&para;</a></h3>
+<p>Do <strong>not</strong> restate argument meaning in the tool description. Three channels feed
+<code>inputSchema.properties.*.description</code> directly:</p>
+<div class="language-python highlight"><pre><span></span><code><span id="__span-10-1"><a id="__codelineno-10-1" name="__codelineno-10-1" href="#__codelineno-10-1"></a><span class="c1"># 1. Serializer fields — `help_text` becomes the property description.</span>
+</span><span id="__span-10-2"><a id="__codelineno-10-2" name="__codelineno-10-2" href="#__codelineno-10-2"></a><span class="k">class</span><span class="w"> </span><span class="nc">ArchiveWidgetInput</span><span class="p">(</span><span class="n">serializers</span><span class="o">.</span><span class="n">Serializer</span><span class="p">):</span>
+</span><span id="__span-10-3"><a id="__codelineno-10-3" name="__codelineno-10-3" href="#__codelineno-10-3"></a>    <span class="n">widget_id</span> <span class="o">=</span> <span class="n">serializers</span><span class="o">.</span><span class="n">IntegerField</span><span class="p">(</span>
+</span><span id="__span-10-4"><a id="__codelineno-10-4" name="__codelineno-10-4" href="#__codelineno-10-4"></a>        <span class="n">help_text</span><span class="o">=</span><span class="s2">&quot;Primary key of the widget. Not the public slug.&quot;</span><span class="p">,</span>
+</span><span id="__span-10-5"><a id="__codelineno-10-5" name="__codelineno-10-5" href="#__codelineno-10-5"></a>    <span class="p">)</span>
+</span><span id="__span-10-6"><a id="__codelineno-10-6" name="__codelineno-10-6" href="#__codelineno-10-6"></a>
+</span><span id="__span-10-7"><a id="__codelineno-10-7" name="__codelineno-10-7" href="#__codelineno-10-7"></a><span class="c1"># 2. URL kwargs — `UrlKwarg` takes a description of its own.</span>
+</span><span id="__span-10-8"><a id="__codelineno-10-8" name="__codelineno-10-8" href="#__codelineno-10-8"></a><span class="n">server</span><span class="o">.</span><span class="n">register_selector_tool</span><span class="p">(</span>
+</span><span id="__span-10-9"><a id="__codelineno-10-9" name="__codelineno-10-9" href="#__codelineno-10-9"></a>    <span class="n">name</span><span class="o">=</span><span class="s2">&quot;list_loan_documents&quot;</span><span class="p">,</span>
+</span><span id="__span-10-10"><a id="__codelineno-10-10" name="__codelineno-10-10" href="#__codelineno-10-10"></a>    <span class="n">spec</span><span class="o">=</span><span class="n">documents_spec</span><span class="p">,</span>
+</span><span id="__span-10-11"><a id="__codelineno-10-11" name="__codelineno-10-11" href="#__codelineno-10-11"></a>    <span class="n">description</span><span class="o">=</span><span class="s2">&quot;List the documents filed against a loan.&quot;</span><span class="p">,</span>
+</span><span id="__span-10-12"><a id="__codelineno-10-12" name="__codelineno-10-12" href="#__codelineno-10-12"></a>    <span class="n">url_kwargs</span><span class="o">=</span><span class="p">[</span>
+</span><span id="__span-10-13"><a id="__codelineno-10-13" name="__codelineno-10-13" href="#__codelineno-10-13"></a>        <span class="n">UrlKwarg</span><span class="p">(</span>
+</span><span id="__span-10-14"><a id="__codelineno-10-14" name="__codelineno-10-14" href="#__codelineno-10-14"></a>            <span class="n">name</span><span class="o">=</span><span class="s2">&quot;loan_pk&quot;</span><span class="p">,</span>
+</span><span id="__span-10-15"><a id="__codelineno-10-15" name="__codelineno-10-15" href="#__codelineno-10-15"></a>            <span class="nb">type</span><span class="o">=</span><span class="s2">&quot;string&quot;</span><span class="p">,</span>
+</span><span id="__span-10-16"><a id="__codelineno-10-16" name="__codelineno-10-16" href="#__codelineno-10-16"></a>            <span class="n">required</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
+</span><span id="__span-10-17"><a id="__codelineno-10-17" name="__codelineno-10-17" href="#__codelineno-10-17"></a>            <span class="n">description</span><span class="o">=</span><span class="s2">&quot;Primary key of the *loan*, not the borrower.&quot;</span><span class="p">,</span>
+</span><span id="__span-10-18"><a id="__codelineno-10-18" name="__codelineno-10-18" href="#__codelineno-10-18"></a>        <span class="p">)</span>
+</span><span id="__span-10-19"><a id="__codelineno-10-19" name="__codelineno-10-19" href="#__codelineno-10-19"></a>    <span class="p">],</span>
+</span><span id="__span-10-20"><a id="__codelineno-10-20" name="__codelineno-10-20" href="#__codelineno-10-20"></a><span class="p">)</span>
+</span></code></pre></div>
+<p>The third is drf-services' <code>Annotated</code> marker vocabulary on an
+<code>Unpack[TypedDict]</code> extras key, which today carries <code>InputRequired</code> and
+<code>NotClientInput</code> but no description — a key documented only that way has to fall
+back to the tool description until that gap is closed upstream.</p>
+<p>Duplicated prose is where descriptions get longest and go stale, so an argument
+whose name doesn't match the entity it identifies belongs in <code>help_text</code> or
+<code>UrlKwarg(description=…)</code>, written once.</p>
 <h2 id="tools-vs-resources">Tools vs resources<a class="headerlink" href="#tools-vs-resources" title="Permanent link">&para;</a></h2>
 <table>
 <thead>
@@ -2362,15 +2484,15 @@ over time.</p>
 <h2 id="uri-templates">URI templates<a class="headerlink" href="#uri-templates" title="Permanent link">&para;</a></h2>
 <p>Resource URIs follow a small subset of <a href="https://www.rfc-editor.org/rfc/rfc6570">RFC 6570</a>.
 Each <code>{var}</code> placeholder becomes a kwarg in the selector's signature:</p>
-<div class="language-python highlight"><pre><span></span><code><span id="__span-10-1"><a id="__codelineno-10-1" name="__codelineno-10-1" href="#__codelineno-10-1"></a><span class="n">server</span><span class="o">.</span><span class="n">register_resource</span><span class="p">(</span>
-</span><span id="__span-10-2"><a id="__codelineno-10-2" name="__codelineno-10-2" href="#__codelineno-10-2"></a>    <span class="n">name</span><span class="o">=</span><span class="s2">&quot;invoice&quot;</span><span class="p">,</span>
-</span><span id="__span-10-3"><a id="__codelineno-10-3" name="__codelineno-10-3" href="#__codelineno-10-3"></a>    <span class="n">uri_template</span><span class="o">=</span><span class="s2">&quot;invoices://</span><span class="si">{pk}</span><span class="s2">&quot;</span><span class="p">,</span>
-</span><span id="__span-10-4"><a id="__codelineno-10-4" name="__codelineno-10-4" href="#__codelineno-10-4"></a>    <span class="n">selector</span><span class="o">=</span><span class="n">SelectorSpec</span><span class="p">(</span>
-</span><span id="__span-10-5"><a id="__codelineno-10-5" name="__codelineno-10-5" href="#__codelineno-10-5"></a>        <span class="n">kind</span><span class="o">=</span><span class="n">SelectorKind</span><span class="o">.</span><span class="n">RETRIEVE</span><span class="p">,</span>
-</span><span id="__span-10-6"><a id="__codelineno-10-6" name="__codelineno-10-6" href="#__codelineno-10-6"></a>        <span class="n">selector</span><span class="o">=</span><span class="n">get_invoice</span><span class="p">,</span>             <span class="c1"># def get_invoice(*, pk): ...</span>
-</span><span id="__span-10-7"><a id="__codelineno-10-7" name="__codelineno-10-7" href="#__codelineno-10-7"></a>        <span class="n">output_serializer</span><span class="o">=</span><span class="n">InvoiceOutputSerializer</span><span class="p">,</span>
-</span><span id="__span-10-8"><a id="__codelineno-10-8" name="__codelineno-10-8" href="#__codelineno-10-8"></a>    <span class="p">),</span>
-</span><span id="__span-10-9"><a id="__codelineno-10-9" name="__codelineno-10-9" href="#__codelineno-10-9"></a><span class="p">)</span>
+<div class="language-python highlight"><pre><span></span><code><span id="__span-11-1"><a id="__codelineno-11-1" name="__codelineno-11-1" href="#__codelineno-11-1"></a><span class="n">server</span><span class="o">.</span><span class="n">register_resource</span><span class="p">(</span>
+</span><span id="__span-11-2"><a id="__codelineno-11-2" name="__codelineno-11-2" href="#__codelineno-11-2"></a>    <span class="n">name</span><span class="o">=</span><span class="s2">&quot;invoice&quot;</span><span class="p">,</span>
+</span><span id="__span-11-3"><a id="__codelineno-11-3" name="__codelineno-11-3" href="#__codelineno-11-3"></a>    <span class="n">uri_template</span><span class="o">=</span><span class="s2">&quot;invoices://</span><span class="si">{pk}</span><span class="s2">&quot;</span><span class="p">,</span>
+</span><span id="__span-11-4"><a id="__codelineno-11-4" name="__codelineno-11-4" href="#__codelineno-11-4"></a>    <span class="n">selector</span><span class="o">=</span><span class="n">SelectorSpec</span><span class="p">(</span>
+</span><span id="__span-11-5"><a id="__codelineno-11-5" name="__codelineno-11-5" href="#__codelineno-11-5"></a>        <span class="n">kind</span><span class="o">=</span><span class="n">SelectorKind</span><span class="o">.</span><span class="n">RETRIEVE</span><span class="p">,</span>
+</span><span id="__span-11-6"><a id="__codelineno-11-6" name="__codelineno-11-6" href="#__codelineno-11-6"></a>        <span class="n">selector</span><span class="o">=</span><span class="n">get_invoice</span><span class="p">,</span>             <span class="c1"># def get_invoice(*, pk): ...</span>
+</span><span id="__span-11-7"><a id="__codelineno-11-7" name="__codelineno-11-7" href="#__codelineno-11-7"></a>        <span class="n">output_serializer</span><span class="o">=</span><span class="n">InvoiceOutputSerializer</span><span class="p">,</span>
+</span><span id="__span-11-8"><a id="__codelineno-11-8" name="__codelineno-11-8" href="#__codelineno-11-8"></a>    <span class="p">),</span>
+</span><span id="__span-11-9"><a id="__codelineno-11-9" name="__codelineno-11-9" href="#__codelineno-11-9"></a><span class="p">)</span>
 </span></code></pre></div>
 <p>Concrete URIs (no placeholders) appear in <code>resources/list</code>; templated ones
 appear in <code>resources/templates/list</code> so clients can fill them in.</p>
@@ -2379,13 +2501,13 @@ appear in <code>resources/templates/list</code> so clients can fill them in.</p>
 decisions, so <code>encoding=</code> is declared rather than inferred from the mime type —
 sniffing would silently change the body for anyone already advertising
 something other than JSON.</p>
-<div class="language-python highlight"><pre><span></span><code><span id="__span-11-1"><a id="__codelineno-11-1" name="__codelineno-11-1" href="#__codelineno-11-1"></a><span class="n">server</span><span class="o">.</span><span class="n">register_resource</span><span class="p">(</span>
-</span><span id="__span-11-2"><a id="__codelineno-11-2" name="__codelineno-11-2" href="#__codelineno-11-2"></a>    <span class="n">name</span><span class="o">=</span><span class="s2">&quot;changelog&quot;</span><span class="p">,</span>
-</span><span id="__span-11-3"><a id="__codelineno-11-3" name="__codelineno-11-3" href="#__codelineno-11-3"></a>    <span class="n">uri_template</span><span class="o">=</span><span class="s2">&quot;docs://changelog&quot;</span><span class="p">,</span>
-</span><span id="__span-11-4"><a id="__codelineno-11-4" name="__codelineno-11-4" href="#__codelineno-11-4"></a>    <span class="n">selector</span><span class="o">=</span><span class="n">SelectorSpec</span><span class="p">(</span><span class="n">kind</span><span class="o">=</span><span class="n">SelectorKind</span><span class="o">.</span><span class="n">RETRIEVE</span><span class="p">,</span> <span class="n">selector</span><span class="o">=</span><span class="n">read_changelog</span><span class="p">),</span>
-</span><span id="__span-11-5"><a id="__codelineno-11-5" name="__codelineno-11-5" href="#__codelineno-11-5"></a>    <span class="n">mime_type</span><span class="o">=</span><span class="s2">&quot;text/markdown&quot;</span><span class="p">,</span>
-</span><span id="__span-11-6"><a id="__codelineno-11-6" name="__codelineno-11-6" href="#__codelineno-11-6"></a>    <span class="n">encoding</span><span class="o">=</span><span class="n">ResourceEncoding</span><span class="o">.</span><span class="n">TEXT</span><span class="p">,</span>
-</span><span id="__span-11-7"><a id="__codelineno-11-7" name="__codelineno-11-7" href="#__codelineno-11-7"></a><span class="p">)</span>
+<div class="language-python highlight"><pre><span></span><code><span id="__span-12-1"><a id="__codelineno-12-1" name="__codelineno-12-1" href="#__codelineno-12-1"></a><span class="n">server</span><span class="o">.</span><span class="n">register_resource</span><span class="p">(</span>
+</span><span id="__span-12-2"><a id="__codelineno-12-2" name="__codelineno-12-2" href="#__codelineno-12-2"></a>    <span class="n">name</span><span class="o">=</span><span class="s2">&quot;changelog&quot;</span><span class="p">,</span>
+</span><span id="__span-12-3"><a id="__codelineno-12-3" name="__codelineno-12-3" href="#__codelineno-12-3"></a>    <span class="n">uri_template</span><span class="o">=</span><span class="s2">&quot;docs://changelog&quot;</span><span class="p">,</span>
+</span><span id="__span-12-4"><a id="__codelineno-12-4" name="__codelineno-12-4" href="#__codelineno-12-4"></a>    <span class="n">selector</span><span class="o">=</span><span class="n">SelectorSpec</span><span class="p">(</span><span class="n">kind</span><span class="o">=</span><span class="n">SelectorKind</span><span class="o">.</span><span class="n">RETRIEVE</span><span class="p">,</span> <span class="n">selector</span><span class="o">=</span><span class="n">read_changelog</span><span class="p">),</span>
+</span><span id="__span-12-5"><a id="__codelineno-12-5" name="__codelineno-12-5" href="#__codelineno-12-5"></a>    <span class="n">mime_type</span><span class="o">=</span><span class="s2">&quot;text/markdown&quot;</span><span class="p">,</span>
+</span><span id="__span-12-6"><a id="__codelineno-12-6" name="__codelineno-12-6" href="#__codelineno-12-6"></a>    <span class="n">encoding</span><span class="o">=</span><span class="n">ResourceEncoding</span><span class="o">.</span><span class="n">TEXT</span><span class="p">,</span>
+</span><span id="__span-12-7"><a id="__codelineno-12-7" name="__codelineno-12-7" href="#__codelineno-12-7"></a><span class="p">)</span>
 </span></code></pre></div>
 <p><code>ResourceEncoding.JSON</code> (the default) pretty-prints the selector's return
 value. <code>ResourceEncoding.TEXT</code> returns it verbatim, which is what Markdown,
@@ -2399,15 +2521,15 @@ chat, under the <a href="https://github.com/modelcontextprotocol/ext-apps">MCP A
 extension. It layers over the base protocol this package already speaks, so
 there is no protocol bump and no transport change.</p>
 <p>The host/server split is the whole shape of it. This package <strong>declares</strong>:</p>
-<div class="language-python highlight"><pre><span></span><code><span id="__span-12-1"><a id="__codelineno-12-1" name="__codelineno-12-1" href="#__codelineno-12-1"></a><span class="n">server</span><span class="o">.</span><span class="n">register_ui_resource</span><span class="p">(</span>
-</span><span id="__span-12-2"><a id="__codelineno-12-2" name="__codelineno-12-2" href="#__codelineno-12-2"></a>    <span class="n">name</span><span class="o">=</span><span class="s2">&quot;invoices_table&quot;</span><span class="p">,</span>
-</span><span id="__span-12-3"><a id="__codelineno-12-3" name="__codelineno-12-3" href="#__codelineno-12-3"></a>    <span class="n">uri</span><span class="o">=</span><span class="s2">&quot;ui://invoices/table.html&quot;</span><span class="p">,</span>
-</span><span id="__span-12-4"><a id="__codelineno-12-4" name="__codelineno-12-4" href="#__codelineno-12-4"></a>    <span class="n">template_name</span><span class="o">=</span><span class="s2">&quot;mcp/invoices_table.html&quot;</span><span class="p">,</span>
-</span><span id="__span-12-5"><a id="__codelineno-12-5" name="__codelineno-12-5" href="#__codelineno-12-5"></a>    <span class="n">ui</span><span class="o">=</span><span class="n">UIResourceMeta</span><span class="p">(</span>
-</span><span id="__span-12-6"><a id="__codelineno-12-6" name="__codelineno-12-6" href="#__codelineno-12-6"></a>        <span class="n">csp</span><span class="o">=</span><span class="n">UICsp</span><span class="p">(</span><span class="n">connect_domains</span><span class="o">=</span><span class="p">[</span><span class="s2">&quot;https://api.example.com&quot;</span><span class="p">]),</span>
-</span><span id="__span-12-7"><a id="__codelineno-12-7" name="__codelineno-12-7" href="#__codelineno-12-7"></a>        <span class="n">prefers_border</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
-</span><span id="__span-12-8"><a id="__codelineno-12-8" name="__codelineno-12-8" href="#__codelineno-12-8"></a>    <span class="p">),</span>
-</span><span id="__span-12-9"><a id="__codelineno-12-9" name="__codelineno-12-9" href="#__codelineno-12-9"></a><span class="p">)</span>
+<div class="language-python highlight"><pre><span></span><code><span id="__span-13-1"><a id="__codelineno-13-1" name="__codelineno-13-1" href="#__codelineno-13-1"></a><span class="n">server</span><span class="o">.</span><span class="n">register_ui_resource</span><span class="p">(</span>
+</span><span id="__span-13-2"><a id="__codelineno-13-2" name="__codelineno-13-2" href="#__codelineno-13-2"></a>    <span class="n">name</span><span class="o">=</span><span class="s2">&quot;invoices_table&quot;</span><span class="p">,</span>
+</span><span id="__span-13-3"><a id="__codelineno-13-3" name="__codelineno-13-3" href="#__codelineno-13-3"></a>    <span class="n">uri</span><span class="o">=</span><span class="s2">&quot;ui://invoices/table.html&quot;</span><span class="p">,</span>
+</span><span id="__span-13-4"><a id="__codelineno-13-4" name="__codelineno-13-4" href="#__codelineno-13-4"></a>    <span class="n">template_name</span><span class="o">=</span><span class="s2">&quot;mcp/invoices_table.html&quot;</span><span class="p">,</span>
+</span><span id="__span-13-5"><a id="__codelineno-13-5" name="__codelineno-13-5" href="#__codelineno-13-5"></a>    <span class="n">ui</span><span class="o">=</span><span class="n">UIResourceMeta</span><span class="p">(</span>
+</span><span id="__span-13-6"><a id="__codelineno-13-6" name="__codelineno-13-6" href="#__codelineno-13-6"></a>        <span class="n">csp</span><span class="o">=</span><span class="n">UICsp</span><span class="p">(</span><span class="n">connect_domains</span><span class="o">=</span><span class="p">[</span><span class="s2">&quot;https://api.example.com&quot;</span><span class="p">]),</span>
+</span><span id="__span-13-7"><a id="__codelineno-13-7" name="__codelineno-13-7" href="#__codelineno-13-7"></a>        <span class="n">prefers_border</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
+</span><span id="__span-13-8"><a id="__codelineno-13-8" name="__codelineno-13-8" href="#__codelineno-13-8"></a>    <span class="p">),</span>
+</span><span id="__span-13-9"><a id="__codelineno-13-9" name="__codelineno-13-9" href="#__codelineno-13-9"></a><span class="p">)</span>
 </span></code></pre></div>
 <p>The <strong>host</strong> renders: it builds the sandboxed iframe, constructs and enforces
 the CSP from what you declared, and runs the <code>ui/*</code> postMessage bridge. None of
@@ -2432,11 +2554,11 @@ across the host's cache.</p>
 </div>
 <p>A tool then points at the view, and the host renders that tool's result inside
 it instead of showing raw JSON:</p>
-<div class="language-python highlight"><pre><span></span><code><span id="__span-13-1"><a id="__codelineno-13-1" name="__codelineno-13-1" href="#__codelineno-13-1"></a><span class="n">server</span><span class="o">.</span><span class="n">register_selector_tool</span><span class="p">(</span>
-</span><span id="__span-13-2"><a id="__codelineno-13-2" name="__codelineno-13-2" href="#__codelineno-13-2"></a>    <span class="n">name</span><span class="o">=</span><span class="s2">&quot;list_invoices&quot;</span><span class="p">,</span>
-</span><span id="__span-13-3"><a id="__codelineno-13-3" name="__codelineno-13-3" href="#__codelineno-13-3"></a>    <span class="n">spec</span><span class="o">=</span><span class="n">list_invoices_spec</span><span class="p">,</span>
-</span><span id="__span-13-4"><a id="__codelineno-13-4" name="__codelineno-13-4" href="#__codelineno-13-4"></a>    <span class="n">ui</span><span class="o">=</span><span class="n">UIToolMeta</span><span class="p">(</span><span class="n">resource_uri</span><span class="o">=</span><span class="s2">&quot;ui://invoices/table.html&quot;</span><span class="p">),</span>
-</span><span id="__span-13-5"><a id="__codelineno-13-5" name="__codelineno-13-5" href="#__codelineno-13-5"></a><span class="p">)</span>
+<div class="language-python highlight"><pre><span></span><code><span id="__span-14-1"><a id="__codelineno-14-1" name="__codelineno-14-1" href="#__codelineno-14-1"></a><span class="n">server</span><span class="o">.</span><span class="n">register_selector_tool</span><span class="p">(</span>
+</span><span id="__span-14-2"><a id="__codelineno-14-2" name="__codelineno-14-2" href="#__codelineno-14-2"></a>    <span class="n">name</span><span class="o">=</span><span class="s2">&quot;list_invoices&quot;</span><span class="p">,</span>
+</span><span id="__span-14-3"><a id="__codelineno-14-3" name="__codelineno-14-3" href="#__codelineno-14-3"></a>    <span class="n">spec</span><span class="o">=</span><span class="n">list_invoices_spec</span><span class="p">,</span>
+</span><span id="__span-14-4"><a id="__codelineno-14-4" name="__codelineno-14-4" href="#__codelineno-14-4"></a>    <span class="n">ui</span><span class="o">=</span><span class="n">UIToolMeta</span><span class="p">(</span><span class="n">resource_uri</span><span class="o">=</span><span class="s2">&quot;ui://invoices/table.html&quot;</span><span class="p">),</span>
+</span><span id="__span-14-5"><a id="__codelineno-14-5" name="__codelineno-14-5" href="#__codelineno-14-5"></a><span class="p">)</span>
 </span></code></pre></div>
 <p>The render payload is the <code>structuredContent</code> the tool <strong>already emits</strong> — no
 second serialisation path — and a <code>tools/call</code> the view makes comes back
@@ -2582,19 +2704,19 @@ optional <code>structuredContent</code>:</p>
 <li><code>structuredContent</code> is always JSON-shaped — clients parse it directly.</li>
 <li><code>content[0]</code> is a text block whose payload is encoded per <code>OutputFormat</code>.</li>
 </ul>
-<div class="language-python highlight"><pre><span></span><code><span id="__span-14-1"><a id="__codelineno-14-1" name="__codelineno-14-1" href="#__codelineno-14-1"></a><span class="kn">from</span><span class="w"> </span><span class="nn">rest_framework_mcp</span><span class="w"> </span><span class="kn">import</span> <span class="n">OutputFormat</span>
-</span><span id="__span-14-2"><a id="__codelineno-14-2" name="__codelineno-14-2" href="#__codelineno-14-2"></a>
-</span><span id="__span-14-3"><a id="__codelineno-14-3" name="__codelineno-14-3" href="#__codelineno-14-3"></a><span class="n">server</span><span class="o">.</span><span class="n">register_service_tool</span><span class="p">(</span>
-</span><span id="__span-14-4"><a id="__codelineno-14-4" name="__codelineno-14-4" href="#__codelineno-14-4"></a>    <span class="n">name</span><span class="o">=</span><span class="s2">&quot;invoices.list&quot;</span><span class="p">,</span>
-</span><span id="__span-14-5"><a id="__codelineno-14-5" name="__codelineno-14-5" href="#__codelineno-14-5"></a>    <span class="n">spec</span><span class="o">=</span><span class="n">ServiceSpec</span><span class="p">(</span>
-</span><span id="__span-14-6"><a id="__codelineno-14-6" name="__codelineno-14-6" href="#__codelineno-14-6"></a>        <span class="n">service</span><span class="o">=</span><span class="n">list_invoices</span><span class="p">,</span>
-</span><span id="__span-14-7"><a id="__codelineno-14-7" name="__codelineno-14-7" href="#__codelineno-14-7"></a>        <span class="n">output_selector_spec</span><span class="o">=</span><span class="n">SelectorSpec</span><span class="p">(</span>
-</span><span id="__span-14-8"><a id="__codelineno-14-8" name="__codelineno-14-8" href="#__codelineno-14-8"></a>            <span class="n">kind</span><span class="o">=</span><span class="n">SelectorKind</span><span class="o">.</span><span class="n">LIST</span><span class="p">,</span>
-</span><span id="__span-14-9"><a id="__codelineno-14-9" name="__codelineno-14-9" href="#__codelineno-14-9"></a>            <span class="n">output_serializer</span><span class="o">=</span><span class="n">InvoiceOutputSerializer</span><span class="p">,</span>
-</span><span id="__span-14-10"><a id="__codelineno-14-10" name="__codelineno-14-10" href="#__codelineno-14-10"></a>        <span class="p">),</span>
-</span><span id="__span-14-11"><a id="__codelineno-14-11" name="__codelineno-14-11" href="#__codelineno-14-11"></a>    <span class="p">),</span>
-</span><span id="__span-14-12"><a id="__codelineno-14-12" name="__codelineno-14-12" href="#__codelineno-14-12"></a>    <span class="n">output_format</span><span class="o">=</span><span class="n">OutputFormat</span><span class="o">.</span><span class="n">AUTO</span><span class="p">,</span>   <span class="c1"># JSON, TOON, or AUTO</span>
-</span><span id="__span-14-13"><a id="__codelineno-14-13" name="__codelineno-14-13" href="#__codelineno-14-13"></a><span class="p">)</span>
+<div class="language-python highlight"><pre><span></span><code><span id="__span-15-1"><a id="__codelineno-15-1" name="__codelineno-15-1" href="#__codelineno-15-1"></a><span class="kn">from</span><span class="w"> </span><span class="nn">rest_framework_mcp</span><span class="w"> </span><span class="kn">import</span> <span class="n">OutputFormat</span>
+</span><span id="__span-15-2"><a id="__codelineno-15-2" name="__codelineno-15-2" href="#__codelineno-15-2"></a>
+</span><span id="__span-15-3"><a id="__codelineno-15-3" name="__codelineno-15-3" href="#__codelineno-15-3"></a><span class="n">server</span><span class="o">.</span><span class="n">register_service_tool</span><span class="p">(</span>
+</span><span id="__span-15-4"><a id="__codelineno-15-4" name="__codelineno-15-4" href="#__codelineno-15-4"></a>    <span class="n">name</span><span class="o">=</span><span class="s2">&quot;invoices.list&quot;</span><span class="p">,</span>
+</span><span id="__span-15-5"><a id="__codelineno-15-5" name="__codelineno-15-5" href="#__codelineno-15-5"></a>    <span class="n">spec</span><span class="o">=</span><span class="n">ServiceSpec</span><span class="p">(</span>
+</span><span id="__span-15-6"><a id="__codelineno-15-6" name="__codelineno-15-6" href="#__codelineno-15-6"></a>        <span class="n">service</span><span class="o">=</span><span class="n">list_invoices</span><span class="p">,</span>
+</span><span id="__span-15-7"><a id="__codelineno-15-7" name="__codelineno-15-7" href="#__codelineno-15-7"></a>        <span class="n">output_selector_spec</span><span class="o">=</span><span class="n">SelectorSpec</span><span class="p">(</span>
+</span><span id="__span-15-8"><a id="__codelineno-15-8" name="__codelineno-15-8" href="#__codelineno-15-8"></a>            <span class="n">kind</span><span class="o">=</span><span class="n">SelectorKind</span><span class="o">.</span><span class="n">LIST</span><span class="p">,</span>
+</span><span id="__span-15-9"><a id="__codelineno-15-9" name="__codelineno-15-9" href="#__codelineno-15-9"></a>            <span class="n">output_serializer</span><span class="o">=</span><span class="n">InvoiceOutputSerializer</span><span class="p">,</span>
+</span><span id="__span-15-10"><a id="__codelineno-15-10" name="__codelineno-15-10" href="#__codelineno-15-10"></a>        <span class="p">),</span>
+</span><span id="__span-15-11"><a id="__codelineno-15-11" name="__codelineno-15-11" href="#__codelineno-15-11"></a>    <span class="p">),</span>
+</span><span id="__span-15-12"><a id="__codelineno-15-12" name="__codelineno-15-12" href="#__codelineno-15-12"></a>    <span class="n">output_format</span><span class="o">=</span><span class="n">OutputFormat</span><span class="o">.</span><span class="n">AUTO</span><span class="p">,</span>   <span class="c1"># JSON, TOON, or AUTO</span>
+</span><span id="__span-15-13"><a id="__codelineno-15-13" name="__codelineno-15-13" href="#__codelineno-15-13"></a><span class="p">)</span>
 </span></code></pre></div>
 <p><code>AUTO</code> picks per-payload — TOON for uniform list-of-objects, JSON otherwise.
 TOON is wrapped in a fenced <code>```toon</code> block with a leading <code># format: toon</code>

@@ -1629,6 +1629,11 @@ too (or set <code>include_output_schema=False</code> per binding). The other dir
 <td>Registering a tool with no permissions at all (neither <code>spec.permission_classes</code> nor <code>permissions=[…]</code>) raises <code>ImproperlyConfigured</code> instead of emitting <code>UnguardedToolWarning</code>. The warning exists because guarding the <em>viewset</em> — or relying on <code>REST_FRAMEWORK</code>'s default permission classes — has <strong>no effect over MCP</strong>: this package bypasses DRF's view-layer pipeline, so a spec that looks guarded over HTTP ships as an unguarded tool. See <a href="../../auth/">Authentication</a>.</td>
 </tr>
 <tr>
+<td><code>REQUIRE_TOOL_DESCRIPTIONS</code></td>
+<td><code>False</code></td>
+<td>Registering a tool with no <code>description</code> raises <code>ImproperlyConfigured</code> instead of emitting <code>UndescribedToolWarning</code>. The description is the only thing a model reads to decide whether and how to call a tool, so an empty one ships a tool that cannot be used correctly — and <code>tools/list</code> renders it indistinguishably from a documented one. There is deliberately <strong>no docstring fallback</strong>: a docstring is written for the next developer, not for a model choosing between tools. See <a href="../../concepts/#documenting-tools">Documenting tools</a>.</td>
+</tr>
+<tr>
 <td><code>FILTER_LISTINGS_BY_PERMISSIONS</code></td>
 <td><code>False</code></td>
 <td>Drop bindings whose <code>permissions</code> deny the caller from <code>tools/list</code>, <code>resources/list</code>, <code>resources/templates/list</code> and <code>prompts/list</code>. Per-binding <code>always_listed=True</code> opts one back in as a discovery aid.</td>
