@@ -294,6 +294,81 @@ Both are resolved when the patterns are built. Omit either to take
 `REST_FRAMEWORK_MCP["DCR_ENABLED"]` / `["DCR_INITIAL_ACCESS_TOKEN"]` as the
 default; pass them to let two mounts in one project gate DCR differently.
 
+### What a registration accepts and returns
+
+The endpoint speaks RFC 7591's vocabulary. `token_endpoint_auth_method` decides
+whether the client is public or confidential, and `grant_types` decides the
+grant — the two fields an interoperable client actually sends:
+
+```json title="POST /oauth/register/"
+{
+  "client_name": "Claude",
+  "redirect_uris": ["https://claude.ai/api/mcp/auth_callback"],
+  "grant_types": ["authorization_code", "refresh_token"],
+  "response_types": ["code"],
+  "token_endpoint_auth_method": "none"
+}
+```
+
+`token_endpoint_auth_method: none` registers a **public** client: no secret is
+issued, and it authenticates at the token endpoint with PKCE alone. This is the
+only mode Claude's custom connectors can use — that flow has no way to be handed
+a pre-provisioned `client_id`, so DCR is its only path in. `client_secret_basic`
+(the RFC's default when the field is omitted) and `client_secret_post` register
+a **confidential** client and return a `client_secret`.
+
+The registration above — a public client — comes back with no secret at all:
+
+```json title="201 Created"
+{
+  "client_id": "…",
+  "client_id_issued_at": 1753747200,
+  "client_name": "Claude",
+  "redirect_uris": ["https://claude.ai/api/mcp/auth_callback"],
+  "grant_types": ["authorization_code", "refresh_token"],
+  "response_types": ["code"],
+  "token_endpoint_auth_method": "none",
+  "client_type": "public",
+  "authorization_grant_type": "authorization-code"
+}
+```
+
+A confidential registration adds `client_secret` and `client_secret_expires_at`
+(`0`, meaning it does not expire). That secret is the plaintext, returned once
+and never recoverable afterwards — DOT hashes the stored column, so nothing can
+re-derive it.
+
+Every field in the response is the **resolved** value — what was actually
+registered — not an echo of what was asked for. RFC 7591 §3.2.1 lets an
+authorization server substitute any metadata value it likes, but obliges it to
+report what it settled on; a substitution the client is never told about is what
+turns a legal downgrade into an undiagnosable failure at the token endpoint.
+
+DOT's own `client_type` / `authorization_grant_type` spellings are still
+accepted as an escape hatch for callers that already speak DOT, and are echoed
+back alongside the RFC fields. Sending both vocabularies is fine when they
+agree; a contradiction (`token_endpoint_auth_method: none` with
+`client_type: confidential`) is a `400 invalid_client_metadata` rather than a
+silent winner. DOT models one grant per application, so `grant_types` may name
+at most one primary grant — `refresh_token` rides along and is not counted.
+
+`response_types` is derived from the grant per RFC 7591 §2.1 rather than chosen
+independently: `authorization_code` → `["code"]`, `implicit` → `["token"]`, and
+the `client_credentials` / `password` grants never reach the authorization
+endpoint, so `[]`. Supply it to assert the same thing and it is accepted;
+supply something inconsistent and you get a `400`.
+
+`scope` is checked against DOT's own scopes backend — the same set
+`validate_scopes` uses at authorize time, which by default is
+`OAUTH2_PROVIDER["SCOPES"]`. A registration naming a scope the server doesn't
+offer is a `400` with the offending values named, rather than a `201` followed
+by an `invalid_scope` a leg later with nothing linking the two. DOT stores no
+per-application scope, so the registration can only ever be checked against the
+global set, never narrowed to this client.
+
+RFC 7591 fields the server doesn't understand (`contacts`, `logo_uri`, `jwks`, …)
+are ignored, which §2 requires.
+
 The contrib mount also surfaces AS metadata, so `AllowAnyBackend`
 deployments (which have no AS) return `501 Not Implemented` on the AS
 metadata endpoints rather than serving a fake payload. Use

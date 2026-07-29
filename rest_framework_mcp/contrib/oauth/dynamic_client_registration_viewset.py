@@ -27,8 +27,12 @@ class DynamicClientRegistrationViewSet(ViewSet):
     Single-action ViewSet — wired as the ``create`` action (POST) via
     ``DynamicClientRegistrationViewSet.as_view({"post": "create"})``.
     Successful POST returns the RFC 7591 client information response
-    (``client_id`` / ``client_secret`` / echoed registration metadata)
-    and persists a DOT ``Application``.
+    (``client_id`` / echoed registration metadata, plus a plaintext
+    ``client_secret`` for confidential clients) and persists a DOT
+    ``Application``. A client that registers with
+    ``token_endpoint_auth_method: none`` becomes a public client and is
+    issued no secret — it authenticates at the token endpoint with PKCE
+    alone, which is the only mode Claude's custom connectors can use.
 
     DOT (``oauth2_provider``) is imported lazily inside the action so
     this module remains importable without the ``[oauth]`` extra. A
@@ -92,7 +96,13 @@ class DynamicClientRegistrationViewSet(ViewSet):
             )
 
         try:
+            from oauth2_provider.generators import (  # type: ignore[import-not-found]
+                generate_client_secret,
+            )
             from oauth2_provider.models import Application  # type: ignore[import-not-found]
+            from oauth2_provider.scopes import (  # type: ignore[import-not-found]
+                get_scopes_backend,
+            )
         except ImportError as exc:  # pragma: no cover - exercised by smoke job w/o DOT
             raise ImportError(
                 "DynamicClientRegistrationViewSet requires `django-oauth-toolkit`. "
@@ -101,24 +111,69 @@ class DynamicClientRegistrationViewSet(ViewSet):
 
         # ``DataclassSerializer.save()`` returns the validated payload as
         # a :class:`DynamicClientRegistrationRequest` instance — typed
-        # access for every downstream read, no dict-key string typos.
+        # access for every downstream read, no dict-key string typos. Its
+        # RFC 7591 and DOT spellings are already reconciled and defaulted
+        # by the serializer, so there is nothing left to resolve here.
         instance = serializer.save()
-        client_type: str = instance.client_type or Application.CLIENT_CONFIDENTIAL
-        grant_type: str = instance.authorization_grant_type or Application.GRANT_AUTHORIZATION_CODE
+        client_type: str = instance.client_type
+        grant_type: str = instance.authorization_grant_type
+
+        # DOT has no per-application scope column — scopes are configured
+        # globally and checked against the *authorize* request. Echoing a scope
+        # we never registered would tell the client it got something it didn't,
+        # and it would only find out one leg later, so check it here instead:
+        # the same set DOT's ``validate_scopes`` will use, surfaced as a
+        # per-field ``invalid_client_metadata`` while there is still something
+        # actionable to say. Checked before ``create`` so a rejection leaves no
+        # orphan row.
+        available: set[str] = set(get_scopes_backend().get_available_scopes())
+        unsupported: list[str] = [s for s in instance.scope.split() if s not in available]
+        if unsupported:
+            return Response(
+                {
+                    "error": "invalid_client_metadata",
+                    "error_description": "Validation failed",
+                    "detail": {
+                        "scope": [
+                            f"This authorization server does not offer {unsupported}. "
+                            f"Available: {sorted(available)}."
+                        ]
+                    },
+                },
+                status=400,
+            )
+
+        # Generate the secret here rather than letting the model default fire,
+        # because ``ClientSecretField.pre_save`` hashes the column in place:
+        # after ``create()`` the attribute holds a PBKDF2 digest, and returning
+        # that is the same as issuing a credential nobody can authenticate
+        # with. This is the only moment the plaintext exists. Public clients
+        # still get a stored secret (so the row can never be authenticated
+        # against a known value) but are never handed one — RFC 7591 §2 issues
+        # secrets only to clients that authenticate.
+        client_secret: str = generate_client_secret()
         application = Application.objects.create(
             name=instance.client_name[:255],
             redirect_uris=" ".join(instance.redirect_uris),
             client_type=client_type,
             authorization_grant_type=grant_type,
+            client_secret=client_secret,
             skip_authorization=False,
         )
+        is_confidential: bool = client_type == Application.CLIENT_CONFIDENTIAL
 
         response = DynamicClientRegistrationResponse(
             client_id=application.client_id,
-            client_secret=application.client_secret,
+            client_secret=client_secret if is_confidential else None,
             client_id_issued_at=int(application.created.timestamp()),
             client_name=application.name,
-            redirect_uris=list(instance.redirect_uris),
+            # Read back off the row, not the request: RFC 7591 §3.2.1 asks for
+            # what was registered, and ``client_name`` in particular may have
+            # been truncated on the way in.
+            redirect_uris=application.redirect_uris.split(),
+            grant_types=list(instance.grant_types),
+            response_types=list(instance.response_types),
+            token_endpoint_auth_method=instance.token_endpoint_auth_method,
             client_type=client_type,
             authorization_grant_type=grant_type,
             scope=instance.scope or None,
