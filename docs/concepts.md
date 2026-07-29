@@ -167,6 +167,43 @@ somewhere less legible. `required` can't be combined with a `default` (a default
 always satisfies the argument, so requiring it would be a no-op); that raises at
 registration.
 
+#### A reflected `**extras` key is not a route capture
+
+A selector typed `def list_widgets(user, **extras: Unpack[WidgetExtras])` that
+reads `extras["project_pk"]` already has that key reflected into the tool's
+`inputSchema` by drf-services (0.26+) — no `UrlKwarg` needed **for the selector
+itself**, which receives it through the spec params. Marking it `InputRequired`
+(drf-services 0.28+) makes the model supply it; that is a *schema* statement and
+changes nothing about where the value lands.
+
+The two declarations answer different questions, and only one of them puts a
+value on the request:
+
+| | reflected `**extras` key (± `InputRequired`) | registered `UrlKwarg` |
+| --- | --- | --- |
+| In the `inputSchema` | yes | yes |
+| Can be required | yes (`InputRequired`) | yes (`required=True`, plus an `isError` result when omitted) |
+| Reaches the selector | yes, as a spec param | yes, via the `view.kwargs` spread |
+| Reaches `view.kwargs` | **no** | yes |
+| Ranks above caller-supplied params | no — it *is* caller input | yes |
+
+So anything that reads request state rather than its own arguments — a
+`spec.kwargs` provider, `extend_queryset`, a permission class, an
+`output_serializer_context` provider — sees nothing for a reflected-only key. A
+scoping provider doing `view.kwargs.get("project_pk")` returns `None` and
+**mis-scopes every call** instead of failing: the failure mode worth naming here
+is that it is silent.
+
+Register the `UrlKwarg` as well when the value is scope. It is a strict superset
+— the selector still receives it in `**extras`, and the schema keeps one property
+and one `required` entry (an explicit `UrlKwarg` wins the merge over a reflected
+key of the same name).
+
+That split mirrors HTTP, where a route capture arrives in the URL and never in the
+body — which is what makes it unspoofable. Over MCP the arguments are whatever the
+model chose; a `UrlKwarg` value outranks them. If a provider scopes by it, it has
+to come through the channel that carries that precedence.
+
 `UrlKwarg` is
 [drf-services' type](https://github.com/Artui/djangorestframework-services/blob/main/rest_framework_services/types/url_kwarg.py),
 re-exported here — the declaration is the same whichever transport carries it, and
