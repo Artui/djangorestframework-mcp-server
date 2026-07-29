@@ -7,6 +7,86 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- **Dynamic client registration issued credentials that could never
+  authenticate.** Every client registered through `/oauth/register/` completed
+  the authorize leg — login, consent, redirect back with a code — and then died
+  at the token exchange with `401 {"error": "invalid_client"}`. Two independent
+  defects, either one sufficient:
+
+  1. `token_endpoint_auth_method` — the RFC 7591 §2 field that actually carries
+     this — was not modelled, so it never reached the dataclass and every
+     registration fell through to `client_type = confidential`. A spec-compliant
+     public-PKCE registration was silently downgraded into a client DOT then
+     demanded authentication from, having registered specifically to say it had
+     no credentials to authenticate with.
+  2. The `client_secret` in the registration response was the PBKDF2 digest, not
+     the secret. `DOT`'s `ClientSecretField.pre_save` hashes the column during
+     `Application.objects.create()`, so reading the attribute back afterwards
+     yields `pbkdf2_sha256$…`. The plaintext was never emitted and was
+     unrecoverable, leaving confidential clients holding a credential that could
+     not verify against itself.
+
+  For Claude's custom connectors this was terminal rather than inconvenient:
+  that flow cannot be handed a pre-provisioned `client_id`, so DCR is the only
+  way in, and the operator-facing message ("check your credentials and
+  permissions") pointed at neither cause.
+
+  Both are fixed, and the endpoint now speaks RFC 7591's vocabulary rather than
+  only DOT's:
+
+  - `token_endpoint_auth_method` (`client_secret_basic` / `client_secret_post` /
+    `none`) and `grant_types` are accepted and drive `client_type` /
+    `authorization_grant_type`. The DOT-spelled fields remain as an escape
+    hatch; supplying both is fine when they agree and a `400` when they don't.
+  - The secret is generated before the `Application` is written, so the response
+    carries the plaintext — alongside `client_secret_expires_at`, which §3.2.1
+    makes REQUIRED whenever a secret is issued.
+  - Public clients get no `client_secret` at all, per §2.
+  - The response now reports every value it resolved —
+    `token_endpoint_auth_method`, `grant_types`, `response_types` — read back
+    from the registered row rather than echoed off the request. §3.2.1 permits
+    an authorization server to substitute metadata but obliges it to say what it
+    settled on, and an undisclosed substitution is precisely what made this
+    undiagnosable: the client goes on behaving as what it asked to be while the
+    token endpoint enforces something else.
+  - `response_types` is derived from the grant per §2.1 (`authorization_code` →
+    `["code"]`, `implicit` → `["token"]`, `client_credentials` / `password` →
+    `[]`); an explicit value that contradicts the grant is a `400`.
+  - `scope` is validated against DOT's scopes backend — the same set
+    `validate_scopes` uses at authorize time. Previously it was echoed
+    unchecked, and since DOT stores no per-application scope, a client naming a
+    scope the server doesn't offer was told it had registered successfully and
+    found out one leg later. **Potentially breaking** for a deployment whose
+    clients register scopes outside `OAUTH2_PROVIDER["SCOPES"]`: those
+    registrations now fail with a per-field `invalid_client_metadata` naming the
+    offending values, where they used to return `201` and fail at authorize.
+
+  The registration response gained fields; nothing was removed or renamed. The
+  gap that let this ship is closed too: the DCR tests asserted a secret was
+  *present* (a hash is present) and stopped at the registration endpoint. There
+  is now a test that drives DOT's own token endpoint with what DCR handed out,
+  for both the public-PKCE and confidential-secret paths.
+
+### Changed
+
+- **Selector-tool and chain-step rendering now go through drf-services'
+  `render_spec_output`** instead of local renderer + context-resolver copies. No
+  behaviour change — the copies had been brought to parity in 0.18.0, and this
+  removes the parity requirement rather than restating it. It is what the repo's
+  own "rendering is not reproduced locally" rule always said, now true on every
+  dispatch path.
+
+  Worth recording *why*: those copies are exactly where 0.18.0's two
+  consumer-reported crashes came from. They bound serializer-context providers
+  positionally where the sister repo binds by name, and they never applied DRF's
+  baseline context. A second implementation that must be kept equal to the first
+  will drift again; deleting it is the only fix that holds.
+
+  Internal only. `handlers.utils.resolve_output_context` (added in 0.18.0) is
+  gone with them — `render_spec_output` does that layering itself.
+
 ## [0.18.0] — 2026-07-29
 
 ### Fixed

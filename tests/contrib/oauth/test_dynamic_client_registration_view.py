@@ -5,7 +5,7 @@ from __future__ import annotations
 import json
 
 import pytest
-from django.test import RequestFactory
+from django.test import RequestFactory, override_settings
 
 from rest_framework_mcp.contrib.oauth.dynamic_client_registration_viewset import (
     DynamicClientRegistrationViewSet,
@@ -106,12 +106,54 @@ def test_happy_path_creates_dot_application_and_returns_credentials() -> None:
 
 @pytest.mark.django_db
 def test_happy_path_echoes_scope_when_provided() -> None:
+    """``read`` / ``write`` are DOT's own default ``SCOPES``."""
     response = _post(
-        json.dumps({"redirect_uris": ["https://client.example/cb"], "scope": "mcp:read mcp:write"})
+        json.dumps({"redirect_uris": ["https://client.example/cb"], "scope": "read write"})
     )
     assert response.status_code == 201
     body = response.data
-    assert body["scope"] == "mcp:read mcp:write"
+    assert body["scope"] == "read write"
+
+
+@pytest.mark.django_db
+def test_scope_the_server_does_not_offer_is_rejected() -> None:
+    """Registering an unavailable scope fails here rather than at authorize.
+
+    DOT stores no per-application scope, so echoing one back unchecked would
+    tell the client it registered something the authorization server will
+    refuse a leg later, with nothing linking the two.
+    """
+    response = _post(
+        json.dumps({"redirect_uris": ["https://client.example/cb"], "scope": "read mcp:admin"})
+    )
+    assert response.status_code == 400
+    body = response.data
+    assert body["error"] == "invalid_client_metadata"
+    assert "mcp:admin" in body["detail"]["scope"][0]
+
+
+@pytest.mark.django_db
+def test_scope_check_follows_the_configured_scopes() -> None:
+    """The check reads DOT's scopes backend, not a list of our own."""
+    with override_settings(OAUTH2_PROVIDER={"SCOPES": {"mcp:read": "Read via MCP"}}):
+        response = _post(
+            json.dumps({"redirect_uris": ["https://client.example/cb"], "scope": "mcp:read"})
+        )
+        assert response.status_code == 201
+        assert response.data["scope"] == "mcp:read"
+
+        rejected = _post(
+            json.dumps({"redirect_uris": ["https://client.example/cb"], "scope": "write"})
+        )
+        assert rejected.status_code == 400
+
+
+@pytest.mark.django_db
+def test_rejected_scope_leaves_no_application_row() -> None:
+    from oauth2_provider.models import Application
+
+    _post(json.dumps({"redirect_uris": ["https://client.example/cb"], "scope": "nope"}))
+    assert not Application.objects.exists()
 
 
 @pytest.mark.django_db
