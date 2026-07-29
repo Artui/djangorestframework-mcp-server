@@ -358,6 +358,32 @@ the `client_credentials` / `password` grants never reach the authorization
 endpoint, so `[]`. Supply it to assert the same thing and it is accepted;
 supply something inconsistent and you get a `400`.
 
+### ID tokens and `openid`
+
+If your DOT deployment sets `OIDC_ENABLED`, `openid` appears in `scopes_supported`
+and clients will request it. The exchange then routes through the OpenID grant and
+DOT tries to sign an ID token with the registered client's `algorithm`.
+
+Registration resolves that algorithm rather than leaving it unset:
+
+- `id_token_signed_response_alg: "RS256"` — honoured when
+  `OAUTH2_PROVIDER["OIDC_RSA_PRIVATE_KEY"]` is configured, and a `400` naming that
+  setting when it isn't.
+- **Omitted** — takes RS256 when the server has a key, and otherwise registers no
+  algorithm at all, which is the right outcome for a deployment not doing OIDC.
+- `id_token_signed_response_alg: "HS256"` — always refused. HS256 signs the ID
+  token with `client_secret`, and this endpoint leaves DOT's `hash_client_secret`
+  at its default, so the stored column holds a PBKDF2 digest rather than the
+  secret the client was handed. Signing with the digest produces a token whose
+  signature can never verify.
+- OIDC's `none` (an unsigned ID token) is not offered — DOT cannot mint one.
+
+`/.well-known/openid-configuration` reports
+`id_token_signing_alg_values_supported` derived from the same key, so it is empty
+on a server that cannot sign. **If you want ID tokens, configure
+`OIDC_RSA_PRIVATE_KEY`** — without it, clients that request `openid` register
+successfully and get no ID token.
+
 `scope` is checked against DOT's own scopes backend — the same set
 `validate_scopes` uses at authorize time, which by default is
 `OAUTH2_PROVIDER["SCOPES"]`. A registration naming a scope the server doesn't

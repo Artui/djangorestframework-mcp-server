@@ -67,11 +67,15 @@ def _register(**extra: Any) -> dict[str, Any]:
     return dict(response.data)
 
 
-def _issue_grant(client_id: str) -> str:
+def _issue_grant(client_id: str, *, scope: str = "") -> str:
     """Stand in for the authorize leg: persist the code DOT would have written."""
     from oauth2_provider.models import Application, Grant
 
-    user = get_user_model().objects.create_user(username="probe")
+    # ``last_login`` is set because the real authorize leg cannot be reached
+    # without one, and DOT's ``get_id_token_dictionary`` reads it for the
+    # ``auth_time`` claim — a stand-in without it is not the state a consented
+    # grant is ever in.
+    user = get_user_model().objects.create_user(username="probe", last_login=timezone.now())
     application = Application.objects.get(client_id=client_id)
     grant = Grant.objects.create(
         application=application,
@@ -79,7 +83,7 @@ def _issue_grant(client_id: str) -> str:
         code="probe-authorization-code",
         expires=timezone.now() + timedelta(minutes=10),
         redirect_uri=REDIRECT_URI,
-        scope="",
+        scope=scope,
         code_challenge=CODE_CHALLENGE,
         code_challenge_method="S256",
     )

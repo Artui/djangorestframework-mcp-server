@@ -62,6 +62,53 @@ def check_tool_permissions_declared(
     warnings.warn(message, UnguardedToolWarning, stacklevel=3)
 
 
+class UndescribedToolWarning(UserWarning):
+    """A tool was registered with no description.
+
+    Dedicated category, matching :class:`UnguardedToolWarning`, so consumers
+    can silence or escalate it precisely via ``warnings.filterwarnings``.
+    """
+
+
+def check_tool_description_present(name: str, description: str | None, *, require: bool) -> None:
+    """Warn (or raise) when a tool binding carries no description.
+
+    The counterpart to :func:`check_tool_permissions_declared`, and added
+    for the asymmetry it closes: two properties are equally required for a
+    tool to be *usable* by a model — something must gate the call, and
+    something must tell the model what the call does — and only the first
+    was checked. A tool registered without a description was served with
+    an empty one in ``tools/list``, indistinguishable from a documented
+    tool anywhere in the package, the transport, or the test surface. The
+    consumer who reported this found theirs by dumping every registered
+    tool and reading the output.
+
+    Deliberately **no docstring fallback.** ``register_specs`` could
+    default to ``inspect.getdoc(spec.service)``, but a docstring is
+    written for the next developer, not for a model choosing between
+    tools — quietly promoting one to a tool description ships prose that
+    was never reviewed for that audience, and silences the warning that
+    would have prompted someone to write the right thing. The decorator
+    registration paths that already fall back to ``fn.__doc__`` keep doing
+    so; this check simply reports whatever survived that.
+
+    Emits on every undescribed registration (no warn-once module state —
+    see the repo's no-module-level-mutable-state rule).
+    """
+    if description and description.strip():
+        return
+    message = (
+        f"MCP tool {name!r} is registered with no description. `tools/list` will "
+        "advertise it with an empty description, which is the only thing a model "
+        "reads to decide whether and how to call it. Pass description='...' at "
+        "registration, or set REST_FRAMEWORK_MCP['REQUIRE_TOOL_DESCRIPTIONS'] = True "
+        "to make this an error."
+    )
+    if require:
+        raise ImproperlyConfigured(message)
+    warnings.warn(message, UndescribedToolWarning, stacklevel=3)
+
+
 def build_ui_tool_meta(
     *,
     name: str,
@@ -134,7 +181,9 @@ def build_ui_tool_meta(
 
 
 __all__ = [
+    "UndescribedToolWarning",
     "UnguardedToolWarning",
     "build_ui_tool_meta",
+    "check_tool_description_present",
     "check_tool_permissions_declared",
 ]

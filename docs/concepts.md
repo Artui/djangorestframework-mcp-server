@@ -465,6 +465,61 @@ are re-exported from the package root so a consumer can branch on faults. This i
 the surface the `django-ag-ui` bridge consumes to run drf-mcp tools in-process
 with HTTP-equivalent semantics.
 
+## Documenting tools
+
+A tool's description and its argument descriptions are the entire contract a
+model has to work from. Both have a channel; neither is filled in for you.
+
+### The tool description
+
+`description=` on any `register_*` call. There is **no docstring fallback** for
+spec registration — a docstring is written for the next developer, not for a
+model choosing between tools, so promoting one silently would ship prose nobody
+reviewed for that audience.
+
+Registering without one emits `UndescribedToolWarning`, and
+`REST_FRAMEWORK_MCP["REQUIRE_TOOL_DESCRIPTIONS"] = True` turns that into an
+`ImproperlyConfigured`. This mirrors `REQUIRE_TOOL_PERMISSIONS`: two properties
+are equally required for a tool to be usable — something must gate the call, and
+something must say what the call does.
+
+### Per-argument descriptions
+
+Do **not** restate argument meaning in the tool description. Three channels feed
+`inputSchema.properties.*.description` directly:
+
+```python
+# 1. Serializer fields — `help_text` becomes the property description.
+class ArchiveWidgetInput(serializers.Serializer):
+    widget_id = serializers.IntegerField(
+        help_text="Primary key of the widget. Not the public slug.",
+    )
+
+# 2. URL kwargs — `UrlKwarg` takes a description of its own.
+server.register_selector_tool(
+    name="list_loan_documents",
+    spec=documents_spec,
+    description="List the documents filed against a loan.",
+    url_kwargs=[
+        UrlKwarg(
+            name="loan_pk",
+            type="string",
+            required=True,
+            description="Primary key of the *loan*, not the borrower.",
+        )
+    ],
+)
+```
+
+The third is drf-services' `Annotated` marker vocabulary on an
+`Unpack[TypedDict]` extras key, which today carries `InputRequired` and
+`NotClientInput` but no description — a key documented only that way has to fall
+back to the tool description until that gap is closed upstream.
+
+Duplicated prose is where descriptions get longest and go stale, so an argument
+whose name doesn't match the entity it identifies belongs in `help_text` or
+`UrlKwarg(description=…)`, written once.
+
 ## Tools vs resources
 
 | | Tools | Resources |

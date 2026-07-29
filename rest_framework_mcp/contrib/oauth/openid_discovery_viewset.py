@@ -10,6 +10,7 @@ from rest_framework.viewsets import ViewSet
 
 from rest_framework_mcp.auth.types.auth_backend import MCPAuthBackend
 from rest_framework_mcp.contrib.oauth.types.openid_discovery_payload import OpenIDDiscoveryPayload
+from rest_framework_mcp.contrib.oauth.utils import supported_id_token_algorithms
 
 
 @method_decorator(never_cache, name="dispatch")
@@ -30,11 +31,17 @@ class OpenIDDiscoveryViewSet(ViewSet):
 
     - ``subject_types_supported: ["public"]`` — DOT-style pseudonymous
       identifiers.
-    - ``id_token_signing_alg_values_supported: ["RS256"]`` — the most
-      common OIDC algorithm, advertised even though we don't actually
-      mint ID tokens (clients that walk this list and pick one work
-      fine because they only use it for verification — which they
-      never get to do without an ID-token endpoint anyway).
+    - ``id_token_signing_alg_values_supported`` — **derived**, not fixed.
+      This used to be a hardcoded ``["RS256"]``, on the reasoning that
+      the value is inert because "we don't actually mint ID tokens". That
+      reasoning was wrong wherever DOT *is* the authorization server with
+      ``OIDC_ENABLED``: DOT's token endpoint mints ID tokens, so a client
+      that read this list, saw RS256 and requested ``openid`` reached
+      ``Application.jwk_key`` on a DCR-registered client that had no
+      algorithm — ``ImproperlyConfigured``, surfacing as a 500 after the
+      user had already logged in and consented. It now reports what the
+      server can genuinely sign with, which is empty when no RSA key is
+      configured.
     - ``response_modes_supported: ["query"]`` — standard.
 
     Backends that don't host an authorization server raise
@@ -58,8 +65,31 @@ class OpenIDDiscoveryViewSet(ViewSet):
                 {"error": "authorization_server_unavailable", "error_description": str(exc)},
                 status=501,
             )
-        payload = OpenIDDiscoveryPayload(base=base)
+        payload = OpenIDDiscoveryPayload(
+            base=base,
+            id_token_signing_alg_values_supported=supported_id_token_algorithms(
+                rsa_key_configured=self._rsa_key_configured()
+            ),
+        )
         return Response(payload.to_dict())
+
+    @staticmethod
+    def _rsa_key_configured() -> bool:
+        """Whether DOT holds an RSA signing key.
+
+        Lazy + tolerant of DOT's absence: this ViewSet is backend-agnostic
+        (it renders whatever ``MCPAuthBackend`` returns), while the only
+        signing key it can see belongs to DOT. A mount fronting some other
+        authorization server reports no signable algorithm rather than
+        guessing on that server's behalf.
+        """
+        try:
+            from oauth2_provider.settings import (  # type: ignore[import-not-found]
+                oauth2_settings,
+            )
+        except ImportError:  # pragma: no cover - exercised by smoke job w/o DOT
+            return False
+        return bool(oauth2_settings.OIDC_RSA_PRIVATE_KEY)
 
 
 __all__ = ["OpenIDDiscoveryViewSet"]

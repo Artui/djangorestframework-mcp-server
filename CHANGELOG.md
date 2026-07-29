@@ -7,6 +7,112 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.20.0] — 2026-07-29
+
+### Fixed
+
+- **A dynamically registered client could not be issued an ID token, so the token
+  endpoint returned 500 whenever the advertised `openid` scope was requested.**
+  DCR never set `Application.algorithm`, leaving DOT's `NO_ALGORITHM` default, so
+  `Application.jwk_key` raised `ImproperlyConfigured("This application does not
+  support signed tokens")` as soon as oauthlib routed the exchange through the
+  OpenID grant — after the user had already logged in and consented.
+
+  This is the same shape as 0.19.0's public-client bug: **discovery advertised a
+  capability the registration endpoint could not provision.**
+  `id_token_signing_alg_values_supported` was a hardcoded `["RS256"]`, justified
+  in a comment on the grounds that the value was inert because "we don't actually
+  mint ID tokens". That is false wherever DOT *is* the authorization server with
+  `OIDC_ENABLED` — its token endpoint mints them.
+
+  - `id_token_signed_response_alg` (RFC 7591 §2) is now modelled and resolved to
+    DOT's `algorithm`, and echoed in the registration response.
+  - Omitted, it takes RS256 when `OAUTH2_PROVIDER["OIDC_RSA_PRIVATE_KEY"]` is
+    configured, and otherwise registers no algorithm — today's behaviour, kept
+    for deployments not doing OIDC.
+  - Requesting RS256 without a server key is a `400` naming the missing setting.
+  - **HS256 is refused outright**, for a reason worth recording: it signs the ID
+    token with `client_secret`, and this endpoint leaves `hash_client_secret` at
+    its default, so the column holds a PBKDF2 digest rather than the secret the
+    client was handed. Accepting it would mint tokens whose signature can never
+    verify — quieter than the 500, and harder to diagnose.
+  - `id_token_signing_alg_values_supported` is now derived from the same key, so
+    it is empty on a server that cannot sign rather than promising RS256.
+  - **Registering `scope: "openid"` on a server with no signing key is refused.**
+    Found by sweeping for the same shape rather than reported: that server
+    publishes `openid`, so the scope check passes it, no algorithm is registered,
+    and the token endpoint 500s exactly as before. The algorithm resolution alone
+    misses it because nothing was *requested* — the scope is what makes an ID
+    token mandatory. Only a client that declares the scope at registration is
+    caught; one that registers bare and asks for `openid` at authorize is not
+    visible from this endpoint.
+
+  Two further findings from that sweep are **recorded, not fixed**, because both
+  are low-severity and fixing either carries more risk than the symptom:
+
+  - `registration_endpoint` is advertised in AS metadata whenever an issuer is
+    configured, including when DCR is disabled or was never mounted. Unlike the
+    bugs above this fails *cleanly* — an immediate, well-formed
+    `403 {"error": "invalid_request", "error_description": "DCR is disabled"}` —
+    and gating it on `DCR_ENABLED` would stop advertising a working endpoint for
+    anyone who passes `dcr_enabled=True` to the mount without also setting the
+    global, which is precisely the flow Claude's connectors depend on.
+  - `capabilities.resources` is advertised at `initialize` even with zero
+    resources registered, where `prompts` is deliberately gated on having at
+    least one. The asymmetry is real but the consequence is an empty
+    `resources/list`, not a failure.
+
+  Checked and found sound: `resolve_structured_output` already refuses to
+  advertise an `outputSchema` while `structuredContent` is disabled (the MCP-side
+  instance of this exact bug class, guarded with a clear error); the `ui=` link
+  refuses at registration when a tool doesn't emit `structuredContent`;
+  `bearer_methods_supported`, `code_challenge_methods_supported`,
+  `subject_types_supported` and `response_modes_supported` are all backed by what
+  DOT actually accepts.
+
+  On the related report that this reaches the client as a bare 500 rather than an
+  OAuth error: `/oauth/token/` is DOT's view, not this package's — `build_oauth_urlpatterns`
+  deliberately does not mount it — so the RFC 6749 §5.2 channel isn't ours to use.
+  What is ours is refusing the registration that creates the condition, which is
+  where RFC 7591 §3.2.2's `invalid_client_metadata` applies and where the user
+  hasn't yet spent a login and a consent. The general case of an
+  `ImproperlyConfigured` escaping DOT's token endpoint remains open.
+
+### Added
+
+- **`UndescribedToolWarning` and `REQUIRE_TOOL_DESCRIPTIONS`** — registering a
+  tool with no description now warns, and can be escalated to
+  `ImproperlyConfigured`, exactly as `REQUIRE_TOOL_PERMISSIONS` already did for
+  permissions.
+
+  The asymmetry is the point: two properties are equally required for a tool to
+  be usable by a model — something must gate the call, and something must say
+  what the call does — and only the first was checked. An undescribed tool was
+  served through `tools/list` with an empty description, indistinguishable from a
+  documented one anywhere in the package, the transport, or the test surface. The
+  consumer who reported this found theirs by dumping every registered tool and
+  reading the output by hand.
+
+  Deliberately **no docstring fallback** for spec registration. Defaulting to
+  `inspect.getdoc(spec.service)` would silence the warning by shipping prose
+  written for the next developer to a model choosing between tools. The decorator
+  paths that already fall back to `fn.__doc__` are unchanged; the check reports
+  whatever survived that.
+
+### Documentation
+
+- **"Documenting tools"** in [concepts](docs/concepts.md) — the three channels
+  that already feed `inputSchema.properties.*.description`: serializer
+  `help_text`, `UrlKwarg(description=…)`, and (the gap) drf-services' `Annotated`
+  marker vocabulary on `Unpack[TypedDict]` extras keys, which carries
+  `InputRequired` / `NotClientInput` but no description.
+
+  Prompted by a report that there is "no supported way to attach meaning to an
+  individual argument", which led to one argument being explained in prose across
+  three tool descriptions. Two of the three channels have worked all along —
+  `UrlKwarg.description` is emitted by `UrlKwarg.json_schema()` — so the gap was
+  discoverability, not capability.
+
 ## [0.19.0] — 2026-07-29
 
 ### Fixed
@@ -1854,7 +1960,8 @@ Pinned to `djangorestframework-services==0.6.0`.
 - 100% line + branch coverage enforced by pytest (**451 tests** at
   release).
 
-[Unreleased]: https://github.com/Artui/djangorestframework-mcp-server/compare/v0.19.0...HEAD
+[Unreleased]: https://github.com/Artui/djangorestframework-mcp-server/compare/v0.20.0...HEAD
+[0.20.0]: https://github.com/Artui/djangorestframework-mcp-server/compare/v0.19.0...v0.20.0
 [0.19.0]: https://github.com/Artui/djangorestframework-mcp-server/compare/v0.18.0...v0.19.0
 [0.18.0]: https://github.com/Artui/djangorestframework-mcp-server/compare/v0.17.1...v0.18.0
 [0.17.1]: https://github.com/Artui/djangorestframework-mcp-server/compare/v0.17.0...v0.17.1

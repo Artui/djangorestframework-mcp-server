@@ -54,6 +54,15 @@ _GRANT_RESPONSE_TYPES = {
 }
 _RESPONSE_TYPES = sorted({rt for types in _GRANT_RESPONSE_TYPES.values() for rt in types})
 
+# RFC 7591 §2 / OIDC Core §2 ``id_token_signed_response_alg``, restricted to the
+# ``Application.ALGORITHM_TYPES`` DOT can actually sign with. OIDC's ``none``
+# (an unsigned ID token) is deliberately absent: DOT's ``jwk_key`` raises for
+# anything that is not RS256 or HS256, so accepting ``none`` would register a
+# client whose very first ID token is a 500 — the failure this list exists to
+# stop. Whether a listed algorithm is *usable* is a server-configuration and
+# client-type question, resolved in the viewset.
+_ID_TOKEN_ALGORITHMS = ["HS256", "RS256"]
+
 # What a registration that named neither vocabulary gets, and — for the
 # reverse direction — the RFC method to echo back to a caller who spelled its
 # intent DOT's way. RFC 7591 §2 defaults an omitted method to
@@ -125,6 +134,11 @@ class DynamicClientRegistrationSerializer(DataclassSerializer):
         required=False,
         allow_empty=True,
         help_text="RFC 7591 §2.1. Derived from the grant; supply it only to assert the same.",
+    )
+    id_token_signed_response_alg = serializers.ChoiceField(
+        choices=_ID_TOKEN_ALGORITHMS,
+        required=False,
+        help_text="RFC 7591 §2. Omit to take the strongest algorithm this server can sign with.",
     )
     # Choices populated dynamically in ``__init__`` so test environments
     # without DOT installed don't break import of this module.

@@ -19,6 +19,7 @@ def build_mcp_config(
     record_service_exceptions: bool | None = None,
     filter_listings_by_permissions: bool | None = None,
     require_tool_permissions: bool | None = None,
+    require_tool_descriptions: bool | None = None,
 ) -> MCPConfig:
     """Resolve a :class:`MCPConfig` from ``REST_FRAMEWORK_MCP``, applying overrides.
 
@@ -85,6 +86,11 @@ def build_mcp_config(
             require_tool_permissions
             if require_tool_permissions is not None
             else get_setting("REQUIRE_TOOL_PERMISSIONS")
+        ),
+        require_tool_descriptions=bool(
+            require_tool_descriptions
+            if require_tool_descriptions is not None
+            else get_setting("REQUIRE_TOOL_DESCRIPTIONS")
         ),
     )
 

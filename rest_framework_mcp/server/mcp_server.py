@@ -56,7 +56,11 @@ from rest_framework_mcp.registry.types.tool_binding import ToolBinding
 from rest_framework_mcp.registry.types.ui_resource_meta import UIResourceMeta
 from rest_framework_mcp.registry.types.ui_tool_meta import UIToolMeta
 from rest_framework_mcp.registry.types.url_kwarg import UrlKwarg
-from rest_framework_mcp.server.utils import build_ui_tool_meta, check_tool_permissions_declared
+from rest_framework_mcp.server.utils import (
+    build_ui_tool_meta,
+    check_tool_description_present,
+    check_tool_permissions_declared,
+)
 from rest_framework_mcp.transport.async_streamable_http_viewset import (
     ASYNC_STREAMABLE_HTTP_ACTION_MAP,
     AsyncStreamableHttpViewSet,
@@ -286,6 +290,9 @@ class MCPServer:
         check_tool_permissions_declared(
             binding.name, binding.permissions, require=self._config.require_tool_permissions
         )
+        check_tool_description_present(
+            binding.name, binding.description, require=self._config.require_tool_descriptions
+        )
         self._tools.register(binding)
         return binding
 
@@ -390,6 +397,9 @@ class MCPServer:
         )
         check_tool_permissions_declared(
             binding.name, binding.permissions, require=self._config.require_tool_permissions
+        )
+        check_tool_description_present(
+            binding.name, binding.description, require=self._config.require_tool_descriptions
         )
         self._tools.register(binding)
         return binding
@@ -553,6 +563,9 @@ class MCPServer:
         )
         check_tool_permissions_declared(
             binding.name, binding.permissions, require=self._config.require_tool_permissions
+        )
+        check_tool_description_present(
+            binding.name, binding.description, require=self._config.require_tool_descriptions
         )
         self._tools.register(binding)
         return binding

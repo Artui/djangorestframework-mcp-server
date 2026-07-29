@@ -28,6 +28,13 @@ class DynamicClientRegistrationRequest:
     so it is derived rather than stored, and an explicit value that
     contradicts the grant is rejected.
 
+    ``id_token_signed_response_alg`` maps to DOT's ``Application.algorithm``,
+    which decides whether an ID token can be signed at all. Only the
+    viewset can resolve it, because whether an algorithm is *usable*
+    depends on server configuration (an RSA key) and on the client type
+    (HS256 signs with the client secret, which a public client does not
+    have) — neither of which is visible from the payload alone.
+
     RFC 7591 fields the server doesn't understand (``contacts``,
     ``logo_uri``, ``jwks``, …) are ignored, which §2 requires — DOT has
     nowhere to put them, and echoing metadata the authorization server
@@ -40,5 +47,6 @@ class DynamicClientRegistrationRequest:
     token_endpoint_auth_method: str = ""
     grant_types: list[str] = field(default_factory=list)
     response_types: list[str] = field(default_factory=list)
+    id_token_signed_response_alg: str = ""
     client_type: str = ""
     authorization_grant_type: str = ""
