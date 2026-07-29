@@ -7,6 +7,49 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- **Serializer-context providers were called positionally, so any provider that
+  didn't lead with `(view, request)` raised `TypeError`.** The sister repo
+  invokes every provider through the keyword pool — each gets the subset of
+  `view` / `request` / the resolved-data extra it declares *by name* — so
+  `def get_context(request, **extras)` works over HTTP and through drf-pai. This
+  transport forwarded `provider(view, request, **declared)` unconditionally and
+  the same provider died with `takes 1 positional argument but 2 were given`,
+  500-ing the tool call. Now bound by name, matching the docstring's own parity
+  claim. Applies to `output_serializer_context` on selector and chain tools, and
+  to a resource binding's `kwargs_provider`, which had the same divergence.
+  **Behaviour change:** a provider whose first two parameters are named
+  something other than `view` / `request` (e.g. `def ctx(v, r)`) used to work
+  here and now raises — the sister repo has always required those names, and
+  this is the parity that was claimed. Rename the parameters, or accept
+  `**kwargs`.
+- **No baseline serializer context off the HTTP path, so
+  `self.context["request"]` raised `KeyError`.** Over HTTP DRF hands every
+  serializer `get_serializer_context()` — `request` / `format` / `view` — and
+  serializers read those keys unguarded (`request.user`, `build_absolute_uri`,
+  an ownership check in a `SerializerMethodField`). MCP rendering passed only
+  what a spec's `output_serializer_context` provider returned, and nothing at
+  all when no provider was declared, so a serializer that renders fine behind a
+  view 500-ed the tool call. Every serializer this transport builds now starts
+  from that baseline (drf-services' `base_serializer_context`), with the spec's
+  provider merged over it: selector tools (retrieve / list / paginated), chain
+  steps, `resources/read`, and the read-path input validators. Service tools
+  render through drf-services' `render_spec_output` and are fixed there.
+- **A selector tool's context provider saw an empty `view.kwargs`.** Rendering
+  built a second, kwargs-less `OfflineServiceView`, so a provider scoping by a
+  registered `UrlKwarg` (`view.kwargs["project_pk"]`) got `None` at render time
+  while the selector itself got the real value. One view is now built per call
+  and threaded through dispatch and rendering, as on HTTP.
+
+### Changed
+
+- Requires `djangorestframework-services>=0.29.0` (for `base_serializer_context`).
+- `handlers.utils.invoke_context_provider` is replaced by
+  `handlers.utils.resolve_output_context`, which returns the whole context
+  (baseline + provider) rather than just the provider's return. Internal helper;
+  renamed because it no longer does what its name said.
+
 ## [0.17.1] — 2026-07-28
 
 ### Fixed

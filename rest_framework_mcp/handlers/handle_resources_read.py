@@ -82,16 +82,26 @@ def handle_resources_read(
             "user": context.token.user,
             **vars_,
         }
+        # URI-template variables are exposed via ``view.kwargs`` so a provider
+        # (and the output serializer's context) can read them without parsing
+        # the URI again.
+        view = OfflineServiceView(request=drf_request, action=binding.name, kwargs=dict(vars_))
         if binding.kwargs_provider is not None:
-            # Per-spec kwargs provider from ``SelectorSpec.kwargs``: URI-template
-            # variables are exposed via ``view.kwargs`` so providers can inspect
-            # them without parsing the URI again.
-            view = OfflineServiceView(request=drf_request, action=binding.name, kwargs=dict(vars_))
-            pool.update(binding.kwargs_provider(view, drf_request))
+            # Per-spec kwargs provider from ``SelectorSpec.kwargs``, invoked
+            # through the keyword pool exactly as drf-services invokes it on the
+            # HTTP path — by name, so ``def kwargs(request): ...`` works here too.
+            provider_pool: dict[str, Any] = {"view": view, "request": drf_request}
+            pool.update(
+                binding.kwargs_provider(
+                    **resolve_callable_kwargs(binding.kwargs_provider, provider_pool)
+                )
+            )
         kwargs: dict[str, Any] = resolve_callable_kwargs(binding.selector, pool)
         raw: Any = run_selector(binding.selector, kwargs)
 
-        contents = build_resource_contents(binding=binding, uri=uri, raw=raw)
+        contents = build_resource_contents(
+            binding=binding, uri=uri, raw=raw, view=view, request=drf_request
+        )
         if isinstance(contents, JsonRpcError):
             return contents
         return {"contents": [contents.to_dict()]}

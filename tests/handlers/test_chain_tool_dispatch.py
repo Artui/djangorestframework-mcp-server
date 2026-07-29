@@ -458,3 +458,37 @@ def test_rate_limited() -> None:
     assert isinstance(out, JsonRpcError)
     assert out.code == JsonRpcErrorCode.RATE_LIMITED
     assert out.data == {"retryAfter": 42}
+
+
+@pytest.mark.django_db
+def test_step_render_has_the_request_without_a_provider() -> None:
+    """A step's serializer gets DRF's baseline context, provider or not."""
+    Invoice.objects.create(number="A", amount_cents=100)
+
+    class _RequestReading(drf_serializers.ModelSerializer):
+        is_editable = drf_serializers.SerializerMethodField()
+
+        class Meta:
+            model = Invoice
+            fields = ["id", "is_editable"]
+
+        def get_is_editable(self, _: Invoice) -> str:
+            return str(self.context["request"].user)
+
+    server = _server()
+    server.register_chain_tool(
+        name="chain",
+        steps=[
+            ChainStep(
+                "one",
+                SelectorSpec(
+                    kind=SelectorKind.RETRIEVE,
+                    selector=lambda: Invoice.objects.first(),
+                    output_serializer=_RequestReading,
+                ),
+            )
+        ],
+    )
+    out = _call(server, {})
+    assert isinstance(out, dict)
+    assert out["structuredContent"]["is_editable"] == "None"

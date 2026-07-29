@@ -271,3 +271,89 @@ async def test_async_selector_spec_kwargs_provider_invoked_on_read() -> None:
     import json
 
     assert json.loads(text) == {"pk": "5", "tenant": 11}
+
+
+def test_resource_kwargs_provider_declaring_request_only_is_bound_by_name() -> None:
+    """``def provider(request)`` — bound through the keyword pool, as on HTTP.
+
+    Forwarding ``(view, request)`` positionally raised ``TypeError`` for any
+    provider that didn't lead with exactly those two parameters.
+    """
+    from rest_framework_mcp.registry.types.resource_binding import ResourceBinding
+
+    seen: dict[str, Any] = {}
+
+    def provider(request: DRFRequest) -> dict[str, Any]:
+        seen["user"] = request.user
+        return {"tenant_id": 5}
+
+    resources = ResourceRegistry()
+    resources.register(
+        ResourceBinding(
+            name="r",
+            uri_template="r://{pk}",
+            description=None,
+            selector=lambda *, pk, tenant_id: {"pk": pk, "tenant": tenant_id},
+            kind=SelectorKind.RETRIEVE,
+            kwargs_provider=provider,
+        )
+    )
+    out = handle_resources_read({"uri": "r://7"}, _ctx(resources=resources))
+    assert isinstance(out, dict)
+    assert seen["user"] == "alice"
+    assert '"tenant": 5' in out["contents"][0]["text"]
+
+
+def test_resource_render_has_the_request_in_the_serializer_context() -> None:
+    """A resource's ``output_serializer`` gets DRF's baseline context too."""
+    from rest_framework import serializers
+
+    from rest_framework_mcp.registry.types.resource_binding import ResourceBinding
+
+    class _Out(serializers.Serializer):
+        who = serializers.SerializerMethodField()
+
+        def get_who(self, _: Any) -> str:
+            return str(self.context["request"].user)
+
+    resources = ResourceRegistry()
+    resources.register(
+        ResourceBinding(
+            name="r",
+            uri_template="r://{pk}",
+            description=None,
+            selector=lambda *, pk: {"pk": pk},
+            kind=SelectorKind.RETRIEVE,
+            output_serializer=_Out,
+        )
+    )
+    out = handle_resources_read({"uri": "r://7"}, _ctx(resources=resources))
+    assert isinstance(out, dict)
+    assert '"who": "alice"' in out["contents"][0]["text"]
+
+
+async def test_async_resource_render_has_the_request_in_the_serializer_context() -> None:
+    from rest_framework import serializers
+
+    from rest_framework_mcp.registry.types.resource_binding import ResourceBinding
+
+    class _Out(serializers.Serializer):
+        who = serializers.SerializerMethodField()
+
+        def get_who(self, _: Any) -> str:
+            return str(self.context["request"].user)
+
+    resources = ResourceRegistry()
+    resources.register(
+        ResourceBinding(
+            name="r",
+            uri_template="r://{pk}",
+            description=None,
+            selector=lambda *, pk: {"pk": pk},
+            kind=SelectorKind.RETRIEVE,
+            output_serializer=_Out,
+        )
+    )
+    out = await handle_resources_read_async({"uri": "r://7"}, _ctx(resources=resources))
+    assert isinstance(out, dict)
+    assert '"who": "alice"' in out["contents"][0]["text"]

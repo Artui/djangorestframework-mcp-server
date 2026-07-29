@@ -42,6 +42,7 @@ from rest_framework import serializers as drf_serializers
 from rest_framework_services import (
     OfflineServiceView,
     adispatch_spec,
+    base_serializer_context,
     build_offline_context,
     dispatch_spec,
     is_queryset,
@@ -63,7 +64,7 @@ from rest_framework_mcp.handlers.types.context import MCPCallContext
 from rest_framework_mcp.handlers.utils import (
     check_permissions,
     consume_rate_limits,
-    invoke_context_provider,
+    resolve_output_context,
     services_dispatch_policies,
     split_url_kwargs,
     validate_input_against_serializer,
@@ -88,14 +89,16 @@ def dispatch_selector_tool(
     if early is not None:
         return early
 
-    drf_request, validated, error = _build_request_and_validate(binding, arguments_raw, context)
+    drf_request, view, validated, error = _build_request_and_validate(
+        binding, arguments_raw, context
+    )
     if error is not None:
         return error
 
     try:
         result = dispatch_spec(
             binding.spec,
-            **_dispatch_kwargs(binding, validated, drf_request, arguments_raw, context),
+            **_dispatch_kwargs(binding, validated, drf_request, view, arguments_raw, context),
         )
     except ServiceValidationError as exc:
         # Tool-level failure → ``isError`` result the model can read and
@@ -114,7 +117,7 @@ def dispatch_selector_tool(
         return build_error_tool_result(exc.message, error_type="service_error").to_dict()
 
     return _post_fetch_and_render(
-        binding, result, drf_request, arguments_raw, params, context.config
+        binding, result, drf_request, view, arguments_raw, params, context.config
     )
 
 
@@ -122,6 +125,7 @@ async def _post_fetch_and_render_async(
     binding: SelectorToolBinding,
     result: Any,
     drf_request: Any,
+    view: Any,
     arguments_raw: dict[str, Any],
     params: dict[str, Any],
     config: MCPConfig,
@@ -134,7 +138,7 @@ async def _post_fetch_and_render_async(
     async-context boundary differs.
     """
     return await acall(
-        _post_fetch_and_render, binding, result, drf_request, arguments_raw, params, config
+        _post_fetch_and_render, binding, result, drf_request, view, arguments_raw, params, config
     )
 
 
@@ -150,14 +154,16 @@ async def dispatch_selector_tool_async(
     if early is not None:
         return early
 
-    drf_request, validated, error = _build_request_and_validate(binding, arguments_raw, context)
+    drf_request, view, validated, error = _build_request_and_validate(
+        binding, arguments_raw, context
+    )
     if error is not None:
         return error
 
     try:
         result = await adispatch_spec(
             binding.spec,
-            **_dispatch_kwargs(binding, validated, drf_request, arguments_raw, context),
+            **_dispatch_kwargs(binding, validated, drf_request, view, arguments_raw, context),
         )
     except ServiceValidationError as exc:
         # See the sync sibling for the protocol-vs-tool error boundary.
@@ -174,7 +180,7 @@ async def dispatch_selector_tool_async(
         return build_error_tool_result(exc.message, error_type="service_error").to_dict()
 
     return await _post_fetch_and_render_async(
-        binding, result, drf_request, arguments_raw, params, context.config
+        binding, result, drf_request, view, arguments_raw, params, context.config
     )
 
 
@@ -209,28 +215,63 @@ def _build_request_and_validate(
     binding: SelectorToolBinding,
     arguments_raw: dict[str, Any],
     context: MCPCallContext,
-) -> tuple[Any, Any, JsonRpcError | None]:
-    """Build a synthesised DRF request + validate the ``input_serializer`` portion.
+) -> tuple[Any, Any, Any, dict[str, Any] | JsonRpcError | None]:
+    """Build the synthesised request + view, and validate the ``input_serializer``.
+
+    Returns ``(drf_request, view, validated, error)``; ``error`` is non-``None``
+    when the call is already answered — a JSON-RPC ``INVALID_PARAMS`` envelope
+    for a serializer rejection, an ``isError`` tool result for a missing
+    required URL kwarg (a tool-level failure the model can self-correct from).
+
+    The ``view`` is built **once**, here, and threaded through dispatch and
+    rendering: on HTTP a single view instance serves the whole request, so the
+    ``view.kwargs`` a spec callable reads must be the ones a context provider
+    sees too.
 
     Filter / ordering / pagination args bypass ``input_serializer``
     validation — they're shape-checked at runtime by the FilterSet, the
     ordering enum at dispatch, and ``int(...)`` coercion respectively.
     Their names are passed in as ``additional_known_keys`` so the
     unknown-argument policy doesn't flag them as unrecognised.
+
+    The serializer is given DRF's baseline context, as it has over HTTP — a
+    validator reading ``self.context["request"]`` (a user-scoped
+    ``PrimaryKeyRelatedField`` queryset, an ownership check) behaves the same
+    over both transports.
     """
     drf_request = build_offline_context(
         context.token.user, arguments_raw, http_request=context.http_request
     ).request
+    try:
+        # URL kwargs route through ``view.kwargs`` (from where drf-services
+        # spreads them, authoritative over params), never as selector params.
+        _spec_params, url_kwarg_values = split_url_kwargs(arguments_raw, binding.url_kwargs)
+    except ServiceValidationError as exc:
+        return (
+            drf_request,
+            None,
+            None,
+            build_error_tool_result(
+                exc.message,
+                error_type="validation_error",
+                detail=validation_error_data(
+                    exc.detail, arguments_raw, include_value=context.config.include_validation_value
+                ),
+            ).to_dict(),
+        )
+    view = OfflineServiceView(request=drf_request, action=binding.name, kwargs=url_kwarg_values)
     try:
         validated = validate_input_against_serializer(
             arguments_raw,
             binding.input_serializer,
             unknown_arguments=binding.unknown_arguments,
             additional_known_keys=_selector_tool_additional_known_keys(binding),
+            context=base_serializer_context(view=view, request=drf_request),
         )
     except drf_serializers.ValidationError as exc:
         return (
             drf_request,
+            view,
             None,
             JsonRpcError(
                 JsonRpcErrorCode.INVALID_PARAMS,
@@ -240,7 +281,7 @@ def _build_request_and_validate(
                 ),
             ),
         )
-    return drf_request, validated, None
+    return drf_request, view, validated, None
 
 
 def _selector_tool_additional_known_keys(binding: SelectorToolBinding) -> frozenset[str]:
@@ -278,6 +319,7 @@ def _post_fetch_and_render(
     binding: SelectorToolBinding,
     result: DispatchResult,
     drf_request: Any,
+    view: Any,
     arguments_raw: dict[str, Any],
     params: dict[str, Any],
     config: MCPConfig,
@@ -314,8 +356,8 @@ def _post_fetch_and_render(
                 output_format=output_format,
                 include_structured_content=emit_structured_content,
             ).to_dict()
-        context: Mapping[str, Any] | None = _resolve_output_context(
-            binding, drf_request, extras={"instance": instance}
+        context: Mapping[str, Any] = _output_context(
+            binding, drf_request, view, extras={"instance": instance}
         )
         payload: Any = _render_single(instance, binding, context=context)
         return build_tool_result(
@@ -342,7 +384,7 @@ def _post_fetch_and_render(
     # Pagination — wraps the response in ``{items, page, totalPages, hasNext}``.
     if binding.paginate:
         page_no, limit, page_items, total = _slice_for_pagination(qs, arguments_raw)
-        context = _resolve_output_context(binding, drf_request, extras={"page": page_items})
+        context = _output_context(binding, drf_request, view, extras={"page": page_items})
         rendered_items = _render_collection(page_items, binding, context=context)
         total_pages: int = max(1, -(-total // limit))  # ceil divide
         payload = {
@@ -352,7 +394,7 @@ def _post_fetch_and_render(
             "hasNext": page_no < total_pages,
         }
     else:
-        context = _resolve_output_context(binding, drf_request, extras={"page": qs})
+        context = _output_context(binding, drf_request, view, extras={"page": qs})
         payload = _render_collection(qs, binding, context=context)
     return build_tool_result(
         payload,
@@ -380,22 +422,22 @@ def _dispatch_kwargs(
     binding: SelectorToolBinding,
     validated: Any,
     drf_request: Any,
+    view: Any,
     arguments_raw: dict[str, Any],
     context: MCPCallContext,
 ) -> dict[str, Any]:
     """Keyword args for ``dispatch_spec`` / ``adispatch_spec`` on a selector tool."""
     argument_binding, unknown_arguments = services_dispatch_policies(binding)
-    # URL kwargs route through ``view.kwargs`` (from where drf-services spreads
-    # them, authoritative over params), not the selector's params — so strip them
-    # before building the spread and seed the offline view with their values.
-    spec_params, url_kwarg_values = split_url_kwargs(arguments_raw, binding.url_kwargs)
+    # URL kwargs already rode onto ``view.kwargs`` (from where drf-services
+    # spreads them, authoritative over params); strip them from the params so a
+    # value never also reaches the selector as an ordinary input. The split
+    # cannot fail here — ``_build_request_and_validate`` ran it first.
+    spec_params, _url_kwarg_values = split_url_kwargs(arguments_raw, binding.url_kwargs)
     return {
         "user": context.token.user,
         "params": _selector_dispatch_params(spec_params, validated),
         "request": drf_request,
-        "view": OfflineServiceView(
-            request=drf_request, action=binding.name, kwargs=url_kwarg_values
-        ),
+        "view": view,
         "argument_binding": argument_binding,
         "unknown_arguments": unknown_arguments,
     }
@@ -483,15 +525,17 @@ def _render_collection(
     items: Any,
     binding: SelectorToolBinding,
     *,
-    context: Mapping[str, Any] | None = None,
+    context: Mapping[str, Any],
 ) -> Any:
     """Render a collection through the binding's output serializer.
 
     Falls back to a list/passthrough when no serializer is declared. List
     materialisation happens here because querysets aren't JSON-serialisable
-    directly. ``context`` is forwarded to the serializer when present so
-    sister-repo's ``output_serializer_context`` callable participates in
-    field rendering (e.g. hyperlinked relations needing the request).
+    directly. ``context`` is always forwarded — it carries DRF's baseline
+    (``request`` / ``format`` / ``view``) as well as anything sister-repo's
+    ``output_serializer_context`` callable added, so a field needing the
+    request (hyperlinked relations, an ownership check) resolves it exactly as
+    it would behind a view. See :func:`_output_context`.
     """
     output_serializer: type | None = binding.spec.output_serializer
     if output_serializer is None:
@@ -499,8 +543,6 @@ def _render_collection(
         # gets evaluated; clients receive an array of dicts only if the
         # selector itself returns dict-shaped items.
         return list(items) if hasattr(items, "__iter__") else items
-    if context is None:
-        return output_serializer(items, many=True).data
     return output_serializer(items, many=True, context=dict(context)).data
 
 
@@ -508,7 +550,7 @@ def _render_single(
     instance: Any,
     binding: SelectorToolBinding,
     *,
-    context: Mapping[str, Any] | None = None,
+    context: Mapping[str, Any],
 ) -> Any:
     """Render a single instance through the binding's output serializer.
 
@@ -520,30 +562,30 @@ def _render_single(
     output_serializer: type | None = binding.spec.output_serializer
     if output_serializer is None:
         return instance
-    if context is None:
-        return output_serializer(instance, many=False).data
     return output_serializer(instance, many=False, context=dict(context)).data
 
 
-def _resolve_output_context(
+def _output_context(
     binding: SelectorToolBinding,
     drf_request: Any,
+    view: Any,
     *,
     extras: Mapping[str, Any],
-) -> Mapping[str, Any] | None:
-    """Invoke ``spec.output_serializer_context(view, request[, **extras])`` if declared.
+) -> Mapping[str, Any]:
+    """The output serializer's context: DRF baseline + ``spec.output_serializer_context``.
 
     ``extras`` carries the resolved data about to be serialised — the
-    ``instance`` for a RETRIEVE tool, the ``page`` for a LIST tool. The
-    provider receives only the names it declares; legacy ``(view, request)``
-    providers are unaffected. See
-    :func:`rest_framework_mcp.handlers.utils.invoke_context_provider`.
+    ``instance`` for a RETRIEVE tool, the ``page`` for a LIST tool. See
+    :func:`rest_framework_mcp.handlers.utils.resolve_output_context` for the
+    layering and the keyword-pool contract.
+
+    ``view`` is the one dispatch ran under, so a provider reading
+    ``view.kwargs`` (to scope by the route's ``parent_pk``) sees the same
+    values the selector did.
     """
-    spec = binding.spec
-    if spec.output_serializer_context is None:
-        return None
-    view = OfflineServiceView(request=drf_request, action=binding.name)
-    return invoke_context_provider(spec.output_serializer_context, view, drf_request, extras=extras)
+    return resolve_output_context(
+        binding.spec.output_serializer_context, view, drf_request, extras=extras
+    )
 
 
 __all__ = ["dispatch_selector_tool", "dispatch_selector_tool_async"]

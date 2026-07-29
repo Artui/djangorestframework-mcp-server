@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from typing import Any
 
+from rest_framework_services import base_serializer_context
 from rest_framework_services.types.selector_kind import SelectorKind
 
 from rest_framework_mcp.constants import JsonRpcErrorCode, ResourceEncoding
@@ -16,6 +17,8 @@ def build_resource_contents(
     binding: ResourceBinding,
     uri: str,
     raw: Any,
+    view: Any = None,
+    request: Any = None,
 ) -> ResourceContents | JsonRpcError:
     """Render a selector's return value into one ``resources/read`` block.
 
@@ -27,7 +30,12 @@ def build_resource_contents(
     Two steps, in order:
 
     1. **Render**, if the binding declares an ``output_serializer`` — with
-       ``many=True`` for a ``LIST`` selector, ``many=False`` otherwise.
+       ``many=True`` for a ``LIST`` selector, ``many=False`` otherwise. The
+       serializer gets DRF's baseline context (``request`` / ``format`` /
+       ``view``) built from the ``view`` / ``request`` the handler synthesized,
+       so a field reading ``self.context["request"]`` resolves it here as it
+       would behind a view. A resource binding has no context provider of its
+       own — its selector is a bare callable, not a spec.
     2. **Encode** per the binding's :class:`ResourceEncoding`. ``JSON``
        pretty-prints; ``TEXT`` passes the value straight through as the body,
        which is what an HTML / Markdown / CSV resource needs — JSON-encoding
@@ -41,7 +49,11 @@ def build_resource_contents(
     """
     payload: Any = raw
     if binding.output_serializer is not None:
-        payload = binding.output_serializer(raw, many=binding.kind is SelectorKind.LIST).data
+        payload = binding.output_serializer(
+            raw,
+            many=binding.kind is SelectorKind.LIST,
+            context=base_serializer_context(view=view, request=request),
+        ).data
 
     text: str
     if binding.encoding is ResourceEncoding.TEXT:

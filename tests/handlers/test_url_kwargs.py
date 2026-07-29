@@ -472,3 +472,42 @@ def test_selector_tool_maps_a_missing_required_url_kwarg() -> None:
     out = handle_tools_call({"name": "t", "arguments": {}}, _ctx(tools=tools))
     assert isinstance(out, dict)
     assert out["isError"] is True
+
+
+def test_output_context_provider_sees_the_url_kwargs() -> None:
+    """The render-time view is the dispatch-time view, ``kwargs`` included.
+
+    On HTTP one view instance serves the request, so a context provider reading
+    ``view.kwargs`` to scope its query sees the route captures. Over MCP the
+    render step used to build a fresh, kwargs-less ``OfflineServiceView``.
+    """
+    seen: dict[str, Any] = {}
+
+    class _Out(serializers.Serializer):
+        scope = serializers.SerializerMethodField()
+
+        def get_scope(self, _: Any) -> Any:
+            return self.context["scope"]
+
+    def _ctx_provider(view: Any) -> dict[str, Any]:
+        seen["kwargs"] = dict(view.kwargs)
+        return {"scope": view.kwargs.get("project_pk")}
+
+    tools = ToolRegistry()
+    tools.register(
+        SelectorToolBinding(
+            name="t",
+            description=None,
+            spec=SelectorSpec(
+                kind=SelectorKind.RETRIEVE,
+                selector=lambda **kw: {},
+                output_serializer=_Out,
+                output_serializer_context=_ctx_provider,
+            ),
+            url_kwargs=(UrlKwarg("project_pk", type="integer"),),
+        )
+    )
+    out = handle_tools_call({"name": "t", "arguments": {"project_pk": 7}}, _ctx(tools=tools))
+    assert isinstance(out, dict)
+    assert seen["kwargs"] == {"project_pk": 7}
+    assert out["structuredContent"]["scope"] == 7

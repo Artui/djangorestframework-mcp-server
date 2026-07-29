@@ -45,11 +45,20 @@ register a spec once and both surfaces get the same shape:
   `prefetch_related`, `annotations`, and `extend_queryset` are applied
   before the FilterSet / ordering / pagination pipeline. Non-queryset
   returns (lists, scalars) pass through unchanged.
-- **Serializer context** — `input_serializer_context` /
-  `output_serializer_context` (on `ServiceSpec`) and
-  `output_serializer_context` (on `SelectorSpec`) are invoked with the
-  synthesised view + DRF request and forwarded as `context=` to the
-  serializer constructor on both sync and async dispatch paths.
+- **Serializer context** — every serializer the MCP transport builds
+  carries DRF's baseline context (`request` / `format` / `view`, from the
+  synthesised pair), exactly as `get_serializer_context()` supplies it
+  behind a view — so a serializer reading `self.context["request"]`
+  unguarded renders the same over both surfaces. On top of that,
+  `input_serializer_context` / `output_serializer_context` (on
+  `ServiceSpec`) and `output_serializer_context` (on `SelectorSpec`) are
+  merged over the baseline and forwarded as `context=` to the serializer
+  constructor, on both sync and async dispatch paths. Providers are
+  invoked **through the keyword pool** — each receives the subset of
+  `view` / `request` / the resolved-data extra (`result` / `instance` /
+  `page`) it declares *by name*, or the whole pool if it takes `**kwargs`
+  — which is how drf-services invokes them on the HTTP path, so one
+  provider serves both. Requires `djangorestframework-services>=0.29.0`.
 - **`SelectorSpec.kind`** — required `SelectorKind` discriminator
   (`LIST` or `RETRIEVE`). It drives the `many=` flag on the output
   serializer and gates which post-fetch knobs the registration
@@ -101,6 +110,12 @@ is the binding name, and on resource reads `view.kwargs` carries the
 URI-template variables. Same wire shape as the
 HTTP transport's `ServiceView`, so providers can be shared between
 transports.
+
+Like every provider in the framework, it is invoked **through the keyword
+pool**: it receives `view` / `request` *by name*, so it declares only what it
+needs (`def with_tenant(request): ...` is as valid as the two-parameter form,
+and `**kwargs` takes the whole pool). Declaring a parameter the pool doesn't
+carry is the error — not declaring one it does.
 
 ### URL kwargs — route values a provider reads off `view.kwargs`
 

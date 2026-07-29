@@ -524,3 +524,126 @@ def test_paginated_page_read_is_a_single_query(django_assert_num_queries: Any) -
         handle_tools_call(
             {"name": "invoices.list", "arguments": {"page": 1, "limit": 2}}, _ctx(server)
         )
+
+
+# ---------- DRF's baseline context off the HTTP path ----------
+#
+# Over HTTP every serializer carries ``get_serializer_context()`` — request /
+# format / view — so serializers read those keys unguarded. The two reported
+# consumer failures were the absence of that baseline over MCP (``KeyError:
+# 'request'``) and the provider being called positionally (``TypeError`` for a
+# provider that doesn't lead with ``view, request``).
+
+
+class _RequestReadingSerializer(drf_serializers.ModelSerializer):
+    """Reads ``self.context["request"]`` the way a real one does."""
+
+    is_editable = drf_serializers.SerializerMethodField()
+
+    class Meta:
+        model = Invoice
+        fields = ["id", "number", "is_editable"]
+
+    def get_is_editable(self, _: Invoice) -> str:
+        return str(self.context["request"].user)
+
+
+def _get_one_invoice() -> Any:
+    return Invoice.objects.all()
+
+
+@pytest.mark.django_db
+def test_selector_list_render_has_the_request_without_a_provider() -> None:
+    Invoice.objects.create(number="A", amount_cents=100)
+
+    server = _server()
+    server.register_selector_tool(
+        name="invoices.list",
+        spec=SelectorSpec(
+            kind=SelectorKind.LIST,
+            selector=_list_all_invoices,
+            output_serializer=_RequestReadingSerializer,
+        ),
+    )
+    out = handle_tools_call({"name": "invoices.list", "arguments": {}}, _ctx(server))
+    assert isinstance(out, dict)
+    assert out["structuredContent"][0]["is_editable"] == "None"
+
+
+@pytest.mark.django_db
+def test_selector_retrieve_render_has_the_request_without_a_provider() -> None:
+    Invoice.objects.create(number="A", amount_cents=100)
+
+    server = _server()
+    server.register_selector_tool(
+        name="invoices.get",
+        spec=SelectorSpec(
+            kind=SelectorKind.RETRIEVE,
+            selector=_get_one_invoice,
+            output_serializer=_RequestReadingSerializer,
+        ),
+    )
+    out = handle_tools_call({"name": "invoices.get", "arguments": {}}, _ctx(server))
+    assert isinstance(out, dict)
+    assert out["structuredContent"]["is_editable"] == "None"
+
+
+@pytest.mark.django_db
+def test_selector_paginated_render_has_the_request_without_a_provider() -> None:
+    Invoice.objects.create(number="A", amount_cents=100)
+
+    server = _server()
+    server.register_selector_tool(
+        name="invoices.page",
+        spec=SelectorSpec(
+            kind=SelectorKind.LIST,
+            selector=_list_all_invoices,
+            output_serializer=_RequestReadingSerializer,
+        ),
+        paginate=True,
+    )
+    out = handle_tools_call({"name": "invoices.page", "arguments": {}}, _ctx(server))
+    assert isinstance(out, dict)
+    assert out["structuredContent"]["items"][0]["is_editable"] == "None"
+
+
+@pytest.mark.django_db
+def test_provider_declaring_request_only_is_bound_by_name() -> None:
+    """``def provider(request, **extras)`` — valid over HTTP and through drf-pai.
+
+    It used to raise ``TypeError: takes 1 positional argument but 2 were given``
+    over MCP, because ``view`` / ``request`` were forwarded positionally.
+    """
+    Invoice.objects.create(number="A", amount_cents=100)
+    seen: dict[str, Any] = {}
+
+    class _TagSerializer(drf_serializers.ModelSerializer):
+        tag = drf_serializers.SerializerMethodField()
+
+        class Meta:
+            model = Invoice
+            fields = ["id", "tag"]
+
+        def get_tag(self, _: Invoice) -> str:
+            return self.context["tag"]
+
+    def _ctx_provider(request: Request, **extras: Any) -> Mapping[str, Any]:
+        seen["request"] = request
+        seen["extras"] = sorted(extras)
+        return {"tag": "by-name"}
+
+    server = _server()
+    server.register_selector_tool(
+        name="invoices.list",
+        spec=SelectorSpec(
+            kind=SelectorKind.LIST,
+            selector=_list_all_invoices,
+            output_serializer=_TagSerializer,
+            output_serializer_context=_ctx_provider,
+        ),
+    )
+    out = handle_tools_call({"name": "invoices.list", "arguments": {}}, _ctx(server))
+    assert isinstance(out, dict)
+    assert out["structuredContent"][0]["tag"] == "by-name"
+    assert isinstance(seen["request"], Request)
+    assert seen["extras"] == ["page", "view"]

@@ -33,6 +33,7 @@ from django.db import transaction
 from rest_framework import serializers as drf_serializers
 from rest_framework_services import (
     OfflineServiceView,
+    base_serializer_context,
     build_offline_context,
     resolve_callable_kwargs,
     run_selector,
@@ -51,7 +52,7 @@ from rest_framework_mcp.handlers.types.context import MCPCallContext
 from rest_framework_mcp.handlers.utils import (
     check_permissions,
     consume_rate_limits,
-    invoke_context_provider,
+    resolve_output_context,
     validate_input_against_serializer,
     validation_error_data,
 )
@@ -109,7 +110,14 @@ def dispatch_chain_tool(
     serializer: type | None = binding.resolved_input_serializer
     try:
         validated: Any = validate_input_against_serializer(
-            arguments_raw, serializer, unknown_arguments=binding.unknown_arguments
+            arguments_raw,
+            serializer,
+            unknown_arguments=binding.unknown_arguments,
+            # DRF's baseline context, as the serializer would have over HTTP.
+            context=base_serializer_context(
+                view=OfflineServiceView(request=drf_request, action=binding.name),
+                request=drf_request,
+            ),
         )
     except drf_serializers.ValidationError as exc:
         return JsonRpcError(
@@ -288,10 +296,9 @@ def _render_step(step: ChainStep, ctx: ChainContext, drf_request: Any) -> Any:
         provider = out_spec.output_serializer_context if out_spec else None
     if serializer is None:
         return {} if result is None else result
-    if provider is None:
-        return serializer(result, many=many).data
     view = OfflineServiceView(request=drf_request, action=step.alias)
-    sctx: Mapping[str, Any] = invoke_context_provider(
+    # Always a context: DRF's baseline plus whatever the step's provider adds.
+    sctx: Mapping[str, Any] = resolve_output_context(
         provider, view, drf_request, extras={extra_name: result}
     )
     return serializer(result, many=many, context=dict(sctx)).data
