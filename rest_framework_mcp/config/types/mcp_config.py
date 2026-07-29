@@ -77,5 +77,9 @@ class MCPConfig:
     """Whether registering a tool with no permissions raises instead of warning.
     Read at *registration* time, not per request."""
 
+    require_tool_descriptions: bool
+    """Whether registering a tool with no description raises instead of warning.
+    Read at *registration* time, not per request."""
+
 
 __all__ = ["MCPConfig"]

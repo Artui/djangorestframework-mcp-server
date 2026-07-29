@@ -7,6 +7,79 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- **A dynamically registered client could not be issued an ID token, so the token
+  endpoint returned 500 whenever the advertised `openid` scope was requested.**
+  DCR never set `Application.algorithm`, leaving DOT's `NO_ALGORITHM` default, so
+  `Application.jwk_key` raised `ImproperlyConfigured("This application does not
+  support signed tokens")` as soon as oauthlib routed the exchange through the
+  OpenID grant — after the user had already logged in and consented.
+
+  This is the same shape as 0.19.0's public-client bug: **discovery advertised a
+  capability the registration endpoint could not provision.**
+  `id_token_signing_alg_values_supported` was a hardcoded `["RS256"]`, justified
+  in a comment on the grounds that the value was inert because "we don't actually
+  mint ID tokens". That is false wherever DOT *is* the authorization server with
+  `OIDC_ENABLED` — its token endpoint mints them.
+
+  - `id_token_signed_response_alg` (RFC 7591 §2) is now modelled and resolved to
+    DOT's `algorithm`, and echoed in the registration response.
+  - Omitted, it takes RS256 when `OAUTH2_PROVIDER["OIDC_RSA_PRIVATE_KEY"]` is
+    configured, and otherwise registers no algorithm — today's behaviour, kept
+    for deployments not doing OIDC.
+  - Requesting RS256 without a server key is a `400` naming the missing setting.
+  - **HS256 is refused outright**, for a reason worth recording: it signs the ID
+    token with `client_secret`, and this endpoint leaves `hash_client_secret` at
+    its default, so the column holds a PBKDF2 digest rather than the secret the
+    client was handed. Accepting it would mint tokens whose signature can never
+    verify — quieter than the 500, and harder to diagnose.
+  - `id_token_signing_alg_values_supported` is now derived from the same key, so
+    it is empty on a server that cannot sign rather than promising RS256.
+
+  On the related report that this reaches the client as a bare 500 rather than an
+  OAuth error: `/oauth/token/` is DOT's view, not this package's — `build_oauth_urlpatterns`
+  deliberately does not mount it — so the RFC 6749 §5.2 channel isn't ours to use.
+  What is ours is refusing the registration that creates the condition, which is
+  where RFC 7591 §3.2.2's `invalid_client_metadata` applies and where the user
+  hasn't yet spent a login and a consent. The general case of an
+  `ImproperlyConfigured` escaping DOT's token endpoint remains open.
+
+### Added
+
+- **`UndescribedToolWarning` and `REQUIRE_TOOL_DESCRIPTIONS`** — registering a
+  tool with no description now warns, and can be escalated to
+  `ImproperlyConfigured`, exactly as `REQUIRE_TOOL_PERMISSIONS` already did for
+  permissions.
+
+  The asymmetry is the point: two properties are equally required for a tool to
+  be usable by a model — something must gate the call, and something must say
+  what the call does — and only the first was checked. An undescribed tool was
+  served through `tools/list` with an empty description, indistinguishable from a
+  documented one anywhere in the package, the transport, or the test surface. The
+  consumer who reported this found theirs by dumping every registered tool and
+  reading the output by hand.
+
+  Deliberately **no docstring fallback** for spec registration. Defaulting to
+  `inspect.getdoc(spec.service)` would silence the warning by shipping prose
+  written for the next developer to a model choosing between tools. The decorator
+  paths that already fall back to `fn.__doc__` are unchanged; the check reports
+  whatever survived that.
+
+### Documentation
+
+- **"Documenting tools"** in [concepts](docs/concepts.md) — the three channels
+  that already feed `inputSchema.properties.*.description`: serializer
+  `help_text`, `UrlKwarg(description=…)`, and (the gap) drf-services' `Annotated`
+  marker vocabulary on `Unpack[TypedDict]` extras keys, which carries
+  `InputRequired` / `NotClientInput` but no description.
+
+  Prompted by a report that there is "no supported way to attach meaning to an
+  individual argument", which led to one argument being explained in prose across
+  three tool descriptions. Two of the three channels have worked all along —
+  `UrlKwarg.description` is emitted by `UrlKwarg.json_schema()` — so the gap was
+  discoverability, not capability.
+
 ## [0.19.0] — 2026-07-29
 
 ### Fixed

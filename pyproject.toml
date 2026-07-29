@@ -105,6 +105,15 @@ DJANGO_SETTINGS_MODULE = "tests.conftest_settings"
 asyncio_mode = "auto"
 addopts = "--cov=rest_framework_mcp --cov-report=term-missing --cov-fail-under=100"
 testpaths = ["tests"]
+# Most fixtures register throwaway tools with no description, which is fine for a
+# fixture and would otherwise bury every other warning in the run.
+# `test_undescribed_warning.py` re-enables it locally via `pytest.warns`.
+# Matched on the message rather than `ignore::…UndescribedToolWarning`: a dotted
+# category path makes pytest import the module at config time, before
+# `DJANGO_SETTINGS_MODULE` is applied, which breaks collection outright.
+filterwarnings = [
+    "ignore:MCP tool .* is registered with no description",
+]
 
 [tool.coverage.run]
 branch = true

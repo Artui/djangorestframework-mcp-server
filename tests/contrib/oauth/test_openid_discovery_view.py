@@ -21,8 +21,21 @@ def test_get_returns_as_metadata_plus_oidc_defaults(settings) -> None:
     assert body["issuer"] == "https://issuer.example/oauth"
     # …plus OIDC additions.
     assert body["subject_types_supported"] == ["public"]
-    assert "id_token_signing_alg_values_supported" in body
     assert body["response_modes_supported"] == ["query"]
+    # No RSA key configured in the test settings, so nothing is advertised —
+    # this list used to be a hardcoded ["RS256"] regardless.
+    assert body["id_token_signing_alg_values_supported"] == []
+
+
+def test_signing_algorithms_are_advertised_when_a_key_is_configured(settings) -> None:
+    """The discovery document tracks what the server can sign, not a fixed list."""
+    settings.REST_FRAMEWORK_MCP = {
+        "SERVER_INFO": {"authorization_servers": ["https://issuer.example/oauth"]},
+    }
+    settings.OAUTH2_PROVIDER = {"OIDC_RSA_PRIVATE_KEY": "-----BEGIN RSA PRIVATE KEY-----"}
+    view = OpenIDDiscoveryViewSet.as_view({"get": "list"}, auth_backend=DjangoOAuthToolkitBackend())
+    response = view(RequestFactory().get("/.well-known/openid-configuration"))
+    assert response.data["id_token_signing_alg_values_supported"] == ["RS256"]
 
 
 def test_get_returns_501_when_backend_has_no_authorization_server() -> None:

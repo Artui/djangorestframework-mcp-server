@@ -13,6 +13,7 @@ from rest_framework_mcp.contrib.oauth.dcr_serializer import DynamicClientRegistr
 from rest_framework_mcp.contrib.oauth.types.dynamic_client_registration_response import (
     DynamicClientRegistrationResponse,
 )
+from rest_framework_mcp.contrib.oauth.utils import resolve_id_token_algorithm
 
 
 class DynamicClientRegistrationViewSet(ViewSet):
@@ -103,6 +104,9 @@ class DynamicClientRegistrationViewSet(ViewSet):
             from oauth2_provider.scopes import (  # type: ignore[import-not-found]
                 get_scopes_backend,
             )
+            from oauth2_provider.settings import (  # type: ignore[import-not-found]
+                oauth2_settings,
+            )
         except ImportError as exc:  # pragma: no cover - exercised by smoke job w/o DOT
             raise ImportError(
                 "DynamicClientRegistrationViewSet requires `django-oauth-toolkit`. "
@@ -117,6 +121,7 @@ class DynamicClientRegistrationViewSet(ViewSet):
         instance = serializer.save()
         client_type: str = instance.client_type
         grant_type: str = instance.authorization_grant_type
+        is_confidential: bool = client_type == Application.CLIENT_CONFIDENTIAL
 
         # DOT has no per-application scope column — scopes are configured
         # globally and checked against the *authorize* request. Echoing a scope
@@ -143,6 +148,30 @@ class DynamicClientRegistrationViewSet(ViewSet):
                 status=400,
             )
 
+        # Whether an ID token can ever be signed for this client. Left unset,
+        # DOT's ``algorithm`` column defaults to NO_ALGORITHM and
+        # ``Application.jwk_key`` raises ``ImproperlyConfigured`` the moment
+        # ``openid`` is among the granted scopes — a 500 out of the token
+        # endpoint, after the user has already logged in and consented. Same
+        # rejected-before-``create`` treatment as ``scope`` above: a
+        # registration that cannot be honoured fails here, where RFC 7591
+        # §3.2.2 has an error code for it, not one leg later where RFC 6749
+        # §5.2's channel is never reached.
+        algorithm, algorithm_error = resolve_id_token_algorithm(
+            instance.id_token_signed_response_alg,
+            is_confidential=is_confidential,
+            rsa_key_configured=bool(oauth2_settings.OIDC_RSA_PRIVATE_KEY),
+        )
+        if algorithm_error is not None:
+            return Response(
+                {
+                    "error": "invalid_client_metadata",
+                    "error_description": "Validation failed",
+                    "detail": {"id_token_signed_response_alg": [algorithm_error]},
+                },
+                status=400,
+            )
+
         # Generate the secret here rather than letting the model default fire,
         # because ``ClientSecretField.pre_save`` hashes the column in place:
         # after ``create()`` the attribute holds a PBKDF2 digest, and returning
@@ -158,9 +187,9 @@ class DynamicClientRegistrationViewSet(ViewSet):
             client_type=client_type,
             authorization_grant_type=grant_type,
             client_secret=client_secret,
+            algorithm=algorithm,
             skip_authorization=False,
         )
-        is_confidential: bool = client_type == Application.CLIENT_CONFIDENTIAL
 
         response = DynamicClientRegistrationResponse(
             client_id=application.client_id,
@@ -174,6 +203,7 @@ class DynamicClientRegistrationViewSet(ViewSet):
             grant_types=list(instance.grant_types),
             response_types=list(instance.response_types),
             token_endpoint_auth_method=instance.token_endpoint_auth_method,
+            id_token_signed_response_alg=application.algorithm,
             client_type=client_type,
             authorization_grant_type=grant_type,
             scope=instance.scope or None,

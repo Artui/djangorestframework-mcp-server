@@ -41,6 +41,7 @@ class DynamicClientRegistrationResponse:
     grant_types: list[str] = field(default_factory=list)
     response_types: list[str] = field(default_factory=list)
     token_endpoint_auth_method: str = ""
+    id_token_signed_response_alg: str = ""
     client_type: str = ""
     authorization_grant_type: str = ""
     scope: str | None = None
@@ -57,6 +58,11 @@ class DynamicClientRegistrationResponse:
             "client_type": self.client_type,
             "authorization_grant_type": self.authorization_grant_type,
         }
+        if self.id_token_signed_response_alg:
+            # Omitted rather than sent empty when the server registered no
+            # signing algorithm: "" is not a value OIDC defines, and claiming
+            # one would promise an ID token that cannot be minted.
+            out["id_token_signed_response_alg"] = self.id_token_signed_response_alg
         if self.client_secret is not None:
             out["client_secret"] = self.client_secret
             out["client_secret_expires_at"] = self.client_secret_expires_at

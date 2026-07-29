@@ -112,6 +112,14 @@ DEFAULTS: dict[str, Any] = {
     # MCP: this package deliberately bypasses DRF's view-layer pipeline,
     # so a spec that looks guarded over HTTP ships as an unguarded tool.
     "REQUIRE_TOOL_PERMISSIONS": False,
+    # When True, registering a tool with no description raises
+    # ``ImproperlyConfigured`` instead of emitting the default
+    # ``UndescribedToolWarning``. A description is not decoration: it is the
+    # only thing a model reads to decide whether to call the tool, so an empty
+    # one ships a tool that cannot be used correctly — the same class of
+    # silent-shipping problem ``REQUIRE_TOOL_PERMISSIONS`` guards, and
+    # previously the only one of the two that was checked.
+    "REQUIRE_TOOL_DESCRIPTIONS": False,
 }
 
 
