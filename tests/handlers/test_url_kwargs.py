@@ -472,3 +472,83 @@ def test_selector_tool_maps_a_missing_required_url_kwarg() -> None:
     out = handle_tools_call({"name": "t", "arguments": {}}, _ctx(tools=tools))
     assert isinstance(out, dict)
     assert out["isError"] is True
+
+
+def test_output_context_provider_sees_the_url_kwargs() -> None:
+    """The render-time view is the dispatch-time view, ``kwargs`` included.
+
+    On HTTP one view instance serves the request, so a context provider reading
+    ``view.kwargs`` to scope its query sees the route captures. Over MCP the
+    render step used to build a fresh, kwargs-less ``OfflineServiceView``.
+    """
+    seen: dict[str, Any] = {}
+
+    class _Out(serializers.Serializer):
+        scope = serializers.SerializerMethodField()
+
+        def get_scope(self, _: Any) -> Any:
+            return self.context["scope"]
+
+    def _ctx_provider(view: Any) -> dict[str, Any]:
+        seen["kwargs"] = dict(view.kwargs)
+        return {"scope": view.kwargs.get("project_pk")}
+
+    tools = ToolRegistry()
+    tools.register(
+        SelectorToolBinding(
+            name="t",
+            description=None,
+            spec=SelectorSpec(
+                kind=SelectorKind.RETRIEVE,
+                selector=lambda **kw: {},
+                output_serializer=_Out,
+                output_serializer_context=_ctx_provider,
+            ),
+            url_kwargs=(UrlKwarg("project_pk", type="integer"),),
+        )
+    )
+    out = handle_tools_call({"name": "t", "arguments": {"project_pk": 7}}, _ctx(tools=tools))
+    assert isinstance(out, dict)
+    assert seen["kwargs"] == {"project_pk": 7}
+    assert out["structuredContent"]["scope"] == 7
+
+
+def test_url_kwarg_is_a_superset_of_a_reflected_extras_key() -> None:
+    """A reflected ``**extras`` key never reaches ``view.kwargs``; a UrlKwarg does.
+
+    The distinction consumers get wrong: marking a reflected key
+    ``InputRequired`` is a *schema* statement and doesn't change where the value
+    lands, so a ``spec.kwargs`` provider scoping off ``view.kwargs`` silently
+    sees ``None``. Registering the same name as a ``UrlKwarg`` is a strict
+    superset — the selector still receives it in its extras.
+    """
+    seen: dict[str, Any] = {}
+
+    def selector(user: Any, scope: Any = None, **extras: Any) -> list[Any]:
+        seen["selector_project_pk"] = extras.get("project_pk")
+        seen["scope"] = scope
+        return []
+
+    def provider(view: Any) -> dict[str, Any]:
+        return {"scope": view.kwargs.get("project_pk")}
+
+    def call(url_kwargs: tuple[UrlKwarg, ...]) -> None:
+        seen.clear()
+        tools = ToolRegistry()
+        tools.register(
+            SelectorToolBinding(
+                name="t",
+                description=None,
+                spec=SelectorSpec(kind=SelectorKind.LIST, selector=selector, kwargs=provider),
+                url_kwargs=url_kwargs,
+            )
+        )
+        handle_tools_call({"name": "t", "arguments": {"project_pk": 7}}, _ctx(tools=tools))
+
+    # Undeclared: the selector gets it as an ordinary param, the provider doesn't.
+    call(())
+    assert seen == {"selector_project_pk": 7, "scope": None}
+
+    # Declared: it routes through ``view.kwargs`` *and* still reaches the selector.
+    call((UrlKwarg("project_pk", type="integer"),))
+    assert seen == {"selector_project_pk": 7, "scope": 7}

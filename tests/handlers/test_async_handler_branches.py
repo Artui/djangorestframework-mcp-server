@@ -375,7 +375,9 @@ async def test_async_input_serializer_context_flows_into_validation() -> None:
     )
     out = await handle_tools_call_async({"name": "t", "arguments": {"x": 1}}, _ctx(tools))
     assert isinstance(out, dict)
-    assert received == {"k": "v"}
+    # The provider's keys, merged over DRF's baseline (drf-services >= 0.29).
+    assert received["k"] == "v"
+    assert set(received) == {"k", "request", "format", "view"}
 
 
 async def test_async_output_serializer_context_flows_into_render() -> None:

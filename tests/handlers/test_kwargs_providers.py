@@ -271,3 +271,154 @@ async def test_async_selector_spec_kwargs_provider_invoked_on_read() -> None:
     import json
 
     assert json.loads(text) == {"pk": "5", "tenant": 11}
+
+
+def test_resource_kwargs_provider_declaring_request_only_is_bound_by_name() -> None:
+    """``def provider(request)`` — bound through the keyword pool, as on HTTP.
+
+    Forwarding ``(view, request)`` positionally raised ``TypeError`` for any
+    provider that didn't lead with exactly those two parameters.
+    """
+    from rest_framework_mcp.registry.types.resource_binding import ResourceBinding
+
+    seen: dict[str, Any] = {}
+
+    def provider(request: DRFRequest) -> dict[str, Any]:
+        seen["user"] = request.user
+        return {"tenant_id": 5}
+
+    resources = ResourceRegistry()
+    resources.register(
+        ResourceBinding(
+            name="r",
+            uri_template="r://{pk}",
+            description=None,
+            selector=lambda *, pk, tenant_id: {"pk": pk, "tenant": tenant_id},
+            kind=SelectorKind.RETRIEVE,
+            kwargs_provider=provider,
+        )
+    )
+    out = handle_resources_read({"uri": "r://7"}, _ctx(resources=resources))
+    assert isinstance(out, dict)
+    assert seen["user"] == "alice"
+    assert '"tenant": 5' in out["contents"][0]["text"]
+
+
+def test_resource_render_has_the_request_in_the_serializer_context() -> None:
+    """A resource's ``output_serializer`` gets DRF's baseline context too."""
+    from rest_framework import serializers
+
+    from rest_framework_mcp.registry.types.resource_binding import ResourceBinding
+
+    class _Out(serializers.Serializer):
+        who = serializers.SerializerMethodField()
+
+        def get_who(self, _: Any) -> str:
+            return str(self.context["request"].user)
+
+    resources = ResourceRegistry()
+    resources.register(
+        ResourceBinding(
+            name="r",
+            uri_template="r://{pk}",
+            description=None,
+            selector=lambda *, pk: {"pk": pk},
+            kind=SelectorKind.RETRIEVE,
+            output_serializer=_Out,
+        )
+    )
+    out = handle_resources_read({"uri": "r://7"}, _ctx(resources=resources))
+    assert isinstance(out, dict)
+    assert '"who": "alice"' in out["contents"][0]["text"]
+
+
+async def test_async_resource_render_has_the_request_in_the_serializer_context() -> None:
+    from rest_framework import serializers
+
+    from rest_framework_mcp.registry.types.resource_binding import ResourceBinding
+
+    class _Out(serializers.Serializer):
+        who = serializers.SerializerMethodField()
+
+        def get_who(self, _: Any) -> str:
+            return str(self.context["request"].user)
+
+    resources = ResourceRegistry()
+    resources.register(
+        ResourceBinding(
+            name="r",
+            uri_template="r://{pk}",
+            description=None,
+            selector=lambda *, pk: {"pk": pk},
+            kind=SelectorKind.RETRIEVE,
+            output_serializer=_Out,
+        )
+    )
+    out = await handle_resources_read_async({"uri": "r://7"}, _ctx(resources=resources))
+    assert isinstance(out, dict)
+    assert '"who": "alice"' in out["contents"][0]["text"]
+
+
+# ---------- the async resources path stays off the event loop ----------
+#
+# ``resources/read`` renders a bare selector's return through the binding's
+# ``output_serializer``, and a selector returning a queryset returns it *lazy* —
+# the serializer is what evaluates it. Both tests query inside the callable under
+# test, so they raise ``SynchronousOnlyOperation`` if it runs on the loop.
+
+
+@pytest.mark.django_db(transaction=True)
+async def test_async_list_resource_renders_a_lazy_queryset_off_loop() -> None:
+    from rest_framework import serializers
+
+    from rest_framework_mcp.registry.types.resource_binding import ResourceBinding
+    from tests.testapp.models import Invoice
+
+    await Invoice.objects.acreate(number="A", amount_cents=1)
+
+    class _Out(serializers.ModelSerializer):
+        class Meta:
+            model = Invoice
+            fields = ["id", "number"]
+
+    resources = ResourceRegistry()
+    resources.register(
+        ResourceBinding(
+            name="r",
+            uri_template="r://all",
+            description=None,
+            selector=lambda: Invoice.objects.all(),
+            kind=SelectorKind.LIST,
+            output_serializer=_Out,
+        )
+    )
+    out = await handle_resources_read_async({"uri": "r://all"}, _ctx(resources=resources))
+    assert isinstance(out, dict)
+    assert '"number": "A"' in out["contents"][0]["text"]
+
+
+@pytest.mark.django_db(transaction=True)
+async def test_async_resource_kwargs_provider_may_query() -> None:
+    from rest_framework_mcp.registry.types.resource_binding import ResourceBinding
+    from tests.testapp.models import Invoice
+
+    await Invoice.objects.acreate(number="A", amount_cents=1)
+
+    def provider(view: Any) -> dict[str, Any]:
+        # The headline use of a kwargs provider: a scoping lookup.
+        return {"seen": Invoice.objects.count()}
+
+    resources = ResourceRegistry()
+    resources.register(
+        ResourceBinding(
+            name="r",
+            uri_template="r://{pk}",
+            description=None,
+            selector=lambda *, pk, seen: {"pk": pk, "seen": seen},
+            kind=SelectorKind.RETRIEVE,
+            kwargs_provider=provider,
+        )
+    )
+    out = await handle_resources_read_async({"uri": "r://7"}, _ctx(resources=resources))
+    assert isinstance(out, dict)
+    assert '"seen": 1' in out["contents"][0]["text"]

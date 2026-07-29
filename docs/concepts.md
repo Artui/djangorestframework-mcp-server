@@ -45,11 +45,20 @@ register a spec once and both surfaces get the same shape:
   `prefetch_related`, `annotations`, and `extend_queryset` are applied
   before the FilterSet / ordering / pagination pipeline. Non-queryset
   returns (lists, scalars) pass through unchanged.
-- **Serializer context** — `input_serializer_context` /
-  `output_serializer_context` (on `ServiceSpec`) and
-  `output_serializer_context` (on `SelectorSpec`) are invoked with the
-  synthesised view + DRF request and forwarded as `context=` to the
-  serializer constructor on both sync and async dispatch paths.
+- **Serializer context** — every serializer the MCP transport builds
+  carries DRF's baseline context (`request` / `format` / `view`, from the
+  synthesised pair), exactly as `get_serializer_context()` supplies it
+  behind a view — so a serializer reading `self.context["request"]`
+  unguarded renders the same over both surfaces. On top of that,
+  `input_serializer_context` / `output_serializer_context` (on
+  `ServiceSpec`) and `output_serializer_context` (on `SelectorSpec`) are
+  merged over the baseline and forwarded as `context=` to the serializer
+  constructor, on both sync and async dispatch paths. Providers are
+  invoked **through the keyword pool** — each receives the subset of
+  `view` / `request` / the resolved-data extra (`result` / `instance` /
+  `page`) it declares *by name*, or the whole pool if it takes `**kwargs`
+  — which is how drf-services invokes them on the HTTP path, so one
+  provider serves both. Requires `djangorestframework-services>=0.29.0`.
 - **`SelectorSpec.kind`** — required `SelectorKind` discriminator
   (`LIST` or `RETRIEVE`). It drives the `many=` flag on the output
   serializer and gates which post-fetch knobs the registration
@@ -102,6 +111,12 @@ URI-template variables. Same wire shape as the
 HTTP transport's `ServiceView`, so providers can be shared between
 transports.
 
+Like every provider in the framework, it is invoked **through the keyword
+pool**: it receives `view` / `request` *by name*, so it declares only what it
+needs (`def with_tenant(request): ...` is as valid as the two-parameter form,
+and `**kwargs` takes the whole pool). Declaring a parameter the pool doesn't
+carry is the error — not declaring one it does.
+
 ### URL kwargs — route values a provider reads off `view.kwargs`
 
 On a **tool** call, `view.kwargs` is empty by default (a tool has no URL). So a
@@ -151,6 +166,43 @@ as an `isError` validation result naming the missing argument rather than failin
 somewhere less legible. `required` can't be combined with a `default` (a default
 always satisfies the argument, so requiring it would be a no-op); that raises at
 registration.
+
+#### A reflected `**extras` key is not a route capture
+
+A selector typed `def list_widgets(user, **extras: Unpack[WidgetExtras])` that
+reads `extras["project_pk"]` already has that key reflected into the tool's
+`inputSchema` by drf-services (0.26+) — no `UrlKwarg` needed **for the selector
+itself**, which receives it through the spec params. Marking it `InputRequired`
+(drf-services 0.28+) makes the model supply it; that is a *schema* statement and
+changes nothing about where the value lands.
+
+The two declarations answer different questions, and only one of them puts a
+value on the request:
+
+| | reflected `**extras` key (± `InputRequired`) | registered `UrlKwarg` |
+| --- | --- | --- |
+| In the `inputSchema` | yes | yes |
+| Can be required | yes (`InputRequired`) | yes (`required=True`, plus an `isError` result when omitted) |
+| Reaches the selector | yes, as a spec param | yes, via the `view.kwargs` spread |
+| Reaches `view.kwargs` | **no** | yes |
+| Ranks above caller-supplied params | no — it *is* caller input | yes |
+
+So anything that reads request state rather than its own arguments — a
+`spec.kwargs` provider, `extend_queryset`, a permission class, an
+`output_serializer_context` provider — sees nothing for a reflected-only key. A
+scoping provider doing `view.kwargs.get("project_pk")` returns `None` and
+**mis-scopes every call** instead of failing: the failure mode worth naming here
+is that it is silent.
+
+Register the `UrlKwarg` as well when the value is scope. It is a strict superset
+— the selector still receives it in `**extras`, and the schema keeps one property
+and one `required` entry (an explicit `UrlKwarg` wins the merge over a reflected
+key of the same name).
+
+That split mirrors HTTP, where a route capture arrives in the URL and never in the
+body — which is what makes it unspoofable. Over MCP the arguments are whatever the
+model chose; a `UrlKwarg` value outranks them. If a provider scopes by it, it has
+to come through the channel that carries that precedence.
 
 `UrlKwarg` is
 [drf-services' type](https://github.com/Artui/djangorestframework-services/blob/main/rest_framework_services/types/url_kwarg.py),
