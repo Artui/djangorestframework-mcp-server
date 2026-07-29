@@ -36,6 +36,37 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
     verify — quieter than the 500, and harder to diagnose.
   - `id_token_signing_alg_values_supported` is now derived from the same key, so
     it is empty on a server that cannot sign rather than promising RS256.
+  - **Registering `scope: "openid"` on a server with no signing key is refused.**
+    Found by sweeping for the same shape rather than reported: that server
+    publishes `openid`, so the scope check passes it, no algorithm is registered,
+    and the token endpoint 500s exactly as before. The algorithm resolution alone
+    misses it because nothing was *requested* — the scope is what makes an ID
+    token mandatory. Only a client that declares the scope at registration is
+    caught; one that registers bare and asks for `openid` at authorize is not
+    visible from this endpoint.
+
+  Two further findings from that sweep are **recorded, not fixed**, because both
+  are low-severity and fixing either carries more risk than the symptom:
+
+  - `registration_endpoint` is advertised in AS metadata whenever an issuer is
+    configured, including when DCR is disabled or was never mounted. Unlike the
+    bugs above this fails *cleanly* — an immediate, well-formed
+    `403 {"error": "invalid_request", "error_description": "DCR is disabled"}` —
+    and gating it on `DCR_ENABLED` would stop advertising a working endpoint for
+    anyone who passes `dcr_enabled=True` to the mount without also setting the
+    global, which is precisely the flow Claude's connectors depend on.
+  - `capabilities.resources` is advertised at `initialize` even with zero
+    resources registered, where `prompts` is deliberately gated on having at
+    least one. The asymmetry is real but the consequence is an empty
+    `resources/list`, not a failure.
+
+  Checked and found sound: `resolve_structured_output` already refuses to
+  advertise an `outputSchema` while `structuredContent` is disabled (the MCP-side
+  instance of this exact bug class, guarded with a clear error); the `ui=` link
+  refuses at registration when a tool doesn't emit `structuredContent`;
+  `bearer_methods_supported`, `code_challenge_methods_supported`,
+  `subject_types_supported` and `response_modes_supported` are all backed by what
+  DOT actually accepts.
 
   On the related report that this reaches the client as a bare 500 rather than an
   OAuth error: `/oauth/token/` is DOT's view, not this package's — `build_oauth_urlpatterns`

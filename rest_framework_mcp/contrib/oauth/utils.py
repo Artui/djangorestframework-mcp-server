@@ -2,6 +2,10 @@
 
 from __future__ import annotations
 
+# The scope whose presence makes an ID token — and therefore a signing
+# algorithm — mandatory rather than optional.
+OPENID_SCOPE = "openid"
+
 # DOT's ``Application.RS256_ALGORITHM`` / ``HS256_ALGORITHM`` / ``NO_ALGORITHM``,
 # spelled literally so this module stays importable without the ``[oauth]``
 # extra. They double as OIDC's own ``id_token_signed_response_alg`` values, so
@@ -76,4 +80,4 @@ def supported_id_token_algorithms(*, rsa_key_configured: bool) -> list[str]:
     return [RS256] if rsa_key_configured else []
 
 
-__all__ = ["resolve_id_token_algorithm", "supported_id_token_algorithms"]
+__all__ = ["OPENID_SCOPE", "resolve_id_token_algorithm", "supported_id_token_algorithms"]

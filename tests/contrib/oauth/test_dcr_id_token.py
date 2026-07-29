@@ -149,6 +149,32 @@ def test_unsigned_id_tokens_are_rejected_per_field() -> None:
 
 
 @pytest.mark.django_db
+def test_registering_openid_without_a_signing_key_is_rejected() -> None:
+    """Found by sweeping for the same "advertised but unbacked" shape.
+
+    A server publishing `openid` in its scopes but holding no signing key
+    passes the scope check (DOT does offer the scope), registers no
+    algorithm, and then 500s at the token endpoint exactly as before. The
+    algorithm resolution alone doesn't catch it, because nothing was
+    *requested* — the scope is what makes an ID token mandatory.
+    """
+    with override_settings(OAUTH2_PROVIDER={"SCOPES": OIDC_SCOPES}):
+        response = _register_raw(scope="openid")
+
+    assert response.status_code == 400
+    assert "OIDC_RSA_PRIVATE_KEY" in response.data["detail"]["scope"][0]
+
+
+@pytest.mark.django_db
+def test_registering_openid_is_accepted_once_a_key_exists() -> None:
+    with override_settings(OAUTH2_PROVIDER=_oidc_settings()):
+        response = _register_raw(scope="openid")
+
+    assert response.status_code == 201
+    assert response.data["scope"] == "openid"
+
+
+@pytest.mark.django_db
 def test_no_rejected_registration_leaves_an_application_row() -> None:
     from oauth2_provider.models import Application
 

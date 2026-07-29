@@ -13,7 +13,7 @@ from rest_framework_mcp.contrib.oauth.dcr_serializer import DynamicClientRegistr
 from rest_framework_mcp.contrib.oauth.types.dynamic_client_registration_response import (
     DynamicClientRegistrationResponse,
 )
-from rest_framework_mcp.contrib.oauth.utils import resolve_id_token_algorithm
+from rest_framework_mcp.contrib.oauth.utils import OPENID_SCOPE, resolve_id_token_algorithm
 
 
 class DynamicClientRegistrationViewSet(ViewSet):
@@ -131,8 +131,9 @@ class DynamicClientRegistrationViewSet(ViewSet):
         # per-field ``invalid_client_metadata`` while there is still something
         # actionable to say. Checked before ``create`` so a rejection leaves no
         # orphan row.
+        requested_scopes: list[str] = instance.scope.split()
         available: set[str] = set(get_scopes_backend().get_available_scopes())
-        unsupported: list[str] = [s for s in instance.scope.split() if s not in available]
+        unsupported: list[str] = [s for s in requested_scopes if s not in available]
         if unsupported:
             return Response(
                 {
@@ -168,6 +169,31 @@ class DynamicClientRegistrationViewSet(ViewSet):
                     "error": "invalid_client_metadata",
                     "error_description": "Validation failed",
                     "detail": {"id_token_signed_response_alg": [algorithm_error]},
+                },
+                status=400,
+            )
+
+        # The residual case the algorithm resolution alone leaves open: a server
+        # that publishes ``openid`` in its scopes but holds no signing key. The
+        # scope check above passes it (DOT does offer the scope), no algorithm
+        # can be registered, and the ID token then fails exactly as it did
+        # before — a 500 at the token endpoint. Refuse it here instead, naming
+        # the setting that would make it work. Only a client that *declares*
+        # ``openid`` is caught; one that registers bare and requests the scope
+        # at authorize still reaches DOT, because nothing about that is visible
+        # from this endpoint.
+        if OPENID_SCOPE in requested_scopes and not algorithm:
+            return Response(
+                {
+                    "error": "invalid_client_metadata",
+                    "error_description": "Validation failed",
+                    "detail": {
+                        "scope": [
+                            f"`{OPENID_SCOPE}` needs an ID token, and this server has no "
+                            "signing key: set OAUTH2_PROVIDER['OIDC_RSA_PRIVATE_KEY'], or "
+                            "register without that scope."
+                        ]
+                    },
                 },
                 status=400,
             )
