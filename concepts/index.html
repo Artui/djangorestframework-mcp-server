@@ -425,6 +425,23 @@
     </span>
   </a>
   
+    <nav class="md-nav" aria-label="URL kwargs — route values a provider reads off view.kwargs">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#a-reflected-extras-key-is-not-a-route-capture" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        A reflected **extras key is not a route capture
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
 </li>
         
           <li class="md-nav__item">
@@ -1620,6 +1637,23 @@
     </span>
   </a>
   
+    <nav class="md-nav" aria-label="URL kwargs — route values a provider reads off view.kwargs">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#a-reflected-extras-key-is-not-a-route-capture" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        A reflected **extras key is not a route capture
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
 </li>
         
           <li class="md-nav__item">
@@ -1885,11 +1919,20 @@ register a spec once and both surfaces get the same shape:</p>
   <code>prefetch_related</code>, <code>annotations</code>, and <code>extend_queryset</code> are applied
   before the FilterSet / ordering / pagination pipeline. Non-queryset
   returns (lists, scalars) pass through unchanged.</li>
-<li><strong>Serializer context</strong> — <code>input_serializer_context</code> /
-  <code>output_serializer_context</code> (on <code>ServiceSpec</code>) and
-  <code>output_serializer_context</code> (on <code>SelectorSpec</code>) are invoked with the
-  synthesised view + DRF request and forwarded as <code>context=</code> to the
-  serializer constructor on both sync and async dispatch paths.</li>
+<li><strong>Serializer context</strong> — every serializer the MCP transport builds
+  carries DRF's baseline context (<code>request</code> / <code>format</code> / <code>view</code>, from the
+  synthesised pair), exactly as <code>get_serializer_context()</code> supplies it
+  behind a view — so a serializer reading <code>self.context["request"]</code>
+  unguarded renders the same over both surfaces. On top of that,
+  <code>input_serializer_context</code> / <code>output_serializer_context</code> (on
+  <code>ServiceSpec</code>) and <code>output_serializer_context</code> (on <code>SelectorSpec</code>) are
+  merged over the baseline and forwarded as <code>context=</code> to the serializer
+  constructor, on both sync and async dispatch paths. Providers are
+  invoked <strong>through the keyword pool</strong> — each receives the subset of
+  <code>view</code> / <code>request</code> / the resolved-data extra (<code>result</code> / <code>instance</code> /
+  <code>page</code>) it declares <em>by name</em>, or the whole pool if it takes <code>**kwargs</code>
+  — which is how drf-services invokes them on the HTTP path, so one
+  provider serves both. Requires <code>djangorestframework-services&gt;=0.29.0</code>.</li>
 <li><strong><code>SelectorSpec.kind</code></strong> — required <code>SelectorKind</code> discriminator
   (<code>LIST</code> or <code>RETRIEVE</code>). It drives the <code>many=</code> flag on the output
   serializer and gates which post-fetch knobs the registration
@@ -1937,6 +1980,11 @@ is the binding name, and on resource reads <code>view.kwargs</code> carries the
 URI-template variables. Same wire shape as the
 HTTP transport's <code>ServiceView</code>, so providers can be shared between
 transports.</p>
+<p>Like every provider in the framework, it is invoked <strong>through the keyword
+pool</strong>: it receives <code>view</code> / <code>request</code> <em>by name</em>, so it declares only what it
+needs (<code>def with_tenant(request): ...</code> is as valid as the two-parameter form,
+and <code>**kwargs</code> takes the whole pool). Declaring a parameter the pool doesn't
+carry is the error — not declaring one it does.</p>
 <h3 id="url-kwargs-route-values-a-provider-reads-off-viewkwargs">URL kwargs — route values a provider reads off <code>view.kwargs</code><a class="headerlink" href="#url-kwargs-route-values-a-provider-reads-off-viewkwargs" title="Permanent link">&para;</a></h3>
 <p>On a <strong>tool</strong> call, <code>view.kwargs</code> is empty by default (a tool has no URL). So a
 provider shared with an HTTP view that scopes by a route capture — e.g.
@@ -1978,6 +2026,65 @@ as an <code>isError</code> validation result naming the missing argument rather 
 somewhere less legible. <code>required</code> can't be combined with a <code>default</code> (a default
 always satisfies the argument, so requiring it would be a no-op); that raises at
 registration.</p>
+<h4 id="a-reflected-extras-key-is-not-a-route-capture">A reflected <code>**extras</code> key is not a route capture<a class="headerlink" href="#a-reflected-extras-key-is-not-a-route-capture" title="Permanent link">&para;</a></h4>
+<p>A selector typed <code>def list_widgets(user, **extras: Unpack[WidgetExtras])</code> that
+reads <code>extras["project_pk"]</code> already has that key reflected into the tool's
+<code>inputSchema</code> by drf-services (0.26+) — no <code>UrlKwarg</code> needed <strong>for the selector
+itself</strong>, which receives it through the spec params. Marking it <code>InputRequired</code>
+(drf-services 0.28+) makes the model supply it; that is a <em>schema</em> statement and
+changes nothing about where the value lands.</p>
+<p>The two declarations answer different questions, and only one of them puts a
+value on the request:</p>
+<table>
+<thead>
+<tr>
+<th></th>
+<th>reflected <code>**extras</code> key (± <code>InputRequired</code>)</th>
+<th>registered <code>UrlKwarg</code></th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>In the <code>inputSchema</code></td>
+<td>yes</td>
+<td>yes</td>
+</tr>
+<tr>
+<td>Can be required</td>
+<td>yes (<code>InputRequired</code>)</td>
+<td>yes (<code>required=True</code>, plus an <code>isError</code> result when omitted)</td>
+</tr>
+<tr>
+<td>Reaches the selector</td>
+<td>yes, as a spec param</td>
+<td>yes, via the <code>view.kwargs</code> spread</td>
+</tr>
+<tr>
+<td>Reaches <code>view.kwargs</code></td>
+<td><strong>no</strong></td>
+<td>yes</td>
+</tr>
+<tr>
+<td>Ranks above caller-supplied params</td>
+<td>no — it <em>is</em> caller input</td>
+<td>yes</td>
+</tr>
+</tbody>
+</table>
+<p>So anything that reads request state rather than its own arguments — a
+<code>spec.kwargs</code> provider, <code>extend_queryset</code>, a permission class, an
+<code>output_serializer_context</code> provider — sees nothing for a reflected-only key. A
+scoping provider doing <code>view.kwargs.get("project_pk")</code> returns <code>None</code> and
+<strong>mis-scopes every call</strong> instead of failing: the failure mode worth naming here
+is that it is silent.</p>
+<p>Register the <code>UrlKwarg</code> as well when the value is scope. It is a strict superset
+— the selector still receives it in <code>**extras</code>, and the schema keeps one property
+and one <code>required</code> entry (an explicit <code>UrlKwarg</code> wins the merge over a reflected
+key of the same name).</p>
+<p>That split mirrors HTTP, where a route capture arrives in the URL and never in the
+body — which is what makes it unspoofable. Over MCP the arguments are whatever the
+model chose; a <code>UrlKwarg</code> value outranks them. If a provider scopes by it, it has
+to come through the channel that carries that precedence.</p>
 <p><code>UrlKwarg</code> is
 <a href="https://github.com/Artui/djangorestframework-services/blob/main/rest_framework_services/types/url_kwarg.py">drf-services' type</a>,
 re-exported here — the declaration is the same whichever transport carries it, and
