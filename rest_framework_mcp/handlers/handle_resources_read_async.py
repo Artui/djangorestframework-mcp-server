@@ -29,11 +29,12 @@ async def handle_resources_read_async(
     """Async sibling of :func:`handle_resources_read`.
 
     Same shape — resolve the URI, check permissions, run the selector, then
-    render and encode through the shared :func:`build_resource_contents` —
-    but routes the selector
-    through :func:`arun_selector_sync_safe` so genuinely async selectors run
-    native and sync selectors are bridged via ``sync_to_async`` (preventing
-    ``SynchronousOnlyOperation`` from any ORM call inside).
+    render and encode through the shared :func:`build_resource_contents` — but
+    nothing that can touch the ORM runs on the event loop: the selector goes
+    through :func:`arun_selector_sync_safe` (genuinely async selectors run
+    native, sync ones are bridged), and the render + encode step goes through
+    :func:`acall`, because a selector returning a queryset returns it **lazy**
+    and the serializer is what evaluates it.
     """
     if not isinstance(params, dict):
         return JsonRpcError(
@@ -91,19 +92,29 @@ async def handle_resources_read_async(
             # Per-spec kwargs provider from ``SelectorSpec.kwargs``, invoked
             # through the keyword pool exactly as drf-services invokes it on the
             # HTTP path — by name, so ``def kwargs(request): ...`` works here too.
-            # Typed as a sync callable on ``SelectorSpec``; running it on the
-            # event loop is fine — providers are documented as cheap.
+            # It is sync (a spec is written once for both transports) and its
+            # headline use is a scoping tenant / role lookup, i.e. a query — so
+            # it runs off the loop, as drf-services runs it in ``adispatch_spec``.
             provider_pool: dict[str, Any] = {"view": view, "request": drf_request}
             pool.update(
-                binding.kwargs_provider(
-                    **resolve_callable_kwargs(binding.kwargs_provider, provider_pool)
+                await acall(
+                    binding.kwargs_provider,
+                    **resolve_callable_kwargs(binding.kwargs_provider, provider_pool),
                 )
             )
         kwargs: dict[str, Any] = resolve_callable_kwargs(binding.selector, pool)
         raw: Any = await arun_selector_sync_safe(binding.selector, kwargs)
 
-        contents = build_resource_contents(
-            binding=binding, uri=uri, raw=raw, view=view, request=drf_request
+        # Rendering is ORM work: ``output_serializer(...).data`` iterates the
+        # value, so a LIST resource whose selector returned a (lazy) queryset
+        # evaluates it right here. Off the loop, like the selector above.
+        contents = await acall(
+            build_resource_contents,
+            binding=binding,
+            uri=uri,
+            raw=raw,
+            view=view,
+            request=drf_request,
         )
         if isinstance(contents, JsonRpcError):
             return contents

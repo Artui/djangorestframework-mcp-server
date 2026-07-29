@@ -36,6 +36,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   provider merged over it: selector tools (retrieve / list / paginated), chain
   steps, `resources/read`, and the read-path input validators. Service tools
   render through drf-services' `render_spec_output` and are fixed there.
+- **`resources/read` on the async transport rendered on the event loop.** The
+  handler bridged the *selector* off-loop but then called
+  `build_resource_contents` inline — and rendering is the ORM work:
+  `output_serializer(...).data` iterates the value, so a `LIST` resource whose
+  selector returned a (lazy) queryset evaluated it right there and raised
+  `SynchronousOnlyOperation`. The binding's `kwargs_provider` ran inline too, on
+  a comment claiming providers are cheap; its documented headline use is a
+  scoping tenant / role lookup, which is a query. Both now go through `acall`,
+  matching what drf-services 0.29 does for the same callables in
+  `adispatch_spec`. The sync transport was never affected.
+
 - **A selector tool's context provider saw an empty `view.kwargs`.** Rendering
   built a second, kwargs-less `OfflineServiceView`, so a provider scoping by a
   registered `UrlKwarg` (`view.kwargs["project_pk"]`) got `None` at render time
