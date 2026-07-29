@@ -1603,6 +1603,23 @@
     </span>
   </a>
   
+    <nav class="md-nav" aria-label="DynamicClientRegistrationSerializer">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#rest_framework_mcp.contrib.oauth.dcr_serializer.DynamicClientRegistrationSerializer.validate" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        validate
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
 </li>
       
         <li class="md-nav__item">
@@ -2091,6 +2108,23 @@
       
     </span>
   </a>
+  
+    <nav class="md-nav" aria-label="DynamicClientRegistrationSerializer">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#rest_framework_mcp.contrib.oauth.dcr_serializer.DynamicClientRegistrationSerializer.validate" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        validate
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
   
 </li>
       
@@ -3504,8 +3538,12 @@ present.</p>
 <p>Single-action ViewSet — wired as the <code>create</code> action (POST) via
 <code>DynamicClientRegistrationViewSet.as_view({"post": "create"})</code>.
 Successful POST returns the RFC 7591 client information response
-(<code>client_id</code> / <code>client_secret</code> / echoed registration metadata)
-and persists a DOT <code>Application</code>.</p>
+(<code>client_id</code> / echoed registration metadata, plus a plaintext
+<code>client_secret</code> for confidential clients) and persists a DOT
+<code>Application</code>. A client that registers with
+<code>token_endpoint_auth_method: none</code> becomes a public client and is
+issued no secret — it authenticates at the token endpoint with PKCE
+alone, which is the only mode Claude's custom connectors can use.</p>
 <p>DOT (<code>oauth2_provider</code>) is imported lazily inside the action so
 this module remains importable without the <code>[oauth]</code> extra. A
 request that arrives with DCR enabled but DOT absent surfaces a
@@ -3571,13 +3609,22 @@ the dataclass-derived auto-generated fields with shapes that
 actually validate the wire contract:</p>
 <ul>
 <li><code>redirect_uris</code> is required + non-empty + child is a URL.</li>
-<li><code>client_type</code> / <code>authorization_grant_type</code> are <code>ChoiceField</code>
-  with choices sourced from DOT's <code>Application</code> model constants
-  at instance construction. Declaring them here lets us reject
-  malformed values with a per-field error before the request ever
-  reaches the database. The lazy import keeps this module
-  importable without the <code>[oauth]</code> extra.</li>
+<li><code>token_endpoint_auth_method</code> / <code>grant_types</code> are the RFC 7591
+  §2 spellings every interoperable client sends. They are the
+  <em>primary</em> inputs: :meth:<code>validate</code> translates them into DOT's
+  <code>client_type</code> / <code>authorization_grant_type</code>.</li>
+<li><code>client_type</code> / <code>authorization_grant_type</code> are DOT's
+  non-standard spellings, retained as an escape hatch for callers
+  already speaking DOT. They are <code>ChoiceField</code> with choices sourced
+  from DOT's <code>Application</code> model constants at instance
+  construction, so a malformed value is rejected per-field before the
+  request ever reaches the database. The lazy import keeps this
+  module importable without the <code>[oauth]</code> extra.</li>
 </ul>
+<p>Supplying both spellings is allowed only when they agree; a
+contradiction is a 400 rather than a silent winner, because either
+choice would hand back a client that cannot complete the flow it
+registered for.</p>
 <p>Other RFC 7591 fields are silently ignored — DOT doesn't model them
 and inventing a richer shape would diverge from the underlying
 authorization server.</p>
@@ -3602,6 +3649,35 @@ authorization server.</p>
 
 
 
+
+<div class="doc doc-object doc-function">
+
+
+<h3 id="rest_framework_mcp.contrib.oauth.dcr_serializer.DynamicClientRegistrationSerializer.validate" class="doc doc-heading">
+            <span class="doc doc-object-name doc-function-name">validate</span>
+
+
+<a href="#rest_framework_mcp.contrib.oauth.dcr_serializer.DynamicClientRegistrationSerializer.validate" class="headerlink" title="Permanent link">&para;</a></h3>
+<div class="language-python doc-signature highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="nf">validate</span><span class="p">(</span><span class="n">attrs</span><span class="p">:</span> <span class="n">DynamicClientRegistrationRequest</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">DynamicClientRegistrationRequest</span>
+</span></code></pre></div>
+
+    <div class="doc doc-contents ">
+
+        <p>Reconcile the RFC 7591 and DOT spellings, in both directions.</p>
+<p>Every caller downstream reads all four fields already populated
+and mutually consistent, so nobody has to know which vocabulary
+the client used, and nobody re-applies defaults.</p>
+<p><code>attrs</code> is the dataclass instance built by
+<code>DataclassSerializer.to_internal_value</code>; it is mutable precisely
+so normalisation like this can happen in place. Fields the client
+omitted carry the dataclass defaults (<code>""</code> / <code>[]</code>), neither of
+which is an accepted choice, so "empty" unambiguously means "not
+supplied".</p>
+
+
+    </div>
+
+</div>
 
 
 
@@ -3754,9 +3830,24 @@ endpoint.</p>
 <code>setdefault</code>-style normalisation if needed. Frozen would force
 consumers to build a second instance just to change a defaulted
 field, which is awkward for a request-shape type.</p>
-<p>Whitelists the fields the DCR view actually forwards to DOT's
-<code>Application</code> model. Other RFC 7591 fields are silently ignored
-by the serializer — DOT doesn't model them.</p>
+<p>Two vocabularies land here side by side:</p>
+<ul>
+<li><code>token_endpoint_auth_method</code>, <code>grant_types</code> and
+  <code>response_types</code> are the RFC 7591 §2 fields an interoperable
+  client actually sends.</li>
+<li><code>client_type</code> and <code>authorization_grant_type</code> are DOT's
+  non-standard equivalents, kept as an escape hatch for callers that
+  already speak DOT.</li>
+</ul>
+<p>The serializer's <code>validate</code> reconciles the two, so everything
+downstream reads a consistent set. <code>response_types</code> has no DOT
+counterpart at all — RFC 7591 §2.1 makes it a function of the grant,
+so it is derived rather than stored, and an explicit value that
+contradicts the grant is rejected.</p>
+<p>RFC 7591 fields the server doesn't understand (<code>contacts</code>,
+<code>logo_uri</code>, <code>jwks</code>, …) are ignored, which §2 requires — DOT has
+nowhere to put them, and echoing metadata the authorization server
+won't honour is worse than dropping it.</p>
 
 
 
@@ -3808,8 +3899,24 @@ by the serializer — DOT doesn't model them.</p>
 
         <p>RFC 7591 client information response.</p>
 <p>The wire shape returned by :class:<code>DynamicClientRegistrationViewSet</code>
-on a successful registration. <code>scope</code> is optional (only emitted
-when the request supplied one).</p>
+on a successful registration.</p>
+<p>RFC 7591 §3.2.1 lets the authorization server substitute any metadata
+value it likes, but obliges it to return everything it registered. A
+substitution the client is never told about is what turns a legal
+downgrade into an undiagnosable failure: the client goes on behaving
+as what it asked to be while the token endpoint enforces something
+else. So every field here is the <em>resolved</em> value — what was written
+— not an echo of what was asked for.</p>
+<p><code>client_secret</code> is the <strong>plaintext</strong> secret, and it is only present
+for confidential clients. DOT hashes the column on save, so the value
+here has to be the one generated before the <code>Application</code> was
+written — read it back off the model and you emit the PBKDF2 digest,
+which no client can authenticate with. A public client
+(<code>token_endpoint_auth_method: none</code>) gets no secret at all, per
+RFC 7591 §2. <code>client_secret_expires_at</code> rides along whenever a
+secret is issued because §3.2.1 makes it REQUIRED in that case; <code>0</code>
+means "does not expire".</p>
+<p><code>scope</code> is optional (only emitted when the request supplied one).</p>
 
 
 

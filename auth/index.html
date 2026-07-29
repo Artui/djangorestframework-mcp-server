@@ -501,6 +501,23 @@
     </span>
   </a>
   
+    <nav class="md-nav" aria-label="OAuth contrib mount">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#what-a-registration-accepts-and-returns" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        What a registration accepts and returns
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
 </li>
       
         <li class="md-nav__item">
@@ -1569,6 +1586,23 @@
     </span>
   </a>
   
+    <nav class="md-nav" aria-label="OAuth contrib mount">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#what-a-registration-accepts-and-returns" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        What a registration accepts and returns
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
 </li>
       
         <li class="md-nav__item">
@@ -1934,6 +1968,67 @@ per RFC 7591 §3.</p>
 <p>Both are resolved when the patterns are built. Omit either to take
 <code>REST_FRAMEWORK_MCP["DCR_ENABLED"]</code> / <code>["DCR_INITIAL_ACCESS_TOKEN"]</code> as the
 default; pass them to let two mounts in one project gate DCR differently.</p>
+<h3 id="what-a-registration-accepts-and-returns">What a registration accepts and returns<a class="headerlink" href="#what-a-registration-accepts-and-returns" title="Permanent link">&para;</a></h3>
+<p>The endpoint speaks RFC 7591's vocabulary. <code>token_endpoint_auth_method</code> decides
+whether the client is public or confidential, and <code>grant_types</code> decides the
+grant — the two fields an interoperable client actually sends:</p>
+<div class="language-json highlight"><span class="filename">POST /oauth/register/</span><pre><span></span><code><span id="__span-11-1"><a id="__codelineno-11-1" name="__codelineno-11-1" href="#__codelineno-11-1"></a><span class="p">{</span>
+</span><span id="__span-11-2"><a id="__codelineno-11-2" name="__codelineno-11-2" href="#__codelineno-11-2"></a><span class="w">  </span><span class="nt">&quot;client_name&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;Claude&quot;</span><span class="p">,</span>
+</span><span id="__span-11-3"><a id="__codelineno-11-3" name="__codelineno-11-3" href="#__codelineno-11-3"></a><span class="w">  </span><span class="nt">&quot;redirect_uris&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">[</span><span class="s2">&quot;https://claude.ai/api/mcp/auth_callback&quot;</span><span class="p">],</span>
+</span><span id="__span-11-4"><a id="__codelineno-11-4" name="__codelineno-11-4" href="#__codelineno-11-4"></a><span class="w">  </span><span class="nt">&quot;grant_types&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">[</span><span class="s2">&quot;authorization_code&quot;</span><span class="p">,</span><span class="w"> </span><span class="s2">&quot;refresh_token&quot;</span><span class="p">],</span>
+</span><span id="__span-11-5"><a id="__codelineno-11-5" name="__codelineno-11-5" href="#__codelineno-11-5"></a><span class="w">  </span><span class="nt">&quot;response_types&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">[</span><span class="s2">&quot;code&quot;</span><span class="p">],</span>
+</span><span id="__span-11-6"><a id="__codelineno-11-6" name="__codelineno-11-6" href="#__codelineno-11-6"></a><span class="w">  </span><span class="nt">&quot;token_endpoint_auth_method&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;none&quot;</span>
+</span><span id="__span-11-7"><a id="__codelineno-11-7" name="__codelineno-11-7" href="#__codelineno-11-7"></a><span class="p">}</span>
+</span></code></pre></div>
+<p><code>token_endpoint_auth_method: none</code> registers a <strong>public</strong> client: no secret is
+issued, and it authenticates at the token endpoint with PKCE alone. This is the
+only mode Claude's custom connectors can use — that flow has no way to be handed
+a pre-provisioned <code>client_id</code>, so DCR is its only path in. <code>client_secret_basic</code>
+(the RFC's default when the field is omitted) and <code>client_secret_post</code> register
+a <strong>confidential</strong> client and return a <code>client_secret</code>.</p>
+<p>The registration above — a public client — comes back with no secret at all:</p>
+<div class="language-json highlight"><span class="filename">201 Created</span><pre><span></span><code><span id="__span-12-1"><a id="__codelineno-12-1" name="__codelineno-12-1" href="#__codelineno-12-1"></a><span class="p">{</span>
+</span><span id="__span-12-2"><a id="__codelineno-12-2" name="__codelineno-12-2" href="#__codelineno-12-2"></a><span class="w">  </span><span class="nt">&quot;client_id&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;…&quot;</span><span class="p">,</span>
+</span><span id="__span-12-3"><a id="__codelineno-12-3" name="__codelineno-12-3" href="#__codelineno-12-3"></a><span class="w">  </span><span class="nt">&quot;client_id_issued_at&quot;</span><span class="p">:</span><span class="w"> </span><span class="mi">1753747200</span><span class="p">,</span>
+</span><span id="__span-12-4"><a id="__codelineno-12-4" name="__codelineno-12-4" href="#__codelineno-12-4"></a><span class="w">  </span><span class="nt">&quot;client_name&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;Claude&quot;</span><span class="p">,</span>
+</span><span id="__span-12-5"><a id="__codelineno-12-5" name="__codelineno-12-5" href="#__codelineno-12-5"></a><span class="w">  </span><span class="nt">&quot;redirect_uris&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">[</span><span class="s2">&quot;https://claude.ai/api/mcp/auth_callback&quot;</span><span class="p">],</span>
+</span><span id="__span-12-6"><a id="__codelineno-12-6" name="__codelineno-12-6" href="#__codelineno-12-6"></a><span class="w">  </span><span class="nt">&quot;grant_types&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">[</span><span class="s2">&quot;authorization_code&quot;</span><span class="p">,</span><span class="w"> </span><span class="s2">&quot;refresh_token&quot;</span><span class="p">],</span>
+</span><span id="__span-12-7"><a id="__codelineno-12-7" name="__codelineno-12-7" href="#__codelineno-12-7"></a><span class="w">  </span><span class="nt">&quot;response_types&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">[</span><span class="s2">&quot;code&quot;</span><span class="p">],</span>
+</span><span id="__span-12-8"><a id="__codelineno-12-8" name="__codelineno-12-8" href="#__codelineno-12-8"></a><span class="w">  </span><span class="nt">&quot;token_endpoint_auth_method&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;none&quot;</span><span class="p">,</span>
+</span><span id="__span-12-9"><a id="__codelineno-12-9" name="__codelineno-12-9" href="#__codelineno-12-9"></a><span class="w">  </span><span class="nt">&quot;client_type&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;public&quot;</span><span class="p">,</span>
+</span><span id="__span-12-10"><a id="__codelineno-12-10" name="__codelineno-12-10" href="#__codelineno-12-10"></a><span class="w">  </span><span class="nt">&quot;authorization_grant_type&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;authorization-code&quot;</span>
+</span><span id="__span-12-11"><a id="__codelineno-12-11" name="__codelineno-12-11" href="#__codelineno-12-11"></a><span class="p">}</span>
+</span></code></pre></div>
+<p>A confidential registration adds <code>client_secret</code> and <code>client_secret_expires_at</code>
+(<code>0</code>, meaning it does not expire). That secret is the plaintext, returned once
+and never recoverable afterwards — DOT hashes the stored column, so nothing can
+re-derive it.</p>
+<p>Every field in the response is the <strong>resolved</strong> value — what was actually
+registered — not an echo of what was asked for. RFC 7591 §3.2.1 lets an
+authorization server substitute any metadata value it likes, but obliges it to
+report what it settled on; a substitution the client is never told about is what
+turns a legal downgrade into an undiagnosable failure at the token endpoint.</p>
+<p>DOT's own <code>client_type</code> / <code>authorization_grant_type</code> spellings are still
+accepted as an escape hatch for callers that already speak DOT, and are echoed
+back alongside the RFC fields. Sending both vocabularies is fine when they
+agree; a contradiction (<code>token_endpoint_auth_method: none</code> with
+<code>client_type: confidential</code>) is a <code>400 invalid_client_metadata</code> rather than a
+silent winner. DOT models one grant per application, so <code>grant_types</code> may name
+at most one primary grant — <code>refresh_token</code> rides along and is not counted.</p>
+<p><code>response_types</code> is derived from the grant per RFC 7591 §2.1 rather than chosen
+independently: <code>authorization_code</code> → <code>["code"]</code>, <code>implicit</code> → <code>["token"]</code>, and
+the <code>client_credentials</code> / <code>password</code> grants never reach the authorization
+endpoint, so <code>[]</code>. Supply it to assert the same thing and it is accepted;
+supply something inconsistent and you get a <code>400</code>.</p>
+<p><code>scope</code> is checked against DOT's own scopes backend — the same set
+<code>validate_scopes</code> uses at authorize time, which by default is
+<code>OAUTH2_PROVIDER["SCOPES"]</code>. A registration naming a scope the server doesn't
+offer is a <code>400</code> with the offending values named, rather than a <code>201</code> followed
+by an <code>invalid_scope</code> a leg later with nothing linking the two. DOT stores no
+per-application scope, so the registration can only ever be checked against the
+global set, never narrowed to this client.</p>
+<p>RFC 7591 fields the server doesn't understand (<code>contacts</code>, <code>logo_uri</code>, <code>jwks</code>, …)
+are ignored, which §2 requires.</p>
 <p>The contrib mount also surfaces AS metadata, so <code>AllowAnyBackend</code>
 deployments (which have no AS) return <code>501 Not Implemented</code> on the AS
 metadata endpoints rather than serving a fake payload. Use
@@ -1944,49 +2039,49 @@ metadata endpoints rather than serving a fake payload. Use
 tokens it issues — DCR, the authorization endpoint, token endpoint, and refresh
 flow are all handled by DOT itself. Modern MCP clients (Claude Desktop,
 Inspector) discover them through PRM → AS metadata.</p>
-<div class="language-python highlight"><span class="filename">settings.py</span><pre><span></span><code><span id="__span-11-1"><a id="__codelineno-11-1" name="__codelineno-11-1" href="#__codelineno-11-1"></a><span class="n">INSTALLED_APPS</span> <span class="o">=</span> <span class="p">[</span>
-</span><span id="__span-11-2"><a id="__codelineno-11-2" name="__codelineno-11-2" href="#__codelineno-11-2"></a>    <span class="c1"># ...</span>
-</span><span id="__span-11-3"><a id="__codelineno-11-3" name="__codelineno-11-3" href="#__codelineno-11-3"></a>    <span class="s2">&quot;oauth2_provider&quot;</span><span class="p">,</span>
-</span><span id="__span-11-4"><a id="__codelineno-11-4" name="__codelineno-11-4" href="#__codelineno-11-4"></a><span class="p">]</span>
-</span><span id="__span-11-5"><a id="__codelineno-11-5" name="__codelineno-11-5" href="#__codelineno-11-5"></a>
-</span><span id="__span-11-6"><a id="__codelineno-11-6" name="__codelineno-11-6" href="#__codelineno-11-6"></a><span class="n">OAUTH2_PROVIDER</span> <span class="o">=</span> <span class="p">{</span>
-</span><span id="__span-11-7"><a id="__codelineno-11-7" name="__codelineno-11-7" href="#__codelineno-11-7"></a>    <span class="c1"># Bind every issued token to the canonical resource URL so the resource</span>
-</span><span id="__span-11-8"><a id="__codelineno-11-8" name="__codelineno-11-8" href="#__codelineno-11-8"></a>    <span class="c1"># server can perform RFC 8707 audience checks.</span>
-</span><span id="__span-11-9"><a id="__codelineno-11-9" name="__codelineno-11-9" href="#__codelineno-11-9"></a>    <span class="s2">&quot;REQUIRE_RESOURCE&quot;</span><span class="p">:</span> <span class="kc">True</span><span class="p">,</span>
-</span><span id="__span-11-10"><a id="__codelineno-11-10" name="__codelineno-11-10" href="#__codelineno-11-10"></a>    <span class="s2">&quot;SCOPES&quot;</span><span class="p">:</span> <span class="p">{</span>
-</span><span id="__span-11-11"><a id="__codelineno-11-11" name="__codelineno-11-11" href="#__codelineno-11-11"></a>        <span class="s2">&quot;invoices:read&quot;</span><span class="p">:</span>  <span class="s2">&quot;Read invoices&quot;</span><span class="p">,</span>
-</span><span id="__span-11-12"><a id="__codelineno-11-12" name="__codelineno-11-12" href="#__codelineno-11-12"></a>        <span class="s2">&quot;invoices:write&quot;</span><span class="p">:</span> <span class="s2">&quot;Mutate invoices&quot;</span><span class="p">,</span>
-</span><span id="__span-11-13"><a id="__codelineno-11-13" name="__codelineno-11-13" href="#__codelineno-11-13"></a>    <span class="p">},</span>
-</span><span id="__span-11-14"><a id="__codelineno-11-14" name="__codelineno-11-14" href="#__codelineno-11-14"></a>    <span class="c1"># Token lifetimes appropriate for an MCP session — short access tokens,</span>
-</span><span id="__span-11-15"><a id="__codelineno-11-15" name="__codelineno-11-15" href="#__codelineno-11-15"></a>    <span class="c1"># refresh on demand.</span>
-</span><span id="__span-11-16"><a id="__codelineno-11-16" name="__codelineno-11-16" href="#__codelineno-11-16"></a>    <span class="s2">&quot;ACCESS_TOKEN_EXPIRE_SECONDS&quot;</span><span class="p">:</span> <span class="mi">600</span><span class="p">,</span>
-</span><span id="__span-11-17"><a id="__codelineno-11-17" name="__codelineno-11-17" href="#__codelineno-11-17"></a>    <span class="s2">&quot;REFRESH_TOKEN_EXPIRE_SECONDS&quot;</span><span class="p">:</span> <span class="mi">60</span> <span class="o">*</span> <span class="mi">60</span> <span class="o">*</span> <span class="mi">24</span><span class="p">,</span>
-</span><span id="__span-11-18"><a id="__codelineno-11-18" name="__codelineno-11-18" href="#__codelineno-11-18"></a><span class="p">}</span>
-</span><span id="__span-11-19"><a id="__codelineno-11-19" name="__codelineno-11-19" href="#__codelineno-11-19"></a>
-</span><span id="__span-11-20"><a id="__codelineno-11-20" name="__codelineno-11-20" href="#__codelineno-11-20"></a><span class="n">REST_FRAMEWORK_MCP</span> <span class="o">=</span> <span class="p">{</span>
-</span><span id="__span-11-21"><a id="__codelineno-11-21" name="__codelineno-11-21" href="#__codelineno-11-21"></a>    <span class="s2">&quot;RESOURCE_URL&quot;</span><span class="p">:</span> <span class="s2">&quot;https://example.com/mcp/&quot;</span><span class="p">,</span>
-</span><span id="__span-11-22"><a id="__codelineno-11-22" name="__codelineno-11-22" href="#__codelineno-11-22"></a>    <span class="s2">&quot;ALLOWED_ORIGINS&quot;</span><span class="p">:</span> <span class="p">[</span><span class="s2">&quot;https://app.example.com&quot;</span><span class="p">],</span>
-</span><span id="__span-11-23"><a id="__codelineno-11-23" name="__codelineno-11-23" href="#__codelineno-11-23"></a>    <span class="s2">&quot;SERVER_INFO&quot;</span><span class="p">:</span> <span class="p">{</span>
-</span><span id="__span-11-24"><a id="__codelineno-11-24" name="__codelineno-11-24" href="#__codelineno-11-24"></a>        <span class="s2">&quot;authorization_servers&quot;</span><span class="p">:</span> <span class="p">[</span><span class="s2">&quot;https://example.com/oauth/&quot;</span><span class="p">],</span>
-</span><span id="__span-11-25"><a id="__codelineno-11-25" name="__codelineno-11-25" href="#__codelineno-11-25"></a>        <span class="s2">&quot;scopes_supported&quot;</span><span class="p">:</span> <span class="p">[</span><span class="s2">&quot;invoices:read&quot;</span><span class="p">,</span> <span class="s2">&quot;invoices:write&quot;</span><span class="p">],</span>
-</span><span id="__span-11-26"><a id="__codelineno-11-26" name="__codelineno-11-26" href="#__codelineno-11-26"></a>        <span class="s2">&quot;resource_metadata_url&quot;</span><span class="p">:</span>
-</span><span id="__span-11-27"><a id="__codelineno-11-27" name="__codelineno-11-27" href="#__codelineno-11-27"></a>            <span class="s2">&quot;https://example.com/mcp/.well-known/oauth-protected-resource&quot;</span><span class="p">,</span>
-</span><span id="__span-11-28"><a id="__codelineno-11-28" name="__codelineno-11-28" href="#__codelineno-11-28"></a>    <span class="p">},</span>
-</span><span id="__span-11-29"><a id="__codelineno-11-29" name="__codelineno-11-29" href="#__codelineno-11-29"></a><span class="p">}</span>
+<div class="language-python highlight"><span class="filename">settings.py</span><pre><span></span><code><span id="__span-13-1"><a id="__codelineno-13-1" name="__codelineno-13-1" href="#__codelineno-13-1"></a><span class="n">INSTALLED_APPS</span> <span class="o">=</span> <span class="p">[</span>
+</span><span id="__span-13-2"><a id="__codelineno-13-2" name="__codelineno-13-2" href="#__codelineno-13-2"></a>    <span class="c1"># ...</span>
+</span><span id="__span-13-3"><a id="__codelineno-13-3" name="__codelineno-13-3" href="#__codelineno-13-3"></a>    <span class="s2">&quot;oauth2_provider&quot;</span><span class="p">,</span>
+</span><span id="__span-13-4"><a id="__codelineno-13-4" name="__codelineno-13-4" href="#__codelineno-13-4"></a><span class="p">]</span>
+</span><span id="__span-13-5"><a id="__codelineno-13-5" name="__codelineno-13-5" href="#__codelineno-13-5"></a>
+</span><span id="__span-13-6"><a id="__codelineno-13-6" name="__codelineno-13-6" href="#__codelineno-13-6"></a><span class="n">OAUTH2_PROVIDER</span> <span class="o">=</span> <span class="p">{</span>
+</span><span id="__span-13-7"><a id="__codelineno-13-7" name="__codelineno-13-7" href="#__codelineno-13-7"></a>    <span class="c1"># Bind every issued token to the canonical resource URL so the resource</span>
+</span><span id="__span-13-8"><a id="__codelineno-13-8" name="__codelineno-13-8" href="#__codelineno-13-8"></a>    <span class="c1"># server can perform RFC 8707 audience checks.</span>
+</span><span id="__span-13-9"><a id="__codelineno-13-9" name="__codelineno-13-9" href="#__codelineno-13-9"></a>    <span class="s2">&quot;REQUIRE_RESOURCE&quot;</span><span class="p">:</span> <span class="kc">True</span><span class="p">,</span>
+</span><span id="__span-13-10"><a id="__codelineno-13-10" name="__codelineno-13-10" href="#__codelineno-13-10"></a>    <span class="s2">&quot;SCOPES&quot;</span><span class="p">:</span> <span class="p">{</span>
+</span><span id="__span-13-11"><a id="__codelineno-13-11" name="__codelineno-13-11" href="#__codelineno-13-11"></a>        <span class="s2">&quot;invoices:read&quot;</span><span class="p">:</span>  <span class="s2">&quot;Read invoices&quot;</span><span class="p">,</span>
+</span><span id="__span-13-12"><a id="__codelineno-13-12" name="__codelineno-13-12" href="#__codelineno-13-12"></a>        <span class="s2">&quot;invoices:write&quot;</span><span class="p">:</span> <span class="s2">&quot;Mutate invoices&quot;</span><span class="p">,</span>
+</span><span id="__span-13-13"><a id="__codelineno-13-13" name="__codelineno-13-13" href="#__codelineno-13-13"></a>    <span class="p">},</span>
+</span><span id="__span-13-14"><a id="__codelineno-13-14" name="__codelineno-13-14" href="#__codelineno-13-14"></a>    <span class="c1"># Token lifetimes appropriate for an MCP session — short access tokens,</span>
+</span><span id="__span-13-15"><a id="__codelineno-13-15" name="__codelineno-13-15" href="#__codelineno-13-15"></a>    <span class="c1"># refresh on demand.</span>
+</span><span id="__span-13-16"><a id="__codelineno-13-16" name="__codelineno-13-16" href="#__codelineno-13-16"></a>    <span class="s2">&quot;ACCESS_TOKEN_EXPIRE_SECONDS&quot;</span><span class="p">:</span> <span class="mi">600</span><span class="p">,</span>
+</span><span id="__span-13-17"><a id="__codelineno-13-17" name="__codelineno-13-17" href="#__codelineno-13-17"></a>    <span class="s2">&quot;REFRESH_TOKEN_EXPIRE_SECONDS&quot;</span><span class="p">:</span> <span class="mi">60</span> <span class="o">*</span> <span class="mi">60</span> <span class="o">*</span> <span class="mi">24</span><span class="p">,</span>
+</span><span id="__span-13-18"><a id="__codelineno-13-18" name="__codelineno-13-18" href="#__codelineno-13-18"></a><span class="p">}</span>
+</span><span id="__span-13-19"><a id="__codelineno-13-19" name="__codelineno-13-19" href="#__codelineno-13-19"></a>
+</span><span id="__span-13-20"><a id="__codelineno-13-20" name="__codelineno-13-20" href="#__codelineno-13-20"></a><span class="n">REST_FRAMEWORK_MCP</span> <span class="o">=</span> <span class="p">{</span>
+</span><span id="__span-13-21"><a id="__codelineno-13-21" name="__codelineno-13-21" href="#__codelineno-13-21"></a>    <span class="s2">&quot;RESOURCE_URL&quot;</span><span class="p">:</span> <span class="s2">&quot;https://example.com/mcp/&quot;</span><span class="p">,</span>
+</span><span id="__span-13-22"><a id="__codelineno-13-22" name="__codelineno-13-22" href="#__codelineno-13-22"></a>    <span class="s2">&quot;ALLOWED_ORIGINS&quot;</span><span class="p">:</span> <span class="p">[</span><span class="s2">&quot;https://app.example.com&quot;</span><span class="p">],</span>
+</span><span id="__span-13-23"><a id="__codelineno-13-23" name="__codelineno-13-23" href="#__codelineno-13-23"></a>    <span class="s2">&quot;SERVER_INFO&quot;</span><span class="p">:</span> <span class="p">{</span>
+</span><span id="__span-13-24"><a id="__codelineno-13-24" name="__codelineno-13-24" href="#__codelineno-13-24"></a>        <span class="s2">&quot;authorization_servers&quot;</span><span class="p">:</span> <span class="p">[</span><span class="s2">&quot;https://example.com/oauth/&quot;</span><span class="p">],</span>
+</span><span id="__span-13-25"><a id="__codelineno-13-25" name="__codelineno-13-25" href="#__codelineno-13-25"></a>        <span class="s2">&quot;scopes_supported&quot;</span><span class="p">:</span> <span class="p">[</span><span class="s2">&quot;invoices:read&quot;</span><span class="p">,</span> <span class="s2">&quot;invoices:write&quot;</span><span class="p">],</span>
+</span><span id="__span-13-26"><a id="__codelineno-13-26" name="__codelineno-13-26" href="#__codelineno-13-26"></a>        <span class="s2">&quot;resource_metadata_url&quot;</span><span class="p">:</span>
+</span><span id="__span-13-27"><a id="__codelineno-13-27" name="__codelineno-13-27" href="#__codelineno-13-27"></a>            <span class="s2">&quot;https://example.com/mcp/.well-known/oauth-protected-resource&quot;</span><span class="p">,</span>
+</span><span id="__span-13-28"><a id="__codelineno-13-28" name="__codelineno-13-28" href="#__codelineno-13-28"></a>    <span class="p">},</span>
+</span><span id="__span-13-29"><a id="__codelineno-13-29" name="__codelineno-13-29" href="#__codelineno-13-29"></a><span class="p">}</span>
 </span></code></pre></div>
-<div class="language-python highlight"><span class="filename">urls.py</span><pre><span></span><code><span id="__span-12-1"><a id="__codelineno-12-1" name="__codelineno-12-1" href="#__codelineno-12-1"></a><span class="kn">from</span><span class="w"> </span><span class="nn">django.urls</span><span class="w"> </span><span class="kn">import</span> <span class="n">include</span><span class="p">,</span> <span class="n">path</span>
-</span><span id="__span-12-2"><a id="__codelineno-12-2" name="__codelineno-12-2" href="#__codelineno-12-2"></a>
-</span><span id="__span-12-3"><a id="__codelineno-12-3" name="__codelineno-12-3" href="#__codelineno-12-3"></a><span class="kn">from</span><span class="w"> </span><span class="nn">invoices.mcp</span><span class="w"> </span><span class="kn">import</span> <span class="n">server</span>
-</span><span id="__span-12-4"><a id="__codelineno-12-4" name="__codelineno-12-4" href="#__codelineno-12-4"></a>
-</span><span id="__span-12-5"><a id="__codelineno-12-5" name="__codelineno-12-5" href="#__codelineno-12-5"></a><span class="n">urlpatterns</span> <span class="o">=</span> <span class="p">[</span>
-</span><span id="__span-12-6"><a id="__codelineno-12-6" name="__codelineno-12-6" href="#__codelineno-12-6"></a>    <span class="n">path</span><span class="p">(</span><span class="s2">&quot;oauth/&quot;</span><span class="p">,</span> <span class="n">include</span><span class="p">(</span><span class="s2">&quot;oauth2_provider.urls&quot;</span><span class="p">,</span> <span class="n">namespace</span><span class="o">=</span><span class="s2">&quot;oauth2_provider&quot;</span><span class="p">)),</span>
-</span><span id="__span-12-7"><a id="__codelineno-12-7" name="__codelineno-12-7" href="#__codelineno-12-7"></a>    <span class="n">path</span><span class="p">(</span><span class="s2">&quot;mcp/&quot;</span><span class="p">,</span> <span class="n">server</span><span class="o">.</span><span class="n">urls</span><span class="p">),</span>
-</span><span id="__span-12-8"><a id="__codelineno-12-8" name="__codelineno-12-8" href="#__codelineno-12-8"></a><span class="p">]</span>
+<div class="language-python highlight"><span class="filename">urls.py</span><pre><span></span><code><span id="__span-14-1"><a id="__codelineno-14-1" name="__codelineno-14-1" href="#__codelineno-14-1"></a><span class="kn">from</span><span class="w"> </span><span class="nn">django.urls</span><span class="w"> </span><span class="kn">import</span> <span class="n">include</span><span class="p">,</span> <span class="n">path</span>
+</span><span id="__span-14-2"><a id="__codelineno-14-2" name="__codelineno-14-2" href="#__codelineno-14-2"></a>
+</span><span id="__span-14-3"><a id="__codelineno-14-3" name="__codelineno-14-3" href="#__codelineno-14-3"></a><span class="kn">from</span><span class="w"> </span><span class="nn">invoices.mcp</span><span class="w"> </span><span class="kn">import</span> <span class="n">server</span>
+</span><span id="__span-14-4"><a id="__codelineno-14-4" name="__codelineno-14-4" href="#__codelineno-14-4"></a>
+</span><span id="__span-14-5"><a id="__codelineno-14-5" name="__codelineno-14-5" href="#__codelineno-14-5"></a><span class="n">urlpatterns</span> <span class="o">=</span> <span class="p">[</span>
+</span><span id="__span-14-6"><a id="__codelineno-14-6" name="__codelineno-14-6" href="#__codelineno-14-6"></a>    <span class="n">path</span><span class="p">(</span><span class="s2">&quot;oauth/&quot;</span><span class="p">,</span> <span class="n">include</span><span class="p">(</span><span class="s2">&quot;oauth2_provider.urls&quot;</span><span class="p">,</span> <span class="n">namespace</span><span class="o">=</span><span class="s2">&quot;oauth2_provider&quot;</span><span class="p">)),</span>
+</span><span id="__span-14-7"><a id="__codelineno-14-7" name="__codelineno-14-7" href="#__codelineno-14-7"></a>    <span class="n">path</span><span class="p">(</span><span class="s2">&quot;mcp/&quot;</span><span class="p">,</span> <span class="n">server</span><span class="o">.</span><span class="n">urls</span><span class="p">),</span>
+</span><span id="__span-14-8"><a id="__codelineno-14-8" name="__codelineno-14-8" href="#__codelineno-14-8"></a><span class="p">]</span>
 </span></code></pre></div>
 <p>Verify the AS publishes <a href="https://datatracker.ietf.org/doc/html/rfc8414">RFC 8414</a>
 metadata before debugging client-side issues — DOT supports this, but the URL
 is configurable. From a shell:</p>
-<div class="language-bash highlight"><pre><span></span><code><span id="__span-13-1"><a id="__codelineno-13-1" name="__codelineno-13-1" href="#__codelineno-13-1"></a>curl<span class="w"> </span>https://example.com/oauth/.well-known/oauth-authorization-server<span class="w"> </span><span class="p">|</span><span class="w"> </span>jq<span class="w"> </span>.
+<div class="language-bash highlight"><pre><span></span><code><span id="__span-15-1"><a id="__codelineno-15-1" name="__codelineno-15-1" href="#__codelineno-15-1"></a>curl<span class="w"> </span>https://example.com/oauth/.well-known/oauth-authorization-server<span class="w"> </span><span class="p">|</span><span class="w"> </span>jq<span class="w"> </span>.
 </span></code></pre></div>
 <p>You should see at minimum <code>issuer</code>, <code>authorization_endpoint</code>, <code>token_endpoint</code>,
 and (for DCR-aware clients) <code>registration_endpoint</code>. The PRM endpoint you serve
@@ -2013,13 +2108,13 @@ cause of "Inspector can't authenticate" reports.</p>
 (CIMD) over DCR — they avoid an extra registration round-trip and let clients
 rotate without server-side state. If your AS supports CIMD, advertise it in
 the AS metadata response:</p>
-<div class="language-json highlight"><pre><span></span><code><span id="__span-14-1"><a id="__codelineno-14-1" name="__codelineno-14-1" href="#__codelineno-14-1"></a><span class="p">{</span>
-</span><span id="__span-14-2"><a id="__codelineno-14-2" name="__codelineno-14-2" href="#__codelineno-14-2"></a><span class="w">  </span><span class="nt">&quot;issuer&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;https://example.com/oauth/&quot;</span><span class="p">,</span>
-</span><span id="__span-14-3"><a id="__codelineno-14-3" name="__codelineno-14-3" href="#__codelineno-14-3"></a><span class="w">  </span><span class="nt">&quot;authorization_endpoint&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;https://example.com/oauth/authorize/&quot;</span><span class="p">,</span>
-</span><span id="__span-14-4"><a id="__codelineno-14-4" name="__codelineno-14-4" href="#__codelineno-14-4"></a><span class="w">  </span><span class="nt">&quot;token_endpoint&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;https://example.com/oauth/token/&quot;</span><span class="p">,</span>
-</span><span id="__span-14-5"><a id="__codelineno-14-5" name="__codelineno-14-5" href="#__codelineno-14-5"></a><span class="w">  </span><span class="nt">&quot;registration_endpoint&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;https://example.com/oauth/register/&quot;</span><span class="p">,</span>
-</span><span id="__span-14-6"><a id="__codelineno-14-6" name="__codelineno-14-6" href="#__codelineno-14-6"></a><span class="w">  </span><span class="nt">&quot;client_id_metadata_document_supported&quot;</span><span class="p">:</span><span class="w"> </span><span class="kc">true</span>
-</span><span id="__span-14-7"><a id="__codelineno-14-7" name="__codelineno-14-7" href="#__codelineno-14-7"></a><span class="p">}</span>
+<div class="language-json highlight"><pre><span></span><code><span id="__span-16-1"><a id="__codelineno-16-1" name="__codelineno-16-1" href="#__codelineno-16-1"></a><span class="p">{</span>
+</span><span id="__span-16-2"><a id="__codelineno-16-2" name="__codelineno-16-2" href="#__codelineno-16-2"></a><span class="w">  </span><span class="nt">&quot;issuer&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;https://example.com/oauth/&quot;</span><span class="p">,</span>
+</span><span id="__span-16-3"><a id="__codelineno-16-3" name="__codelineno-16-3" href="#__codelineno-16-3"></a><span class="w">  </span><span class="nt">&quot;authorization_endpoint&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;https://example.com/oauth/authorize/&quot;</span><span class="p">,</span>
+</span><span id="__span-16-4"><a id="__codelineno-16-4" name="__codelineno-16-4" href="#__codelineno-16-4"></a><span class="w">  </span><span class="nt">&quot;token_endpoint&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;https://example.com/oauth/token/&quot;</span><span class="p">,</span>
+</span><span id="__span-16-5"><a id="__codelineno-16-5" name="__codelineno-16-5" href="#__codelineno-16-5"></a><span class="w">  </span><span class="nt">&quot;registration_endpoint&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;https://example.com/oauth/register/&quot;</span><span class="p">,</span>
+</span><span id="__span-16-6"><a id="__codelineno-16-6" name="__codelineno-16-6" href="#__codelineno-16-6"></a><span class="w">  </span><span class="nt">&quot;client_id_metadata_document_supported&quot;</span><span class="p">:</span><span class="w"> </span><span class="kc">true</span>
+</span><span id="__span-16-7"><a id="__codelineno-16-7" name="__codelineno-16-7" href="#__codelineno-16-7"></a><span class="p">}</span>
 </span></code></pre></div>
 <p>DOT does not implement CIMD natively today; the typical setup is to front it
 with a small wrapper view that:</p>
@@ -2035,7 +2130,7 @@ issued at the end of the flow look identical. The only requirement is that
 the AS is forwarding the <code>resource</code> parameter through to the token, which DOT
 handles when <code>REQUIRE_RESOURCE</code> is set.</p>
 <h2 id="try-it-with-mcp-inspector">Try it with mcp-inspector<a class="headerlink" href="#try-it-with-mcp-inspector" title="Permanent link">&para;</a></h2>
-<div class="language-bash highlight"><pre><span></span><code><span id="__span-15-1"><a id="__codelineno-15-1" name="__codelineno-15-1" href="#__codelineno-15-1"></a>npx<span class="w"> </span>@modelcontextprotocol/inspector<span class="w"> </span>--url<span class="w"> </span>http://localhost:8000/mcp/
+<div class="language-bash highlight"><pre><span></span><code><span id="__span-17-1"><a id="__codelineno-17-1" name="__codelineno-17-1" href="#__codelineno-17-1"></a>npx<span class="w"> </span>@modelcontextprotocol/inspector<span class="w"> </span>--url<span class="w"> </span>http://localhost:8000/mcp/
 </span></code></pre></div>
 <p>Inspector reads PRM, hits your AS metadata, walks the auth flow, and exercises
 <code>tools/list</code> + <code>tools/call</code>. Common failure modes and where to look:</p>
