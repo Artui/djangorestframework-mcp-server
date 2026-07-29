@@ -7,6 +7,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- **Selector-tool and chain-step rendering now go through drf-services'
+  `render_spec_output`** instead of local renderer + context-resolver copies. No
+  behaviour change — the copies had been brought to parity in 0.18.0, and this
+  removes the parity requirement rather than restating it. It is what the repo's
+  own "rendering is not reproduced locally" rule always said, now true on every
+  dispatch path.
+
+  Worth recording *why*: those copies are exactly where 0.18.0's two
+  consumer-reported crashes came from. They bound serializer-context providers
+  positionally where the sister repo binds by name, and they never applied DRF's
+  baseline context. A second implementation that must be kept equal to the first
+  will drift again; deleting it is the only fix that holds.
+
+  Internal only. `handlers.utils.resolve_output_context` (added in 0.18.0) is
+  gone with them — `render_spec_output` does that layering itself.
+
 ## [0.18.0] — 2026-07-29
 
 ### Fixed

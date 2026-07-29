@@ -35,7 +35,6 @@ single instance for ``RETRIEVE``).
 
 from __future__ import annotations
 
-from collections.abc import Mapping
 from typing import Any
 
 from rest_framework import serializers as drf_serializers
@@ -46,6 +45,7 @@ from rest_framework_services import (
     build_offline_context,
     dispatch_spec,
     is_queryset,
+    render_spec_output,
     spec_to_json_schema,
 )
 from rest_framework_services.exceptions.service_error import ServiceError
@@ -64,7 +64,6 @@ from rest_framework_mcp.handlers.types.context import MCPCallContext
 from rest_framework_mcp.handlers.utils import (
     check_permissions,
     consume_rate_limits,
-    resolve_output_context,
     services_dispatch_policies,
     split_url_kwargs,
     validate_input_against_serializer,
@@ -356,10 +355,14 @@ def _post_fetch_and_render(
                 output_format=output_format,
                 include_structured_content=emit_structured_content,
             ).to_dict()
-        context: Mapping[str, Any] = _output_context(
-            binding, drf_request, view, extras={"instance": instance}
+        payload: Any = render_spec_output(
+            binding.spec,
+            instance,
+            many=False,
+            view=view,
+            request=drf_request,
+            extras={"instance": instance},
         )
-        payload: Any = _render_single(instance, binding, context=context)
         return build_tool_result(
             payload,
             output_format=output_format,
@@ -374,18 +377,22 @@ def _post_fetch_and_render(
         if isinstance(ordering, str) and _is_valid_ordering(ordering, binding.ordering_fields):
             qs = qs.order_by(ordering)
 
-    # Output-serializer context (sister-repo 0.12+; resolved-data extras in
-    # 0.15+). Resolved *after* the page is materialised so a provider
-    # declaring ``page`` receives the exact objects being serialised — and
-    # the same object the renderer iterates, so an id-keyed batched query
-    # reuses the queryset's result cache instead of issuing a second query.
-    # ``None`` from the spec → no context.
+    # Rendering happens *after* the page is materialised, so a provider
+    # declaring ``page`` receives the exact objects being serialised — and the
+    # same object the renderer iterates, so an id-keyed batched query reuses the
+    # queryset's result cache instead of issuing a second query.
     #
     # Pagination — wraps the response in ``{items, page, totalPages, hasNext}``.
     if binding.paginate:
         page_no, limit, page_items, total = _slice_for_pagination(qs, arguments_raw)
-        context = _output_context(binding, drf_request, view, extras={"page": page_items})
-        rendered_items = _render_collection(page_items, binding, context=context)
+        rendered_items = render_spec_output(
+            binding.spec,
+            page_items,
+            many=True,
+            view=view,
+            request=drf_request,
+            extras={"page": page_items},
+        )
         total_pages: int = max(1, -(-total // limit))  # ceil divide
         payload = {
             "items": rendered_items,
@@ -394,8 +401,9 @@ def _post_fetch_and_render(
             "hasNext": page_no < total_pages,
         }
     else:
-        context = _output_context(binding, drf_request, view, extras={"page": qs})
-        payload = _render_collection(qs, binding, context=context)
+        payload = render_spec_output(
+            binding.spec, qs, many=True, view=view, request=drf_request, extras={"page": qs}
+        )
     return build_tool_result(
         payload,
         output_format=output_format,
@@ -519,73 +527,6 @@ def _coerce_int(value: Any, *, default: int) -> int:
         except ValueError:
             return default
     return default
-
-
-def _render_collection(
-    items: Any,
-    binding: SelectorToolBinding,
-    *,
-    context: Mapping[str, Any],
-) -> Any:
-    """Render a collection through the binding's output serializer.
-
-    Falls back to a list/passthrough when no serializer is declared. List
-    materialisation happens here because querysets aren't JSON-serialisable
-    directly. ``context`` is always forwarded — it carries DRF's baseline
-    (``request`` / ``format`` / ``view``) as well as anything sister-repo's
-    ``output_serializer_context`` callable added, so a field needing the
-    request (hyperlinked relations, an ownership check) resolves it exactly as
-    it would behind a view. See :func:`_output_context`.
-    """
-    output_serializer: type | None = binding.spec.output_serializer
-    if output_serializer is None:
-        # No serializer — best-effort serialise. List-coerce so a queryset
-        # gets evaluated; clients receive an array of dicts only if the
-        # selector itself returns dict-shaped items.
-        return list(items) if hasattr(items, "__iter__") else items
-    return output_serializer(items, many=True, context=dict(context)).data
-
-
-def _render_single(
-    instance: Any,
-    binding: SelectorToolBinding,
-    *,
-    context: Mapping[str, Any],
-) -> Any:
-    """Render a single instance through the binding's output serializer.
-
-    Used for ``kind=RETRIEVE``. Falls back to passing ``instance``
-    through unchanged when no serializer is declared — the JSON encoder
-    then handles primitives / dicts directly. ``context`` follows the
-    same sister-repo contract as :func:`_render_collection`.
-    """
-    output_serializer: type | None = binding.spec.output_serializer
-    if output_serializer is None:
-        return instance
-    return output_serializer(instance, many=False, context=dict(context)).data
-
-
-def _output_context(
-    binding: SelectorToolBinding,
-    drf_request: Any,
-    view: Any,
-    *,
-    extras: Mapping[str, Any],
-) -> Mapping[str, Any]:
-    """The output serializer's context: DRF baseline + ``spec.output_serializer_context``.
-
-    ``extras`` carries the resolved data about to be serialised — the
-    ``instance`` for a RETRIEVE tool, the ``page`` for a LIST tool. See
-    :func:`rest_framework_mcp.handlers.utils.resolve_output_context` for the
-    layering and the keyword-pool contract.
-
-    ``view`` is the one dispatch ran under, so a provider reading
-    ``view.kwargs`` (to scope by the route's ``parent_pk``) sees the same
-    values the selector did.
-    """
-    return resolve_output_context(
-        binding.spec.output_serializer_context, view, drf_request, extras=extras
-    )
 
 
 __all__ = ["dispatch_selector_tool", "dispatch_selector_tool_async"]
