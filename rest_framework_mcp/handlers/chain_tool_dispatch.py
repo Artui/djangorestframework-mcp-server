@@ -35,6 +35,7 @@ from rest_framework_services import (
     OfflineServiceView,
     base_serializer_context,
     build_offline_context,
+    render_spec_output,
     resolve_callable_kwargs,
     run_selector,
     run_service,
@@ -52,7 +53,6 @@ from rest_framework_mcp.handlers.types.context import MCPCallContext
 from rest_framework_mcp.handlers.utils import (
     check_permissions,
     consume_rate_limits,
-    resolve_output_context,
     validate_input_against_serializer,
     validation_error_data,
 )
@@ -280,28 +280,38 @@ def _render_chain_output(binding: ChainToolBinding, ctx: ChainContext, drf_reque
 
 
 def _render_step(step: ChainStep, ctx: ChainContext, drf_request: Any) -> Any:
+    """Render one step's stored output through its own spec.
+
+    Only the ``many`` flag and the resolved-data extra's *name* are decided
+    here — a selector step renders its ``kind``, a service step its nested
+    ``output_selector_spec`` — and both are handed to ``render_spec_output``,
+    which owns serializer lookup and the context layering for every transport.
+
+    The serializer-less short-circuit stays local because it is this
+    transport's own contract: a step with nothing to render contributes ``{}``
+    rather than a ``null`` to the chain's output object, and a raw value passes
+    through uncoerced (``render_spec_output`` would list-coerce a ``many``
+    result, which a chain step never wants — its value may be fed to a later
+    step).
+    """
     result: Any = ctx.outputs[step.alias]
     spec = step.spec
-    provider: Any
     if isinstance(spec, SelectorSpec):
-        serializer: type | None = spec.output_serializer
         many: bool = spec.kind is SelectorKind.LIST
         extra_name: str = "page" if many else "instance"
-        provider = spec.output_serializer_context
     else:
-        out_spec = spec.output_selector_spec
-        serializer = out_spec.output_serializer if out_spec else None
         many = False
         extra_name = "result"
-        provider = out_spec.output_serializer_context if out_spec else None
-    if serializer is None:
+    if _step_output_serializer(step) is None:
         return {} if result is None else result
-    view = OfflineServiceView(request=drf_request, action=step.alias)
-    # Always a context: DRF's baseline plus whatever the step's provider adds.
-    sctx: Mapping[str, Any] = resolve_output_context(
-        provider, view, drf_request, extras={extra_name: result}
+    return render_spec_output(
+        spec,
+        result,
+        many=many,
+        view=OfflineServiceView(request=drf_request, action=step.alias),
+        request=drf_request,
+        extras={extra_name: result},
     )
-    return serializer(result, many=many, context=dict(sctx)).data
 
 
 def _step_output_serializer(step: ChainStep) -> type | None:
