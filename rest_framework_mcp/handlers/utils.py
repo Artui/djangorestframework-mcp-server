@@ -1,14 +1,12 @@
 from __future__ import annotations
 
 import dataclasses
-from collections.abc import Callable, Mapping
+from collections.abc import Mapping
 from typing import Any
 
 from django.http import HttpRequest
 from rest_framework import serializers as drf_serializers
-from rest_framework.request import Request
 from rest_framework_dataclasses.serializers import DataclassSerializer
-from rest_framework_services import base_serializer_context, resolve_callable_kwargs
 from rest_framework_services.exceptions.service_validation_error import (
     ServiceValidationError,
 )
@@ -206,8 +204,7 @@ def build_validated_input_serializer(
     (instance resolution, ``input_serializer_context``, the bundle/spread
     pool), so the instance-aware variant lives there.
 
-    ``context`` is the serializer context — callers pass
-    :func:`resolve_output_context`'s input-side twin, i.e. the
+    ``context`` is the serializer context — callers pass the
     ``base_serializer_context`` baseline, so a validator reading
     ``self.context["request"]`` (a user-scoped ``PrimaryKeyRelatedField``
     queryset, an ownership check in ``validate()``) behaves as it does behind a
@@ -338,54 +335,12 @@ def validation_error_data(detail: Any, value: Any, *, include_value: bool) -> di
     return payload
 
 
-def resolve_output_context(
-    provider: Callable[..., Mapping[str, Any]] | None,
-    view: Any,
-    request: Request,
-    *,
-    extras: Mapping[str, Any],
-) -> dict[str, Any]:
-    """Build the output serializer's ``context`` for a spec rendered over MCP.
-
-    Two layers, the sister repo's ``resolve_output_context`` verbatim:
-
-    1. ``base_serializer_context`` — the ``request`` / ``format`` / ``view``
-       baseline a serializer gets for free over HTTP. Always applied, so a
-       serializer reading ``self.context["request"]`` (``request.user``, an
-       ownership check in a ``SerializerMethodField``) renders the same over
-       this transport as behind a DRF view.
-    2. The spec's ``output_serializer_context`` provider, when declared,
-       merged over that baseline — so it keeps the final say on every key.
-
-    Every provider is invoked **through the keyword pool**
-    (``resolve_callable_kwargs``): it receives the subset of ``view`` /
-    ``request`` / ``extras`` it declares by *name*, or the whole pool if it
-    takes ``**kwargs``. ``extras`` carries the resolved data about to be
-    serialized — ``result`` for a mutation, ``instance`` for a retrieve,
-    ``page`` for a list.
-
-    Binding by name is what the sister repo does on the HTTP path, so
-    ``def ctx(request, **extras)`` — valid there, and through drf-pai — works
-    here too. Before **this package's** 0.18.0 the path forwarded ``view`` /
-    ``request`` positionally and unconditionally, which raised ``TypeError`` for
-    any provider that didn't declare exactly those two leading parameters. (Bare
-    ``0.18`` elsewhere in this package refers to a ``djangorestframework-services``
-    version — hence the qualifier.)
-    """
-    context: dict[str, Any] = base_serializer_context(view=view, request=request)
-    if provider is not None:
-        pool: dict[str, Any] = {"view": view, "request": request, **extras}
-        context.update(provider(**resolve_callable_kwargs(provider, pool)))
-    return context
-
-
 __all__ = [
     "advertises_closed_schema",
     "binding_input_serializer",
     "build_validated_input_serializer",
     "check_permissions",
     "consume_rate_limits",
-    "resolve_output_context",
     "services_dispatch_policies",
     "split_url_kwargs",
     "validate_input_against_serializer",

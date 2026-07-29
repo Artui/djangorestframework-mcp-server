@@ -126,9 +126,22 @@ never from internal `utils` / `_compat` paths.
 
 Validation, output-serializer rendering, and kwarg-pool construction are **not**
 reproduced locally. The `handlers/` layer delegates to the sister repo's
-transport-neutral dispatch surface — `dispatch_spec` + `render_spec_output` (see
-`handlers/call_spec_tool.py` and `mcp_server.py`) — so a single implementation of
-validation and output rendering serves both the DRF view path and this MCP transport.
+transport-neutral dispatch surface — `dispatch_spec` + `render_spec_output` — so a
+single implementation of validation and output rendering serves both the DRF view
+path and this MCP transport. **Every** dispatch path goes through it: service tools
+(`call_spec_tool.py`, `handle_tools_call*.py`), selector tools
+(`selector_tool_dispatch.py`), and chain steps (`chain_tool_dispatch.py`).
+
+This is load-bearing, not tidiness. The selector and chain paths once had their own
+renderer + context resolver "for transport-shaped equivalence", and the two copies
+drifted: they bound serializer-context providers positionally where the sister repo
+binds by name (a `TypeError` for any provider not leading with `view, request`), and
+they never applied DRF's baseline context (a `KeyError: 'request'` for any serializer
+reading it). Both were consumer-reported. If a path needs something rendering doesn't
+give it, extend `render_spec_output` upstream rather than growing a second copy here.
+A binding that is genuinely not a spec — a `ResourceBinding`, whose selector is a bare
+callable — is the one exception, and it composes `base_serializer_context` instead of
+re-deriving it.
 
 ## Tests
 
