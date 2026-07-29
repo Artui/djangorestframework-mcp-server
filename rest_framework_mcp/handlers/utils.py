@@ -366,9 +366,11 @@ def resolve_output_context(
 
     Binding by name is what the sister repo does on the HTTP path, so
     ``def ctx(request, **extras)`` — valid there, and through drf-pai — works
-    here too. Before 0.18 this path forwarded ``view`` / ``request``
-    positionally and unconditionally, which raised ``TypeError`` for any
-    provider that didn't declare exactly those two leading parameters.
+    here too. Before **this package's** 0.18.0 the path forwarded ``view`` /
+    ``request`` positionally and unconditionally, which raised ``TypeError`` for
+    any provider that didn't declare exactly those two leading parameters. (Bare
+    ``0.18`` elsewhere in this package refers to a ``djangorestframework-services``
+    version — hence the qualifier.)
     """
     context: dict[str, Any] = base_serializer_context(view=view, request=request)
     if provider is not None:
