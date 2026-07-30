@@ -7,6 +7,68 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- **`DjangoOAuthToolkitBackend` rejected every bearer token as soon as a resource
+  URL was configured, and enforcement could not be turned off.** Audience
+  enforcement was implied by `resource_url` alone, and it reads the token's bound
+  resource via `getattr(token, "resource", None)` — but **DOT's `AccessToken` has
+  no `resource` field and DOT implements no RFC 8707 resource indicators at all**,
+  so that is always `None`. `audience_matches(None, "https://…")` is `False`, so
+  `authenticate` returned `None` for every valid token. Confirmed against DOT
+  3.3.0: the model's fields are `application, created, expires, id, id_token,
+  refresh_token, scope, source_refresh_token, token, token_checksum, updated,
+  user`.
+
+  Worse, the condition was inescapable. `resource_url=""` counted as "not None",
+  so it skipped the settings fallbacks *and* enforced against the empty string;
+  and clearing the setting entirely made PRM advertise `resource: ""`, which RFC
+  9728 marks REQUIRED. A deployment had to choose between authenticating anybody
+  and publishing valid metadata — the MCP spec requires the latter, so the
+  bundled OAuth backend was unusable in any real deployment.
+
+  - **`ENFORCE_AUDIENCE` is now a separate setting, default `False`.**
+    `resource_url` means "the identity this server publishes"; enforcement means
+    "reject tokens that don't carry it". Coupling them was the bug.
+  - **`audience_getter=`** says where the audience actually lives — a JWT claim,
+    a gateway header, a related row. The default still reads `token.resource`,
+    which is meaningful for a swapped
+    `OAUTH2_PROVIDER["ACCESS_TOKEN_MODEL"]` carrying that field.
+  - **Turning enforcement on without a usable audience source raises
+    `ImproperlyConfigured` at construction** — which is startup, since
+    `MCPServer.__init__` builds the backend — naming both ways out. A server that
+    rejects everything is a configuration error; discovering it as a per-request
+    401 is what made this take a live deployment to find.
+  - `resource_url=""` now means unset at every layer, and unconfigured PRM carries
+    a `_warning` explaining the empty `resource` instead of leaving a blank
+    required field.
+
+  **Not a security regression.** The previous default was on-but-unsatisfiable,
+  so no deployment can have been relying on it working — it rejected valid and
+  invalid tokens alike.
+
+  **Why the suite missed it** — sharper than "no resource URL was configured in
+  the tool-call suites. The backend's own audience tests drive `authenticate`
+  through a `_FakeToken` **that has a `resource` attribute DOT's real model does
+  not**. The fake was more capable than the thing it stood for, so the audience
+  path looked thoroughly covered while being dead in production. The new
+  `tests/auth/backends/test_dot_backend_audience_reality.py` uses a genuine
+  `AccessToken` row, and pins `"resource" not in AccessToken` so the divergence
+  cannot silently return; the fake-token tests now pass an explicit
+  `audience_getter` and say why.
+
+### Documentation
+
+- **Removed `OAUTH2_PROVIDER["REQUIRE_RESOURCE"]` from the DOT recipe.** That
+  setting does not exist in django-oauth-toolkit — `grep -rn REQUIRE_RESOURCE
+  oauth2_provider/` finds nothing in 3.3.0 — and the surrounding prose claimed
+  DOT "handles" forwarding the `resource` parameter to the token when it is set.
+  It does not. An operator following that recipe configured a no-op and then hit
+  the 401 above.
+- The mcp-inspector troubleshooting table listed this exact symptom ("Token
+  accepted but every call still 401") and blamed the authorization server for not
+  binding `resource`. The row now names the real cause.
+
 ## [0.20.0] — 2026-07-29
 
 ### Fixed

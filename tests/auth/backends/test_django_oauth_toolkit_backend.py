@@ -40,6 +40,18 @@ class _FakeToken:
         return self._valid
 
 
+def _read_resource(token: object) -> str | None:
+    """Audience getter matching ``_FakeToken``.
+
+    Passed explicitly wherever enforcement is exercised, because ``_FakeToken``
+    carries a ``resource`` attribute that DOT's real ``AccessToken`` does not —
+    see ``test_dot_access_token_has_no_resource_field``. Relying on the default
+    getter here is what let the audience path look tested while being
+    unsatisfiable in production.
+    """
+    return getattr(token, "resource", None)
+
+
 def _patch_loader(monkeypatch, behaviour: Any) -> None:
     from oauth2_provider import oauth2_validators
 
@@ -101,15 +113,18 @@ def test_valid_token_with_no_scope(monkeypatch) -> None:
 
 def test_audience_mismatch_rejects_token(monkeypatch, settings) -> None:
     """RFC 8707: a token bound to a different resource is rejected."""
-    settings.REST_FRAMEWORK_MCP = {"RESOURCE_URL": "https://example.com/mcp/"}
+    settings.REST_FRAMEWORK_MCP = {
+        "RESOURCE_URL": "https://example.com/mcp/",
+        "ENFORCE_AUDIENCE": True,
+    }
     _patch_loader(
         monkeypatch,
         lambda _t: _FakeToken(
             scope="read", user="alice", valid=True, resource="https://other.example/mcp/"
         ),
     )
-    out = DjangoOAuthToolkitBackend().authenticate(_request_with_auth("Bearer x"))
-    assert out is None
+    backend = DjangoOAuthToolkitBackend(audience_getter=_read_resource)
+    assert backend.authenticate(_request_with_auth("Bearer x")) is None
 
 
 def test_audience_match_accepts_token(monkeypatch, settings) -> None:
@@ -136,13 +151,16 @@ def test_audience_unset_skips_enforcement(monkeypatch, settings) -> None:
 
 
 def test_audience_set_but_token_missing_resource_rejected(monkeypatch, settings) -> None:
-    settings.REST_FRAMEWORK_MCP = {"RESOURCE_URL": "https://example.com/mcp/"}
+    settings.REST_FRAMEWORK_MCP = {
+        "RESOURCE_URL": "https://example.com/mcp/",
+        "ENFORCE_AUDIENCE": True,
+    }
     _patch_loader(
         monkeypatch,
         lambda _t: _FakeToken(scope="read", user="alice", valid=True, resource=None),
     )
-    out = DjangoOAuthToolkitBackend().authenticate(_request_with_auth("Bearer x"))
-    assert out is None
+    backend = DjangoOAuthToolkitBackend(audience_getter=_read_resource)
+    assert backend.authenticate(_request_with_auth("Bearer x")) is None
 
 
 def test_protected_resource_metadata_uses_settings(settings) -> None:
@@ -298,8 +316,16 @@ def test_a_token_for_one_server_is_rejected_by_another(monkeypatch, settings) ->
             scope="read", user="alice", valid=True, resource="https://example.com/public/mcp/"
         ),
     )
-    public = DjangoOAuthToolkitBackend(resource_url="https://example.com/public/mcp/")
-    internal = DjangoOAuthToolkitBackend(resource_url="https://example.com/internal/mcp/")
+    public = DjangoOAuthToolkitBackend(
+        resource_url="https://example.com/public/mcp/",
+        enforce_audience=True,
+        audience_getter=_read_resource,
+    )
+    internal = DjangoOAuthToolkitBackend(
+        resource_url="https://example.com/internal/mcp/",
+        enforce_audience=True,
+        audience_getter=_read_resource,
+    )
 
     request = _request_with_auth("Bearer public-token")
     assert public.authenticate(request) is not None

@@ -45,10 +45,14 @@ DEFAULTS: dict[str, Any] = {
     "DEFAULT_OUTPUT_FORMAT": "json",
     "SERVER_INFO": {"name": "djangorestframework-mcp-server"},
     "MAX_REQUEST_BYTES": 1_048_576,
-    # Default canonical resource URL, used for RFC 8707 audience enforcement by
-    # token-validating auth backends. ``None`` disables enforcement (suitable
-    # for development / behind a separate gateway). When set, tokens whose
-    # ``aud`` / ``resource`` claim does not match are rejected.
+    # Default canonical resource URL. This is the identity the resource server
+    # *publishes* — RFC 9728 requires it in protected-resource metadata, and it
+    # is what audience enforcement compares against when enabled.
+    #
+    # Setting it does **not** by itself reject anything: enforcement is
+    # ``ENFORCE_AUDIENCE`` below. The two were once the same knob, which made a
+    # deployment choose between publishing valid metadata and being able to
+    # authenticate at all — see that setting's note.
     #
     # This is only the **default** for ``MCPServer(resource_url=...)``. RFC 8707
     # binds a token to *a* resource, so each server in a project needs its own
@@ -57,6 +61,22 @@ DEFAULTS: dict[str, Any] = {
     # mechanism exists to prevent. Set it per server; leave this for the
     # single-server case.
     "RESOURCE_URL": None,
+    # Whether a token-validating auth backend *rejects* tokens whose bound
+    # resource doesn't equal ``RESOURCE_URL`` (RFC 8707 audience binding).
+    #
+    # Default ``False``, and that default is load-bearing rather than lax.
+    # Enforcement needs the access token to record which resource it was issued
+    # for, and DOT's stock ``AccessToken`` model has no such field — it
+    # implements no resource indicators at all. Enforcement was previously
+    # implied by ``RESOURCE_URL`` alone, so the only OAuth backend this package
+    # ships rejected *every* token the moment a resource URL was configured,
+    # which the MCP spec requires it to be. Nothing could authenticate.
+    #
+    # Turn this on when the token genuinely carries the resource: a swapped
+    # ``OAUTH2_PROVIDER["ACCESS_TOKEN_MODEL"]`` with a ``resource`` field, or a
+    # backend given an explicit ``audience_getter=``. The backend refuses to
+    # start otherwise, rather than 401-ing every request.
+    "ENFORCE_AUDIENCE": False,
     # Maximum number of items returned by a single list-style call
     # (``tools/list``, ``resources/list``, ``resources/templates/list``,
     # ``prompts/list``). Clients page through using the opaque ``cursor`` token

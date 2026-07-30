@@ -184,10 +184,46 @@ independently of `has_permission(request, token)`.
 
 ## Audience binding (RFC 8707)
 
-`DjangoOAuthToolkitBackend` enforces RFC 8707 audience binding when a
-`resource_url` is configured. Every accepted token must carry that URL as its
-bound resource; tokens with a missing or mismatched `aud` / `resource` are
-rejected as if the bearer were absent.
+`resource_url` is the identity this server **publishes** — RFC 9728 requires it
+in protected-resource metadata, and it is what the `WWW-Authenticate` challenge
+points clients at. Setting it does **not**, on its own, reject anything.
+
+!!! warning "Enforcement is a separate, opt-in knob — and stock DOT cannot satisfy it"
+    Audience enforcement needs the access token to record which resource it was
+    issued for. **django-oauth-toolkit has no such field and implements no RFC
+    8707 resource indicators**, so `getattr(token, "resource", None)` is always
+    `None` for a DOT-issued token.
+
+    Enforcement used to be implied by `resource_url` alone. That made the
+    bundled backend unusable: configuring the resource URL a resource server is
+    supposed to publish rejected *every* token, and clearing it published
+    invalid metadata — there was no configuration that did both. Enforcement is
+    now `ENFORCE_AUDIENCE`, default `False`.
+
+To enforce, tell the backend where the audience actually lives — either a
+swapped `OAUTH2_PROVIDER["ACCESS_TOKEN_MODEL"]` carrying a `resource` field, or
+an explicit `audience_getter`:
+
+```python
+MCPServer(
+    name="internal-mcp",
+    auth_backend=DjangoOAuthToolkitBackend(
+        resource_url="https://example.com/internal/mcp/",
+        enforce_audience=True,
+        # Wherever the resource really arrives: a JWT claim, a gateway header,
+        # a related row. Returning None rejects the token.
+        audience_getter=lambda token: token.jwt_claims.get("aud"),
+    ),
+)
+```
+
+Turning enforcement on without one of those raises `ImproperlyConfigured` at
+startup, naming both ways out — a server that rejects everything is a
+configuration error, and the only useful place to say so is where the
+configuration is read, not in a 401 per request.
+
+Because enforcement needs a getter, it means bringing your own backend:
+`MCPServer(resource_url=...)` configures the default backend for *metadata*.
 
 ```python
 REST_FRAMEWORK_MCP = {
@@ -233,11 +269,10 @@ from its `resource_url` — so discovery lands on the right metadata.
 `auth_backend=`, it owns its audience binding — configure it there
 (`DjangoOAuthToolkitBackend(resource_url=...)`); passing both raises.
 
-`RESOURCE_URL` is also what the PRM endpoint advertises as `resource`, so the
-configuration cannot drift between "what we accept" and "what we tell clients
-to ask for". Setting `RESOURCE_URL` to `None` (the default) disables
-enforcement — appropriate for development or for deployments where audience
-binding happens at an upstream gateway.
+`RESOURCE_URL` is also what the PRM endpoint advertises as `resource`, so one
+value drives both "what we tell clients to ask for" and — when `ENFORCE_AUDIENCE`
+is on — "what we accept". Leaving it unset publishes an empty `resource`, which
+RFC 9728 marks REQUIRED, so the metadata carries a `_warning` saying why.
 
 !!! note "Why exact-match"
     Token audiences are URLs, not patterns. Substring matches and prefix
@@ -415,9 +450,8 @@ INSTALLED_APPS = [
 ]
 
 OAUTH2_PROVIDER = {
-    # Bind every issued token to the canonical resource URL so the resource
-    # server can perform RFC 8707 audience checks.
-    "REQUIRE_RESOURCE": True,
+    # NB: DOT implements no RFC 8707 resource indicators, so there is nothing to
+    # set here to bind tokens to a resource — see "Audience binding" above.
     "SCOPES": {
         "invoices:read":  "Read invoices",
         "invoices:write": "Mutate invoices",
@@ -507,9 +541,10 @@ with a small wrapper view that:
    on the fly with the document's `redirect_uris`.
 
 From the resource server's perspective nothing changes — the access tokens
-issued at the end of the flow look identical. The only requirement is that
-the AS is forwarding the `resource` parameter through to the token, which DOT
-handles when `REQUIRE_RESOURCE` is set.
+issued at the end of the flow look identical. Note that DOT does **not** carry
+the `resource` parameter through to the token — it implements no resource
+indicators — so audience enforcement needs an `audience_getter`; see
+[Audience binding](#audience-binding-rfc-8707).
 
 ## Try it with mcp-inspector
 
@@ -524,6 +559,6 @@ Inspector reads PRM, hits your AS metadata, walks the auth flow, and exercises
 | --- | --- |
 | 401 with no `WWW-Authenticate` | Custom auth backend forgot to return a challenge. Check `www_authenticate_challenge`. |
 | 401 with `WWW-Authenticate` but no `resource_metadata` | `SERVER_INFO["resource_metadata_url"]` not set. |
-| Token accepted but every call still 401 | `RESOURCE_URL` set but the AS isn't binding `resource` to the token. |
+| Token accepted but every call still 401 | `ENFORCE_AUDIENCE` is on and the `audience_getter` returns something other than `RESOURCE_URL` (with stock DOT it returns `None`, since DOT records no resource). |
 | 403 with `scope=` in challenge | Token authenticated, missing one of the per-binding scopes. |
 | 403 with no `scope=` | A non-scope permission denied (e.g. `DjangoPermRequired`). |

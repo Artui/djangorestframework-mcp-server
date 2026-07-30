@@ -1,7 +1,9 @@
 from __future__ import annotations
 
+from collections.abc import Callable
 from typing import Any
 
+from django.core.exceptions import ImproperlyConfigured
 from django.http import HttpRequest
 
 from rest_framework_mcp.auth.audience import audience_matches
@@ -11,6 +13,19 @@ from rest_framework_mcp.auth.types.authorization_server_metadata import (
 from rest_framework_mcp.auth.types.protected_resource_metadata import ProtectedResourceMetadata
 from rest_framework_mcp.auth.types.token_info import TokenInfo
 from rest_framework_mcp.conf import get_setting
+
+# The attribute an access token is expected to carry its RFC 8707 resource on.
+# Named once so the startup check and the default getter cannot drift.
+_RESOURCE_FIELD = "resource"
+
+
+def _default_audience_getter(token: Any) -> str | None:
+    """Read the bound resource off a DOT access token.
+
+    Always ``None`` for DOT's stock model, which is why enforcement is
+    opt-in and validated at construction.
+    """
+    return getattr(token, _RESOURCE_FIELD, None)
 
 
 class DjangoOAuthToolkitBackend:
@@ -23,11 +38,31 @@ class DjangoOAuthToolkitBackend:
     never blows up just because DOT is absent; the ``ImportError`` only fires
     when a request actually reaches authentication.
 
-    Audience enforcement (RFC 8707): when ``resource_url`` is set, the token's
-    ``resource`` claim must match it exactly, and tokens without a bound
-    resource are rejected. ``None`` (the default) disables enforcement —
-    appropriate for dev, or where audience binding happens at an upstream
-    gateway.
+    Audience enforcement (RFC 8707) is controlled by ``enforce_audience``,
+    **not** by ``resource_url``. ``resource_url`` is the identity this server
+    publishes in its protected-resource metadata; enforcement is whether a
+    token that doesn't carry that identity is rejected.
+
+    Those two were once one knob, and coupling them made the bundled backend
+    unusable. Enforcement needs the access token to record the resource it was
+    issued for, and **DOT's stock ``AccessToken`` has no such field** — DOT
+    implements no resource indicators, so ``getattr(token, "resource", None)``
+    is always ``None``. Setting ``resource_url``, which RFC 9728 effectively
+    requires, therefore rejected every token: a deployment had to choose between
+    authenticating anybody and publishing valid metadata, with no configuration
+    that did both.
+
+    So enforcement now defaults off and, when switched on, is checked at
+    construction rather than discovered per request. It works when the token
+    really does carry the resource:
+
+    - a swapped ``OAUTH2_PROVIDER["ACCESS_TOKEN_MODEL"]`` carrying a
+      ``resource`` field (DOT supports substituting the model), or
+    - an explicit ``audience_getter=`` reading it from wherever it lives — a
+      JWT claim, an upstream gateway header, a related row.
+
+    Turning it on without either raises :class:`ImproperlyConfigured` at
+    startup, naming both ways out, instead of 401-ing every request.
 
     **One resource URL per server.** RFC 8707 binds a token to *a* resource, so
     each server needs its own canonical URL — that binding is precisely what
@@ -54,16 +89,33 @@ class DjangoOAuthToolkitBackend:
         scopes_supported: list[str] | None = None,
         resource_documentation: str | None = None,
         resource_metadata_url: str | None = None,
+        enforce_audience: bool | None = None,
+        audience_getter: Callable[[Any], str | None] | None = None,
     ) -> None:
         server_info: dict[str, Any] = get_setting("SERVER_INFO")
         # RESOURCE_URL is preferred over SERVER_INFO["resource"] — the former is
         # also what audience enforcement reads, so one configuration mistake
         # can't produce metadata that disagrees with the check.
+        #
+        # ``or None`` on the argument too, not just the settings fallbacks: an
+        # explicit ``resource_url=""`` used to be "not None", so it skipped the
+        # fallbacks *and* enforced the audience against the empty string, which
+        # no token can match. Empty means unset at every layer.
         self._resource_url: str | None = (
-            resource_url
+            (resource_url or None)
             if resource_url is not None
             else get_setting("RESOURCE_URL") or server_info.get("resource") or None
         )
+        self._audience_getter: Callable[[Any], str | None] = (
+            audience_getter if audience_getter is not None else _default_audience_getter
+        )
+        self._enforce_audience: bool = bool(
+            enforce_audience if enforce_audience is not None else get_setting("ENFORCE_AUDIENCE")
+        )
+        if self._enforce_audience:
+            self._check_enforcement_is_satisfiable(
+                has_custom_getter=audience_getter is not None,
+            )
         self._authorization_servers: list[str] = list(
             authorization_servers
             if authorization_servers is not None
@@ -120,8 +172,8 @@ class DjangoOAuthToolkitBackend:
         if token is None or not token.is_valid():
             return None
 
-        token_audience: str | None = getattr(token, "resource", None)
-        if not audience_matches(token_audience, self._resource_url):
+        token_audience: str | None = self._audience_getter(token)
+        if self._enforce_audience and not audience_matches(token_audience, self._resource_url):
             return None
 
         scopes: tuple[str, ...] = tuple(token.scope.split()) if token.scope else ()
@@ -132,13 +184,68 @@ class DjangoOAuthToolkitBackend:
             raw=token,
         )
 
+    def _check_enforcement_is_satisfiable(self, *, has_custom_getter: bool) -> None:
+        """Refuse to start when audience enforcement could never succeed.
+
+        Both failure modes here reject every token, so the only useful
+        moment to raise is construction — which happens at startup, since
+        ``MCPServer.__init__`` builds the backend. Per-request discovery
+        was the original bug: an unsatisfiable check is indistinguishable
+        from a bad credential once it reaches the client as a 401.
+
+        DOT is imported here rather than at module scope so this module
+        stays importable without the ``[oauth]`` extra; when DOT is
+        genuinely absent the token-model check is skipped and
+        :meth:`authenticate` raises its own ``ImportError`` instead.
+        """
+        if self._resource_url is None:
+            raise ImproperlyConfigured(
+                "DjangoOAuthToolkitBackend: audience enforcement is on but no resource "
+                "URL is configured, so there is nothing for a token's resource to match "
+                "and every request would be rejected. Set resource_url= (or "
+                "REST_FRAMEWORK_MCP['RESOURCE_URL']), or turn off "
+                "REST_FRAMEWORK_MCP['ENFORCE_AUDIENCE']."
+            )
+        if has_custom_getter:
+            return
+        try:
+            from oauth2_provider.models import (  # type: ignore[import-not-found]
+                get_access_token_model,
+            )
+        except ImportError:  # pragma: no cover - exercised by smoke job w/o DOT
+            return
+        token_model: Any = get_access_token_model()
+        if any(field.name == _RESOURCE_FIELD for field in token_model._meta.get_fields()):
+            return
+        raise ImproperlyConfigured(
+            "DjangoOAuthToolkitBackend: audience enforcement is on, but "
+            f"{token_model.__name__} has no {_RESOURCE_FIELD!r} field — django-oauth-toolkit "
+            "implements no RFC 8707 resource indicators, so no token it issues records the "
+            "resource it was issued for and every request would be rejected. Either supply "
+            "audience_getter= to read the audience from wherever it actually lives (a JWT "
+            "claim, a gateway header), swap OAUTH2_PROVIDER['ACCESS_TOKEN_MODEL'] for one "
+            f"carrying a {_RESOURCE_FIELD!r} field, or turn off "
+            "REST_FRAMEWORK_MCP['ENFORCE_AUDIENCE'] and keep resource_url= for metadata only."
+        )
+
     def protected_resource_metadata(self) -> ProtectedResourceMetadata:
+        # RFC 9728 makes ``resource`` REQUIRED, so an unconfigured server
+        # publishes an empty one either way. Say so in the payload rather than
+        # letting a client puzzle over a blank required field.
         return ProtectedResourceMetadata(
             resource=self._resource_url or "",
             authorization_servers=list(self._authorization_servers),
             bearer_methods_supported=["header"],
             scopes_supported=list(self._scopes_supported),
             resource_documentation=self._resource_documentation,
+            warning=(
+                None
+                if self._resource_url
+                else (
+                    "No resource URL is configured, so `resource` is empty. Set "
+                    "REST_FRAMEWORK_MCP['RESOURCE_URL'] or MCPServer(resource_url=...)."
+                )
+            ),
         )
 
     def authorization_server_metadata(self) -> AuthorizationServerMetadata:
