@@ -5,6 +5,7 @@ from dataclasses import dataclass, field
 from typing import Any, Generic, TypeVar
 
 from django.core.exceptions import ImproperlyConfigured
+from rest_framework_services import UNSET, UnsetType
 from rest_framework_services.types.selector_kind import SelectorKind
 from rest_framework_services.types.selector_spec import SelectorSpec
 
@@ -97,6 +98,26 @@ class SelectorToolBinding(Generic[ResultT, ExtraT]):
     The MCP spec forbids advertising ``outputSchema`` while suppressing
     ``structuredContent``, so ``include_output_schema=True`` together with
     ``include_structured_content=False`` is rejected at construction time."""
+
+    max_result_bytes: int | None | UnsetType = UNSET
+    """Per-tool override for the outbound result ceiling. ``UNSET`` defers to
+    the server's ``MAX_RESULT_BYTES``; ``None`` disables it here; an ``int``
+    sets its own."""
+
+    dispatch_timeout: float | None | UnsetType = UNSET
+    """Per-tool override for the dispatch deadline, in seconds. ``UNSET``
+    defers to the server's ``DISPATCH_TIMEOUT``; ``None`` disables it here.
+    ⚠ Async transport only."""
+
+    max_page_size: int | None | UnsetType = UNSET
+    """Per-tool ceiling on the model-supplied ``limit``. ``UNSET`` defers to the
+    server's ``MAX_PAGE_SIZE``; ``None`` lets this tool serve any ``limit`` the
+    model asks for; an ``int`` sets its own.
+
+    Only meaningful with ``paginate=True`` — an unpaginated selector has no
+    ``limit`` argument to clamp, and clamping its result silently would drop
+    rows with nothing in the payload to say so (see
+    ``UnboundedListWarning``)."""
     # ----- read-shaped pipeline knobs -----
     # ``filter_set`` is no longer stored here — it is sourced from
     # ``spec.filter_set`` via the property below (the spec is the single

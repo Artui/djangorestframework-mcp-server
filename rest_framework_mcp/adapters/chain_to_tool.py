@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from typing import Any
 
+from rest_framework_services import UNSET, UnsetType
 from rest_framework_services.types.selector_spec import SelectorSpec
 
 from rest_framework_mcp.adapters.utils import merge_meta, merge_tool_annotations
@@ -32,6 +33,8 @@ def chain_steps_to_tool(
     include_output_schema: bool | None = None,
     unknown_arguments: UnknownArguments = UnknownArguments.REJECT,
     always_listed: bool = False,
+    max_result_bytes: int | None | UnsetType = UNSET,
+    dispatch_timeout: float | None | UnsetType = UNSET,
 ) -> ChainToolBinding:
     """Lift an ordered list of :class:`ChainStep` into a :class:`ChainToolBinding`.
 
@@ -78,6 +81,8 @@ def chain_steps_to_tool(
         include_output_schema=include_output_schema,
         unknown_arguments=unknown_arguments,
         always_listed=always_listed,
+        max_result_bytes=max_result_bytes,
+        dispatch_timeout=dispatch_timeout,
     )
 
 

@@ -45,6 +45,50 @@ DEFAULTS: dict[str, Any] = {
     "DEFAULT_OUTPUT_FORMAT": "json",
     "SERVER_INFO": {"name": "djangorestframework-mcp-server"},
     "MAX_REQUEST_BYTES": 1_048_576,
+    # Ceiling on a single tool result / resource read, measured on the encoded
+    # JSON-RPC ``result`` payload — the mirror of ``MAX_REQUEST_BYTES`` on the
+    # outbound side. ``None`` disables the check.
+    #
+    # Measured on the *wire* payload, not the rendered text block, because a
+    # successful tool result carries the payload twice: once as
+    # ``structuredContent`` and once as the human-readable ``content[0]`` text
+    # the spec asks for as a backwards-compatibility mirror. A ceiling that
+    # only counted one of them would be wrong by 2× against the thing that
+    # actually matters — the client's context window.
+    #
+    # Over the ceiling, the call comes back as an ``isError`` tool result
+    # naming the remedy, **never as a silently truncated payload**. Truncation
+    # is the wrong failure mode for a model consumer: a clipped list reads as
+    # complete, and the model reasons from it. An error is something the model
+    # can act on — narrow the filter, lower ``limit`` — which is exactly what
+    # the spec means by a tool execution error carrying actionable feedback.
+    "MAX_RESULT_BYTES": 5_242_880,
+    # Ceiling on the model-supplied ``limit`` of a ``paginate=True`` selector
+    # tool. ``None`` disables the clamp.
+    #
+    # Clamping rather than erroring is safe *here specifically* because a
+    # paginated result is self-describing: ``totalPages`` / ``hasNext`` tell
+    # the model there is more, so a clamped page is honest in a way a clipped
+    # unpaginated list is not. The generated ``inputSchema`` also advertises
+    # this as ``maximum`` on ``limit``, so a well-behaved model asks for
+    # something serveable in the first place; the clamp is what stops us
+    # trusting it.
+    "MAX_PAGE_SIZE": 500,
+    # Wall-clock ceiling, in seconds, on a single dispatch. ``None`` disables.
+    #
+    # ⚠ **Async transport only.** A sync (WSGI) view has no in-process way to
+    # bound its own dispatch, so this applies to the ASGI viewset's
+    # ``tools/call`` / ``resources/read`` / ``prompts/get`` paths and nowhere
+    # else.
+    #
+    # ⚠ **This does not reclaim the worker.** A thread parked in a database
+    # driver's socket read is not interruptible by asyncio cancellation, so the
+    # thread stays hot until the query itself ends. What the deadline buys is a
+    # *terminal protocol event*: the client learns the call failed and why,
+    # instead of holding an open request until something upstream gives up. Pair
+    # it with a database-level statement timeout, which is what actually ends
+    # the query.
+    "DISPATCH_TIMEOUT": 60.0,
     # Default canonical resource URL. This is the identity the resource server
     # *publishes* — RFC 9728 requires it in protected-resource metadata, and it
     # is what audience enforcement compares against when enabled.
@@ -140,6 +184,14 @@ DEFAULTS: dict[str, Any] = {
     # silent-shipping problem ``REQUIRE_TOOL_PERMISSIONS`` guards, and
     # previously the only one of the two that was checked.
     "REQUIRE_TOOL_DESCRIPTIONS": False,
+    # When True, registering a LIST selector tool with ``paginate=False``
+    # raises ``ImproperlyConfigured`` instead of emitting the default
+    # ``UnboundedListWarning``. Such a tool serialises whatever the selector
+    # returns — the whole table, if that is what the queryset resolves to —
+    # and unlike a paginated tool there is no honest way to clamp it, because
+    # the result carries no metadata that would tell the model rows were
+    # dropped. ``MAX_RESULT_BYTES`` is the backstop; pagination is the fix.
+    "REQUIRE_LIST_PAGINATION": False,
 }
 
 

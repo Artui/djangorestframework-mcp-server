@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 from typing import Any
 
 from rest_framework import serializers as drf_serializers
@@ -18,6 +19,9 @@ from rest_framework_mcp.handlers.types.context import MCPCallContext
 from rest_framework_mcp.handlers.utils import (
     check_permissions,
     consume_rate_limits,
+    enforce_result_ceiling,
+    resolve_bound,
+    run_with_deadline,
     services_dispatch_policies,
     split_url_kwargs,
     validation_error_data,
@@ -60,6 +64,43 @@ async def handle_tools_call_async(
     if not isinstance(arguments_raw, dict):
         return JsonRpcError(JsonRpcErrorCode.INVALID_PARAMS, "'arguments' must be an object")
 
+    try:
+        result: dict[str, Any] | JsonRpcError = await run_with_deadline(
+            _dispatch_tool_call_async(binding, params, arguments_raw, context),
+            resolve_bound(binding.dispatch_timeout, context.config.dispatch_timeout),
+        )
+    except asyncio.TimeoutError:  # noqa: UP041 — 3.10 keeps this distinct from builtins
+        # A timeout is a tool *execution* failure, not a malformed request, so
+        # it comes back as an ``isError`` result: the model can respond to it
+        # (narrow the query, try a smaller page) where it can only surface a
+        # JSON-RPC error. ⚠ The dispatch itself keeps running — see
+        # ``run_with_deadline`` — so this ends the client's wait, not the work.
+        return build_error_tool_result(
+            f"Tool {binding.name!r} exceeded this server's dispatch deadline and was "
+            "abandoned. It may still be running. Narrow the request — tighten a "
+            "filter, lower 'limit' — and try again.",
+            error_type="timeout",
+        ).to_dict()
+    return enforce_result_ceiling(
+        result,
+        max_result_bytes=resolve_bound(binding.max_result_bytes, context.config.max_result_bytes),
+        label=f"Tool {binding.name!r}",
+    )
+
+
+async def _dispatch_tool_call_async(
+    binding: Any,
+    params: dict[str, Any],
+    arguments_raw: dict[str, Any],
+    context: MCPCallContext,
+) -> dict[str, Any] | JsonRpcError:
+    """Route a resolved binding to its async dispatch path.
+
+    Split out of :func:`handle_tools_call_async` so one deadline covers the
+    whole dispatch — permissions, rate limits, the spec run and rendering — and
+    one size check sees the finished result, whichever of the three paths
+    produced it.
+    """
     with span("mcp.tools.call", attributes=_span_attrs(binding.name, context)) as otel_span:
         # Chain tools run an ordered sequence of specs; read-shaped tools route
         # through the selector-tool dispatch helper (filter / order / paginate).

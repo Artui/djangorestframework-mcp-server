@@ -4,6 +4,7 @@ from dataclasses import dataclass, field
 from typing import Any
 
 from django.core.exceptions import ImproperlyConfigured
+from rest_framework_services import UNSET, UnsetType
 from rest_framework_services.types.selector_spec import SelectorSpec
 from rest_framework_services.types.service_spec import ServiceSpec
 
@@ -69,6 +70,12 @@ class ChainToolBinding:
     title: str | None = None
     include_structured_content: bool | None = None
     include_output_schema: bool | None = None
+    # See ``ToolBinding.max_result_bytes`` / ``.dispatch_timeout`` — ``UNSET``
+    # defers to the server config, ``None`` disables the bound for this tool.
+    # A chain runs several specs in sequence, so its deadline covers the whole
+    # sequence, not each step: the client is waiting on one ``tools/call``.
+    max_result_bytes: int | None | UnsetType = UNSET
+    dispatch_timeout: float | None | UnsetType = UNSET
     unknown_arguments: UnknownArguments = UnknownArguments.REJECT
     always_listed: bool = False
 

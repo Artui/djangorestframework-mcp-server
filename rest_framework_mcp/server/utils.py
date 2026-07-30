@@ -109,6 +109,52 @@ def check_tool_description_present(name: str, description: str | None, *, requir
     warnings.warn(message, UndescribedToolWarning, stacklevel=3)
 
 
+class UnboundedListWarning(UserWarning):
+    """A LIST selector tool was registered without pagination.
+
+    Dedicated category, matching :class:`UnguardedToolWarning`, so consumers
+    can silence or escalate it precisely via ``warnings.filterwarnings``.
+    """
+
+
+def check_list_pagination_declared(name: str, *, paginate: bool, require: bool) -> None:
+    """Warn (or raise) when a LIST selector tool has no pagination.
+
+    The third member of the registration-time family, and the one with a
+    production incident behind it: an unpaginated LIST tool serialises whatever
+    its selector returns, which for a plain ``Model.objects.all()`` is the whole
+    table. The failure is not a crash — it is a response large enough to
+    exhaust the client's context, or slow enough that the client gives up
+    first.
+
+    **Why this warns rather than silently clamping.** A ``paginate=True`` tool
+    can have its ``limit`` clamped safely, because ``totalPages`` / ``hasNext``
+    tell the model rows were left behind. An unpaginated result carries no such
+    metadata, so a clamped one would look complete — and a model reasoning from
+    a silently truncated list is worse off than one that got an error. There is
+    nowhere honest to put the truth except the registration, hence a warning
+    here and ``MAX_RESULT_BYTES`` as the backstop at dispatch.
+
+    Emits on every unpaginated LIST registration (no warn-once module state —
+    see the repo's no-module-level-mutable-state rule). ``RETRIEVE`` selectors
+    are exempt: a single instance is bounded by construction.
+    """
+    if paginate:
+        return
+    message = (
+        f"MCP tool {name!r} is a LIST selector registered with paginate=False, so a "
+        "call returns every row the selector resolves to. Unlike a paginated tool "
+        "there is no honest way to clamp that at dispatch — the result carries no "
+        "metadata that would tell the model rows were dropped — so an oversized "
+        "result can only fail the call (see REST_FRAMEWORK_MCP['MAX_RESULT_BYTES']). "
+        "Pass paginate=True, or set REST_FRAMEWORK_MCP['REQUIRE_LIST_PAGINATION'] = "
+        "True to make this an error."
+    )
+    if require:
+        raise ImproperlyConfigured(message)
+    warnings.warn(message, UnboundedListWarning, stacklevel=3)
+
+
 def build_ui_tool_meta(
     *,
     name: str,
@@ -181,9 +227,11 @@ def build_ui_tool_meta(
 
 
 __all__ = [
+    "UnboundedListWarning",
     "UndescribedToolWarning",
     "UnguardedToolWarning",
     "build_ui_tool_meta",
+    "check_list_pagination_declared",
     "check_tool_description_present",
     "check_tool_permissions_declared",
 ]

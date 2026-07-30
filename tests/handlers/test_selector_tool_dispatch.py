@@ -127,7 +127,9 @@ def test_tools_list_emits_filter_args_in_input_schema() -> None:
     assert properties["ordering"]["enum"] == ["amount_cents", "-amount_cents"]
     # Pagination args:
     assert properties["page"] == {"type": "integer", "minimum": 1}
-    assert properties["limit"] == {"type": "integer", "minimum": 1}
+    # ``maximum`` mirrors the server's MAX_PAGE_SIZE, so the model sees the
+    # ceiling dispatch will clamp to rather than discovering it by surprise.
+    assert properties["limit"] == {"type": "integer", "minimum": 1, "maximum": 500}
 
 
 # ---------- Filtering ----------

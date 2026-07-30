@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from typing import Any
 
+from rest_framework_services import UNSET, UnsetType
 from rest_framework_services.types.service_spec import ServiceSpec
 
 from rest_framework_mcp.adapters.utils import (
@@ -36,6 +37,8 @@ def service_spec_to_tool(
     always_listed: bool = False,
     spec_kwargs_provides: tuple[str, ...] = (),
     url_kwargs: tuple[UrlKwarg, ...] = (),
+    max_result_bytes: int | None | UnsetType = UNSET,
+    dispatch_timeout: float | None | UnsetType = UNSET,
 ) -> ToolBinding:
     """Lift a ``ServiceSpec`` into a :class:`ToolBinding`.
 
@@ -89,6 +92,8 @@ def service_spec_to_tool(
         unknown_arguments=unknown_arguments,
         always_listed=always_listed,
         url_kwargs=url_kwargs,
+        max_result_bytes=max_result_bytes,
+        dispatch_timeout=dispatch_timeout,
     )
 
 

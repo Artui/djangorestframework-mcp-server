@@ -6,7 +6,7 @@ from rest_framework_mcp.constants import JsonRpcErrorCode
 from rest_framework_mcp.handlers.is_binding_listable import is_binding_listable
 from rest_framework_mcp.handlers.pagination import paginate
 from rest_framework_mcp.handlers.types.context import MCPCallContext
-from rest_framework_mcp.handlers.utils import advertises_closed_schema
+from rest_framework_mcp.handlers.utils import advertises_closed_schema, resolve_bound
 from rest_framework_mcp.output.resolve_structured_output import resolve_structured_output
 from rest_framework_mcp.protocol.types.json_rpc_error import JsonRpcError
 from rest_framework_mcp.protocol.types.tool import Tool
@@ -58,7 +58,10 @@ def handle_tools_list(
         if isinstance(binding, ChainToolBinding):
             input_schema = build_chain_tool_input_schema(binding)
         elif isinstance(binding, SelectorToolBinding):
-            input_schema = build_selector_tool_input_schema(binding)
+            input_schema = build_selector_tool_input_schema(
+                binding,
+                max_page_size=resolve_bound(binding.max_page_size, context.config.max_page_size),
+            )
         else:
             # ``spec.partial is True`` (sister-repo 0.16) relaxes validation to
             # partial, dropping ``required``; any registered URL kwargs merge in.

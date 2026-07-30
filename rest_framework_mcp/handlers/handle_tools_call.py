@@ -21,6 +21,8 @@ from rest_framework_mcp.handlers.types.context import MCPCallContext
 from rest_framework_mcp.handlers.utils import (
     check_permissions,
     consume_rate_limits,
+    enforce_result_ceiling,
+    resolve_bound,
     services_dispatch_policies,
     split_url_kwargs,
     validation_error_data,
@@ -64,6 +66,30 @@ def handle_tools_call(
     if not isinstance(arguments_raw, dict):
         return JsonRpcError(JsonRpcErrorCode.INVALID_PARAMS, "'arguments' must be an object")
 
+    # The outbound size ceiling is applied once, here, rather than at each of
+    # the three dispatch paths' several ``build_tool_result`` sites — one place
+    # to reason about, and it measures the finished result (both copies of the
+    # payload) rather than a renderer's intermediate.
+    return enforce_result_ceiling(
+        _dispatch_tool_call(binding, params, arguments_raw, context),
+        max_result_bytes=resolve_bound(binding.max_result_bytes, context.config.max_result_bytes),
+        label=f"Tool {binding.name!r}",
+    )
+
+
+def _dispatch_tool_call(
+    binding: Any,
+    params: dict[str, Any],
+    arguments_raw: dict[str, Any],
+    context: MCPCallContext,
+) -> dict[str, Any] | JsonRpcError:
+    """Route a resolved binding to its dispatch path and return the raw result.
+
+    Split out of :func:`handle_tools_call` so the size ceiling wraps every
+    return — including the ones the chain and selector helpers make — at a
+    single point. The async sibling splits the same way, for the same reason
+    plus the deadline.
+    """
     # OpenTelemetry span: scoped to the dispatch portion (after binding
     # resolution) so cheap validation rejections don't generate noise. The
     # span is a no-op when ``opentelemetry-api`` isn't installed.

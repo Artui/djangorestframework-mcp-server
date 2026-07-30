@@ -5,6 +5,7 @@ from dataclasses import dataclass, field
 from typing import Any, Generic, TypeVar
 
 from django.core.exceptions import ImproperlyConfigured
+from rest_framework_services import UNSET, UnsetType
 from rest_framework_services.types.service_spec import ServiceSpec
 
 from rest_framework_mcp.constants import ArgumentBinding, OutputFormat, UnknownArguments
@@ -73,6 +74,21 @@ class ToolBinding(Generic[InputT, ResultT, ExtraT]):
     The MCP spec forbids advertising ``outputSchema`` while suppressing
     ``structuredContent``, so ``include_output_schema=True`` together with
     ``include_structured_content=False`` is rejected at construction time."""
+
+    max_result_bytes: int | None | UnsetType = UNSET
+    """Per-tool override for the outbound result ceiling. ``UNSET`` (the
+    default) defers to the server's ``MAX_RESULT_BYTES``; ``None`` disables the
+    check for this tool; an ``int`` sets its own ceiling.
+
+    ``None`` cannot double as "not supplied" here — disabling the ceiling for
+    one deliberately-large export tool is a real thing to want — which is why
+    this is ``UNSET``-sentinelled rather than tri-state like the fields above."""
+
+    dispatch_timeout: float | None | UnsetType = UNSET
+    """Per-tool override for the dispatch deadline, in seconds. ``UNSET``
+    defers to the server's ``DISPATCH_TIMEOUT``; ``None`` disables it for this
+    tool; a number sets its own. ⚠ Async transport only — see
+    :attr:`~rest_framework_mcp.config.types.mcp_config.MCPConfig.dispatch_timeout`."""
 
     argument_binding: ArgumentBinding = ArgumentBinding.BUNDLE
     """How MCP ``arguments`` flow into the kwarg pool. Defaults to ``BUNDLE``

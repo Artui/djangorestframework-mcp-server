@@ -64,6 +64,7 @@ from rest_framework_mcp.handlers.types.context import MCPCallContext
 from rest_framework_mcp.handlers.utils import (
     check_permissions,
     consume_rate_limits,
+    resolve_bound,
     services_dispatch_policies,
     split_url_kwargs,
     validate_input_against_serializer,
@@ -384,7 +385,9 @@ def _post_fetch_and_render(
     #
     # Pagination — wraps the response in ``{items, page, totalPages, hasNext}``.
     if binding.paginate:
-        page_no, limit, page_items, total = _slice_for_pagination(qs, arguments_raw)
+        page_no, limit, page_items, total = _slice_for_pagination(
+            qs, arguments_raw, resolve_bound(binding.max_page_size, config.max_page_size)
+        )
         rendered_items = render_spec_output(
             binding.spec,
             page_items,
@@ -477,12 +480,21 @@ def _is_valid_ordering(value: str, allowed: tuple[str, ...]) -> bool:
     return value.lstrip("-") in allowed
 
 
-def _slice_for_pagination(qs: Any, arguments_raw: dict[str, Any]) -> tuple[int, int, Any, int]:
+def _slice_for_pagination(
+    qs: Any, arguments_raw: dict[str, Any], max_page_size: int | None
+) -> tuple[int, int, Any, int]:
     """Return ``(page, limit, page_slice, total)``.
 
     ``total`` uses ``.count()`` for QuerySet shapes and ``len(...)`` for
     plain sequences (lists / tuples). ``page`` / ``limit`` default to 1 /
-    100; non-positive values are clamped to 1.
+    100; non-positive values are clamped to 1, and ``limit`` is clamped
+    *down* to ``max_page_size`` when one is configured.
+
+    The upper clamp is silent by design, and safe here in a way truncating an
+    unpaginated result would not be: the response carries ``totalPages`` /
+    ``hasNext`` computed from the clamped ``limit``, so a model that asked for
+    500 rows and got 100 is told there are more pages rather than being left to
+    assume it saw everything.
 
     The shape is discriminated with the sister-repo's :func:`is_queryset`
     predicate, **not** ``hasattr(qs, "count")``: ``list`` / ``tuple`` also
@@ -495,6 +507,8 @@ def _slice_for_pagination(qs: Any, arguments_raw: dict[str, Any]) -> tuple[int, 
     """
     page_no: int = max(1, _coerce_int(arguments_raw.get("page"), default=1))
     limit: int = max(1, _coerce_int(arguments_raw.get("limit"), default=100))
+    if max_page_size is not None:
+        limit = min(limit, max_page_size)
     if is_queryset(qs):
         total: int = qs.count()
     elif hasattr(qs, "__len__") and hasattr(qs, "__getitem__"):

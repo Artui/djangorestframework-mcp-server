@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from typing import Any
 
+from rest_framework_services import UNSET, UnsetType
 from rest_framework_services.types.selector_spec import SelectorSpec
 
 from rest_framework_mcp.adapters.utils import (
@@ -39,6 +40,9 @@ def selector_spec_to_tool(
     always_listed: bool = False,
     spec_kwargs_provides: tuple[str, ...] = (),
     url_kwargs: tuple[UrlKwarg, ...] = (),
+    max_result_bytes: int | None | UnsetType = UNSET,
+    dispatch_timeout: float | None | UnsetType = UNSET,
+    max_page_size: int | None | UnsetType = UNSET,
 ) -> SelectorToolBinding:
     """Lift a ``SelectorSpec`` into a :class:`SelectorToolBinding`.
 
@@ -101,6 +105,9 @@ def selector_spec_to_tool(
         unknown_arguments=unknown_arguments,
         always_listed=always_listed,
         url_kwargs=url_kwargs,
+        max_result_bytes=max_result_bytes,
+        dispatch_timeout=dispatch_timeout,
+        max_page_size=max_page_size,
     )
 
 
