@@ -562,6 +562,34 @@
 </li>
       
         <li class="md-nav__item">
+  <a href="#what-the-package-bounds" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        What the package bounds
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="What the package bounds">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#what-is-not-bounded" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        What is not bounded
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
   <a href="#adding-profile-points" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -1433,6 +1461,34 @@
 </li>
       
         <li class="md-nav__item">
+  <a href="#what-the-package-bounds" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        What the package bounds
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="What the package bounds">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#what-is-not-bounded" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        What is not bounded
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
   <a href="#adding-profile-points" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -1557,6 +1613,79 @@ layer and reports the per-call median.</p>
 <li><strong>SSE broker</strong> — <code>InMemorySSEBroker</code> pushes are sub-µs; Redis pub/sub
   adds ~1 ms per <code>notify</code>. Acceptable for nearly all use cases; if you
   do hit a hot path, batch notifications.</li>
+</ul>
+<h2 id="what-the-package-bounds">What the package bounds<a class="headerlink" href="#what-the-package-bounds" title="Permanent link">&para;</a></h2>
+<p>Inbound work has been bounded since the beginning — <code>MAX_REQUEST_BYTES</code> rejects
+an oversized body with <code>413</code> before parsing. Outbound work is bounded by three
+settings, all of which take <code>None</code> to disable and all of which can be overridden
+per tool at registration:</p>
+<table>
+<thead>
+<tr>
+<th>Bound</th>
+<th>Setting</th>
+<th>Per-tool</th>
+<th>Behaviour over the bound</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Result size</td>
+<td><code>MAX_RESULT_BYTES</code> (5 MiB)</td>
+<td><code>max_result_bytes=</code></td>
+<td><code>isError</code> result naming the remedy</td>
+</tr>
+<tr>
+<td>Page size</td>
+<td><code>MAX_PAGE_SIZE</code> (500)</td>
+<td><code>max_page_size=</code></td>
+<td><code>limit</code> clamped down; <code>hasNext</code> says there's more</td>
+</tr>
+<tr>
+<td>Duration</td>
+<td><code>DISPATCH_TIMEOUT</code> (60 s)</td>
+<td><code>dispatch_timeout=</code></td>
+<td><code>isError</code> result; ⚠ ASGI only</td>
+</tr>
+</tbody>
+</table>
+<p>Three things worth knowing before you tune them:</p>
+<p><strong>Every payload goes out twice.</strong> A successful tool result carries the payload
+as <code>structuredContent</code> <em>and</em> as the <code>content[0]</code> text mirror the spec asks for,
+so the context cost at the client is roughly 2× the payload. If you are fighting
+a context window rather than a byte ceiling, <code>INCLUDE_STRUCTURED_CONTENT=False</code>
+(server-wide or per binding) halves it at once — clients that don't parse the
+structured field lose nothing.</p>
+<p><strong>A deadline does not reclaim the worker.</strong> <code>DISPATCH_TIMEOUT</code> cancels the
+asyncio task, but a thread parked in <code>psycopg</code>'s socket read — which is where
+every ORM-backed spec spends its time — is not interruptible by asyncio, so the
+thread stays hot until the <em>query</em> ends. The deadline buys the client a terminal
+answer instead of an open request; it does not free the connection. Set a
+database-level statement timeout for that half:</p>
+<div class="language-python highlight"><pre><span></span><code><span id="__span-2-1"><a id="__codelineno-2-1" name="__codelineno-2-1" href="#__codelineno-2-1"></a><span class="n">DATABASES</span> <span class="o">=</span> <span class="p">{</span>
+</span><span id="__span-2-2"><a id="__codelineno-2-2" name="__codelineno-2-2" href="#__codelineno-2-2"></a>    <span class="s2">&quot;default&quot;</span><span class="p">:</span> <span class="p">{</span>
+</span><span id="__span-2-3"><a id="__codelineno-2-3" name="__codelineno-2-3" href="#__codelineno-2-3"></a>        <span class="c1"># …</span>
+</span><span id="__span-2-4"><a id="__codelineno-2-4" name="__codelineno-2-4" href="#__codelineno-2-4"></a>        <span class="s2">&quot;OPTIONS&quot;</span><span class="p">:</span> <span class="p">{</span><span class="s2">&quot;options&quot;</span><span class="p">:</span> <span class="s2">&quot;-c statement_timeout=30000&quot;</span><span class="p">},</span>  <span class="c1"># PostgreSQL, ms</span>
+</span><span id="__span-2-5"><a id="__codelineno-2-5" name="__codelineno-2-5" href="#__codelineno-2-5"></a>    <span class="p">}</span>
+</span><span id="__span-2-6"><a id="__codelineno-2-6" name="__codelineno-2-6" href="#__codelineno-2-6"></a><span class="p">}</span>
+</span></code></pre></div>
+<p><strong>Truncation is never the answer.</strong> Over a ceiling, a call fails with an error
+the model can act on ("narrow the filter, lower <code>limit</code>") rather than returning
+a shortened payload. A clipped list looks complete to a model, which then
+reasons from it — a wrong answer delivered confidently is worse than a failed
+call.</p>
+<h3 id="what-is-not-bounded">What is <em>not</em> bounded<a class="headerlink" href="#what-is-not-bounded" title="Permanent link">&para;</a></h3>
+<ul>
+<li><strong>Query cost.</strong> Nothing here stops a selector from issuing an expensive join;
+  the bounds measure the result, not the work. <code>select_related</code> /
+  <code>prefetch_related</code> and a database statement timeout are the tools for that.</li>
+<li><strong>Unpaginated LIST tools</strong>, except by <code>MAX_RESULT_BYTES</code>. A <code>paginate=False</code>
+  selector serialises everything its selector resolves to, and it cannot be
+  clamped honestly — the result has nowhere to record that rows were dropped.
+  Registering one emits <code>UnboundedListWarning</code>; <code>REQUIRE_LIST_PAGINATION=True</code>
+  makes it an error.</li>
+<li><strong>Concurrency.</strong> Bounding one call says nothing about how many run at once.
+  Rate limits (<code>rate_limits=</code> per binding) are the lever there.</li>
 </ul>
 <h2 id="adding-profile-points">Adding profile points<a class="headerlink" href="#adding-profile-points" title="Permanent link">&para;</a></h2>
 <p>The package emits OpenTelemetry spans for <code>mcp.tools.call</code>,

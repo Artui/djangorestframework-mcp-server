@@ -1269,6 +1269,17 @@
 </li>
       
         <li class="md-nav__item">
+  <a href="#outbound-bounds" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Outbound bounds
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
   <a href="#permissions" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -1426,6 +1437,17 @@
     <span class="md-ellipsis">
       
         Tools &amp; output
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#outbound-bounds" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Outbound bounds
       
     </span>
   </a>
@@ -1618,6 +1640,43 @@ you turn <code>INCLUDE_STRUCTURED_CONTENT</code> off, turn <code>INCLUDE_OUTPUT_
 too (or set <code>include_output_schema=False</code> per binding). The other direction
 — <code>structuredContent</code> without <code>outputSchema</code> — is allowed.</p>
 </div>
+<h2 id="outbound-bounds">Outbound bounds<a class="headerlink" href="#outbound-bounds" title="Permanent link">&para;</a></h2>
+<p>The mirror of <code>MAX_REQUEST_BYTES</code> on the way out. All three accept <code>None</code> to
+disable, and all three can be overridden per tool at registration
+(<code>max_result_bytes=</code>, <code>dispatch_timeout=</code>, <code>max_page_size=</code>) — pass <code>None</code>
+there to lift the bound for one deliberately-large or deliberately-slow tool.
+See <a href="../../performance/#what-the-package-bounds">What the package bounds</a>.</p>
+<table>
+<thead>
+<tr>
+<th>Key</th>
+<th>Default</th>
+<th>What it does</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>MAX_RESULT_BYTES</code></td>
+<td><code>5242880</code> (5 MiB)</td>
+<td>Ceiling on one tool result or resource read, measured on the <strong>encoded wire payload</strong>. A successful tool result carries the payload twice — as <code>structuredContent</code> and as the spec's backwards-compatibility text mirror — so a ceiling counting one copy would be wrong by 2× against the thing that matters, the client's context window. Over the ceiling the call returns an <code>isError</code> result naming the remedy; <strong>it is never truncated</strong>, because a clipped list reads as complete to the model reasoning from it.</td>
+</tr>
+<tr>
+<td><code>MAX_PAGE_SIZE</code></td>
+<td><code>500</code></td>
+<td>Ceiling on the model-supplied <code>limit</code> of a <code>paginate=True</code> selector tool. Advertised as <code>maximum</code> on the generated <code>inputSchema</code> <em>and</em> clamped at dispatch — the schema tells a well-behaved model what to ask for, the clamp is what stops you trusting it. Clamping is safe here because <code>totalPages</code> / <code>hasNext</code> keep a clamped page self-describing.</td>
+</tr>
+<tr>
+<td><code>DISPATCH_TIMEOUT</code></td>
+<td><code>60.0</code></td>
+<td>Wall-clock ceiling, in seconds, on one dispatch. <strong>ASGI only</strong> — a sync WSGI view has no in-process way to bound its own dispatch. ⚠ It does <strong>not</strong> reclaim the worker: a thread parked in a database driver's socket read is not interruptible by asyncio cancellation, so the query runs on. What it buys is a <em>terminal protocol event</em> instead of an open request that never resolves. Pair it with a database statement timeout.</td>
+</tr>
+<tr>
+<td><code>REQUIRE_LIST_PAGINATION</code></td>
+<td><code>False</code></td>
+<td>Registering a LIST selector tool with <code>paginate=False</code> raises <code>ImproperlyConfigured</code> instead of emitting <code>UnboundedListWarning</code>. Such a tool serialises whatever its selector resolves to — the whole table, for a plain <code>Model.objects.all()</code> — and unlike a paginated tool there is no honest way to clamp it, because the result carries no metadata saying rows were dropped. <code>MAX_RESULT_BYTES</code> is the backstop; <code>paginate=True</code> is the fix.</td>
+</tr>
+</tbody>
+</table>
 <h2 id="permissions">Permissions<a class="headerlink" href="#permissions" title="Permanent link">&para;</a></h2>
 <table>
 <thead>
