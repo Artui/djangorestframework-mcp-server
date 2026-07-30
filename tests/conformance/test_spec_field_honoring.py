@@ -18,10 +18,14 @@ def test_spec_permission_classes_deny_anonymous_user(jsonrpc, initialized_sessio
         {"name": "conformance.gated", "arguments": {}},
         session_id=initialized_session,
     )
-    assert response.status_code == 200, response.content
-    body = response.json()
     # ``IsAuthenticated`` wraps via ``DRFPermissionAdapter`` and denies
-    # the AllowAnyBackend-issued anonymous token. The transport surfaces
-    # that as JSON-RPC ``-32002`` (FORBIDDEN).
+    # the AllowAnyBackend-issued anonymous token. The transport surfaces that
+    # as HTTP 403 — normative in the MCP authorization spec's error table —
+    # with JSON-RPC ``-32002`` (FORBIDDEN) in the body.
+    assert response.status_code == 403, response.content
+    body = response.json()
     assert "error" in body
     assert body["error"]["code"] == -32002
+    # A non-scope permission: 403, but no scope to advertise, so no
+    # ``insufficient_scope`` / ``scope=`` in the challenge.
+    assert "scope=" not in response["WWW-Authenticate"]

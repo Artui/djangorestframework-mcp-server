@@ -7,6 +7,64 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.22.0] — 2026-07-30
+
+### Fixed
+
+- **A permission denial returned HTTP 200 instead of 403, violating the MCP
+  authorization spec.** That spec's error table is normative — `401` for
+  "authorization required or token invalid", **`403` for "invalid scopes or
+  insufficient permissions"** — and a denial went out as a `200` with JSON-RPC
+  `-32002` tucked in the body. A client following the spec has no way to
+  distinguish "you lack a scope" from a successful call it should keep parsing.
+
+  The denial now returns **403** with a `WWW-Authenticate` challenge carrying
+  `error="insufficient_scope"` and `scope="…"`, per RFC 6750 §3.1 — so a client
+  learns what to request on the next authorization round instead of retrying the
+  same token. The JSON-RPC `-32002` body is unchanged, so anything reading
+  `data.requiredScopes` keeps working. A non-scope denial (e.g.
+  `DjangoPermRequired`) is also a 403, but advertises no `scope=`: RFC 6750
+  defines none for that case, and naming a scope the client cannot obtain would
+  send it round a pointless loop.
+
+  Corroborating evidence this was always the intent: `MCPAuthBackend`'s
+  `www_authenticate_challenge(scopes=…)` parameter has existed, and been
+  implemented by both backends, since the auth layer landed — **and nothing ever
+  called it with scopes.** The capability was advertised on the protocol and
+  never wired up, the same shape as the discovery-vs-registration mismatches
+  fixed in 0.19.0–0.21.0.
+
+  **Behaviour change for clients** that treat a `200` as success without
+  inspecting the JSON-RPC envelope: those calls now surface as HTTP errors,
+  which is the point.
+
+  Found by writing the end-to-end flow test below — the assertion disagreed with
+  the documented behaviour, and checking the spec showed the docs were right and
+  the code wrong.
+
+### Tests
+
+- **A full end-to-end OAuth flow, in one test**: `POST /oauth/register/` (RFC 7591,
+  the public-PKCE shape Claude's connectors send) → unauthenticated `401` carrying
+  the PRM pointer → the authorize passthrough with a real logged-in user → DOT's
+  token endpoint on PKCE alone → `initialize` → `tools/list` → `tools/call` that
+  actually writes a row.
+
+  This closes the gap the last three releases came through. Every existing suite
+  authenticates with `AllowAnyBackend`, so **no test drove the MCP transport with a
+  real OAuth token** — which is why DCR issuing unusable credentials (0.19.0), DCR
+  clients that could not be issued an ID token (0.20.0), and audience enforcement
+  that rejected every token (0.21.0) were each individually invisible. The legs
+  were only ever tested apart. The new suite runs on
+  `DjangoOAuthToolkitBackend` **with a resource URL configured** — the exact
+  combination that was broken.
+
+  Three companion passes: the discovery walk a client performs before it has any
+  credential (PRM → AS metadata → `registration_endpoint`, asserted as a chain
+  because it is the chaining that breaks); scope denial on a narrower grant; and
+  session lifecycle on a real bearer, proving the session and the credential are
+  independent.
+
 ## [0.21.0] — 2026-07-30
 
 ### Fixed
@@ -2024,7 +2082,8 @@ Pinned to `djangorestframework-services==0.6.0`.
 - 100% line + branch coverage enforced by pytest (**451 tests** at
   release).
 
-[Unreleased]: https://github.com/Artui/djangorestframework-mcp-server/compare/v0.21.0...HEAD
+[Unreleased]: https://github.com/Artui/djangorestframework-mcp-server/compare/v0.22.0...HEAD
+[0.22.0]: https://github.com/Artui/djangorestframework-mcp-server/compare/v0.21.0...v0.22.0
 [0.21.0]: https://github.com/Artui/djangorestframework-mcp-server/compare/v0.20.0...v0.21.0
 [0.20.0]: https://github.com/Artui/djangorestframework-mcp-server/compare/v0.19.0...v0.20.0
 [0.19.0]: https://github.com/Artui/djangorestframework-mcp-server/compare/v0.18.0...v0.19.0

@@ -44,7 +44,9 @@ def test_bulk_registered_service_inherits_permission_classes(
         {"name": "conformance.bulk_gated", "arguments": {}},
         session_id=initialized_session,
     )
-    assert response.status_code == 200, response.content
+    # 403 per the MCP authorization spec's error table: "invalid scopes or
+    # insufficient permissions". The JSON-RPC error rides in the body too.
+    assert response.status_code == 403, response.content
     body = response.json()
     # ``IsAuthenticated`` denies the AllowAnyBackend-issued anonymous token.
     assert "error" in body

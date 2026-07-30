@@ -560,5 +560,6 @@ Inspector reads PRM, hits your AS metadata, walks the auth flow, and exercises
 | 401 with no `WWW-Authenticate` | Custom auth backend forgot to return a challenge. Check `www_authenticate_challenge`. |
 | 401 with `WWW-Authenticate` but no `resource_metadata` | `SERVER_INFO["resource_metadata_url"]` not set. |
 | Token accepted but every call still 401 | `ENFORCE_AUDIENCE` is on and the `audience_getter` returns something other than `RESOURCE_URL` (with stock DOT it returns `None`, since DOT records no resource). |
-| 403 with `scope=` in challenge | Token authenticated, missing one of the per-binding scopes. |
-| 403 with no `scope=` | A non-scope permission denied (e.g. `DjangoPermRequired`). |
+| 403 with `error="insufficient_scope"` and `scope=` in the challenge | Token authenticated, missing one of the per-binding scopes. The body also carries JSON-RPC `-32002` with `data.requiredScopes`. |
+| 403 with no `scope=` | A non-scope permission denied (e.g. `DjangoPermRequired`). RFC 6750 defines no error code for that case, so the challenge advertises nothing rather than a scope the client cannot obtain. |
+| 403 with `INVALID_REQUEST` (`-32600`) in the body | Not a permission failure — `Origin` rejection. |
