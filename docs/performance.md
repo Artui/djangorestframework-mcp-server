@@ -81,6 +81,63 @@ A few specific things that can show up at scale:
   adds ~1 ms per `notify`. Acceptable for nearly all use cases; if you
   do hit a hot path, batch notifications.
 
+## What the package bounds
+
+Inbound work has been bounded since the beginning — `MAX_REQUEST_BYTES` rejects
+an oversized body with `413` before parsing. Outbound work is bounded by three
+settings, all of which take `None` to disable and all of which can be overridden
+per tool at registration:
+
+| Bound | Setting | Per-tool | Behaviour over the bound |
+|---|---|---|---|
+| Result size | `MAX_RESULT_BYTES` (5 MiB) | `max_result_bytes=` | `isError` result naming the remedy |
+| Page size | `MAX_PAGE_SIZE` (500) | `max_page_size=` | `limit` clamped down; `hasNext` says there's more |
+| Duration | `DISPATCH_TIMEOUT` (60 s) | `dispatch_timeout=` | `isError` result; ⚠ ASGI only |
+
+Three things worth knowing before you tune them:
+
+**Every payload goes out twice.** A successful tool result carries the payload
+as `structuredContent` *and* as the `content[0]` text mirror the spec asks for,
+so the context cost at the client is roughly 2× the payload. If you are fighting
+a context window rather than a byte ceiling, `INCLUDE_STRUCTURED_CONTENT=False`
+(server-wide or per binding) halves it at once — clients that don't parse the
+structured field lose nothing.
+
+**A deadline does not reclaim the worker.** `DISPATCH_TIMEOUT` cancels the
+asyncio task, but a thread parked in `psycopg`'s socket read — which is where
+every ORM-backed spec spends its time — is not interruptible by asyncio, so the
+thread stays hot until the *query* ends. The deadline buys the client a terminal
+answer instead of an open request; it does not free the connection. Set a
+database-level statement timeout for that half:
+
+```python
+DATABASES = {
+    "default": {
+        # …
+        "OPTIONS": {"options": "-c statement_timeout=30000"},  # PostgreSQL, ms
+    }
+}
+```
+
+**Truncation is never the answer.** Over a ceiling, a call fails with an error
+the model can act on ("narrow the filter, lower `limit`") rather than returning
+a shortened payload. A clipped list looks complete to a model, which then
+reasons from it — a wrong answer delivered confidently is worse than a failed
+call.
+
+### What is *not* bounded
+
+- **Query cost.** Nothing here stops a selector from issuing an expensive join;
+  the bounds measure the result, not the work. `select_related` /
+  `prefetch_related` and a database statement timeout are the tools for that.
+- **Unpaginated LIST tools**, except by `MAX_RESULT_BYTES`. A `paginate=False`
+  selector serialises everything its selector resolves to, and it cannot be
+  clamped honestly — the result has nowhere to record that rows were dropped.
+  Registering one emits `UnboundedListWarning`; `REQUIRE_LIST_PAGINATION=True`
+  makes it an error.
+- **Concurrency.** Bounding one call says nothing about how many run at once.
+  Rate limits (`rate_limits=` per binding) are the lever there.
+
 ## Adding profile points
 
 The package emits OpenTelemetry spans for `mcp.tools.call`,

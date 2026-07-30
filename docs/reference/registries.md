@@ -12,6 +12,7 @@ pipeline knobs — `filter_set` is read from the spec; `ordering_fields` /
 ::: rest_framework_mcp.registry.types.tool_binding.ToolBinding
 ::: rest_framework_mcp.registry.types.selector_tool_binding.SelectorToolBinding
 ::: rest_framework_services.types.url_kwarg.UrlKwarg
+::: rest_framework_services.types.query_param.QueryParam
 ::: rest_framework_mcp.registry.tool_registry.ToolRegistry
 ::: rest_framework_mcp.registry.types.resource_binding.ResourceBinding
 ::: rest_framework_mcp.registry.resource_registry.ResourceRegistry

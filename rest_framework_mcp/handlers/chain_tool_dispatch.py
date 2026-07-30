@@ -105,7 +105,15 @@ def dispatch_chain_tool(
         )
 
     drf_request = build_offline_context(
-        context.token.user, arguments_raw, http_request=context.http_request
+        context.token.user,
+        arguments_raw,
+        http_request=context.http_request,
+        # Chain tools have no query-param registration surface (they have no
+        # ``url_kwargs`` either — the two channels stay symmetric), so this is
+        # the empty case: it exists to *replace* the wrapped request's ``GET``,
+        # keeping whatever query string a client appended to the MCP endpoint
+        # URL out of a serializer that reads ``request.query_params``.
+        query_params={},
     ).request
     serializer: type | None = binding.resolved_input_serializer
     try:

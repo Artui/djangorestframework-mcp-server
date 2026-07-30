@@ -5,9 +5,11 @@ from dataclasses import dataclass, field
 from typing import Any, Generic, TypeVar
 
 from django.core.exceptions import ImproperlyConfigured
+from rest_framework_services import UNSET, UnsetType
 from rest_framework_services.types.service_spec import ServiceSpec
 
 from rest_framework_mcp.constants import ArgumentBinding, OutputFormat, UnknownArguments
+from rest_framework_mcp.registry.types.query_param import QueryParam
 from rest_framework_mcp.registry.types.url_kwarg import UrlKwarg
 
 InputT = TypeVar("InputT")
@@ -74,6 +76,21 @@ class ToolBinding(Generic[InputT, ResultT, ExtraT]):
     ``structuredContent``, so ``include_output_schema=True`` together with
     ``include_structured_content=False`` is rejected at construction time."""
 
+    max_result_bytes: int | None | UnsetType = UNSET
+    """Per-tool override for the outbound result ceiling. ``UNSET`` (the
+    default) defers to the server's ``MAX_RESULT_BYTES``; ``None`` disables the
+    check for this tool; an ``int`` sets its own ceiling.
+
+    ``None`` cannot double as "not supplied" here — disabling the ceiling for
+    one deliberately-large export tool is a real thing to want — which is why
+    this is ``UNSET``-sentinelled rather than tri-state like the fields above."""
+
+    dispatch_timeout: float | None | UnsetType = UNSET
+    """Per-tool override for the dispatch deadline, in seconds. ``UNSET``
+    defers to the server's ``DISPATCH_TIMEOUT``; ``None`` disables it for this
+    tool; a number sets its own. ⚠ Async transport only — see
+    :attr:`~rest_framework_mcp.config.types.mcp_config.MCPConfig.dispatch_timeout`."""
+
     argument_binding: ArgumentBinding = ArgumentBinding.BUNDLE
     """How MCP ``arguments`` flow into the kwarg pool. Defaults to ``BUNDLE``
     for service tools: mutation services typically take a single
@@ -100,6 +117,14 @@ class ToolBinding(Generic[InputT, ResultT, ExtraT]):
     normally dropped from ``tools/list`` if any of its ``permissions`` deny the
     caller; ``True`` keeps it visible — useful as a discovery aid for admin
     tools the caller can see but not invoke (``tools/call`` still 403s)."""
+
+    query_params: tuple[QueryParam, ...] = ()
+    """Read-shaping params routed to ``request.query_params`` at dispatch.
+
+    Popped from the caller's arguments like a URL kwarg, but landing in the
+    synthetic request's ``GET`` rather than ``view.kwargs`` — the channel a
+    serializer reads when it branches on the query string. A ``filter_set``
+    field is **not** one of these; see ``split_query_params``."""
 
     url_kwargs: tuple[UrlKwarg, ...] = ()
     """URL-derived values the model supplies as tool args, seeded into the

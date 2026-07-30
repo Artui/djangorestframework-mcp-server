@@ -7,6 +7,127 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.23.0] — 2026-07-30
+
+### Added
+
+- **Outbound resource bounds — duration, result size and page size.**
+  Consumer-reported: a `tools/call` over a list tool that expanded to 19 JOINs
+  never returned. No status logged, no response written, the ASGI worker held
+  until the server killed the instance ~71 s later; the client saw only "the
+  connector's server isn't responding". `MAX_REQUEST_BYTES` has always bounded
+  what a client can *send* — nothing bounded what a tool could produce or how
+  long it could take.
+
+  Four settings, all overridable per tool at registration, all accepting `None`
+  to disable:
+
+  - `MAX_RESULT_BYTES` (default 5 MiB, per-tool `max_result_bytes=`) — ceiling
+    on one tool result or resource read, measured on the encoded wire payload.
+    ⚠ **Measured on the wire, not on the rendered text**, because a successful
+    result carries the payload *twice* — `structuredContent` plus the spec's
+    backwards-compatibility text mirror — so a ceiling counting one copy would
+    be wrong by 2× against the client's context window.
+  - `MAX_PAGE_SIZE` (default 500, per-tool `max_page_size=`) — ceiling on the
+    model-supplied `limit` of a `paginate=True` selector. Now advertised as
+    `maximum` on the generated `inputSchema` **and** clamped at dispatch: the
+    schema tells a well-behaved model what to ask for, the clamp is what stops
+    us trusting it. `limit` previously had a floor (`max(1, …)`) and no ceiling.
+  - `DISPATCH_TIMEOUT` (default 60 s, per-tool `dispatch_timeout=`) — wall-clock
+    ceiling on one dispatch. ⚠ **ASGI only** (a sync WSGI view cannot bound its
+    own dispatch) and it does **not** reclaim the worker: a thread parked in a
+    database driver's socket read is not interruptible by asyncio cancellation.
+    It buys a *terminal protocol event* instead of an open request that never
+    resolves — pair it with a database statement timeout.
+  - `REQUIRE_LIST_PAGINATION` (default `False`) — escalates the new
+    `UnboundedListWarning` to `ImproperlyConfigured`. A `paginate=False` LIST
+    selector serialises whatever its selector resolves to, and unlike a
+    paginated tool it **cannot be clamped honestly**: the result carries no
+    metadata that would tell the model rows were dropped.
+
+  **Over a ceiling a call fails; it is never truncated.** A clipped list reads
+  as complete to a model, which then reasons from it — so the response is an
+  `isError` result naming the remedy ("narrow the filter, lower `limit`"), which
+  is what the spec means by a tool execution error carrying actionable feedback.
+  Resource reads have no `isError` envelope, so theirs is a JSON-RPC error
+  carrying the same message.
+
+  Bounds resolve per binding with `UNSET` (drf-services' sentinel, reused rather
+  than re-invented) rather than `None`-as-default, because `None` is a
+  *meaningful* value for all four — "no ceiling for this one tool" has to be
+  expressible.
+
+- **Request-level query params over MCP — `query_params=` on tool
+  registrations.** Consumer-reported alongside the bounds above. A `QueryParam`
+  is a model-supplied argument that lands in `request.query_params` rather than
+  `view.kwargs` — the channel a serializer reads when it branches on the query
+  string (django-restql field selection, a serializer keyed on `?expand=`).
+  MCP requests carry no query string of their own, so a *declared* per-call
+  channel is the only correct source for one:
+
+  ```python
+  from rest_framework_mcp import QueryParam
+
+  server.register_selector_tool(
+      name="invoices.list",
+      spec=SelectorSpec(kind=SelectorKind.LIST, selector=list_invoices),
+      query_params=(QueryParam("query", description="fieldset, e.g. {id,number}"),),
+  )
+  ```
+
+  Available on `register_service_tool` / `register_selector_tool`, both
+  decorator forms, and `ToolDefinition`. The value is advertised in the tool's
+  `inputSchema`, **popped** from the arguments, and handed to
+  `build_offline_context(query_params=…)` — so it never reaches the spec as an
+  input and the unknown-argument policy never sees it. `QueryParam` is
+  drf-services' type, re-exported here like `UrlKwarg`.
+
+  A `QueryParam` is **never required** (a read-shaping param the spec runs fine
+  without cannot be), and one name cannot be both a `QueryParam` and a
+  `UrlKwarg` — that raises at registration, since a value is popped once and
+  routes to one channel. ⚠ A `filter_set` field is **not** a query param:
+  filter fields already flow through as ordinary arguments, and declaring one
+  here would pop it out and silently stop it filtering.
+
+### Changed
+
+- **⚠ The MCP endpoint's own query string no longer reaches serializers.**
+  Behaviour change, and the reason the feature above matters. Every dispatch
+  path wraps the real Django `POST` to the MCP endpoint, and nothing replaced
+  the wrapped request's `GET` — so whatever query string a client appended to
+  that URL (`POST /mcp/?fields=all`) appeared in `request.query_params` for
+  **every call on that connection**. It was undeclared, client-controlled,
+  identical for every call in the session, and invisible to the model; anything
+  reading `request.query_params` on the dispatch path picked it up.
+
+  All nine `build_offline_context` call sites now pass `query_params=`
+  explicitly — the registered params for a tool that declares them, an empty
+  mapping everywhere else — so what `request.query_params` holds is a property
+  of the binding rather than of whichever URL the client dialled.
+
+  **If you were relying on that passthrough**, declare a `QueryParam` for each
+  value on the tools that need it. It then arrives per call, is advertised to
+  the model, and is checked at registration. Resources and prompts get the
+  closing with no registration knob: a resource URI *is* a locator, so per-call
+  read-shaping belongs in its URI template, whose variables already route to
+  `view.kwargs`.
+
+- **`tools/list` now advertises `maximum` on a paginated selector's `limit`.**
+  Additive to the schema; a client that ignored the field is unaffected.
+
+### Notes
+
+- **`notifications/cancelled` remains unimplemented, deliberately.** It was
+  reported alongside the above as a conformance gap; it is not. `2025-11-25`
+  makes ignoring a cancellation notification a **MAY** (explicitly including
+  "the request cannot be cancelled"), and `2026-07-28` makes the notification
+  **stdio-only** — on Streamable HTTP, closing the SSE response stream is itself
+  the cancellation signal. Honouring it as specified would also need a
+  cross-process registry, since the notification arrives as a separate HTTP
+  request that may land on another worker. Disconnect detection is the mechanism
+  that addresses the underlying problem, and it belongs with the response-stream
+  work rather than here.
+
 ## [0.22.0] — 2026-07-30
 
 ### Fixed
@@ -2082,7 +2203,8 @@ Pinned to `djangorestframework-services==0.6.0`.
 - 100% line + branch coverage enforced by pytest (**451 tests** at
   release).
 
-[Unreleased]: https://github.com/Artui/djangorestframework-mcp-server/compare/v0.22.0...HEAD
+[Unreleased]: https://github.com/Artui/djangorestframework-mcp-server/compare/v0.23.0...HEAD
+[0.23.0]: https://github.com/Artui/djangorestframework-mcp-server/compare/v0.22.0...v0.23.0
 [0.22.0]: https://github.com/Artui/djangorestframework-mcp-server/compare/v0.21.0...v0.22.0
 [0.21.0]: https://github.com/Artui/djangorestframework-mcp-server/compare/v0.20.0...v0.21.0
 [0.20.0]: https://github.com/Artui/djangorestframework-mcp-server/compare/v0.19.0...v0.20.0

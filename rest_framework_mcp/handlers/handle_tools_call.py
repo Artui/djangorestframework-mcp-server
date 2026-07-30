@@ -21,7 +21,10 @@ from rest_framework_mcp.handlers.types.context import MCPCallContext
 from rest_framework_mcp.handlers.utils import (
     check_permissions,
     consume_rate_limits,
+    enforce_result_ceiling,
+    resolve_bound,
     services_dispatch_policies,
+    split_query_params,
     split_url_kwargs,
     validation_error_data,
 )
@@ -64,6 +67,30 @@ def handle_tools_call(
     if not isinstance(arguments_raw, dict):
         return JsonRpcError(JsonRpcErrorCode.INVALID_PARAMS, "'arguments' must be an object")
 
+    # The outbound size ceiling is applied once, here, rather than at each of
+    # the three dispatch paths' several ``build_tool_result`` sites — one place
+    # to reason about, and it measures the finished result (both copies of the
+    # payload) rather than a renderer's intermediate.
+    return enforce_result_ceiling(
+        _dispatch_tool_call(binding, params, arguments_raw, context),
+        max_result_bytes=resolve_bound(binding.max_result_bytes, context.config.max_result_bytes),
+        label=f"Tool {binding.name!r}",
+    )
+
+
+def _dispatch_tool_call(
+    binding: Any,
+    params: dict[str, Any],
+    arguments_raw: dict[str, Any],
+    context: MCPCallContext,
+) -> dict[str, Any] | JsonRpcError:
+    """Route a resolved binding to its dispatch path and return the raw result.
+
+    Split out of :func:`handle_tools_call` so the size ceiling wraps every
+    return — including the ones the chain and selector helpers make — at a
+    single point. The async sibling splits the same way, for the same reason
+    plus the deadline.
+    """
     # OpenTelemetry span: scoped to the dispatch portion (after binding
     # resolution) so cheap validation rejections don't generate noise. The
     # span is a no-op when ``opentelemetry-api`` isn't installed.
@@ -114,12 +141,19 @@ def handle_tools_call(
         # rather than escaping as an unhandled 500.
         try:
             spec_params, url_kwarg_values = split_url_kwargs(arguments_raw, binding.url_kwargs)
+            # Read-shaping params leave the spec params and land in the
+            # synthetic request's ``GET`` instead. Always passed — an empty
+            # mapping still *replaces* whatever query string the client hung off
+            # the MCP endpoint URL, so ``request.query_params`` is this
+            # package's value rather than the caller's.
+            spec_params, query_param_values = split_query_params(spec_params, binding.query_params)
             offline = build_offline_context(
                 context.token.user,
                 spec_params,
                 http_request=context.http_request,
                 action=binding.name,
                 kwargs=url_kwarg_values or None,
+                query_params=query_param_values,
             )
             result = dispatch_spec(
                 binding.spec,

@@ -38,6 +38,7 @@ from rest_framework_services.exceptions.service_validation_error import ServiceV
 from rest_framework_mcp.config.types.mcp_config import MCPConfig
 from rest_framework_mcp.handlers.utils import (
     services_dispatch_policies,
+    split_query_params,
     split_url_kwargs,
     validation_error_data,
 )
@@ -97,12 +98,14 @@ def call_spec_tool(
                 exc.detail, arguments, include_value=config.include_validation_value
             ),
         )
+    spec_params, query_param_values = split_query_params(spec_params, binding.query_params)
     context = build_offline_context(
         user,
         spec_params,
         http_request=request,
         action=binding.name,
         kwargs=url_kwarg_values or None,
+        query_params=query_param_values,
     )
     # Class-level ``permission_classes``, enforced upfront and unconditionally.
     # ``dispatch_spec`` never consults ``permission_classes`` (authz is the

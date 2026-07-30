@@ -2,16 +2,19 @@ from __future__ import annotations
 
 from typing import Any
 
+from rest_framework_services import UNSET, UnsetType
 from rest_framework_services.types.selector_spec import SelectorSpec
 
 from rest_framework_mcp.adapters.utils import (
     merge_meta,
     merge_tool_annotations,
     validate_input_serializer_against_callable,
+    validate_query_params,
     validate_url_kwargs,
 )
 from rest_framework_mcp.auth.permissions.wrap_spec_permissions import wrap_spec_permissions
 from rest_framework_mcp.constants import ArgumentBinding, OutputFormat, UnknownArguments
+from rest_framework_mcp.registry.types.query_param import QueryParam
 from rest_framework_mcp.registry.types.selector_tool_binding import SelectorToolBinding
 from rest_framework_mcp.registry.types.url_kwarg import UrlKwarg
 
@@ -39,6 +42,10 @@ def selector_spec_to_tool(
     always_listed: bool = False,
     spec_kwargs_provides: tuple[str, ...] = (),
     url_kwargs: tuple[UrlKwarg, ...] = (),
+    query_params: tuple[QueryParam, ...] = (),
+    max_result_bytes: int | None | UnsetType = UNSET,
+    dispatch_timeout: float | None | UnsetType = UNSET,
+    max_page_size: int | None | UnsetType = UNSET,
 ) -> SelectorToolBinding:
     """Lift a ``SelectorSpec`` into a :class:`SelectorToolBinding`.
 
@@ -78,6 +85,9 @@ def selector_spec_to_tool(
         spec_kwargs_provides=frozenset(spec_kwargs_provides),
     )
     validate_url_kwargs(label=f"selector tool {name!r}", url_kwargs=url_kwargs)
+    validate_query_params(
+        label=f"selector tool {name!r}", query_params=query_params, url_kwargs=url_kwargs
+    )
     spec_perms: tuple[Any, ...] = wrap_spec_permissions(spec.permission_classes, label=name)
     effective_perms: tuple[Any, ...] = spec_perms + tuple(permissions)
     return SelectorToolBinding(
@@ -101,6 +111,10 @@ def selector_spec_to_tool(
         unknown_arguments=unknown_arguments,
         always_listed=always_listed,
         url_kwargs=url_kwargs,
+        query_params=query_params,
+        max_result_bytes=max_result_bytes,
+        dispatch_timeout=dispatch_timeout,
+        max_page_size=max_page_size,
     )
 
 

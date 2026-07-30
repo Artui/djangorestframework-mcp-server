@@ -18,6 +18,7 @@ from rest_framework_mcp.handlers.utils import (
     consume_rate_limits,
 )
 from rest_framework_mcp.output.build_resource_contents import build_resource_contents
+from rest_framework_mcp.output.enforce_result_bytes import enforce_result_bytes
 from rest_framework_mcp.protocol.types.json_rpc_error import JsonRpcError
 
 
@@ -74,7 +75,14 @@ def handle_resources_read(
             )
 
         drf_request = build_offline_context(
-            context.token.user, None, http_request=context.http_request
+            context.token.user,
+            None,
+            http_request=context.http_request,
+            # Resources take the closing of the undeclared channel and nothing
+            # more: a resource URI *is* a locator, so per-call read-shaping
+            # belongs in its URI template (whose variables already route to
+            # ``view.kwargs``) rather than in a second registration knob.
+            query_params={},
         ).request
 
         pool: dict[str, Any] = {
@@ -104,7 +112,17 @@ def handle_resources_read(
         )
         if isinstance(contents, JsonRpcError):
             return contents
-        return {"contents": [contents.to_dict()]}
+        result: dict[str, Any] = {"contents": [contents.to_dict()]}
+        # Same outbound ceiling as a tool result, different envelope: a resource
+        # read has no ``isError`` shape to carry the explanation, so an
+        # over-ceiling read is a protocol error. The message is identical, and
+        # still names the remedy — a model reading a resource can act on it.
+        oversize: str | None = enforce_result_bytes(
+            result, context.config.max_result_bytes, label=f"Resource {uri!r}"
+        )
+        if oversize is not None:
+            return JsonRpcError(JsonRpcErrorCode.SERVER_ERROR, oversize)
+        return result
 
 
 __all__ = ["handle_resources_read"]

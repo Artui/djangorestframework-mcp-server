@@ -39,6 +39,7 @@ from rest_framework_mcp.registry.resource_registry import ResourceRegistry
 from rest_framework_mcp.registry.tool_registry import ToolRegistry
 from rest_framework_mcp.registry.types.chain_context import ChainContext
 from rest_framework_mcp.registry.types.chain_step import ChainStep
+from rest_framework_mcp.registry.types.query_param import QueryParam
 from rest_framework_mcp.registry.types.selector_defaults import SelectorDefaults
 from rest_framework_mcp.registry.types.service_defaults import ServiceDefaults
 from rest_framework_mcp.registry.types.tool_definition import ToolDefinition
@@ -104,6 +105,7 @@ __all__ = [
     "UIVisibility",
     "UnknownArguments",
     "UpdateService",
+    "QueryParam",
     "UrlKwarg",
     "register_tools",
     "__version__",

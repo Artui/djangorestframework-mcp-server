@@ -8,6 +8,7 @@ from django.core.exceptions import ImproperlyConfigured
 from django.http import HttpRequest
 from django.urls import URLPattern, path
 from rest_framework.serializers import Serializer
+from rest_framework_services import UNSET, UnsetType
 from rest_framework_services.registry.spec_registry import SpecRegistry
 from rest_framework_services.types.selector_kind import SelectorKind
 from rest_framework_services.types.selector_spec import SelectorSpec
@@ -50,6 +51,7 @@ from rest_framework_mcp.registry.tool_registry import ToolRegistry
 from rest_framework_mcp.registry.types.chain_step import ChainStep
 from rest_framework_mcp.registry.types.chain_tool_binding import ChainToolBinding
 from rest_framework_mcp.registry.types.prompt_binding import PromptBinding
+from rest_framework_mcp.registry.types.query_param import QueryParam
 from rest_framework_mcp.registry.types.resource_binding import ResourceBinding
 from rest_framework_mcp.registry.types.selector_tool_binding import SelectorToolBinding
 from rest_framework_mcp.registry.types.tool_binding import ToolBinding
@@ -58,6 +60,7 @@ from rest_framework_mcp.registry.types.ui_tool_meta import UIToolMeta
 from rest_framework_mcp.registry.types.url_kwarg import UrlKwarg
 from rest_framework_mcp.server.utils import (
     build_ui_tool_meta,
+    check_list_pagination_declared,
     check_tool_description_present,
     check_tool_permissions_declared,
 )
@@ -228,6 +231,9 @@ class MCPServer:
         always_listed: bool = False,
         spec_kwargs_provides: tuple[str, ...] = (),
         url_kwargs: tuple[UrlKwarg, ...] = (),
+        query_params: tuple[QueryParam, ...] = (),
+        max_result_bytes: int | None | UnsetType = UNSET,
+        dispatch_timeout: float | None | UnsetType = UNSET,
     ) -> ToolBinding:
         """Register a :class:`ServiceSpec` as an MCP **mutation** tool.
 
@@ -286,6 +292,9 @@ class MCPServer:
             always_listed=always_listed,
             spec_kwargs_provides=spec_kwargs_provides,
             url_kwargs=tuple(url_kwargs),
+            query_params=tuple(query_params),
+            max_result_bytes=max_result_bytes,
+            dispatch_timeout=dispatch_timeout,
         )
         check_tool_permissions_declared(
             binding.name, binding.permissions, require=self._config.require_tool_permissions
@@ -321,6 +330,10 @@ class MCPServer:
         always_listed: bool = False,
         spec_kwargs_provides: tuple[str, ...] = (),
         url_kwargs: tuple[UrlKwarg, ...] = (),
+        query_params: tuple[QueryParam, ...] = (),
+        max_result_bytes: int | None | UnsetType = UNSET,
+        dispatch_timeout: float | None | UnsetType = UNSET,
+        max_page_size: int | None | UnsetType = UNSET,
     ) -> SelectorToolBinding:
         """Register a :class:`SelectorSpec` as an MCP **read** tool.
 
@@ -394,6 +407,10 @@ class MCPServer:
             always_listed=always_listed,
             spec_kwargs_provides=spec_kwargs_provides,
             url_kwargs=tuple(url_kwargs),
+            query_params=tuple(query_params),
+            max_result_bytes=max_result_bytes,
+            dispatch_timeout=dispatch_timeout,
+            max_page_size=max_page_size,
         )
         check_tool_permissions_declared(
             binding.name, binding.permissions, require=self._config.require_tool_permissions
@@ -401,6 +418,14 @@ class MCPServer:
         check_tool_description_present(
             binding.name, binding.description, require=self._config.require_tool_descriptions
         )
+        # LIST only: a RETRIEVE selector returns one instance, which is bounded
+        # by construction and has no ``limit`` to advertise.
+        if binding.kind is SelectorKind.LIST:
+            check_list_pagination_declared(
+                binding.name,
+                paginate=binding.paginate,
+                require=self._config.require_list_pagination,
+            )
         self._tools.register(binding)
         return binding
 
@@ -498,6 +523,8 @@ class MCPServer:
         include_output_schema: bool | None = None,
         unknown_arguments: UnknownArguments = UnknownArguments.REJECT,
         always_listed: bool = False,
+        max_result_bytes: int | None | UnsetType = UNSET,
+        dispatch_timeout: float | None | UnsetType = UNSET,
     ) -> ChainToolBinding:
         """Register an ordered sequence of specs as a single MCP tool.
 
@@ -560,6 +587,8 @@ class MCPServer:
             include_output_schema=include_output_schema,
             unknown_arguments=unknown_arguments,
             always_listed=always_listed,
+            max_result_bytes=max_result_bytes,
+            dispatch_timeout=dispatch_timeout,
         )
         check_tool_permissions_declared(
             binding.name, binding.permissions, require=self._config.require_tool_permissions
@@ -943,6 +972,7 @@ class MCPServer:
         always_listed: bool = False,
         spec_kwargs_provides: tuple[str, ...] = (),
         url_kwargs: tuple[UrlKwarg, ...] = (),
+        query_params: tuple[QueryParam, ...] = (),
     ) -> Callable[[Callable[..., Any]], Callable[..., Any]]:
         """Decorator form of :meth:`register_service_tool`.
 
@@ -989,6 +1019,7 @@ class MCPServer:
                 always_listed=always_listed,
                 spec_kwargs_provides=spec_kwargs_provides,
                 url_kwargs=url_kwargs,
+                query_params=query_params,
             )
             return fn
 
@@ -1019,6 +1050,7 @@ class MCPServer:
         always_listed: bool = False,
         spec_kwargs_provides: tuple[str, ...] = (),
         url_kwargs: tuple[UrlKwarg, ...] = (),
+        query_params: tuple[QueryParam, ...] = (),
     ) -> Callable[[Callable[..., Any]], Callable[..., Any]]:
         """Decorator form of :meth:`register_selector_tool`.
 
@@ -1072,6 +1104,7 @@ class MCPServer:
                 always_listed=always_listed,
                 spec_kwargs_provides=spec_kwargs_provides,
                 url_kwargs=url_kwargs,
+                query_params=query_params,
             )
             return fn
 

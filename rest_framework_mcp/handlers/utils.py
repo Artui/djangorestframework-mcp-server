@@ -1,12 +1,14 @@
 from __future__ import annotations
 
+import asyncio
 import dataclasses
-from collections.abc import Mapping
+from collections.abc import Awaitable, Mapping
 from typing import Any
 
 from django.http import HttpRequest
 from rest_framework import serializers as drf_serializers
 from rest_framework_dataclasses.serializers import DataclassSerializer
+from rest_framework_services import UnsetType
 from rest_framework_services.exceptions.service_validation_error import (
     ServiceValidationError,
 )
@@ -21,7 +23,11 @@ from rest_framework_mcp.constants import (
     ArgumentBinding,
     UnknownArguments,
 )
+from rest_framework_mcp.output.enforce_result_bytes import enforce_result_bytes
+from rest_framework_mcp.output.error_tool_result import build_error_tool_result
+from rest_framework_mcp.protocol.types.json_rpc_error import JsonRpcError
 from rest_framework_mcp.registry.types.chain_tool_binding import ChainToolBinding
+from rest_framework_mcp.registry.types.query_param import QueryParam
 from rest_framework_mcp.registry.types.selector_tool_binding import SelectorToolBinding
 from rest_framework_mcp.registry.types.url_kwarg import UrlKwarg
 
@@ -72,6 +78,43 @@ def split_url_kwargs(
         raise ServiceValidationError(
             {"non_field_errors": [f"Missing required argument(s): {names_repr}."]}
         )
+    params = {key: value for key, value in arguments.items() if key not in names}
+    return params, values
+
+
+def split_query_params(
+    arguments: dict[str, Any], query_params: tuple[QueryParam, ...]
+) -> tuple[dict[str, Any], dict[str, Any]]:
+    """Split ``arguments`` into ``(params, query_param_values)``.
+
+    The sibling of :func:`split_url_kwargs`, and simpler: a
+    :class:`QueryParam` carries no ``required`` flag, so there is nothing to
+    raise about. Each declared param takes the value the model supplied, else its
+    ``default`` when set, else stays absent — and its name is removed from
+    ``params`` so the value routes **only** to ``request.query_params`` and never
+    reaches the spec as an ordinary input.
+
+    That popping is what keeps a query param out of ``unknown_arguments``: by the
+    time the policy runs, the name is gone from the arguments entirely.
+
+    ⚠ A ``filter_set`` field is **not** a query param and must not be declared as
+    one. Filter fields are already generated into the tool schema and flow
+    through as ordinary ``params``, which is where ``dispatch_spec`` reads them
+    (as ``filter_data``); declaring one here would pop it out of the args and it
+    would silently stop filtering.
+
+    Non-mutating. With no declarations the original ``arguments`` dict is
+    returned unchanged (no copy).
+    """
+    if not query_params:
+        return arguments, {}
+    names = {qp.name for qp in query_params}
+    values: dict[str, Any] = {}
+    for query_param in query_params:
+        if query_param.name in arguments:
+            values[query_param.name] = arguments[query_param.name]
+        elif query_param.default is not None:
+            values[query_param.name] = query_param.default
     params = {key: value for key, value in arguments.items() if key not in names}
     return params, values
 
@@ -335,13 +378,74 @@ def validation_error_data(detail: Any, value: Any, *, include_value: bool) -> di
     return payload
 
 
+def resolve_bound(override: Any, default: Any) -> Any:
+    """Resolve a per-binding outbound bound against the server's default.
+
+    ``UNSET`` means the binding said nothing → take the server's value. Any
+    other value — including ``None``, which means *no ceiling* — is the
+    binding's deliberate answer and wins.
+
+    The three bounds (``max_result_bytes`` / ``max_page_size`` /
+    ``dispatch_timeout``) all need this shape because ``None`` is a meaningful
+    setting for each, so the tri-state ``None``-is-default idiom the
+    ``include_*`` flags use would make "no ceiling for this one tool"
+    inexpressible.
+    """
+    return default if isinstance(override, UnsetType) else override
+
+
+def enforce_result_ceiling(result: Any, *, max_result_bytes: int | None, label: str) -> Any:
+    """Replace an over-ceiling tool result with an ``isError`` result.
+
+    Applied once per handler, to the finished result, so every dispatch path
+    (service / selector / chain) is covered by one check and the measurement
+    sees what actually goes on the wire.
+
+    A :class:`JsonRpcError` passes through untouched: it is a protocol-level
+    failure whose size is bounded by its own message, and rewriting it as a
+    tool result would change the envelope the client is waiting for.
+    """
+    if isinstance(result, JsonRpcError):
+        return result
+    message: str | None = enforce_result_bytes(result, max_result_bytes, label=label)
+    if message is None:
+        return result
+    return build_error_tool_result(message, error_type="result_too_large").to_dict()
+
+
+async def run_with_deadline(coro: Awaitable[Any], seconds: float | None) -> Any:
+    """Await ``coro``, raising :class:`asyncio.TimeoutError` past ``seconds``.
+
+    ``None`` awaits without a deadline, so callers can hand the resolved bound
+    straight in.
+
+    ⚠ **This does not stop the work.** ``wait_for`` cancels the *task*, and a
+    task parked in ``sync_to_async`` — which is where every ORM-backed spec
+    spends its time — is waiting on a thread that asyncio cannot interrupt. The
+    thread runs to completion (or until the database ends the query) regardless.
+    What the deadline gives the client is a terminal response instead of an open
+    request that never resolves; pair it with a database statement timeout for
+    the other half.
+
+    ``asyncio.wait_for`` rather than ``asyncio.timeout``: the latter is 3.11+
+    and this package supports 3.10.
+    """
+    if seconds is None:
+        return await coro
+    return await asyncio.wait_for(coro, timeout=seconds)
+
+
 __all__ = [
     "advertises_closed_schema",
     "binding_input_serializer",
     "build_validated_input_serializer",
     "check_permissions",
     "consume_rate_limits",
+    "enforce_result_ceiling",
+    "resolve_bound",
+    "run_with_deadline",
     "services_dispatch_policies",
+    "split_query_params",
     "split_url_kwargs",
     "validate_input_against_serializer",
     "validation_error_data",

@@ -8,7 +8,9 @@ from rest_framework_mcp.registry.types.selector_tool_binding import SelectorTool
 from rest_framework_mcp.schema.input_schema import build_input_schema
 
 
-def build_selector_tool_input_schema(binding: SelectorToolBinding) -> dict[str, Any]:
+def build_selector_tool_input_schema(
+    binding: SelectorToolBinding, *, max_page_size: int | None = None
+) -> dict[str, Any]:
     """Build the JSON Schema for a selector tool's ``inputSchema``.
 
     Merges five sources, in order of precedence (later sources override
@@ -31,7 +33,10 @@ def build_selector_tool_input_schema(binding: SelectorToolBinding) -> dict[str, 
     3. **``ordering_fields``** — adds an ``ordering`` property as an enum
        of ``"<field>"`` and ``"-<field>"`` values. Optional.
     4. **``paginate=True``** — adds optional ``page`` (positive integer)
-       and ``limit`` (positive integer) properties.
+       and ``limit`` (positive integer) properties. ``limit`` carries a
+       ``maximum`` when the caller supplies the effective ``max_page_size``
+       (the binding's override, else the server's) so the model sees the same
+       ceiling dispatch will clamp to.
     5. **``url_kwargs``** — each registered :class:`UrlKwarg`'s advertised
        schema; wins over a reflected key of the same name (it is the
        intentional, authoritative declaration).
@@ -62,7 +67,14 @@ def build_selector_tool_input_schema(binding: SelectorToolBinding) -> dict[str, 
 
     if binding.paginate:
         properties["page"] = {"type": "integer", "minimum": 1}
-        properties["limit"] = {"type": "integer", "minimum": 1}
+        limit_schema: dict[str, Any] = {"type": "integer", "minimum": 1}
+        # Advertise the ceiling the dispatch path will clamp to. Telling the
+        # model and clamping the value are both needed and fail differently: a
+        # schema with no ``maximum`` invites a request for 100 000 rows, and a
+        # schema alone is only a hint — nothing obliges a model to honour it.
+        if max_page_size is not None:
+            limit_schema["maximum"] = max_page_size
+        properties["limit"] = limit_schema
 
     for url_kwarg in binding.url_kwargs:
         # URL-derived args — model-supplied, seeded into ``view.kwargs`` at
@@ -73,6 +85,11 @@ def build_selector_tool_input_schema(binding: SelectorToolBinding) -> dict[str, 
         properties[url_kwarg.name] = url_kwarg.json_schema()
         if url_kwarg.required and url_kwarg.name not in required:
             required.append(url_kwarg.name)
+
+    # Read-shaping params, routed to ``request.query_params`` at dispatch. Never
+    # required — see ``build_service_tool_input_schema``.
+    for query_param in binding.query_params:
+        properties[query_param.name] = query_param.json_schema()
 
     out: dict[str, Any] = {"type": "object", "properties": properties}
     if required:

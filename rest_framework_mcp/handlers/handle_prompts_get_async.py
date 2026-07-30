@@ -80,7 +80,15 @@ async def handle_prompts_get_async(
             )
 
         drf_request = build_offline_context(
-            context.token.user, None, http_request=context.http_request
+            context.token.user,
+            None,
+            http_request=context.http_request,
+            # A prompt renders messages — no queryset, no serializer — so there
+            # is nothing here to read ``request.query_params``. Passed anyway so
+            # the endpoint's own query string can never reach one if that
+            # changes: what the synthetic ``GET`` holds is this package's choice
+            # at every call site, not the client's.
+            query_params={},
         ).request
         pool: dict[str, Any] = {
             "request": drf_request,

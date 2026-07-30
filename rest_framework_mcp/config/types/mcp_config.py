@@ -56,6 +56,28 @@ class MCPConfig:
     max_request_bytes: int
     """Request-body ceiling; larger bodies get a ``413`` before parsing."""
 
+    max_result_bytes: int | None
+    """Outbound mirror of :attr:`max_request_bytes`: ceiling on one tool result
+    or resource read, measured on the encoded wire payload (so the
+    ``structuredContent`` + text-mirror double-emission is counted once each,
+    which is what reaches the client's context). Over it, the call returns an
+    ``isError`` result naming the remedy — never a silently truncated payload.
+    ``None`` disables. Per-binding overrides win."""
+
+    max_page_size: int | None
+    """Ceiling on the model-supplied ``limit`` of a ``paginate=True`` selector
+    tool, advertised as ``maximum`` on the generated schema and clamped at
+    dispatch. Safe to clamp rather than error because ``hasNext`` /
+    ``totalPages`` keep a clamped page self-describing. ``None`` disables.
+    Per-binding overrides win."""
+
+    dispatch_timeout: float | None
+    """Wall-clock ceiling, in seconds, on one dispatch. ⚠ **Async transport
+    only**, and it does **not** reclaim the worker — a thread in a driver's
+    socket read is not interruptible by asyncio cancellation. It buys a
+    terminal protocol event, and pairs with a database statement timeout rather
+    than replacing it. ``None`` disables. Per-binding overrides win."""
+
     page_size: int
     """Maximum items per list-style call (``tools/list``, ``resources/list``,
     ``prompts/list``). Clients page with the opaque ``cursor``."""
@@ -80,6 +102,10 @@ class MCPConfig:
     require_tool_descriptions: bool
     """Whether registering a tool with no description raises instead of warning.
     Read at *registration* time, not per request."""
+
+    require_list_pagination: bool
+    """Whether registering an unpaginated LIST selector tool raises instead of
+    warning. Read at *registration* time, not per request."""
 
 
 __all__ = ["MCPConfig"]

@@ -64,7 +64,9 @@ from rest_framework_mcp.handlers.types.context import MCPCallContext
 from rest_framework_mcp.handlers.utils import (
     check_permissions,
     consume_rate_limits,
+    resolve_bound,
     services_dispatch_policies,
+    split_query_params,
     split_url_kwargs,
     validate_input_against_serializer,
     validation_error_data,
@@ -238,8 +240,18 @@ def _build_request_and_validate(
     ``PrimaryKeyRelatedField`` queryset, an ownership check) behaves the same
     over both transports.
     """
+    # Split first: the value has to be in hand before the request is built, and
+    # unlike the URL-kwarg split this one cannot fail (a ``QueryParam`` has no
+    # ``required``).
+    _qp_params, query_param_values = split_query_params(arguments_raw, binding.query_params)
     drf_request = build_offline_context(
-        context.token.user, arguments_raw, http_request=context.http_request
+        context.token.user,
+        arguments_raw,
+        http_request=context.http_request,
+        # Always passed, empty or not: this *replaces* the wrapped request's
+        # ``GET``, so the MCP endpoint's own query string can never reach a
+        # serializer reading ``request.query_params``.
+        query_params=query_param_values,
     ).request
     try:
         # URL kwargs route through ``view.kwargs`` (from where drf-services
@@ -311,6 +323,10 @@ def _selector_tool_additional_known_keys(binding: SelectorToolBinding) -> frozen
     # Registered URL kwargs are advertised in the inputSchema and popped into
     # ``view.kwargs`` at dispatch — known, not "unknown", to the arg check.
     known.update(url_kwarg.name for url_kwarg in binding.url_kwargs)
+    # Same for registered query params — advertised in the schema and popped into
+    # ``request.query_params``. Without this, ``unknown_arguments=REJECT`` would
+    # flag a legitimate read-shaping argument as unrecognised.
+    known.update(query_param.name for query_param in binding.query_params)
     return frozenset(known)
 
 
@@ -384,7 +400,9 @@ def _post_fetch_and_render(
     #
     # Pagination — wraps the response in ``{items, page, totalPages, hasNext}``.
     if binding.paginate:
-        page_no, limit, page_items, total = _slice_for_pagination(qs, arguments_raw)
+        page_no, limit, page_items, total = _slice_for_pagination(
+            qs, arguments_raw, resolve_bound(binding.max_page_size, config.max_page_size)
+        )
         rendered_items = render_spec_output(
             binding.spec,
             page_items,
@@ -441,6 +459,9 @@ def _dispatch_kwargs(
     # value never also reaches the selector as an ordinary input. The split
     # cannot fail here — ``_build_request_and_validate`` ran it first.
     spec_params, _url_kwarg_values = split_url_kwargs(arguments_raw, binding.url_kwargs)
+    # Query params rode onto ``request.query_params``; strip them here for the
+    # same reason as the URL kwargs above — one value, one channel.
+    spec_params, _query_param_values = split_query_params(spec_params, binding.query_params)
     return {
         "user": context.token.user,
         "params": _selector_dispatch_params(spec_params, validated),
@@ -477,12 +498,21 @@ def _is_valid_ordering(value: str, allowed: tuple[str, ...]) -> bool:
     return value.lstrip("-") in allowed
 
 
-def _slice_for_pagination(qs: Any, arguments_raw: dict[str, Any]) -> tuple[int, int, Any, int]:
+def _slice_for_pagination(
+    qs: Any, arguments_raw: dict[str, Any], max_page_size: int | None
+) -> tuple[int, int, Any, int]:
     """Return ``(page, limit, page_slice, total)``.
 
     ``total`` uses ``.count()`` for QuerySet shapes and ``len(...)`` for
     plain sequences (lists / tuples). ``page`` / ``limit`` default to 1 /
-    100; non-positive values are clamped to 1.
+    100; non-positive values are clamped to 1, and ``limit`` is clamped
+    *down* to ``max_page_size`` when one is configured.
+
+    The upper clamp is silent by design, and safe here in a way truncating an
+    unpaginated result would not be: the response carries ``totalPages`` /
+    ``hasNext`` computed from the clamped ``limit``, so a model that asked for
+    500 rows and got 100 is told there are more pages rather than being left to
+    assume it saw everything.
 
     The shape is discriminated with the sister-repo's :func:`is_queryset`
     predicate, **not** ``hasattr(qs, "count")``: ``list`` / ``tuple`` also
@@ -495,6 +525,8 @@ def _slice_for_pagination(qs: Any, arguments_raw: dict[str, Any]) -> tuple[int, 
     """
     page_no: int = max(1, _coerce_int(arguments_raw.get("page"), default=1))
     limit: int = max(1, _coerce_int(arguments_raw.get("limit"), default=100))
+    if max_page_size is not None:
+        limit = min(limit, max_page_size)
     if is_queryset(qs):
         total: int = qs.count()
     elif hasattr(qs, "__len__") and hasattr(qs, "__getitem__"):
