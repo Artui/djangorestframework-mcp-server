@@ -7,28 +7,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-### Tests
-
-- **A full end-to-end OAuth flow, in one test**: `POST /oauth/register/` (RFC 7591,
-  the public-PKCE shape Claude's connectors send) → unauthenticated `401` carrying
-  the PRM pointer → the authorize passthrough with a real logged-in user → DOT's
-  token endpoint on PKCE alone → `initialize` → `tools/list` → `tools/call` that
-  actually writes a row.
-
-  This closes the gap the last three releases came through. Every existing suite
-  authenticates with `AllowAnyBackend`, so **no test drove the MCP transport with a
-  real OAuth token** — which is why DCR issuing unusable credentials (0.19.0), DCR
-  clients that could not be issued an ID token (0.20.0), and audience enforcement
-  that rejected every token (0.21.0) were each individually invisible. The legs
-  were only ever tested apart. The new suite runs on
-  `DjangoOAuthToolkitBackend` **with a resource URL configured** — the exact
-  combination that was broken.
-
-  Three companion passes: the discovery walk a client performs before it has any
-  credential (PRM → AS metadata → `registration_endpoint`, asserted as a chain
-  because it is the chaining that breaks); scope denial on a narrower grant; and
-  session lifecycle on a real bearer, proving the session and the credential are
-  independent.
+## [0.22.0] — 2026-07-30
 
 ### Fixed
 
@@ -62,6 +41,29 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   Found by writing the end-to-end flow test below — the assertion disagreed with
   the documented behaviour, and checking the spec showed the docs were right and
   the code wrong.
+
+### Tests
+
+- **A full end-to-end OAuth flow, in one test**: `POST /oauth/register/` (RFC 7591,
+  the public-PKCE shape Claude's connectors send) → unauthenticated `401` carrying
+  the PRM pointer → the authorize passthrough with a real logged-in user → DOT's
+  token endpoint on PKCE alone → `initialize` → `tools/list` → `tools/call` that
+  actually writes a row.
+
+  This closes the gap the last three releases came through. Every existing suite
+  authenticates with `AllowAnyBackend`, so **no test drove the MCP transport with a
+  real OAuth token** — which is why DCR issuing unusable credentials (0.19.0), DCR
+  clients that could not be issued an ID token (0.20.0), and audience enforcement
+  that rejected every token (0.21.0) were each individually invisible. The legs
+  were only ever tested apart. The new suite runs on
+  `DjangoOAuthToolkitBackend` **with a resource URL configured** — the exact
+  combination that was broken.
+
+  Three companion passes: the discovery walk a client performs before it has any
+  credential (PRM → AS metadata → `registration_endpoint`, asserted as a chain
+  because it is the chaining that breaks); scope denial on a narrower grant; and
+  session lifecycle on a real bearer, proving the session and the credential are
+  independent.
 
 ## [0.21.0] — 2026-07-30
 
@@ -2080,7 +2082,8 @@ Pinned to `djangorestframework-services==0.6.0`.
 - 100% line + branch coverage enforced by pytest (**451 tests** at
   release).
 
-[Unreleased]: https://github.com/Artui/djangorestframework-mcp-server/compare/v0.21.0...HEAD
+[Unreleased]: https://github.com/Artui/djangorestframework-mcp-server/compare/v0.22.0...HEAD
+[0.22.0]: https://github.com/Artui/djangorestframework-mcp-server/compare/v0.21.0...v0.22.0
 [0.21.0]: https://github.com/Artui/djangorestframework-mcp-server/compare/v0.20.0...v0.21.0
 [0.20.0]: https://github.com/Artui/djangorestframework-mcp-server/compare/v0.19.0...v0.20.0
 [0.19.0]: https://github.com/Artui/djangorestframework-mcp-server/compare/v0.18.0...v0.19.0
