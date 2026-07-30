@@ -1563,7 +1563,12 @@ and now raise <code>ImproperlyConfigured</code> if still present: <code>AUTH_BAC
 <tr>
 <td><code>RESOURCE_URL</code></td>
 <td><code>None</code></td>
-<td>Canonical resource URL for RFC 8707 audience enforcement; <code>None</code> disables it. This is only the <strong>default</strong> for <code>MCPServer(resource_url=…)</code> — RFC 8707 binds a token to <em>a</em> resource, so each server needs its own URL. Two servers sharing one URL means a token minted for one passes the audience check at the other, which is the exact replay the mechanism prevents. Set it per server; leave this key for the single-server case.</td>
+<td>Canonical resource URL this server <strong>publishes</strong> — RFC 9728 requires it in protected-resource metadata, and it is what audience enforcement compares against when enabled. Setting it rejects nothing on its own; see <code>ENFORCE_AUDIENCE</code>. Only the <strong>default</strong> for <code>MCPServer(resource_url=…)</code> — RFC 8707 binds a token to <em>a</em> resource, so each server needs its own URL. Two servers sharing one URL means a token minted for one passes the audience check at the other, which is the exact replay the mechanism prevents. Leaving it unset publishes an empty <code>resource</code> plus a <code>_warning</code>.</td>
+</tr>
+<tr>
+<td><code>ENFORCE_AUDIENCE</code></td>
+<td><code>False</code></td>
+<td>Whether a token whose bound resource doesn't equal <code>RESOURCE_URL</code> is <strong>rejected</strong>. Off by default because enforcement needs the access token to record its resource, and <strong>DOT's stock <code>AccessToken</code> has no such field</strong> — DOT implements no RFC 8707 resource indicators. Enforcement was once implied by <code>RESOURCE_URL</code> alone, so the bundled backend rejected every token as soon as a resource URL was configured. Turn it on with a swapped <code>OAUTH2_PROVIDER["ACCESS_TOKEN_MODEL"]</code> carrying a <code>resource</code> field, or <code>DjangoOAuthToolkitBackend(audience_getter=…)</code>; without either the backend raises <code>ImproperlyConfigured</code> at startup rather than 401-ing every request. See <a href="../../auth/#audience-binding-rfc-8707">Authentication</a>.</td>
 </tr>
 </tbody>
 </table>

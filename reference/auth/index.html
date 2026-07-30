@@ -2508,11 +2508,29 @@ imported lazily inside <code>authenticate</code> because it's an optional extra
 (<code>pip install "djangorestframework-mcp-server[oauth]"</code>) — importing this module
 never blows up just because DOT is absent; the <code>ImportError</code> only fires
 when a request actually reaches authentication.</p>
-<p>Audience enforcement (RFC 8707): when <code>resource_url</code> is set, the token's
-<code>resource</code> claim must match it exactly, and tokens without a bound
-resource are rejected. <code>None</code> (the default) disables enforcement —
-appropriate for dev, or where audience binding happens at an upstream
-gateway.</p>
+<p>Audience enforcement (RFC 8707) is controlled by <code>enforce_audience</code>,
+<strong>not</strong> by <code>resource_url</code>. <code>resource_url</code> is the identity this server
+publishes in its protected-resource metadata; enforcement is whether a
+token that doesn't carry that identity is rejected.</p>
+<p>Those two were once one knob, and coupling them made the bundled backend
+unusable. Enforcement needs the access token to record the resource it was
+issued for, and <strong>DOT's stock <code>AccessToken</code> has no such field</strong> — DOT
+implements no resource indicators, so <code>getattr(token, "resource", None)</code>
+is always <code>None</code>. Setting <code>resource_url</code>, which RFC 9728 effectively
+requires, therefore rejected every token: a deployment had to choose between
+authenticating anybody and publishing valid metadata, with no configuration
+that did both.</p>
+<p>So enforcement now defaults off and, when switched on, is checked at
+construction rather than discovered per request. It works when the token
+really does carry the resource:</p>
+<ul>
+<li>a swapped <code>OAUTH2_PROVIDER["ACCESS_TOKEN_MODEL"]</code> carrying a
+  <code>resource</code> field (DOT supports substituting the model), or</li>
+<li>an explicit <code>audience_getter=</code> reading it from wherever it lives — a
+  JWT claim, an upstream gateway header, a related row.</li>
+</ul>
+<p>Turning it on without either raises :class:<code>ImproperlyConfigured</code> at
+startup, naming both ways out, instead of 401-ing every request.</p>
 <p><strong>One resource URL per server.</strong> RFC 8707 binds a token to <em>a</em> resource, so
 each server needs its own canonical URL — that binding is precisely what
 stops a token issued for one resource being replayed against another. Two
