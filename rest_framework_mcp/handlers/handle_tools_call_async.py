@@ -23,6 +23,7 @@ from rest_framework_mcp.handlers.utils import (
     resolve_bound,
     run_with_deadline,
     services_dispatch_policies,
+    split_query_params,
     split_url_kwargs,
     validation_error_data,
 )
@@ -140,12 +141,19 @@ async def _dispatch_tool_call_async(
         argument_binding, unknown_arguments = services_dispatch_policies(binding)
         try:
             spec_params, url_kwarg_values = split_url_kwargs(arguments_raw, binding.url_kwargs)
+            # Read-shaping params leave the spec params and land in the
+            # synthetic request's ``GET`` instead. Always passed — an empty
+            # mapping still *replaces* whatever query string the client hung off
+            # the MCP endpoint URL, so ``request.query_params`` is this
+            # package's value rather than the caller's.
+            spec_params, query_param_values = split_query_params(spec_params, binding.query_params)
             offline = build_offline_context(
                 context.token.user,
                 spec_params,
                 http_request=context.http_request,
                 action=binding.name,
                 kwargs=url_kwarg_values or None,
+                query_params=query_param_values,
             )
             result = await adispatch_spec(
                 binding.spec,

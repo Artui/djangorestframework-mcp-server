@@ -32,6 +32,7 @@ from rest_framework_mcp.constants import (
     RESERVED_POST_FETCH_KEYS,
     ArgumentBinding,
 )
+from rest_framework_mcp.registry.types.query_param import QueryParam
 from rest_framework_mcp.registry.types.url_kwarg import UrlKwarg
 
 
@@ -59,6 +60,53 @@ def validate_url_kwargs(*, label: str, url_kwargs: tuple[UrlKwarg, ...]) -> None
         declarations=url_kwargs,
         reserved=RESERVED_POST_FETCH_KEYS,
     )
+
+
+def validate_query_params(
+    *,
+    label: str,
+    query_params: tuple[QueryParam, ...],
+    url_kwargs: tuple[UrlKwarg, ...] = (),
+) -> None:
+    """Fail-fast at registration time on a bad ``query_params`` declaration.
+
+    The sibling of :func:`validate_url_kwargs`, delegating the name checks to the
+    same shared ``validate_channel_names`` with the same reserved set: a query
+    param is popped out of the caller's arguments exactly as a URL kwarg is, so
+    the same names are off-limits (the post-fetch pagination knobs and the
+    dispatcher's pool seeds). ``QueryParam`` carries no ``required`` flag, so the
+    validator's required-with-a-default check is inert here — by construction, not
+    by omission: a read-shaping param the spec runs fine without cannot be
+    required.
+
+    **Cross-channel exclusivity is checked here rather than upstream**, and that
+    is a deliberate (small) deviation from the plan. ``validate_channel_names``
+    takes *one* declaration list, so it cannot see that a name appears in both
+    channels; expressing the rule through it would mean either an upstream
+    signature change or calling it with a concatenated list, which would report
+    the overlap as a "duplicate url_kwargs name" and point the consumer at the
+    wrong knob. The check is three lines and the message is the whole value, so
+    it lives here until a second consumer needs it — at which point the shared
+    validator is still the right home.
+
+    One name cannot route to two channels: a URL kwarg lands in ``view.kwargs``
+    and a query param in ``request.query_params``, and a value can only be popped
+    from the arguments once.
+    """
+    validate_channel_names(
+        label=label,
+        kind="query_params",
+        declarations=query_params,
+        reserved=RESERVED_POST_FETCH_KEYS,
+    )
+    overlap = sorted({qp.name for qp in query_params} & {uk.name for uk in url_kwargs})
+    if overlap:
+        raise ImproperlyConfigured(
+            f"{label}: name(s) {overlap} are declared as both a QueryParam and a "
+            "UrlKwarg. A value routes to one channel — query_params reaches "
+            "request.query_params, url_kwargs reaches view.kwargs — and is popped "
+            "from the arguments once. Pick the channel the reader actually uses."
+        )
 
 
 def validate_input_serializer_against_callable(
@@ -387,5 +435,6 @@ __all__ = [
     "merge_meta",
     "merge_tool_annotations",
     "validate_input_serializer_against_callable",
+    "validate_query_params",
     "validate_url_kwargs",
 ]

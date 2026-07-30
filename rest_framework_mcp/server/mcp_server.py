@@ -51,6 +51,7 @@ from rest_framework_mcp.registry.tool_registry import ToolRegistry
 from rest_framework_mcp.registry.types.chain_step import ChainStep
 from rest_framework_mcp.registry.types.chain_tool_binding import ChainToolBinding
 from rest_framework_mcp.registry.types.prompt_binding import PromptBinding
+from rest_framework_mcp.registry.types.query_param import QueryParam
 from rest_framework_mcp.registry.types.resource_binding import ResourceBinding
 from rest_framework_mcp.registry.types.selector_tool_binding import SelectorToolBinding
 from rest_framework_mcp.registry.types.tool_binding import ToolBinding
@@ -230,6 +231,7 @@ class MCPServer:
         always_listed: bool = False,
         spec_kwargs_provides: tuple[str, ...] = (),
         url_kwargs: tuple[UrlKwarg, ...] = (),
+        query_params: tuple[QueryParam, ...] = (),
         max_result_bytes: int | None | UnsetType = UNSET,
         dispatch_timeout: float | None | UnsetType = UNSET,
     ) -> ToolBinding:
@@ -290,6 +292,7 @@ class MCPServer:
             always_listed=always_listed,
             spec_kwargs_provides=spec_kwargs_provides,
             url_kwargs=tuple(url_kwargs),
+            query_params=tuple(query_params),
             max_result_bytes=max_result_bytes,
             dispatch_timeout=dispatch_timeout,
         )
@@ -327,6 +330,7 @@ class MCPServer:
         always_listed: bool = False,
         spec_kwargs_provides: tuple[str, ...] = (),
         url_kwargs: tuple[UrlKwarg, ...] = (),
+        query_params: tuple[QueryParam, ...] = (),
         max_result_bytes: int | None | UnsetType = UNSET,
         dispatch_timeout: float | None | UnsetType = UNSET,
         max_page_size: int | None | UnsetType = UNSET,
@@ -403,6 +407,7 @@ class MCPServer:
             always_listed=always_listed,
             spec_kwargs_provides=spec_kwargs_provides,
             url_kwargs=tuple(url_kwargs),
+            query_params=tuple(query_params),
             max_result_bytes=max_result_bytes,
             dispatch_timeout=dispatch_timeout,
             max_page_size=max_page_size,
@@ -967,6 +972,7 @@ class MCPServer:
         always_listed: bool = False,
         spec_kwargs_provides: tuple[str, ...] = (),
         url_kwargs: tuple[UrlKwarg, ...] = (),
+        query_params: tuple[QueryParam, ...] = (),
     ) -> Callable[[Callable[..., Any]], Callable[..., Any]]:
         """Decorator form of :meth:`register_service_tool`.
 
@@ -1013,6 +1019,7 @@ class MCPServer:
                 always_listed=always_listed,
                 spec_kwargs_provides=spec_kwargs_provides,
                 url_kwargs=url_kwargs,
+                query_params=query_params,
             )
             return fn
 
@@ -1043,6 +1050,7 @@ class MCPServer:
         always_listed: bool = False,
         spec_kwargs_provides: tuple[str, ...] = (),
         url_kwargs: tuple[UrlKwarg, ...] = (),
+        query_params: tuple[QueryParam, ...] = (),
     ) -> Callable[[Callable[..., Any]], Callable[..., Any]]:
         """Decorator form of :meth:`register_selector_tool`.
 
@@ -1096,6 +1104,7 @@ class MCPServer:
                 always_listed=always_listed,
                 spec_kwargs_provides=spec_kwargs_provides,
                 url_kwargs=url_kwargs,
+                query_params=query_params,
             )
             return fn
 

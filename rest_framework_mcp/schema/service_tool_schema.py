@@ -25,7 +25,7 @@ def build_service_tool_input_schema(binding: ToolBinding) -> dict[str, Any]:
     schema: dict[str, Any] = build_input_schema(
         binding.spec.input_serializer, partial=binding.spec.partial is True
     )
-    if not binding.url_kwargs:
+    if not binding.url_kwargs and not binding.query_params:
         return schema
     properties: dict[str, Any] = dict(schema.get("properties", {}))
     required: list[str] = list(schema.get("required", []))
@@ -33,6 +33,11 @@ def build_service_tool_input_schema(binding: ToolBinding) -> dict[str, Any]:
         properties[url_kwarg.name] = url_kwarg.json_schema()
         if url_kwarg.required and url_kwarg.name not in required:
             required.append(url_kwarg.name)
+    # Query params never join ``required``: a read-shaping param the spec runs
+    # fine without cannot be required, which is why ``QueryParam`` carries no
+    # such flag in the first place.
+    for query_param in binding.query_params:
+        properties[query_param.name] = query_param.json_schema()
     merged: dict[str, Any] = {**schema, "type": "object", "properties": properties}
     if required:
         merged["required"] = required

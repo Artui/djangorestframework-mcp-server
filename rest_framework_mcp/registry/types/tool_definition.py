@@ -13,6 +13,7 @@ from rest_framework_mcp.constants import (
     ToolKind,
     UnknownArguments,
 )
+from rest_framework_mcp.registry.types.query_param import QueryParam
 from rest_framework_mcp.registry.types.url_kwarg import UrlKwarg
 
 
@@ -92,6 +93,11 @@ class ToolDefinition:
     off-HTTP ``view.kwargs`` at dispatch (see :class:`UrlKwarg`). ``None`` means
     "use the registration default" (no URL kwargs)."""
 
+    query_params: Sequence[QueryParam] | None = None
+    """Read-shaping values the model supplies as tool args, seeded into the
+    off-HTTP ``request.query_params`` at dispatch (see :class:`QueryParam`).
+    ``None`` means "use the registration default" (no query params)."""
+
     @classmethod
     def service(
         cls,
@@ -114,6 +120,7 @@ class ToolDefinition:
         always_listed: bool | None = None,
         spec_kwargs_provides: Sequence[str] | None = None,
         url_kwargs: Sequence[UrlKwarg] | None = None,
+        query_params: Sequence[QueryParam] | None = None,
     ) -> ToolDefinition:
         """Typed entry point for service-tool definitions."""
         return cls(
@@ -136,6 +143,7 @@ class ToolDefinition:
             always_listed=always_listed,
             spec_kwargs_provides=spec_kwargs_provides,
             url_kwargs=url_kwargs,
+            query_params=query_params,
         )
 
     @classmethod
@@ -163,6 +171,7 @@ class ToolDefinition:
         always_listed: bool | None = None,
         spec_kwargs_provides: Sequence[str] | None = None,
         url_kwargs: Sequence[UrlKwarg] | None = None,
+        query_params: Sequence[QueryParam] | None = None,
     ) -> ToolDefinition:
         """Typed entry point for selector-tool definitions.
 
@@ -194,6 +203,7 @@ class ToolDefinition:
             always_listed=always_listed,
             spec_kwargs_provides=spec_kwargs_provides,
             url_kwargs=url_kwargs,
+            query_params=query_params,
         )
 
 

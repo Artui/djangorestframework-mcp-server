@@ -77,7 +77,14 @@ async def handle_resources_read_async(
             )
 
         drf_request = build_offline_context(
-            context.token.user, None, http_request=context.http_request
+            context.token.user,
+            None,
+            http_request=context.http_request,
+            # Resources take the closing of the undeclared channel and nothing
+            # more: a resource URI *is* a locator, so per-call read-shaping
+            # belongs in its URI template (whose variables already route to
+            # ``view.kwargs``) rather than in a second registration knob.
+            query_params={},
         ).request
 
         pool: dict[str, Any] = {

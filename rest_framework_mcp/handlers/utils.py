@@ -27,6 +27,7 @@ from rest_framework_mcp.output.enforce_result_bytes import enforce_result_bytes
 from rest_framework_mcp.output.error_tool_result import build_error_tool_result
 from rest_framework_mcp.protocol.types.json_rpc_error import JsonRpcError
 from rest_framework_mcp.registry.types.chain_tool_binding import ChainToolBinding
+from rest_framework_mcp.registry.types.query_param import QueryParam
 from rest_framework_mcp.registry.types.selector_tool_binding import SelectorToolBinding
 from rest_framework_mcp.registry.types.url_kwarg import UrlKwarg
 
@@ -77,6 +78,43 @@ def split_url_kwargs(
         raise ServiceValidationError(
             {"non_field_errors": [f"Missing required argument(s): {names_repr}."]}
         )
+    params = {key: value for key, value in arguments.items() if key not in names}
+    return params, values
+
+
+def split_query_params(
+    arguments: dict[str, Any], query_params: tuple[QueryParam, ...]
+) -> tuple[dict[str, Any], dict[str, Any]]:
+    """Split ``arguments`` into ``(params, query_param_values)``.
+
+    The sibling of :func:`split_url_kwargs`, and simpler: a
+    :class:`QueryParam` carries no ``required`` flag, so there is nothing to
+    raise about. Each declared param takes the value the model supplied, else its
+    ``default`` when set, else stays absent — and its name is removed from
+    ``params`` so the value routes **only** to ``request.query_params`` and never
+    reaches the spec as an ordinary input.
+
+    That popping is what keeps a query param out of ``unknown_arguments``: by the
+    time the policy runs, the name is gone from the arguments entirely.
+
+    ⚠ A ``filter_set`` field is **not** a query param and must not be declared as
+    one. Filter fields are already generated into the tool schema and flow
+    through as ordinary ``params``, which is where ``dispatch_spec`` reads them
+    (as ``filter_data``); declaring one here would pop it out of the args and it
+    would silently stop filtering.
+
+    Non-mutating. With no declarations the original ``arguments`` dict is
+    returned unchanged (no copy).
+    """
+    if not query_params:
+        return arguments, {}
+    names = {qp.name for qp in query_params}
+    values: dict[str, Any] = {}
+    for query_param in query_params:
+        if query_param.name in arguments:
+            values[query_param.name] = arguments[query_param.name]
+        elif query_param.default is not None:
+            values[query_param.name] = query_param.default
     params = {key: value for key, value in arguments.items() if key not in names}
     return params, values
 
@@ -407,6 +445,7 @@ __all__ = [
     "resolve_bound",
     "run_with_deadline",
     "services_dispatch_policies",
+    "split_query_params",
     "split_url_kwargs",
     "validate_input_against_serializer",
     "validation_error_data",

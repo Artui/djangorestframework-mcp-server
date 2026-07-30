@@ -86,6 +86,11 @@ def build_selector_tool_input_schema(
         if url_kwarg.required and url_kwarg.name not in required:
             required.append(url_kwarg.name)
 
+    # Read-shaping params, routed to ``request.query_params`` at dispatch. Never
+    # required — see ``build_service_tool_input_schema``.
+    for query_param in binding.query_params:
+        properties[query_param.name] = query_param.json_schema()
+
     out: dict[str, Any] = {"type": "object", "properties": properties}
     if required:
         out["required"] = required

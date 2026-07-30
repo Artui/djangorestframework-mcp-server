@@ -211,6 +211,66 @@ the two adapters that each had a copy had already drifted apart on which names
 they reserved. `from rest_framework_mcp import UrlKwarg` keeps working.
 Requires `djangorestframework-services>=0.28.1`.
 
+### Query params: read-shaping values the serializer reads
+
+`UrlKwarg`'s sibling. A `QueryParam` is a model-supplied argument that lands in
+`request.query_params` instead of `view.kwargs` — the channel a serializer reads
+when it branches on the query string (django-restql field selection, a custom
+serializer keyed on `?expand=`):
+
+```python
+from rest_framework_mcp import QueryParam
+
+server.register_selector_tool(
+    name="invoices.list",
+    spec=SelectorSpec(kind=SelectorKind.LIST, selector=list_invoices,
+                      output_serializer=InvoiceSerializer),
+    paginate=True,
+    query_params=(
+        QueryParam("query", description="django-restql fieldset, e.g. {id,number}"),
+    ),
+)
+```
+
+The value is advertised in the tool's `inputSchema`, **popped** from the
+arguments, and handed to `build_offline_context(query_params=…)`. It never
+reaches the spec as an input, so the unknown-argument policy never sees it.
+
+Three rules worth knowing:
+
+- **Never required.** A read-shaping param the spec runs fine without cannot be
+  required, which is why `QueryParam` has no such flag — unlike `UrlKwarg`,
+  where a missing route capture means the spec cannot run at all.
+- **One name, one channel.** Declaring the same name as both a `QueryParam` and a
+  `UrlKwarg` raises at registration: a value is popped from the arguments once
+  and routes to one place.
+- **A `filter_set` field is not a query param.** Filter fields are already
+  generated into the tool schema and flow through as ordinary arguments, which is
+  where `dispatch_spec` reads them. Declaring one as a `QueryParam` would pop it
+  out of the arguments and it would silently stop filtering.
+
+!!! warning "The MCP endpoint's query string is no longer a channel"
+    Every dispatch path wraps the real Django `POST` to the MCP endpoint, so
+    until `0.23.0` whatever query string a client appended to that URL —
+    `POST /mcp/?fields=all` — showed up in `request.query_params` for every call
+    on that connection. It was undeclared, client-controlled, identical for every
+    call, and invisible to the model.
+
+    Every call site now passes `query_params=` explicitly, so the synthetic
+    request's `GET` is always a value this package chose: the registered params
+    for a tool that declares them, and empty everywhere else. If you were relying
+    on that passthrough, declare a `QueryParam` for each value instead — it then
+    arrives per call, advertised to the model, and validated at registration.
+
+    Resources and prompts get the closing and no registration knob: a resource
+    URI *is* a locator, so per-call read-shaping belongs in its URI template,
+    whose variables already route to `view.kwargs`.
+
+`QueryParam` is
+[drf-services' type](https://github.com/Artui/djangorestframework-services/blob/main/rest_framework_services/types/query_param.py),
+re-exported here for the same reason as `UrlKwarg` — one declaration, whichever
+transport carries it.
+
 ### `SelectorSpec` for resources
 
 `register_resource(selector=...)` requires a

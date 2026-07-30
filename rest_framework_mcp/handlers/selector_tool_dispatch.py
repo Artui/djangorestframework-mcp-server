@@ -66,6 +66,7 @@ from rest_framework_mcp.handlers.utils import (
     consume_rate_limits,
     resolve_bound,
     services_dispatch_policies,
+    split_query_params,
     split_url_kwargs,
     validate_input_against_serializer,
     validation_error_data,
@@ -239,8 +240,18 @@ def _build_request_and_validate(
     ``PrimaryKeyRelatedField`` queryset, an ownership check) behaves the same
     over both transports.
     """
+    # Split first: the value has to be in hand before the request is built, and
+    # unlike the URL-kwarg split this one cannot fail (a ``QueryParam`` has no
+    # ``required``).
+    _qp_params, query_param_values = split_query_params(arguments_raw, binding.query_params)
     drf_request = build_offline_context(
-        context.token.user, arguments_raw, http_request=context.http_request
+        context.token.user,
+        arguments_raw,
+        http_request=context.http_request,
+        # Always passed, empty or not: this *replaces* the wrapped request's
+        # ``GET``, so the MCP endpoint's own query string can never reach a
+        # serializer reading ``request.query_params``.
+        query_params=query_param_values,
     ).request
     try:
         # URL kwargs route through ``view.kwargs`` (from where drf-services
@@ -312,6 +323,10 @@ def _selector_tool_additional_known_keys(binding: SelectorToolBinding) -> frozen
     # Registered URL kwargs are advertised in the inputSchema and popped into
     # ``view.kwargs`` at dispatch — known, not "unknown", to the arg check.
     known.update(url_kwarg.name for url_kwarg in binding.url_kwargs)
+    # Same for registered query params — advertised in the schema and popped into
+    # ``request.query_params``. Without this, ``unknown_arguments=REJECT`` would
+    # flag a legitimate read-shaping argument as unrecognised.
+    known.update(query_param.name for query_param in binding.query_params)
     return frozenset(known)
 
 
@@ -444,6 +459,9 @@ def _dispatch_kwargs(
     # value never also reaches the selector as an ordinary input. The split
     # cannot fail here — ``_build_request_and_validate`` ran it first.
     spec_params, _url_kwarg_values = split_url_kwargs(arguments_raw, binding.url_kwargs)
+    # Query params rode onto ``request.query_params``; strip them here for the
+    # same reason as the URL kwargs above — one value, one channel.
+    spec_params, _query_param_values = split_query_params(spec_params, binding.query_params)
     return {
         "user": context.token.user,
         "params": _selector_dispatch_params(spec_params, validated),

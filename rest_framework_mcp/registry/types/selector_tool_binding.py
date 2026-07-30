@@ -10,6 +10,7 @@ from rest_framework_services.types.selector_kind import SelectorKind
 from rest_framework_services.types.selector_spec import SelectorSpec
 
 from rest_framework_mcp.constants import ArgumentBinding, OutputFormat, UnknownArguments
+from rest_framework_mcp.registry.types.query_param import QueryParam
 from rest_framework_mcp.registry.types.url_kwarg import UrlKwarg
 
 ResultT = TypeVar("ResultT")
@@ -149,6 +150,14 @@ class SelectorToolBinding(Generic[ResultT, ExtraT]):
     """Opt this binding back into listings it would otherwise be filtered out
     of — same semantics as :attr:`ToolBinding.always_listed`, applied to
     selector tools when ``FILTER_LISTINGS_BY_PERMISSIONS`` is enabled."""
+
+    query_params: tuple[QueryParam, ...] = ()
+    """Read-shaping params routed to ``request.query_params`` at dispatch.
+
+    Popped from the caller's arguments like a URL kwarg, but landing in the
+    synthetic request's ``GET`` rather than ``view.kwargs`` — the channel a
+    serializer reads when it branches on the query string. A ``filter_set``
+    field is **not** one of these; see ``split_query_params``."""
 
     url_kwargs: tuple[UrlKwarg, ...] = ()
     """URL-derived values the model supplies as tool args, seeded into the
