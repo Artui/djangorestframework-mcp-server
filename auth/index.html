@@ -2230,12 +2230,16 @@ indicators — so audience enforcement needs an <code>audience_getter</code>; se
 <td><code>ENFORCE_AUDIENCE</code> is on and the <code>audience_getter</code> returns something other than <code>RESOURCE_URL</code> (with stock DOT it returns <code>None</code>, since DOT records no resource).</td>
 </tr>
 <tr>
-<td>403 with <code>scope=</code> in challenge</td>
-<td>Token authenticated, missing one of the per-binding scopes.</td>
+<td>403 with <code>error="insufficient_scope"</code> and <code>scope=</code> in the challenge</td>
+<td>Token authenticated, missing one of the per-binding scopes. The body also carries JSON-RPC <code>-32002</code> with <code>data.requiredScopes</code>.</td>
 </tr>
 <tr>
 <td>403 with no <code>scope=</code></td>
-<td>A non-scope permission denied (e.g. <code>DjangoPermRequired</code>).</td>
+<td>A non-scope permission denied (e.g. <code>DjangoPermRequired</code>). RFC 6750 defines no error code for that case, so the challenge advertises nothing rather than a scope the client cannot obtain.</td>
+</tr>
+<tr>
+<td>403 with <code>INVALID_REQUEST</code> (<code>-32600</code>) in the body</td>
+<td>Not a permission failure — <code>Origin</code> rejection.</td>
 </tr>
 </tbody>
 </table>
