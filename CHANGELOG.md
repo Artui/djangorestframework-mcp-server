@@ -7,6 +7,38 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Tests
+
+- **A full end-to-end OAuth flow, in one test**: `POST /oauth/register/` (RFC 7591,
+  the public-PKCE shape Claude's connectors send) → unauthenticated `401` carrying
+  the PRM pointer → the authorize passthrough with a real logged-in user → DOT's
+  token endpoint on PKCE alone → `initialize` → `tools/list` → `tools/call` that
+  actually writes a row.
+
+  This closes the gap the last three releases came through. Every existing suite
+  authenticates with `AllowAnyBackend`, so **no test drove the MCP transport with a
+  real OAuth token** — which is why DCR issuing unusable credentials (0.19.0), DCR
+  clients that could not be issued an ID token (0.20.0), and audience enforcement
+  that rejected every token (0.21.0) were each individually invisible. The legs
+  were only ever tested apart. The new suite runs on
+  `DjangoOAuthToolkitBackend` **with a resource URL configured** — the exact
+  combination that was broken.
+
+  Three companion passes: the discovery walk a client performs before it has any
+  credential (PRM → AS metadata → `registration_endpoint`, asserted as a chain
+  because it is the chaining that breaks); scope denial on a narrower grant; and
+  session lifecycle on a real bearer, proving the session and the credential are
+  independent.
+
+### Documentation
+
+- **Corrected the mcp-inspector troubleshooting table's permission rows.** They
+  described a `403` with `scope=` in a `WWW-Authenticate` header for a
+  missing-scope denial. No such path exists: a permission denial rides inside a
+  **200** as JSON-RPC `-32002` with `data.requiredScopes`, and the only
+  challenge-bearing response is the 401. HTTP 403 is used for `Origin` rejection
+  alone. Found by writing the flow test above against the real transport.
+
 ## [0.21.0] — 2026-07-30
 
 ### Fixed
