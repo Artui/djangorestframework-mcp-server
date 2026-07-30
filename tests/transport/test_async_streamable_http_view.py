@@ -561,3 +561,59 @@ async def test_async_delete_passes_csrf_middleware(async_urlconf) -> None:
             headers={"Mcp-Protocol-Version": "2025-11-25", "Mcp-Session-Id": sid},
         )
     assert response.status_code == 204
+
+
+@pytest.mark.django_db(transaction=True)
+async def test_async_permission_denial_is_403_with_a_scope_challenge() -> None:
+    """The async transport maps a denial the same way the sync one does.
+
+    Added because the 403 mapping landed in both viewsets but only the sync
+    path had a denial test — the async branch was live and uncovered, which
+    is how the two paths drift.
+    """
+    from rest_framework_services.types.service_spec import ServiceSpec
+
+    from rest_framework_mcp import MCPServer, ScopeRequired
+    from rest_framework_mcp.auth.backends.allow_any_backend import AllowAnyBackend
+
+    def _noop() -> dict[str, str]:
+        return {}
+
+    # AllowAnyBackend authenticates the request but issues no scopes, so the
+    # denial is a *scope* failure — the branch that carries `scope=` in the
+    # challenge. Without an explicit backend this server would default to DOT's
+    # and 401 before ever reaching the permission check.
+    server = MCPServer(
+        name="async-gated",
+        auth_backend=AllowAnyBackend(),
+        session_store=InMemorySessionStore(),
+    )
+    server.register_service_tool(
+        name="gated",
+        spec=ServiceSpec(service=_noop, atomic=False),
+        description="Needs a scope the AllowAnyBackend token does not carry.",
+        permissions=[ScopeRequired(["invoices:write"])],
+    )
+
+    with override_settings(ROOT_URLCONF=urlconf_for(server, is_async=True)):
+        client = AsyncClient()
+        sid = await _initialize(client)
+        response = await client.post(
+            "/mcp/",
+            data=json.dumps(
+                {
+                    "jsonrpc": "2.0",
+                    "id": 9,
+                    "method": "tools/call",
+                    "params": {"name": "gated", "arguments": {}},
+                }
+            ),
+            content_type="application/json",
+            headers={"Mcp-Protocol-Version": "2025-11-25", "Mcp-Session-Id": sid},
+        )
+
+    assert response.status_code == 403, response.content
+    assert response.json()["error"]["data"]["requiredScopes"] == ["invoices:write"]
+    challenge = response["WWW-Authenticate"]
+    assert 'error="insufficient_scope"' in challenge
+    assert 'scope="invoices:write"' in challenge

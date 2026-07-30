@@ -421,20 +421,22 @@ def test_a_token_without_the_required_scope_is_refused_at_the_tool(flow_settings
         **auth,
     }
 
-    status, payload, _ = _rpc(
+    status, payload, response = _rpc(
         client,
         "tools/call",
         {"name": "issue_invoice", "arguments": {"number": "INV-2", "amount_cents": 1}},
         **session,
     )
-    # Authenticated, so not a 401 — and the denial rides *inside* a 200 as a
-    # JSON-RPC error, not as an HTTP status. Worth pinning: the docs claimed a
-    # `403` with `scope=` in a `WWW-Authenticate` header, and no such path
-    # exists — the only challenge-bearing response is the 401 above. What the
-    # client actually gets is `requiredScopes`, which is the actionable part.
-    assert status == 200, payload
+    # Authenticated, so not a 401 — but 403, which the MCP authorization spec's
+    # error table makes normative for "invalid scopes or insufficient
+    # permissions". The challenge names the scope that would satisfy the call,
+    # so the client knows what to ask for instead of retrying this token.
+    assert status == 403, payload
     assert payload["error"]["code"] == JsonRpcErrorCode.FORBIDDEN
     assert payload["error"]["data"]["requiredScopes"] == ["mcp:write"]
+    challenge = response["WWW-Authenticate"]
+    assert 'error="insufficient_scope"' in challenge
+    assert 'scope="mcp:write"' in challenge
     assert not Invoice.objects.filter(number="INV-2").exists()
 
 

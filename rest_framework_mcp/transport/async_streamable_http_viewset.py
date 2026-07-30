@@ -32,7 +32,11 @@ from rest_framework_mcp.transport.sse_response import build_sse_response
 from rest_framework_mcp.transport.types.session_store import SessionStore
 from rest_framework_mcp.transport.types.sse_broker import SSEBroker
 from rest_framework_mcp.transport.types.sse_replay_buffer import SSEReplayBuffer
-from rest_framework_mcp.transport.utils import principal_for_token
+from rest_framework_mcp.transport.utils import (
+    insufficient_scope_challenge,
+    is_permission_denial,
+    principal_for_token,
+)
 
 _SESSION_HEADER: str = "Mcp-Session-Id"
 _VERSION_HEADER: str = "Mcp-Protocol-Version"
@@ -288,7 +292,18 @@ class AsyncStreamableHttpViewSet(ViewSet):
             response_body = JsonRpcResponse(id=message.id, error=result).to_dict()
         else:
             response_body = JsonRpcResponse(id=message.id, result=result).to_dict()
-        http_response = JsonResponse(response_body, status=200)
+        # A permission denial is a 403 with a challenge naming the missing
+        # scopes, not a 200 with the error tucked inside. The MCP authorization
+        # spec's error table makes the status normative, and the challenge is
+        # how a client learns what to ask for instead of retrying the same
+        # token. Every other dispatch outcome — including a tool that failed on
+        # its own terms — stays a 200.
+        denied: bool = is_permission_denial(result)
+        http_response = JsonResponse(response_body, status=403 if denied else 200)
+        if denied:
+            http_response["WWW-Authenticate"] = insufficient_scope_challenge(
+                result, self._require_auth_backend()
+            )
 
         if is_initialize and not isinstance(result, JsonRpcError):
             new_session: str = await acall(store.create, principal_id=principal)

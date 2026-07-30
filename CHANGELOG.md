@@ -30,14 +30,38 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   session lifecycle on a real bearer, proving the session and the credential are
   independent.
 
-### Documentation
+### Fixed
 
-- **Corrected the mcp-inspector troubleshooting table's permission rows.** They
-  described a `403` with `scope=` in a `WWW-Authenticate` header for a
-  missing-scope denial. No such path exists: a permission denial rides inside a
-  **200** as JSON-RPC `-32002` with `data.requiredScopes`, and the only
-  challenge-bearing response is the 401. HTTP 403 is used for `Origin` rejection
-  alone. Found by writing the flow test above against the real transport.
+- **A permission denial returned HTTP 200 instead of 403, violating the MCP
+  authorization spec.** That spec's error table is normative — `401` for
+  "authorization required or token invalid", **`403` for "invalid scopes or
+  insufficient permissions"** — and a denial went out as a `200` with JSON-RPC
+  `-32002` tucked in the body. A client following the spec has no way to
+  distinguish "you lack a scope" from a successful call it should keep parsing.
+
+  The denial now returns **403** with a `WWW-Authenticate` challenge carrying
+  `error="insufficient_scope"` and `scope="…"`, per RFC 6750 §3.1 — so a client
+  learns what to request on the next authorization round instead of retrying the
+  same token. The JSON-RPC `-32002` body is unchanged, so anything reading
+  `data.requiredScopes` keeps working. A non-scope denial (e.g.
+  `DjangoPermRequired`) is also a 403, but advertises no `scope=`: RFC 6750
+  defines none for that case, and naming a scope the client cannot obtain would
+  send it round a pointless loop.
+
+  Corroborating evidence this was always the intent: `MCPAuthBackend`'s
+  `www_authenticate_challenge(scopes=…)` parameter has existed, and been
+  implemented by both backends, since the auth layer landed — **and nothing ever
+  called it with scopes.** The capability was advertised on the protocol and
+  never wired up, the same shape as the discovery-vs-registration mismatches
+  fixed in 0.19.0–0.21.0.
+
+  **Behaviour change for clients** that treat a `200` as success without
+  inspecting the JSON-RPC envelope: those calls now surface as HTTP errors,
+  which is the point.
+
+  Found by writing the end-to-end flow test below — the assertion disagreed with
+  the documented behaviour, and checking the spec showed the docs were right and
+  the code wrong.
 
 ## [0.21.0] — 2026-07-30
 
