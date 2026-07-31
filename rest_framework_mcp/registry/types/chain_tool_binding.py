@@ -109,6 +109,27 @@ class ChainToolBinding:
     here, on the binding, because the extension makes the *server* the sole
     decider and gives the client no way to ask."""
 
+    invalidates: tuple[str, ...] = ()
+    """URI templates naming the resources a successful call changed.
+
+    Published as ``notifications/resources/updated`` after the transaction
+    commits, so subscribers re-read. Uses the same ``{var}`` syntax as a
+    resource's ``uri_template``, rendered against the result merged with the
+    call's arguments::
+
+        invalidates=("invoices://{pk}", "invoices://")
+
+    ⚠ **Name the collection too if you want it watched.** Topic matching is
+    exact — a prefix rule would match ``invoices://1`` against ``invoices://11``
+    and miss a tenant-scoped scheme entirely — so a client watching
+    ``invoices://`` hears nothing unless the write says so.
+
+    ⚠ **Its boundary is real:** this fires for calls that go through this
+    server and for nothing else. A management command, a Celery job or an admin
+    edit changes the same rows and publishes nothing, which is why
+    ``MCPServer.notify_resource_updated`` exists rather than being an
+    afterthought."""
+
     def __post_init__(self) -> None:
         if not self.steps:
             raise ImproperlyConfigured(f"Chain tool {self.name!r}: at least one step is required.")

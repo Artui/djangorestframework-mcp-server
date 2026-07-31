@@ -9,6 +9,43 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **`invalidates=` — a mutation tool announcing its own changes.** Declared at
+  registration, next to every other per-tool knob, because a spec running
+  through this server *is* the moment a resource changed and the server is
+  already standing in the call path:
+
+  ```python
+  server.register_service_tool(
+      name="invoices.create",
+      spec=ServiceSpec(service=create_invoice),
+      invalidates=("invoices://{pk}", "invoices://"),
+  )
+  ```
+
+  Same `{var}` syntax as a resource's `uri_template`, rendered against the
+  result merged with the call's arguments — result wins, since after a write it
+  is authoritative, while the arguments are the only source for a delete whose
+  result carries nothing. A template that cannot render is dropped rather than
+  raised: the write has already committed, and failing the call over a
+  formatting mistake would report failure for work that succeeded.
+
+  ⚠ **Published after the transaction commits**, via `transaction.on_commit`.
+  Announcing from inside `atomic()` tells a subscriber to re-read something that
+  may still roll back — and a wrong notification is worse than a missed one,
+  since the next read recovers a miss but not a lie. The async transport routes
+  the announcement through the thread that did the write, because Django
+  connections are thread-local and checking the transaction from the event loop
+  reads a different connection that reports none open.
+
+  A call that came back `isError` announces nothing; selector tools do not
+  accept the kwarg at all (a read changes nothing); a chain fires once after the
+  whole chain succeeds rather than per step.
+
+  ⚠ **Its boundary is real and stated in the docs**: it fires for calls that go
+  through this server and nothing else. `MCPServer.notify_resource_updated` is
+  the trigger for everything else, which is why it exists rather than being an
+  afterthought.
+
 - **Server-pushed notifications — `subscriptions/listen`.** A client opens a
   long-lived POST stream and names what it wants to hear about: resource URIs,
   and any of the three `list_changed` kinds.

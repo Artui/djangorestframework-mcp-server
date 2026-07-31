@@ -16,6 +16,7 @@ from rest_framework_services.exceptions.service_validation_error import ServiceV
 from rest_framework_mcp._compat.tracing import span
 from rest_framework_mcp.constants import JsonRpcErrorCode, OutputFormat
 from rest_framework_mcp.handlers.chain_tool_dispatch import dispatch_chain_tool
+from rest_framework_mcp.handlers.invalidation_dispatch import announce_invalidations
 from rest_framework_mcp.handlers.selector_tool_dispatch import dispatch_selector_tool
 from rest_framework_mcp.handlers.task_dispatch import maybe_create_task
 from rest_framework_mcp.handlers.types.context import MCPCallContext
@@ -88,11 +89,15 @@ def handle_tools_call(
     # the three dispatch paths' several ``build_tool_result`` sites — one place
     # to reason about, and it measures the finished result (both copies of the
     # payload) rather than a renderer's intermediate.
-    return enforce_result_ceiling(
+    result: dict[str, Any] | JsonRpcError = enforce_result_ceiling(
         _dispatch_tool_call(binding, params, arguments_raw, context),
         max_result_bytes=resolve_bound(binding.max_result_bytes, context.config.max_result_bytes),
         label=f"Tool {binding.name!r}",
     )
+    # After the ceiling, so a result too large to return does not announce a
+    # change the client cannot then read back.
+    announce_invalidations(binding, result, arguments_raw, context)
+    return result
 
 
 def _dispatch_tool_call(

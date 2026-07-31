@@ -897,6 +897,28 @@ deliver.
 
 ### Publishing a change
 
+**Declare it on the tool that does the writing** — the server is already in the
+call path, so this is the trigger that needs no discipline to remember:
+
+```python
+server.register_service_tool(
+    name="invoices.create",
+    spec=ServiceSpec(service=create_invoice),
+    invalidates=("invoices://{pk}", "invoices://"),
+)
+```
+
+Templates use the same `{var}` syntax as a resource's `uri_template`, rendered
+against the result merged with the call's arguments (**result wins** — after a
+write it is authoritative; the arguments cover a delete, whose result carries
+nothing). Publishing happens **after the transaction commits**, and a call that
+came back `isError` publishes nothing.
+
+⚠ **Its boundary is real, and is why the explicit trigger exists too.** It fires
+for calls that go through this server and for nothing else — a management
+command, a Celery job or an admin edit changes the same rows and announces
+nothing. For those:
+
 ```python
 from django.db import transaction
 
@@ -908,6 +930,7 @@ transaction.on_commit(
 ⚠ **Publish after the transaction commits.** Inside `transaction.atomic()` you
 would be announcing a change that may still roll back, and a subscriber that
 re-reads immediately sees the old value — worse than no notification at all.
+`invalidates=` does this for you; `notify_resource_updated` is yours to place.
 
 ⚠ **Matching is exact, not by prefix.** Publish the concrete URI *and* the
 collection URI if you want watchers of the collection to hear about it. A prefix
