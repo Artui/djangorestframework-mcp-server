@@ -43,6 +43,14 @@ DEFAULTS: dict[str, Any] = {
     "INCLUDE_OUTPUT_SCHEMA": True,
     "ALLOWED_ORIGINS": [],
     "DEFAULT_OUTPUT_FORMAT": "json",
+    # The server's wire identity. Recognised keys: ``name``, ``version``,
+    # ``title``, ``description``, ``websiteUrl``, ``icons``. Every one of them
+    # is also a constructor kwarg on ``MCPServer`` — except ``description``,
+    # which is settings-only because the constructor's ``description=`` already
+    # means the ``initialize`` ``instructions`` string (see ``Implementation``).
+    #
+    # ``icons`` is a list of dicts mirroring the spec's ``Icon`` — ``src``
+    # (required, https: or data: only), ``mimeType``, ``sizes``, ``theme``.
     "SERVER_INFO": {"name": "djangorestframework-mcp-server"},
     "MAX_REQUEST_BYTES": 1_048_576,
     # Ceiling on a single tool result / resource read, measured on the encoded

@@ -36,7 +36,7 @@ and now raise `ImproperlyConfigured` if still present: `AUTH_BACKEND`,
 |---|---|---|
 | `PROTOCOL_VERSIONS` | `["2025-11-25", "2025-06-18"]` | Accepted `MCP-Protocol-Version` values. The first entry is the fallback when the header is absent and not required. |
 | `REQUIRE_PROTOCOL_VERSION_HEADER` | `True` | Reject a post-`initialize` request that omits `MCP-Protocol-Version` (HTTP 400). Set `False` for clients that never send it. A header that is *present but unsupported* is rejected either way — downgrading silently there would mask a real version mismatch. |
-| `SERVER_INFO` | `{"name": "djangorestframework-mcp-server"}` | Default `serverInfo` for `initialize`. Prefer per-server identity: `MCPServer(name=…, version=…, title=…)`. |
+| `SERVER_INFO` | `{"name": "djangorestframework-mcp-server"}` | Default `serverInfo` for `initialize`. Recognised keys: `name`, `version`, `title`, `description`, `websiteUrl`, `icons` (a list of `{src, mimeType, sizes, theme}` dicts). Prefer per-server identity: `MCPServer(name=…, version=…, title=…, website_url=…, icons=…)`. `description` is settings-only — the constructor's `description=` is the `initialize` `instructions` string, which is written for the model rather than for a connection list. |
 
 ## Transport & security
 

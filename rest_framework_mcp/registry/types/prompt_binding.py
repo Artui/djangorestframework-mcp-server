@@ -4,6 +4,7 @@ from collections.abc import Callable
 from dataclasses import dataclass, field
 from typing import Any
 
+from rest_framework_mcp.protocol.types.icon import Icon
 from rest_framework_mcp.protocol.types.prompt_argument import PromptArgument
 
 
@@ -35,6 +36,20 @@ class PromptBinding:
     # prompt's ``prompts/list`` entry.
     meta: dict[str, Any] = field(default_factory=dict)
     title: str | None = None
+    completions: dict[str, Callable[..., Any]] = field(default_factory=dict)
+    """Argument name → completer callable, powering ``completion/complete``.
+
+    A completer is dispatched through ``resolve_callable_kwargs`` against a
+    pool of ``value`` (the text typed so far), ``arguments`` (siblings the
+    client has already resolved, also spread by name), ``request`` and
+    ``user``. It returns an iterable of suggestions — a list, a generator or
+    a queryset — and the handler slices it to the spec's cap rather than
+    draining it."""
+
+    icons: tuple[Icon, ...] = ()
+    """Display icons for this entry, emitted in its listing. Purely
+    presentational — a client renders them; nothing in dispatch reads them."""
+
     always_listed: bool = False
     """Opt this prompt back into ``prompts/list`` when
     ``FILTER_LISTINGS_BY_PERMISSIONS`` would otherwise hide it — same semantics

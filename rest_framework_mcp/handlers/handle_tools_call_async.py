@@ -59,7 +59,9 @@ async def handle_tools_call_async(
 
     binding = context.tools.get(tool_name)
     if binding is None:
-        return JsonRpcError(JsonRpcErrorCode.TOOL_NOT_FOUND, f"Unknown tool: {tool_name!r}")
+        # See the sync sibling: the tools spec answers an unknown tool with
+        # ``-32602``.
+        return JsonRpcError(JsonRpcErrorCode.INVALID_PARAMS, f"Unknown tool: {tool_name!r}")
 
     arguments_raw: Any = params.get("arguments") or {}
     if not isinstance(arguments_raw, dict):
@@ -209,6 +211,9 @@ async def _dispatch_tool_call_async(
             payload,
             output_format=output_format,
             include_structured_content=emit_structured_content,
+            content_kind=binding.content_kind,
+            content_mime_type=binding.content_mime_type,
+            binding_name=binding.name,
         ).to_dict()
 
 

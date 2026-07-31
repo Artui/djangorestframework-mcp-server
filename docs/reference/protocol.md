@@ -11,6 +11,11 @@ JSON-RPC envelope, MCP message types, and error codes.
 ::: rest_framework_mcp.constants.JsonRpcErrorCode
 ::: rest_framework_mcp.protocol.parse_message.parse_message
 
+## Display metadata
+
+::: rest_framework_mcp.protocol.types.icon.Icon
+::: rest_framework_mcp.constants.IconTheme
+
 ## Initialize handshake
 
 ::: rest_framework_mcp.protocol.types.implementation.Implementation
@@ -23,6 +28,7 @@ JSON-RPC envelope, MCP message types, and error codes.
 
 ::: rest_framework_mcp.protocol.types.tool.Tool
 ::: rest_framework_mcp.protocol.types.tool_content_block.ToolContentBlock
+::: rest_framework_mcp.constants.ToolContentKind
 ::: rest_framework_mcp.protocol.types.tool_result.ToolResult
 
 ## Resources
@@ -37,3 +43,7 @@ JSON-RPC envelope, MCP message types, and error codes.
 ::: rest_framework_mcp.protocol.types.prompt_argument.PromptArgument
 ::: rest_framework_mcp.protocol.types.prompt_message.PromptMessage
 ::: rest_framework_mcp.protocol.types.get_prompt_result.GetPromptResult
+
+## Completion
+
+::: rest_framework_mcp.protocol.types.completion.Completion

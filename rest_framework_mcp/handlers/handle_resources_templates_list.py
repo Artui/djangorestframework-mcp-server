@@ -37,6 +37,7 @@ def handle_resources_templates_list(
             name=binding.name,
             description=binding.description,
             title=binding.title,
+            icons=binding.icons,
             mime_type=binding.mime_type,
             annotations=dict(binding.annotations) or None,
             meta=dict(binding.meta) or None,

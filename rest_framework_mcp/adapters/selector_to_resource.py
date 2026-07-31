@@ -8,6 +8,7 @@ from rest_framework_services.types.selector_spec import SelectorSpec
 from rest_framework_mcp.adapters.utils import merge_meta
 from rest_framework_mcp.auth.permissions.wrap_spec_permissions import wrap_spec_permissions
 from rest_framework_mcp.constants import ResourceEncoding
+from rest_framework_mcp.protocol.types.icon import Icon
 from rest_framework_mcp.registry.types.resource_binding import ResourceBinding
 
 
@@ -18,6 +19,8 @@ def selector_to_resource(
     selector: SelectorSpec,
     description: str | None = None,
     title: str | None = None,
+    icons: tuple[Icon, ...] = (),
+    completions: dict[str, Callable[..., Any]] | None = None,
     output_serializer: type | None = None,
     mime_type: str = "application/json",
     encoding: ResourceEncoding = ResourceEncoding.JSON,
@@ -70,6 +73,8 @@ def selector_to_resource(
         uri_template=uri_template,
         description=description,
         title=title,
+        icons=icons,
+        completions=dict(completions or {}),
         selector=resolved_callable,
         kind=selector.kind,
         output_serializer=output_serializer,

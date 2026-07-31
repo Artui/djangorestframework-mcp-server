@@ -40,7 +40,7 @@ def build_error_tool_result(
         error.update(detail)
     payload: dict[str, Any] = {"error": error}
     return ToolResult(
-        content=[ToolContentBlock(type="text", text=encode_json(payload))],
+        content=[ToolContentBlock.text_block(encode_json(payload))],
         structured_content=None,
         is_error=True,
     )

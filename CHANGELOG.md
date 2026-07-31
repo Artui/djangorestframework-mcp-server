@@ -7,6 +7,130 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- **Non-text tool results and binary resources.** Every content block the MCP
+  spec defines is now reachable, where before only `text` was ever constructed
+  and `ResourceContents.blob` existed as a field nothing populated.
+
+  - `ResourceEncoding.BLOB` — the selector returns `bytes`, the body is
+    base64-encoded into `blob`. What a PDF, an image or a generated spreadsheet
+    needs.
+  - `content_kind=` / `content_mime_type=` on tool registration, taking
+    `ToolContentKind.IMAGE` / `AUDIO` / `RESOURCE_LINK` (default `TEXT`, which
+    is today's behaviour unchanged). Declared, never sniffed — a base64 string
+    and a text body are indistinguishable by inspection, so guessing would
+    silently change behaviour for a tool that already returns one.
+  - `ToolContentBlock` gained typed constructors for all five block types
+    (`text_block` / `image` / `audio` / `resource_link` / `embedded_resource`)
+    and the fields the non-text ones need. `PromptMessage.block()` reuses them,
+    so a prompt can carry an image without a parallel vocabulary.
+
+  `RESOURCE_LINK` is the one worth reaching for: the tool returns
+  `{"uri": …, "name": …}` (or a list of them) naming resources this server's own
+  `resources/read` already serves, so nothing large rides on the tool-result
+  path and the client fetches only what it decides it wants. It keeps
+  `structuredContent` — the links *are* JSON — while media kinds carry neither
+  `structuredContent` nor `outputSchema`, since neither can describe a PNG.
+  Declaring a media kind alongside either is refused at registration rather
+  than ignored at dispatch.
+
+- **`completion/complete` — argument autocompletion.** Register a completer per
+  prompt argument or URI-template variable with `completions={"language": …}`;
+  clients offering a dropdown while a user types now get suggestions.
+
+  Completers run through the same kwarg-pool dispatch as everything else, so
+  one declares whichever of `value` (the text typed so far), `arguments`
+  (siblings the client has already resolved, also spread by name), `request`
+  and `user` it needs. Return any iterable — list, generator, queryset: the
+  handler slices to the spec's cap of 100 and reports `hasMore` rather than
+  draining it, so a queryset reads 101 rows instead of the table.
+
+  ⚠ **Completion runs the binding's `permissions` and `rate_limits`.** Without
+  that, a resource a caller may not read would still answer "which ids exist?"
+  one keystroke at a time. A completer keyed to an argument the binding does
+  not have is refused at registration — otherwise the failure is an empty
+  dropdown with nothing in the logs.
+
+- **`icons` and `websiteUrl`.** `icons=` on every registration method and on
+  `MCPServer`, emitted in `tools/list`, `resources/list`,
+  `resources/templates/list`, `prompts/list` and `serverInfo`; `website_url=`
+  and a settings-only `description` on the server's own identity. `SERVER_INFO`
+  accepts all of them.
+
+  `Icon.src` must be `https:` or a `data:` URI, checked at construction:
+  clients are *required* to reject anything else, so an `http://` icon is not a
+  worse icon — it is one the user never sees, with nothing in the logs to say
+  why.
+
+- **`client_id_metadata_document_supported` in authorization-server metadata,**
+  sourced from django-oauth-toolkit's `CIMD_ENABLED` (3.4.0+, feature-detected
+  — the `[oauth]` floor is unchanged, and CIMD is opt-in even on 3.4). Client ID
+  Metadata Documents sit *above* Dynamic Client Registration in the spec's
+  registration priority order, and DCR is now deprecated: a server that supports
+  CIMD but stays silent about it sends every client down the deprecated path for
+  no reason.
+
+- **`application_type` accepted on dynamic client registration.** Validated
+  against OIDC's `native` / `web` and echoed in the registration response. MCP
+  clients are required to send it — an OIDC authorization server derives
+  redirect-URI constraints from it, and an omitted value defaults to `web`,
+  which conflicts with the `localhost` redirect URIs a desktop or CLI client
+  needs. It was previously dropped in silence. ⚠ This server validates and
+  echoes but does **not** enforce those constraints: it is not acting as an
+  OIDC provider, and the spec says non-OIDC servers safely ignore the
+  parameter.
+
+### Changed
+
+- ⚠ **Breaking: JSON-RPC error codes now match the MCP spec.**
+
+  | Condition | Was | Now |
+  |---|---|---|
+  | `resources/read`, unknown URI | `-32003` | **`-32002`** (+ `data.uri`) |
+  | `tools/call`, unknown tool | `-32004` | **`-32602`** |
+  | `prompts/get`, unknown prompt | `-32003` | **`-32602`** |
+  | Permission denied | `-32002` | **`-32006`** |
+
+  The last row is the reason the others could not wait. `-32002` is the spec's
+  code for "Resource not found" — and the one legacy code the `2026-07-28`
+  revision singles out for clients to keep recognising — while this package was
+  spending it on permission denials. A spec-following client read every denial
+  as a missing resource. The HTTP status on a denial is unchanged (`403`, with
+  the same `WWW-Authenticate` challenge), which is what a client should be
+  acting on.
+
+  `-32003` and `-32004` are now **burned**: they are not reused for anything
+  else, because a client written against an older release still reads them as
+  "not found" and "unknown tool". `JsonRpcErrorCode.TOOL_NOT_FOUND` is removed;
+  `RESOURCE_NOT_FOUND` remains, renumbered.
+
+- ⚠ **Capabilities are advertised only when the server can answer them.**
+  `tools` and `resources` were advertised unconditionally while `prompts` was
+  conditional, so a server with no resources still told every client to go and
+  call `resources/list`. All four now follow one rule, sourced from the
+  registries. Deliberately *not* filtered per caller by
+  `FILTER_LISTINGS_BY_PERMISSIONS`: capabilities describe the server, and making
+  them per-caller would tell an under-privileged client the method does not
+  exist rather than that it may not use it.
+
+- **`ServerCapabilities.logging` removed.** It was never populated, and the
+  `2026-07-28` revision deprecated the logging utility outright — leaving the
+  field would only invite someone to fill it in.
+
+- **`ScopeRequired([])` / `DjangoPermRequired([])` are refused.** `all(...)`
+  over nothing is `True`, so an empty requirement permits everything while
+  reading as a guard at the registration site — and satisfies the
+  unguarded-tool check that would otherwise have warned.
+
+- ⚠ **`permissions=` now rejects entries that cannot gate**, on every
+  registration method. Security-relevant rather than tidy:
+  `permissions="ScopeRequired"` spreads into one entry per character; the tuple
+  is non-empty so the unguarded-tool warning stays quiet, and at dispatch every
+  entry is skipped and the call is **allowed** — a tool that reads as guarded
+  and gates nothing. Only `has_permission` is required, so a custom permission
+  that implements the gate and omits `required_scopes` remains valid.
+
 ### Fixed
 
 - ⚠ **A permission implementing only `has_permission` hid a binding from
@@ -29,21 +153,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   That asymmetry *was* the bug — a developer who learned the permissive sibling
   naturally wrote the same thing here — so the fix removes the inconsistency
   rather than documenting it.
-
-### Changed
-
-- **`ScopeRequired([])` / `DjangoPermRequired([])` are refused.** `all(...)`
-  over nothing is `True`, so an empty requirement permits everything while
-  reading as a guard at the registration site — and satisfies the
-  unguarded-tool check that would otherwise have warned.
-
-- ⚠ **`permissions=` now rejects entries that cannot gate**, on every
-  registration method. Security-relevant rather than tidy:
-  `permissions="ScopeRequired"` spreads into one entry per character; the tuple
-  is non-empty so the unguarded-tool warning stays quiet, and at dispatch every
-  entry is skipped and the call is **allowed** — a tool that reads as guarded
-  and gates nothing. Only `has_permission` is required, so a custom permission
-  that implements the gate and omits `required_scopes` remains valid.
 
 ## [0.23.0] — 2026-07-30
 

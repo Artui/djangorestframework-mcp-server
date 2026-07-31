@@ -114,7 +114,7 @@ def test_tools_call_denied_by_permission() -> None:
     )
     out = handle_tools_call({"name": "t", "arguments": {}}, _ctx(tools))
     assert isinstance(out, JsonRpcError)
-    assert out.code == -32002
+    assert out.code == -32006
     assert out.data == {"requiredScopes": ["scope:x"]}
 
 
@@ -141,7 +141,7 @@ def test_tools_call_denied_by_spec_permission_is_forbidden() -> None:
     )
     out = handle_tools_call({"name": "t", "arguments": {}}, _ctx(tools))
     assert isinstance(out, JsonRpcError)
-    assert out.code == -32002
+    assert out.code == -32006
 
 
 async def test_async_tools_call_denied_by_spec_permission_is_forbidden() -> None:
@@ -158,7 +158,7 @@ async def test_async_tools_call_denied_by_spec_permission_is_forbidden() -> None
     )
     out = await handle_tools_call_async({"name": "t", "arguments": {}}, _ctx(tools))
     assert isinstance(out, JsonRpcError)
-    assert out.code == -32002
+    assert out.code == -32006
 
 
 def test_tools_call_with_output_selector() -> None:
@@ -239,7 +239,7 @@ def test_resources_read_denied_by_permission() -> None:
     )
     out = handle_resources_read({"uri": "r://"}, ctx)
     assert isinstance(out, JsonRpcError)
-    assert out.code == -32002
+    assert out.code == -32006
     assert out.data == {"requiredScopes": ["scope:x"]}
 
 

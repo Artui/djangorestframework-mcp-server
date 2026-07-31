@@ -39,7 +39,9 @@ async def handle_prompts_get_async(
 
     binding = context.prompts.get(name)
     if binding is None:
-        return JsonRpcError(JsonRpcErrorCode.RESOURCE_NOT_FOUND, f"Unknown prompt: {name!r}")
+        # See the sync sibling: the prompts spec names ``-32602`` for an
+        # invalid prompt name.
+        return JsonRpcError(JsonRpcErrorCode.INVALID_PARAMS, f"Unknown prompt: {name!r}")
 
     arguments_raw: Any = params.get("arguments") or {}
     if not isinstance(arguments_raw, dict):

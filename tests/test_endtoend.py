@@ -87,14 +87,14 @@ def test_tools_call_returns_invalid_params_on_missing_field(
     assert "number" in body["error"]["data"]["detail"]
 
 
-def test_unknown_tool_returns_tool_not_found(jsonrpc, initialized_session: str) -> None:
+def test_unknown_tool_returns_invalid_params(jsonrpc, initialized_session: str) -> None:
     response = jsonrpc(
         "tools/call",
         {"name": "does.not.exist", "arguments": {}},
         session_id=initialized_session,
     )
     body = response.json()
-    assert body["error"]["code"] == -32004
+    assert body["error"]["code"] == -32602
 
 
 def test_call_without_session_id_returns_404(jsonrpc) -> None:

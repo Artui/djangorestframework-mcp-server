@@ -3,6 +3,8 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Any
 
+from rest_framework_mcp.protocol.types.icon import Icon
+
 
 @dataclass(frozen=True)
 class Tool:
@@ -29,6 +31,10 @@ class Tool:
     meta: dict[str, Any] | None = None
     title: str | None = None
 
+    icons: tuple[Icon, ...] = ()
+    """Display icons for this entry. Emitted only when non-empty — the
+    spec makes ``icons`` optional and an empty array carries no meaning."""
+
     def to_dict(self) -> dict[str, Any]:
         out: dict[str, Any] = {"name": self.name, "inputSchema": self.input_schema}
         if self.title is not None:
@@ -41,6 +47,8 @@ class Tool:
             out["annotations"] = self.annotations
         if self.meta:
             out["_meta"] = self.meta
+        if self.icons:
+            out["icons"] = [icon.to_dict() for icon in self.icons]
         return out
 
 

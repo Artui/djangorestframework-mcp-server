@@ -40,7 +40,10 @@ def handle_prompts_get(
 
     binding = context.prompts.get(name)
     if binding is None:
-        return JsonRpcError(JsonRpcErrorCode.RESOURCE_NOT_FOUND, f"Unknown prompt: {name!r}")
+        # The prompts spec is explicit: "Invalid prompt name: -32602". An
+        # unknown name is a fault in the *params*, not a missing resource —
+        # ``-32002`` is reserved for ``resources/read``.
+        return JsonRpcError(JsonRpcErrorCode.INVALID_PARAMS, f"Unknown prompt: {name!r}")
 
     arguments_raw: Any = params.get("arguments") or {}
     if not isinstance(arguments_raw, dict):

@@ -35,6 +35,13 @@ class DynamicClientRegistrationRequest:
     (HS256 signs with the client secret, which a public client does not
     have) — neither of which is visible from the payload alone.
 
+    ``application_type`` is the one field kept without a DOT counterpart. The
+    MCP spec makes sending it a client **MUST**, because an OIDC authorization
+    server derives redirect-URI constraints from it — so dropping it silently
+    would leave a client that carefully declared ``native`` unable to tell
+    whether it had been heard. It is validated and echoed back; see the
+    serializer for why it is not enforced.
+
     RFC 7591 fields the server doesn't understand (``contacts``,
     ``logo_uri``, ``jwks``, …) are ignored, which §2 requires — DOT has
     nowhere to put them, and echoing metadata the authorization server
@@ -48,5 +55,6 @@ class DynamicClientRegistrationRequest:
     grant_types: list[str] = field(default_factory=list)
     response_types: list[str] = field(default_factory=list)
     id_token_signed_response_alg: str = ""
+    application_type: str = ""
     client_type: str = ""
     authorization_grant_type: str = ""

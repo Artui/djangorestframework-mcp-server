@@ -47,7 +47,14 @@ def handle_resources_read(
 
     resolved = context.resources.resolve(uri)
     if resolved is None:
-        return JsonRpcError(JsonRpcErrorCode.RESOURCE_NOT_FOUND, f"Unknown resource: {uri!r}")
+        # ``-32002`` with the URI echoed in ``data`` is the spec's own worked
+        # example for this case, so a client that special-cases resource
+        # not-found finds both halves where it expects them.
+        return JsonRpcError(
+            JsonRpcErrorCode.RESOURCE_NOT_FOUND,
+            f"Unknown resource: {uri!r}",
+            data={"uri": uri},
+        )
     binding, vars_ = resolved
 
     with span(

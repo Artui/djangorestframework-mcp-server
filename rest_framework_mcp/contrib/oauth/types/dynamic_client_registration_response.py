@@ -42,6 +42,7 @@ class DynamicClientRegistrationResponse:
     response_types: list[str] = field(default_factory=list)
     token_endpoint_auth_method: str = ""
     id_token_signed_response_alg: str = ""
+    application_type: str = ""
     client_type: str = ""
     authorization_grant_type: str = ""
     scope: str | None = None
@@ -58,6 +59,12 @@ class DynamicClientRegistrationResponse:
             "client_type": self.client_type,
             "authorization_grant_type": self.authorization_grant_type,
         }
+        if self.application_type:
+            # Echoed only when the client sent one. RFC 7591 §3.2.1 asks for
+            # what was *registered*, and this server registers nothing from it
+            # — echoing a default the client never chose would assert a
+            # decision nobody made.
+            out["application_type"] = self.application_type
         if self.id_token_signed_response_alg:
             # Omitted rather than sent empty when the server registered no
             # signing algorithm: "" is not a value OIDC defines, and claiming

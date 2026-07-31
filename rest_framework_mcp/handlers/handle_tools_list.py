@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from rest_framework_mcp.constants import JsonRpcErrorCode
+from rest_framework_mcp.constants import JsonRpcErrorCode, ToolContentKind
 from rest_framework_mcp.handlers.is_binding_listable import is_binding_listable
 from rest_framework_mcp.handlers.pagination import paginate
 from rest_framework_mcp.handlers.types.context import MCPCallContext
@@ -110,10 +110,17 @@ def handle_tools_list(
                 if binding.spec.output_selector_spec
                 else None
             )
+        # A media tool has no JSON result to describe, and the binding refuses
+        # ``include_output_schema=True`` alongside one — so the schema is
+        # dropped here rather than advertised over a payload that will arrive
+        # as an image block. Resource links keep theirs: the links are JSON.
+        if binding.content_kind in (ToolContentKind.IMAGE, ToolContentKind.AUDIO):
+            output_schema = None
         tool = Tool(
             name=binding.name,
             description=binding.description,
             title=binding.title,
+            icons=binding.icons,
             input_schema=input_schema,
             output_schema=(output_schema if emit_output_schema else None),
             annotations=dict(binding.annotations) or None,

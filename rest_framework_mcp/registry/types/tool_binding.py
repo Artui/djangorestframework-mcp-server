@@ -8,9 +8,16 @@ from django.core.exceptions import ImproperlyConfigured
 from rest_framework_services import UNSET, UnsetType
 from rest_framework_services.types.service_spec import ServiceSpec
 
-from rest_framework_mcp.constants import ArgumentBinding, OutputFormat, UnknownArguments
+from rest_framework_mcp.constants import (
+    ArgumentBinding,
+    OutputFormat,
+    ToolContentKind,
+    UnknownArguments,
+)
+from rest_framework_mcp.protocol.types.icon import Icon
 from rest_framework_mcp.registry.types.query_param import QueryParam
 from rest_framework_mcp.registry.types.url_kwarg import UrlKwarg
+from rest_framework_mcp.registry.types.utils import validate_content_kind
 
 InputT = TypeVar("InputT")
 ResultT = TypeVar("ResultT")
@@ -60,6 +67,10 @@ class ToolBinding(Generic[InputT, ResultT, ExtraT]):
     # place of it.
     meta: dict[str, Any] = field(default_factory=dict)
     title: str | None = None
+    icons: tuple[Icon, ...] = ()
+    """Display icons for this entry, emitted in its listing. Purely
+    presentational — a client renders them; nothing in dispatch reads them."""
+
     include_structured_content: bool | None = None
     """Tri-state override for whether this tool's ``tools/call`` response
     includes a ``structuredContent`` field. ``None`` (the default) defers to the
@@ -134,6 +145,17 @@ class ToolBinding(Generic[InputT, ResultT, ExtraT]):
     :class:`UrlKwarg`. Advertised in the ``inputSchema`` and stripped from the
     dispatched params."""
 
+    content_kind: ToolContentKind = ToolContentKind.TEXT
+    """What this tool's payload becomes in the result's ``content`` array.
+    ``TEXT`` (the default) renders JSON per :attr:`output_format`; the other
+    kinds project the payload into an image / audio / resource-link block.
+    See :class:`ToolContentKind`."""
+
+    content_mime_type: str | None = None
+    """The media type for an ``IMAGE`` / ``AUDIO`` :attr:`content_kind`.
+    Required for those and meaningless for the rest — a resource link
+    carries its own ``mimeType`` per entry."""
+
     def __post_init__(self) -> None:
         if self.include_output_schema is True and self.include_structured_content is False:
             raise ImproperlyConfigured(
@@ -142,6 +164,13 @@ class ToolBinding(Generic[InputT, ResultT, ExtraT]):
                 "any tool advertising outputSchema also return conforming "
                 "structuredContent. Set one of them differently."
             )
+        validate_content_kind(
+            name=self.name,
+            content_kind=self.content_kind,
+            content_mime_type=self.content_mime_type,
+            include_structured_content=self.include_structured_content,
+            include_output_schema=self.include_output_schema,
+        )
 
     @property
     def service(self) -> Callable[..., ResultT]:

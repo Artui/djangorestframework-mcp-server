@@ -40,19 +40,38 @@ def handle_initialize(
     server_info: Implementation | None = context.server_info
     if server_info is None:
         server_info = build_server_info()
-    # Advertise ``prompts`` only when the server has at least one registered.
-    # Empty capability advertisement would tell clients to call ``prompts/list``
-    # that returns nothing — harmless but noisy.
+    # One rule for all four: advertise a capability only when the server can
+    # answer it. ``prompts`` alone worked this way and ``tools`` / ``resources``
+    # were unconditional, which meant a resource-less server still told every
+    # client to go and call ``resources/list``. A capability is a promise about
+    # what this endpoint does, and the registries are the only honest source
+    # for it.
+    #
+    # ⚠ Deliberately *not* filtered by ``FILTER_LISTINGS_BY_PERMISSIONS``: that
+    # decides what a given caller may see, and capabilities describe the
+    # server. Making them per-caller would tell an under-privileged client the
+    # method does not exist, rather than that it may not use it.
     capabilities = ServerCapabilities(
-        tools={},
-        resources={},
+        tools={} if len(context.tools) > 0 else None,
+        resources={} if len(context.resources) > 0 else None,
         prompts={} if len(context.prompts) > 0 else None,
+        # The spec's own remedy for an unsupported capability is ``-32601``, so
+        # a server that declares ``completions`` and then refuses every request
+        # is strictly worse than one that never declared it.
+        completions={} if _has_completers(context) else None,
     )
     return InitializeResult(
         protocol_version=chosen,
         capabilities=capabilities,
         server_info=server_info,
         instructions=context.instructions,
+    )
+
+
+def _has_completers(context: MCPCallContext) -> bool:
+    """Whether any registered prompt or resource can complete an argument."""
+    return any(b.completions for b in context.prompts.all()) or any(
+        b.completions for b in context.resources.all()
     )
 
 

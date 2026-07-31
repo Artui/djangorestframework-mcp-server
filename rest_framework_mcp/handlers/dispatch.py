@@ -4,6 +4,7 @@ from collections.abc import Callable
 from typing import Any
 
 from rest_framework_mcp.constants import JsonRpcErrorCode
+from rest_framework_mcp.handlers.handle_completion_complete import handle_completion_complete
 from rest_framework_mcp.handlers.handle_initialize import handle_initialize
 from rest_framework_mcp.handlers.handle_ping import handle_ping
 from rest_framework_mcp.handlers.handle_prompts_get import handle_prompts_get
@@ -35,6 +36,7 @@ _HANDLERS: dict[str, _HandlerFn] = {
     "resources/read": handle_resources_read,
     "prompts/list": handle_prompts_list,
     "prompts/get": handle_prompts_get,
+    "completion/complete": handle_completion_complete,
 }
 
 

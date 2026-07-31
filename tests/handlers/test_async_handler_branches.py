@@ -97,7 +97,7 @@ async def test_async_tools_call_rejects_non_string_name() -> None:
 
 async def test_async_tools_call_unknown_tool() -> None:
     out = await handle_tools_call_async({"name": "nope"}, _ctx(ToolRegistry()))
-    assert isinstance(out, JsonRpcError) and out.code == -32004
+    assert isinstance(out, JsonRpcError) and out.code == -32602
 
 
 async def test_async_tools_call_rejects_non_dict_arguments() -> None:
@@ -182,7 +182,7 @@ async def test_async_tools_call_denied_by_permission() -> None:
         )
     )
     out = await handle_tools_call_async({"name": "t", "arguments": {}}, _ctx(tools))
-    assert isinstance(out, JsonRpcError) and out.code == -32002
+    assert isinstance(out, JsonRpcError) and out.code == -32006
 
 
 async def test_async_tools_call_runs_async_service_natively() -> None:
@@ -239,7 +239,7 @@ async def test_async_resources_read_rejects_missing_uri() -> None:
 
 async def test_async_resources_read_unknown_uri() -> None:
     out = await handle_resources_read_async({"uri": "nope://x"}, _ctx(ToolRegistry()))
-    assert isinstance(out, JsonRpcError) and out.code == -32003
+    assert isinstance(out, JsonRpcError) and out.code == -32002
 
 
 async def test_async_resources_read_denied_by_permission() -> None:
@@ -258,7 +258,7 @@ async def test_async_resources_read_denied_by_permission() -> None:
         )
     )
     out = await handle_resources_read_async({"uri": "r://"}, _ctx(ToolRegistry(), resources))
-    assert isinstance(out, JsonRpcError) and out.code == -32002
+    assert isinstance(out, JsonRpcError) and out.code == -32006
 
 
 async def test_async_resources_read_passes_through_when_no_serializer() -> None:

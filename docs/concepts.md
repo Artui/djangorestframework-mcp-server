@@ -640,6 +640,135 @@ wrapped in a quoted string literal instead of as itself. A `TEXT` resource's
 selector must return a `str`; anything else is reported as a JSON-RPC error on
 the read rather than raising through the transport.
 
+`ResourceEncoding.BLOB` is the binary case — a PDF, an image, a generated
+spreadsheet. The selector returns `bytes` and the body is base64-encoded into
+the spec's `blob` field instead of `text`; the two are mutually exclusive on a
+`contents` entry, so a client reads whichever is present.
+
+```python
+server.register_resource(
+    name="invoice_pdf",
+    uri_template="invoices://{pk}.pdf",
+    selector=SelectorSpec(kind=SelectorKind.RETRIEVE, selector=render_pdf),
+    mime_type="application/pdf",
+    encoding=ResourceEncoding.BLOB,
+)
+```
+
+## Non-text tool results
+
+A tool result's `content` array is the same content vocabulary — text, image,
+audio, a link to a resource, or an embedded resource. As with resource bodies,
+a binding *declares* what it returns rather than having it guessed, because a
+base64 string and a text body are indistinguishable by inspection:
+
+```python
+server.register_service_tool(
+    name="charts.render",
+    spec=ServiceSpec(service=render_chart, atomic=False),   # returns bytes
+    content_kind=ToolContentKind.IMAGE,
+    content_mime_type="image/png",
+)
+```
+
+`ToolContentKind.TEXT` (the default) renders JSON per the binding's
+`output_format` and mirrors it in `structuredContent`. `IMAGE` and `AUDIO` take
+the media itself — `bytes`, or a `str` already in base64 — and carry **no**
+`structuredContent` or `outputSchema`, since neither can describe a PNG;
+registering one alongside those is refused rather than ignored.
+
+`ToolContentKind.RESOURCE_LINK` is usually the better answer for anything
+large. The tool returns a mapping with `uri` and `name` (or a list of them),
+each becoming a link the client can read through `resources/read` — so no bytes
+ride on the tool-result path and the client fetches only what it decides it
+wants. `structuredContent` is kept for this kind: the links are ordinary JSON.
+
+```python
+server.register_selector_tool(
+    name="invoices.attachments",
+    spec=SelectorSpec(kind=SelectorKind.LIST, selector=list_attachments),
+    content_kind=ToolContentKind.RESOURCE_LINK,
+)
+# → [{"uri": "invoices://1.pdf", "name": "Invoice 1", "mimeType": "application/pdf"}, ...]
+```
+
+A payload that doesn't match the declared kind comes back as an `isError`
+result naming the binding — the same treatment an oversized result or a missed
+deadline gets, so the client always has a well-formed response to read.
+
+## Argument completion
+
+Clients offer autocompletion while a user fills in a prompt argument or a URI
+template variable. Register a completer per argument and this server answers
+`completion/complete`:
+
+```python
+server.register_prompt(
+    name="code_review",
+    render=review_prompt,
+    arguments=[PromptArgument(name="language")],
+    completions={"language": lambda value: Language.objects.filter(
+        name__startswith=value
+    ).values_list("name", flat=True)},
+)
+```
+
+Completers are dispatched through the same kwarg-pool machinery as everything
+else, so declare whichever of `value` (the text typed so far), `arguments`
+(siblings the client has already resolved, also spread by name), `request` and
+`user` you need. Return any iterable — a list, a generator, a queryset: the
+handler slices it to the spec's cap of 100 and sets `hasMore` rather than
+draining it, so a queryset reads 101 rows, not the table.
+
+Resource templates work the same way, keyed by the `{variable}` name:
+
+```python
+server.register_resource(
+    name="invoice",
+    uri_template="invoices://{pk}",
+    selector=SelectorSpec(kind=SelectorKind.RETRIEVE, selector=get_invoice),
+    completions={"pk": recent_invoice_ids},
+)
+```
+
+A completer keyed to an argument the binding doesn't have is refused at
+registration — the failure mode otherwise is an empty dropdown with nothing in
+the logs.
+
+!!! warning "A completion is a read"
+
+    Completion runs the binding's `permissions` and `rate_limits` before the
+    completer. Without that, a resource a caller may not read would still
+    answer "which ids exist?" one keystroke at a time.
+
+The `completions` capability is advertised only when something is actually
+completable, which is the same rule `tools`, `resources` and `prompts` follow:
+a capability is a promise, and a server that declares one and then answers
+`-32601` is worse off than one that never declared it.
+
+## Icons
+
+Tools, resources, resource templates, prompts and the server itself can carry
+display icons. This package only emits them — fetching, sanitising and
+rendering are the client's problem, and the spec puts a long list of MUSTs on
+that side.
+
+```python
+server.register_service_tool(
+    name="invoices.create",
+    spec=spec,
+    icons=(Icon(src="https://cdn.example.com/invoice.png", sizes=("48x48",)),),
+)
+
+MCPServer(name="billing", website_url="https://example.com", icons=(...,))
+```
+
+`src` must be `https:` or a `data:` URI — clients are required to reject
+anything else, so a `http://localhost/...` icon is refused at registration
+rather than shipped as an icon nobody will ever see. The server's own identity
+(`title`, `description`, `websiteUrl`, `icons`) can also come from the
+`SERVER_INFO` setting.
+
 ## Interactive views (MCP Apps)
 
 A tool can declare an HTML view that an MCP **host** renders inline in the

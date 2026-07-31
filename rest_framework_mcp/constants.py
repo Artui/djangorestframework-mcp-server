@@ -54,9 +54,25 @@ class JsonRpcErrorCode(IntEnum):
     """JSON-RPC 2.0 standard error codes plus MCP-specific reservations.
 
     The standard codes (-32700 through -32600 and -32603) are defined by
-    JSON-RPC; MCP reserves the -32000 through -32099 range for server-defined
-    errors. We map common MCP failure modes onto stable codes here so handlers
-    don't drift.
+    JSON-RPC. MCP then partitions the server-error range: ``-32000..-32019``
+    is implementation-defined, ``-32020..-32099`` is reserved for the spec
+    itself. Everything we allocate below sits in the implementation-defined
+    half — with one exception, and it is the important one.
+
+    ⚠ **``-32002`` is not ours to allocate.** The MCP resources spec names it
+    for "Resource not found", and the ``2026-07-28`` revision singles it out
+    as the one legacy code clients should keep recognising. A server that
+    spends it on something else is not merely unconventional: a spec-following
+    client reads that error as a missing resource. It therefore belongs to
+    :attr:`RESOURCE_NOT_FOUND` here and nothing else.
+
+    Two codes are **burned** rather than reused. ``-32003`` and ``-32004``
+    were this package's own not-found codes before the wire values were
+    aligned with the spec; a client written against an older release still
+    reads them as "resource/prompt not found" and "unknown tool". Re-issuing
+    either for a different condition would silently mislead exactly the
+    clients that took the trouble to special-case them, so the next
+    implementation-defined code allocated is ``-32006``.
     """
 
     PARSE_ERROR = -32700
@@ -67,10 +83,10 @@ class JsonRpcErrorCode(IntEnum):
     # Server-defined (MCP):
     SERVER_ERROR = -32000
     UNAUTHORIZED = -32001
-    FORBIDDEN = -32002
-    RESOURCE_NOT_FOUND = -32003
-    TOOL_NOT_FOUND = -32004
+    RESOURCE_NOT_FOUND = -32002
+    # -32003, -32004: burned — see the class docstring.
     RATE_LIMITED = -32005
+    FORBIDDEN = -32006
 
 
 # ---------- Output formatting ----------
@@ -149,6 +165,32 @@ never declared.
 """
 
 
+# ---------- Argument completion ----------
+
+MAX_COMPLETION_VALUES: int = 100
+"""The spec's hard cap on ``values`` in one ``completion/complete`` result.
+
+A completer is free to return more; the handler slices to this and sets
+``hasMore``, so the cap is never something a consumer has to remember.
+"""
+
+
+# ---------- Display metadata ----------
+
+
+class IconTheme(str, Enum):
+    """Which background an :class:`~rest_framework_mcp.protocol.types.icon.Icon`
+    was designed for.
+
+    Omitting the theme (``None``) tells the client the icon works on either,
+    which is the right answer for most artwork. Declare it only when you are
+    shipping a light/dark pair.
+    """
+
+    LIGHT = "light"
+    DARK = "dark"
+
+
 # ---------- Resource body encoding ----------
 
 
@@ -166,10 +208,52 @@ class ResourceEncoding(str, Enum):
       plain text — anything where JSON-encoding would wrap the payload in a
       quoted string literal instead of returning it. The selector must return
       a ``str``.
+    - ``BLOB``: the value is binary. The selector returns ``bytes`` and the
+      body is base64-encoded into the spec's ``blob`` field instead of
+      ``text`` — the two are mutually exclusive on a ``contents`` entry.
+      This is what a PDF, an image, or a generated spreadsheet needs.
     """
 
     JSON = "json"
     TEXT = "text"
+    BLOB = "blob"
+
+
+# ---------- Tool result content ----------
+
+
+class ToolContentKind(str, Enum):
+    """What a tool's rendered payload becomes in the result's ``content`` array.
+
+    Declared per binding rather than sniffed from the payload, for the same
+    reason as :class:`ResourceEncoding`: a base64 ``str`` and a text body are
+    indistinguishable by inspection, so guessing would silently change
+    behaviour for a tool that already returns one.
+
+    - ``TEXT``: the payload is rendered per the binding's ``OutputFormat`` into
+      one text block, and mirrored in ``structuredContent``. The default, and
+      what every JSON-shaped tool wants.
+    - ``IMAGE`` / ``AUDIO``: the payload is the media itself — ``bytes``, or a
+      ``str`` already in base64. ⚠ These carry **no** ``structuredContent``:
+      binary is not JSON, and advertising an ``outputSchema`` over it would
+      describe a shape that never arrives.
+    - ``RESOURCE_LINK``: the payload names resources rather than containing
+      them — one mapping with ``uri`` / ``name`` (plus optional ``description``
+      / ``mimeType``), or a list of them. ``structuredContent`` is kept, since
+      the links *are* JSON, so the model sees both projections.
+
+    Embedded (``resource``) blocks have no kind here on purpose. Inlining
+    contents means producing them, which is what ``resources/read`` already
+    does — a tool that wants to hand over a resource returns a
+    ``RESOURCE_LINK`` and lets the client decide whether to spend context on
+    the body. :meth:`ToolContentBlock.embedded_resource` remains available for
+    a caller building blocks by hand.
+    """
+
+    TEXT = "text"
+    IMAGE = "image"
+    AUDIO = "audio"
+    RESOURCE_LINK = "resource_link"
 
 
 # ---------- MCP Apps (interactive UI) ----------
@@ -233,16 +317,19 @@ gates on it (see :class:`UIVisibility`).
 
 __all__ = [
     "JSONRPC_VERSION",
+    "MAX_COMPLETION_VALUES",
     "RESERVED_POOL_SEEDS",
     "RESERVED_POST_FETCH_KEYS",
     "UI_EXTENSION_ID",
     "UI_META_KEY",
     "UI_RESOURCE_MIME_TYPE",
     "ArgumentBinding",
+    "IconTheme",
     "JsonRpcErrorCode",
     "JsonRpcId",
     "OutputFormat",
     "ResourceEncoding",
+    "ToolContentKind",
     "ToolKind",
     "UIPermission",
     "UIVisibility",

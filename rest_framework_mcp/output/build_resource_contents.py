@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import base64
 from typing import Any
 
 from rest_framework_services import base_serializer_context
@@ -41,8 +42,14 @@ def build_resource_contents(
        which is what an HTML / Markdown / CSV resource needs — JSON-encoding
        one of those yields a quoted string literal rather than the document.
 
-    A ``TEXT`` binding whose selector returned something other than a ``str``
-    is a server misconfiguration that can only surface at read time (the
+    3. **Or encode as a blob**, for ``BLOB``: the value is binary, so it rides
+       the spec's ``blob`` field base64-encoded rather than ``text``. The two
+       are mutually exclusive on a ``contents`` entry — a client reads
+       whichever is present — which is why this returns one or the other and
+       never both.
+
+    A ``TEXT`` or ``BLOB`` binding whose selector returned the wrong Python
+    type is a server misconfiguration that can only surface at read time (the
     selector's return type isn't knowable at registration). It comes back as a
     :class:`JsonRpcError` rather than an exception, so the client gets a
     well-formed error response instead of a transport-level 500.
@@ -54,6 +61,22 @@ def build_resource_contents(
             many=binding.kind is SelectorKind.LIST,
             context=base_serializer_context(view=view, request=request),
         ).data
+
+    if binding.encoding is ResourceEncoding.BLOB:
+        if not isinstance(payload, bytes | bytearray | memoryview):
+            return JsonRpcError(
+                JsonRpcErrorCode.INTERNAL_ERROR,
+                f"Resource {binding.name!r} declares encoding=BLOB but produced "
+                f"{type(payload).__name__}, not bytes. A BLOB resource's body is "
+                "the binary itself, base64-encoded here, so the selector (after "
+                "any output_serializer) must return the bytes.",
+            )
+        return ResourceContents(
+            uri=uri,
+            mime_type=binding.mime_type,
+            blob=base64.b64encode(payload).decode("ascii"),
+            meta=dict(binding.meta) or None,
+        )
 
     text: str
     if binding.encoding is ResourceEncoding.TEXT:

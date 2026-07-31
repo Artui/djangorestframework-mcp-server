@@ -63,6 +63,19 @@ _RESPONSE_TYPES = sorted({rt for types in _GRANT_RESPONSE_TYPES.values() for rt 
 # client-type question, resolved in the viewset.
 _ID_TOKEN_ALGORITHMS = ["HS256", "RS256"]
 
+# OpenID Connect Dynamic Client Registration 1.0 ``application_type``. The MCP
+# spec makes *sending* this a client MUST — an OIDC authorization server
+# derives redirect-URI constraints from it, and an omitted value defaults to
+# ``web``, which conflicts with the ``localhost`` redirect URIs a desktop or
+# CLI client needs.
+#
+# ⚠ This server validates and echoes the value but does **not** enforce those
+# constraints, because it is not acting as an OIDC provider: the spec says
+# non-OIDC servers safely ignore the parameter, and DOT has no column for it.
+# Rejecting a ``web`` client with a localhost redirect URI here would invent a
+# restriction the underlying authorization server does not apply.
+_APPLICATION_TYPES = ["native", "web"]
+
 # What a registration that named neither vocabulary gets, and — for the
 # reverse direction — the RFC method to echo back to a caller who spelled its
 # intent DOT's way. RFC 7591 §2 defaults an omitted method to
@@ -85,6 +98,10 @@ class DynamicClientRegistrationSerializer(DataclassSerializer):
     actually validate the wire contract:
 
     - ``redirect_uris`` is required + non-empty + child is a URL.
+    - ``application_type`` is validated against OIDC's two values and
+      echoed. Clients are required by the MCP spec to send it, so it is
+      accepted rather than dropped — but this server imposes none of the
+      redirect-URI constraints an OIDC provider would derive from it.
     - ``token_endpoint_auth_method`` / ``grant_types`` are the RFC 7591
       §2 spellings every interoperable client sends. They are the
       *primary* inputs: :meth:`validate` translates them into DOT's
@@ -139,6 +156,14 @@ class DynamicClientRegistrationSerializer(DataclassSerializer):
         choices=_ID_TOKEN_ALGORITHMS,
         required=False,
         help_text="RFC 7591 §2. Omit to take the strongest algorithm this server can sign with.",
+    )
+    application_type = serializers.ChoiceField(
+        choices=_APPLICATION_TYPES,
+        required=False,
+        help_text=(
+            "OIDC Registration 1.0. `native` for desktop / CLI / localhost clients, "
+            "`web` for a remotely hosted one. Echoed back; not enforced here."
+        ),
     )
     # Choices populated dynamically in ``__init__`` so test environments
     # without DOT installed don't break import of this module.

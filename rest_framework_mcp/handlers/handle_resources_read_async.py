@@ -49,7 +49,12 @@ async def handle_resources_read_async(
 
     resolved = context.resources.resolve(uri)
     if resolved is None:
-        return JsonRpcError(JsonRpcErrorCode.RESOURCE_NOT_FOUND, f"Unknown resource: {uri!r}")
+        # See the sync sibling: ``-32002`` + ``data.uri`` is the spec's shape.
+        return JsonRpcError(
+            JsonRpcErrorCode.RESOURCE_NOT_FOUND,
+            f"Unknown resource: {uri!r}",
+            data={"uri": uri},
+        )
     binding, vars_ = resolved
 
     with span(

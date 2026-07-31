@@ -40,6 +40,7 @@ def handle_prompts_list(
             name=binding.name,
             description=binding.description,
             title=binding.title,
+            icons=binding.icons,
             arguments=list(binding.arguments),
             annotations=dict(binding.annotations) or None,
             meta=dict(binding.meta) or None,

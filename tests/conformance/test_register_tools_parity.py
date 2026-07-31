@@ -50,4 +50,4 @@ def test_bulk_registered_service_inherits_permission_classes(
     body = response.json()
     # ``IsAuthenticated`` denies the AllowAnyBackend-issued anonymous token.
     assert "error" in body
-    assert body["error"]["code"] == -32002  # FORBIDDEN
+    assert body["error"]["code"] == -32006  # FORBIDDEN

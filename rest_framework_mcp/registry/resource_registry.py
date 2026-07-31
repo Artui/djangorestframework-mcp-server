@@ -50,6 +50,20 @@ class ResourceRegistry:
                 return binding, match.groupdict()
         return None
 
+    def by_uri_template(self, uri_template: str) -> ResourceBinding | None:
+        """Exact lookup on the registered template string.
+
+        Distinct from :meth:`resolve`, which matches a *concrete* URI against
+        each template's pattern. A caller holding the template itself — the
+        completion API's ``ref/resource``, say — must not go through that:
+        ``things://{pk}`` satisfies its own pattern with ``pk="{pk}"``, so
+        ``resolve`` would answer, plausibly and wrongly.
+        """
+        for binding in self._bindings:
+            if binding.uri_template == uri_template:
+                return binding
+        return None
+
     def all(self) -> list[ResourceBinding]:
         return list(self._bindings)
 
