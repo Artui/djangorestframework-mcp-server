@@ -39,6 +39,13 @@ def _register(server: MCPServer, **overrides: Any) -> Any:
     return server.register_ui_resource(**{**defaults, **overrides})
 
 
+class _AlwaysAllow:
+    """A minimal real permission — the sentinel it replaces gated nothing."""
+
+    def has_permission(self, request: Any, token: Any) -> bool:
+        return True
+
+
 class TestDefaults:
     def test_advertises_the_apps_mime_type(self) -> None:
         assert _register(_make()).mime_type == UI_RESOURCE_MIME_TYPE
@@ -57,7 +64,7 @@ class TestDefaults:
         assert _register(_make()).permissions == ()
 
     def test_can_still_be_guarded(self) -> None:
-        sentinel = object()
+        sentinel = _AlwaysAllow()
         assert _register(_make(), permissions=[sentinel]).permissions == (sentinel,)
 
     def test_lands_in_the_shared_resource_registry(self) -> None:

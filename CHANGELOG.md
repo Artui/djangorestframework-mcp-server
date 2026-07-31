@@ -7,6 +7,44 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- ⚠ **A permission implementing only `has_permission` hid a binding from
+  listings but did not gate the call.** `is_binding_listable` duck-types;
+  `check_permissions` skipped anything failing
+  `isinstance(perm, MCPPermission)` — and because that Protocol is
+  `runtime_checkable`, the check demands *every* member, including
+  `required_scopes`, which the Protocol's own docstring documents as having an
+  implied `[]` default. So a custom permission written to that documentation
+  disappeared its tool from `tools/list` **and let the call through**. Dispatch
+  now duck-types the same way listings always did, reading `required_scopes`
+  defensively.
+
+- **`ScopeRequired("mcp:admin")` silently became nine one-character scopes.**
+  The constructor took a list and normalised with `list(scopes)`. Nothing
+  failed at registration; it surfaced much later as a permission that could
+  never be satisfied and a challenge reading `scope="m c p : a d m i n"`.
+
+  It now accepts a bare string, exactly as `DjangoPermRequired` always has.
+  That asymmetry *was* the bug — a developer who learned the permissive sibling
+  naturally wrote the same thing here — so the fix removes the inconsistency
+  rather than documenting it.
+
+### Changed
+
+- **`ScopeRequired([])` / `DjangoPermRequired([])` are refused.** `all(...)`
+  over nothing is `True`, so an empty requirement permits everything while
+  reading as a guard at the registration site — and satisfies the
+  unguarded-tool check that would otherwise have warned.
+
+- ⚠ **`permissions=` now rejects entries that cannot gate**, on every
+  registration method. Security-relevant rather than tidy:
+  `permissions="ScopeRequired"` spreads into one entry per character; the tuple
+  is non-empty so the unguarded-tool warning stays quiet, and at dispatch every
+  entry is skipped and the call is **allowed** — a tool that reads as guarded
+  and gates nothing. Only `has_permission` is required, so a custom permission
+  that implements the gate and omits `required_scopes` remains valid.
+
 ## [0.23.0] — 2026-07-30
 
 ### Added
