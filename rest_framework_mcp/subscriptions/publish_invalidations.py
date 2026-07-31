@@ -49,6 +49,25 @@ def publish_invalidations(broker: SubscriptionBroker | None, uris: tuple[str, ..
     transaction.on_commit(lambda: _publish_now(broker, uris))
 
 
+def publish_after_commit(
+    broker: SubscriptionBroker | None, topic: str, payload: dict[str, Any]
+) -> None:
+    """One notification, on the same terms as an invalidation.
+
+    Shared with task status so both honour the commit boundary by the same
+    route — a task moving to ``completed`` inside a transaction has the same
+    problem an invalidation does, and a second copy of this reasoning would be
+    a second place for it to drift.
+    """
+    if broker is None:
+        return
+    transaction.on_commit(lambda: _publish_one(broker, topic, payload))
+
+
+def _publish_one(broker: SubscriptionBroker, topic: str, payload: dict[str, Any]) -> None:
+    async_to_sync(broker.publish)(topic, payload)
+
+
 def resource_updated(uri: str) -> dict[str, Any]:
     """The ``notifications/resources/updated`` frame for one URI."""
     return {
@@ -68,4 +87,4 @@ async def _publish_all(broker: SubscriptionBroker, uris: tuple[str, ...]) -> Non
         await broker.publish(topic_for_resource(uri), resource_updated(uri))
 
 
-__all__ = ["publish_invalidations", "resource_updated"]
+__all__ = ["publish_after_commit", "publish_invalidations", "resource_updated"]

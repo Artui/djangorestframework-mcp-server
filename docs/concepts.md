@@ -889,11 +889,33 @@ to replace the old GET endpoint. Two settings bound it:
 | `SUBSCRIPTION_MAX_SECONDS` (1 h) | The server closes the stream gracefully and the client re-subscribes. ⚠ Also the **re-authorization interval**: a subscription's permissions are checked once, when it opens, so this is what stops a principal whose access was revoked from receiving change signals indefinitely. |
 | `MAX_CONCURRENT_SUBSCRIPTIONS` (100) | Per worker. Without it an authenticated caller can exhaust the pool by opening streams in a loop. Past the cap a new subscription is refused with `503` / `-32603` rather than queued. |
 
-⛔ **`taskIds` in the filter is parsed but never granted.** The tasks extension
-defines `notifications/tasks` over this stream, but nothing publishes to a task
-topic yet — so granting it would make the acknowledgement promise something that
-can only ever be silent. It is refused visibly until there is something to
-deliver.
+### Watching a task instead of polling it
+
+A client that holds a task id can subscribe to it and stop calling `tasks/get`:
+
+```json
+{"method": "subscriptions/listen",
+ "params": {"notifications": {"taskIds": ["786512e2-…"]}}}
+```
+
+Every status change pushes `notifications/tasks` carrying the **whole task** —
+identical to what `tasks/get` would have returned at that moment — so a missed
+notification costs nothing and polling stays genuinely optional rather than a
+fallback you have to implement anyway.
+
+A task is watchable only by the principal that created it: its status is as
+revealing as its result, since knowing someone else's export finished is knowing
+they ran one.
+
+⛔ **One exception to "refused entries are dropped":** a client asking for
+`taskIds` without declaring the `io.modelcontextprotocol/tasks` extension gets a
+JSON-RPC error, not a quiet omission. The spec requires it, and it is not an
+existence oracle — the error turns on what the *client* declared, not on
+anything about the tasks it named.
+
+⛔ `notifications/progress` and `notifications/message` are **MUST NOT** on this
+stream. Progress for a task is the task's own status; the progress channel
+belongs to the request-scoped stream, which a task by definition outlived.
 
 ### Publishing a change
 
