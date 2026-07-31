@@ -17,7 +17,17 @@ from rest_framework_mcp.transport.types.sse_replay_buffer import SSEReplayBuffer
 _KEEPALIVE_INTERVAL_SECONDS: float = 15.0
 
 
-def _format_event(payload: Any, *, event_id: str | None = None) -> bytes:
+def keepalive_interval_seconds() -> float:
+    """The idle keep-alive period shared by both SSE surfaces.
+
+    Exposed so the POST response stream and the GET session stream cannot
+    drift apart on a value whose whole purpose is matching what proxies in
+    front of them tolerate.
+    """
+    return _KEEPALIVE_INTERVAL_SECONDS
+
+
+def format_event(payload: Any, *, event_id: str | None = None) -> bytes:
     """Encode a single JSON-RPC payload as one SSE event.
 
     SSE events are delimited by a blank line. ``event_id``, when set,
@@ -65,7 +75,7 @@ async def stream_events(
             async for event_id, payload in replay_buffer.replay(  # pragma: no branch
                 session_id, last_event_id
             ):
-                yield _format_event(payload, event_id=event_id)
+                yield format_event(payload, event_id=event_id)
         while True:
             try:
                 payload: Any = await asyncio.wait_for(queue.get(), timeout=keepalive_interval)
@@ -78,9 +88,9 @@ async def stream_events(
                 and "_mcp_event_id" in payload
                 and "_mcp_payload" in payload
             ):
-                yield _format_event(payload["_mcp_payload"], event_id=payload["_mcp_event_id"])
+                yield format_event(payload["_mcp_payload"], event_id=payload["_mcp_event_id"])
             else:
-                yield _format_event(payload)
+                yield format_event(payload)
     finally:
         broker.unsubscribe(session_id, queue)
 
@@ -114,4 +124,4 @@ def build_sse_response(
     return response
 
 
-__all__ = ["build_sse_response", "stream_events"]
+__all__ = ["build_sse_response", "format_event", "keepalive_interval_seconds", "stream_events"]

@@ -26,6 +26,7 @@ from rest_framework_mcp import (
     register_tools,
 )
 from rest_framework_mcp.auth.backends.allow_any_backend import AllowAnyBackend
+from rest_framework_mcp.constants import RESERVED_POOL_SEEDS
 from rest_framework_mcp.transport.in_memory_session_store import InMemorySessionStore
 from tests.testapp.models import Invoice
 
@@ -54,11 +55,14 @@ def _project_scoped_selector(*, project_id: str, **rest: Any) -> Any:
     """Echoes the validated + (under PASSTHROUGH) unknown keys it received.
 
     ``**rest`` absorbs every pool kwarg the explicit ``project_id`` doesn't
-    take — which includes the transport-controlled ``request`` / ``user``
-    / ``data`` pool seeds. Filter those out before returning so the
-    response is JSON-serialisable (the seeds are not).
+    take — which includes the transport-controlled pool seeds. Filter those
+    out before returning so the response is JSON-serialisable (the seeds are
+    not: ``progress`` is a callable, ``request`` an object).
+
+    Filtered by :data:`RESERVED_POOL_SEEDS` rather than a hand-written set, so
+    a seed added upstream doesn't break this fixture the way ``progress`` did.
     """
-    serialisable_rest = {k: v for k, v in rest.items() if k not in {"request", "user", "data"}}
+    serialisable_rest = {k: v for k, v in rest.items() if k not in RESERVED_POOL_SEEDS}
     return [{"project_id": project_id, "rest": serialisable_rest}]
 
 

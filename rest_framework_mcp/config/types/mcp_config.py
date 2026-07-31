@@ -60,6 +60,13 @@ class MCPConfig:
     max_request_bytes: int
     """Request-body ceiling; larger bodies get a ``413`` before parsing."""
 
+    max_progress_notifications: int
+    """Ceiling on ``notifications/progress`` frames emitted for one request.
+
+    The spec asks both parties to rate-limit progress. Past the cap further
+    reports are dropped; the dispatch is untouched and the final response still
+    arrives."""
+
     max_result_bytes: int | None
     """Outbound mirror of :attr:`max_request_bytes`: ceiling on one tool result
     or resource read, measured on the encoded wire payload (so the

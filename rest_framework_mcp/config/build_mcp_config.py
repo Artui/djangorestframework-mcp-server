@@ -42,6 +42,7 @@ def build_mcp_config(
     allowed_origins: tuple[str, ...] | list[str] | None = None,
     default_output_format: OutputFormat | str | None = None,
     max_request_bytes: int | None = None,
+    max_progress_notifications: int | None = None,
     max_result_bytes: int | None | UnsetType = UNSET,
     max_page_size: int | None | UnsetType = UNSET,
     dispatch_timeout: float | None | UnsetType = UNSET,
@@ -133,6 +134,11 @@ def build_mcp_config(
             require_list_pagination
             if require_list_pagination is not None
             else get_setting("REQUIRE_LIST_PAGINATION")
+        ),
+        max_progress_notifications=int(
+            max_progress_notifications
+            if max_progress_notifications is not None
+            else get_setting("MAX_PROGRESS_NOTIFICATIONS")
         ),
         catalog_cache_ttl_ms=int(
             catalog_cache_ttl_ms

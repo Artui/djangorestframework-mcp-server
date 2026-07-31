@@ -9,6 +9,58 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **Streaming progress for long-running tools.** A service or selector declares
+  `progress` and reports as it goes; the client sees it happen:
+
+  ```python
+  def export_invoices(*, data, progress):
+      for index, row in enumerate(rows):
+          write(row)
+          progress(index + 1, total=len(rows), message="writing rows")
+  ```
+
+  Registration is unchanged — `progress` is a kwarg-pool seed from
+  `djangorestframework-services` 0.30 (the new floor), so it arrives like
+  `request` and `user`, and the same service runs unchanged where nobody is
+  listening.
+
+  **The client opts in** with a `progressToken` in the request's `_meta`. That
+  token is the only trigger: with it the response becomes `text/event-stream`
+  carrying `notifications/progress` frames followed by the result; without it,
+  a single JSON object as before. A stream whose only event is the final
+  response costs a connection and buys nothing.
+
+  ⭐ **Era-independent** — `_meta.progressToken` sits in the same place in
+  `2025-11-25` and `2026-07-28`, so a legacy client streams on the same terms
+  as a modern one. ⚠ **ASGI only**: a sync WSGI view cannot yield mid-dispatch,
+  so `server.urls` keeps answering `application/json`, which stays spec-legal.
+
+  What the server does with the reports:
+
+  - **Non-increasing reports are dropped.** The spec makes increase a MUST, so
+    forwarding one would put this server in violation on the service's behalf.
+  - **Frames are capped** by the new `MAX_PROGRESS_NOTIFICATIONS` (default
+    1000). The spec asks both parties to rate-limit, and a per-row reporter
+    over a large table is a flood. Past the cap reports are dropped — the
+    dispatch is untouched and the result still arrives.
+  - **`meta` rides in the notification's `_meta`**, so `message` stays prose.
+  - **Closing the stream cancels the request**, which is what `2026-07-28`
+    means by cancellation-by-disconnect. ⚠ It cancels the await, not the work —
+    a thread parked in a driver's socket read is not interruptible by asyncio,
+    the same caveat `DISPATCH_TIMEOUT` carries.
+
+  ⚠ **Permissions are checked before the stream opens.** A streaming response
+  commits its status before the handler runs, so a denial found inside could
+  only ride as an in-stream error inside a `200` — losing the `403` the
+  authorization spec makes normative. The permission stack runs once at the
+  transport first, so a denied call still gets `403` and a `WWW-Authenticate`
+  challenge. Rate limits stay inside the handler: consuming one is not
+  idempotent, and a rate-limit rejection was already a `200`.
+
+  `X-Accel-Buffering: no` is set on the response stream, as it already was on
+  the session stream — without it nginx buffers the whole body and flushes on
+  close, defeating the point.
+
 - **The `2026-07-28` transport, served alongside the existing one.** This
   package is now **dual-era**: one endpoint, two protocol revisions, and the
   request itself decides which. A request carrying
@@ -170,6 +222,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   parameter.
 
 ### Changed
+
+- ⚠ **The `djangorestframework-services` floor moves to `>=0.30.0,<0.31`.**
+  Progress needed a channel from a service back to the transport, and there was
+  none: `dispatch_spec` took a fixed argument list and the reserved pool-seed
+  set is owned upstream. 0.30 adds the `progress` seed. One consequence lands
+  here: **a `UrlKwarg` or `QueryParam` named `progress` is now refused at
+  registration**, since the name is reserved.
 
 - ⚠ **`PROTOCOL_VERSIONS` now defaults to `["2026-07-28", "2025-11-25",
   "2025-06-18"]`.** One list across both eras — a version belongs to exactly

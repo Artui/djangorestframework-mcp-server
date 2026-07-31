@@ -69,6 +69,15 @@ DEFAULTS: dict[str, Any] = {
     # ``icons`` is a list of dicts mirroring the spec's ``Icon`` — ``src``
     # (required, https: or data: only), ``mimeType``, ``sizes``, ``theme``.
     "SERVER_INFO": {"name": "djangorestframework-mcp-server"},
+    # Ceiling on ``notifications/progress`` frames emitted for one request.
+    #
+    # The spec asks both parties to rate-limit progress, and the failure mode is
+    # familiar from the outbound bounds below: a service reporting per row over
+    # a large table turns one call into a flood of frames, each of which costs a
+    # write and some of the client's attention. Past the cap, further reports
+    # are dropped — the dispatch itself is untouched, and the final response
+    # still arrives.
+    "MAX_PROGRESS_NOTIFICATIONS": 1_000,
     "MAX_REQUEST_BYTES": 1_048_576,
     # Ceiling on a single tool result / resource read, measured on the encoded
     # JSON-RPC ``result`` payload — the mirror of ``MAX_REQUEST_BYTES`` on the

@@ -166,6 +166,9 @@ async def _dispatch_tool_call_async(
                 argument_binding=argument_binding,
                 unknown_arguments=unknown_arguments,
                 on_target_resolved=enforce_permissions,
+                # ``None`` unless the client asked for progress; drf-services
+                # substitutes its no-op, so the service body is unchanged.
+                progress=context.progress,
             )
         except drf_serializers.ValidationError as exc:
             return JsonRpcError(

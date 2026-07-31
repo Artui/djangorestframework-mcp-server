@@ -769,6 +769,66 @@ rather than shipped as an icon nobody will ever see. The server's own identity
 (`title`, `description`, `websiteUrl`, `icons`) can also come from the
 `SERVER_INFO` setting.
 
+## Streaming progress
+
+A long-running tool can report how far it has got, and the client sees it as it
+happens. Declare `progress` on the service or selector and call it:
+
+```python
+def export_invoices(*, data, progress):
+    rows = list(build_rows(data))
+    for index, row in enumerate(rows):
+        write(row)
+        progress(index + 1, total=len(rows), message="writing rows",
+                 meta={"com.example/file": data.path})
+```
+
+Nothing about the registration changes — `progress` is a kwarg-pool seed from
+`djangorestframework-services`, so it arrives like `request` and `user` do, and
+the same service runs unchanged over HTTP where nobody is listening.
+
+**The client opts in** by putting a `progressToken` in the request's `_meta`:
+
+```json
+{"jsonrpc": "2.0", "id": 1, "method": "tools/call",
+ "params": {"name": "invoices.export", "arguments": {},
+            "_meta": {"progressToken": "abc123"}}}
+```
+
+That token is the *only* trigger. With it, the response becomes
+`text/event-stream` carrying `notifications/progress` frames followed by the
+result; without it, a single JSON object as before — a stream whose only event
+is the final response costs a connection and buys nothing.
+
+⭐ **Era-independent.** `_meta.progressToken` sits in the same place in
+`2025-11-25` and `2026-07-28`, so a legacy client gets streamed progress on
+exactly the same terms as a modern one.
+
+⚠ **ASGI only.** A sync WSGI view cannot yield while its dispatch is still
+running, so `server.urls` keeps answering `application/json`. That stays
+spec-legal — a single JSON object is always permitted. Use `server.async_urls`
+if you want progress.
+
+### What the server does with your reports
+
+| | |
+|---|---|
+| `progress` must increase | A non-increasing report is **dropped**. The spec makes increase a MUST, so forwarding one would put this server in violation on the service's behalf. |
+| Frames are capped | `MAX_PROGRESS_NOTIFICATIONS` (default 1000) per request. The spec asks both parties to rate-limit; a per-row reporter over a large table is a flood. Past the cap reports are dropped — **the dispatch is untouched and the result still arrives**. |
+| `meta` rides in `_meta` | Structured detail goes where the protocol puts extension data, so `message` stays prose. Namespace your keys. |
+| Closing the stream cancels | Client disconnect *is* the cancellation signal in `2026-07-28`. ⚠ It cancels the await, not the work — a thread parked in a driver's socket read is not interruptible by asyncio, the same caveat `DISPATCH_TIMEOUT` carries. |
+
+!!! warning "Permissions are checked before the stream opens"
+
+    A streaming response commits its HTTP status before the handler runs, so a
+    permission denial found inside could only ride as an in-stream error inside
+    a `200` — losing the `403` the authorization spec makes normative. The
+    permission stack therefore runs once at the transport before the stream is
+    opened, so a denied call still gets `403` and a `WWW-Authenticate`
+    challenge. Rate limits stay inside the handler: consuming one is not
+    idempotent, and a rate-limit rejection was already a `200` with the detail
+    in the body.
+
 ## Protocol eras
 
 This server speaks two revisions of MCP at once, on one endpoint, and picks

@@ -165,6 +165,9 @@ async def dispatch_selector_tool_async(
         result = await adispatch_spec(
             binding.spec,
             **_dispatch_kwargs(binding, validated, drf_request, view, arguments_raw, context),
+            # Async path only: the sync sibling has no stream to report on, and
+            # ``_dispatch_kwargs`` is shared between the two.
+            progress=context.progress,
         )
     except ServiceValidationError as exc:
         # See the sync sibling for the protocol-vs-tool error boundary.

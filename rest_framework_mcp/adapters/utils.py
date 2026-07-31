@@ -307,9 +307,14 @@ def _validate_required_params_have_sources(
     # carries an ``instance_selector_spec`` with a selector, ``collection``
     # only when it carries a ``collection_selector_spec`` with a selector (the
     # bulk / list-mutation target), ``serializer`` only when an
-    # ``input_serializer`` produces a bound instance. The unconditional seeds
-    # are ``request`` / ``user`` / ``data``.
-    sources: set[str] = {"request", "user", "data"}
+    # ``input_serializer`` produces a bound instance.
+    #
+    # The unconditional seeds are ``request`` / ``user`` / ``data`` /
+    # ``progress``. ⚠ ``progress`` is unconditional even though most requests
+    # carry nowhere to send it: drf-services substitutes its no-op reporter, so
+    # the parameter is *always* satisfiable and refusing to register a service
+    # that declares one would be refusing a service that runs perfectly well.
+    sources: set[str] = {"request", "user", "data", "progress"}
     if provides_instance:
         sources.add("instance")
     if provides_collection:

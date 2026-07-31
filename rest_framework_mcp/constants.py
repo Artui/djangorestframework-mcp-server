@@ -208,6 +208,20 @@ replaces the ``initialize`` handshake's one-time capability exchange: a server
 **MUST NOT** rely on a capability the client did not declare *on that request*.
 """
 
+PROGRESS_TOKEN_META_KEY: str = "progressToken"
+"""Per-request ``_meta`` key by which a client asks to be told about progress.
+
+⭐ **Unprefixed, and identical in both eras** — ``2025-11-25`` puts it in the
+request's ``_meta`` and ``2026-07-28`` keeps it there alongside the new
+protocol fields. So progress is one of the few things this package does not
+have to branch on era for: a legacy client gets it on the same terms.
+
+Its presence is also the *only* signal that streaming is wanted. A server MAY
+decline to send notifications at all, so a request without the token is
+answered with a single JSON object rather than a stream that would carry one
+event.
+"""
+
 SESSIONLESS_METHODS: frozenset[str] = frozenset({"initialize", "server/discover"})
 """Methods answerable before a session exists.
 
@@ -435,6 +449,7 @@ __all__ = [
     "MAX_COMPLETION_VALUES",
     "MODERN_PROTOCOL_VERSIONS",
     "OutputFormat",
+    "PROGRESS_TOKEN_META_KEY",
     "PROTOCOL_VERSION_META_KEY",
     "RESERVED_POOL_SEEDS",
     "RESERVED_POST_FETCH_KEYS",

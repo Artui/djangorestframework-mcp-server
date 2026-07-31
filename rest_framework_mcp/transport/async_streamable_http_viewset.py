@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import dataclasses
 import json
 from typing import Any, cast
 
@@ -10,6 +11,7 @@ from rest_framework.permissions import AllowAny
 from rest_framework.renderers import JSONRenderer
 from rest_framework.request import Request
 from rest_framework.viewsets import ViewSet
+from rest_framework_services.types.progress_reporter import ProgressReporter
 
 from rest_framework_mcp._compat.acall import acall
 from rest_framework_mcp.auth.types.auth_backend import MCPAuthBackend
@@ -32,6 +34,11 @@ from rest_framework_mcp.registry.resource_registry import ResourceRegistry
 from rest_framework_mcp.registry.tool_registry import ToolRegistry
 from rest_framework_mcp.transport.negotiate_protocol_version import negotiate_protocol_version
 from rest_framework_mcp.transport.origin_validation import is_origin_allowed
+from rest_framework_mcp.transport.progress_dispatch import (
+    preflight_permissions,
+    progress_token,
+    stream_with_progress,
+)
 from rest_framework_mcp.transport.sse_response import build_sse_response
 from rest_framework_mcp.transport.types.request_metadata import RequestMetadata
 from rest_framework_mcp.transport.types.session_store import SessionStore
@@ -208,7 +215,7 @@ class AsyncStreamableHttpViewSet(ViewSet):
 
     # ----- DRF async action methods -----
 
-    async def handle_jsonrpc(self, request: Request) -> HttpResponse:
+    async def handle_jsonrpc(self, request: Request) -> HttpResponseBase:
         http_request = request._request  # noqa: SLF001
         guard: HttpResponse | None = self._check_origin(http_request)
         if guard is not None:
@@ -309,6 +316,10 @@ class AsyncStreamableHttpViewSet(ViewSet):
                 code=JsonRpcErrorCode.INVALID_REQUEST, message="Expected a JSON-RPC request"
             )
 
+        streamed: HttpResponseBase | None = await self._maybe_stream(message, context)
+        if streamed is not None:
+            return streamed
+
         result: Any = await adispatch(message.method, _params_dict(message.params), context)
 
         if isinstance(result, JsonRpcError):
@@ -335,7 +346,7 @@ class AsyncStreamableHttpViewSet(ViewSet):
 
     async def _handle_modern(
         self, http_request: Any, message: Any, metadata: RequestMetadata
-    ) -> HttpResponse:
+    ) -> HttpResponseBase:
         """Async sibling of the sync viewset's modern path — same rules.
 
         A full parallel implementation rather than a wrapper, as everywhere
@@ -385,6 +396,10 @@ class AsyncStreamableHttpViewSet(ViewSet):
         # Necessarily a request by now. The era test reads ``params``, which a
         # JSON-RPC *response* does not carry, so a response body is always
         # routed to the legacy path — and rejected there.
+        streamed: HttpResponseBase | None = await self._maybe_stream(message, context)
+        if streamed is not None:
+            return streamed
+
         result: Any = await adispatch(message.method, _params_dict(message.params), context)
         if isinstance(result, JsonRpcError):
             body = JsonRpcResponse(id=message.id, error=result).to_dict()
@@ -494,6 +509,49 @@ class AsyncStreamableHttpViewSet(ViewSet):
                 await self.sse_replay_buffer.forget(session_id)
             await acall(store.destroy, session_id)
         return HttpResponse(status=204)
+
+    async def _maybe_stream(self, message: Any, context: MCPCallContext) -> HttpResponseBase | None:
+        """Answer with an SSE stream when the client asked to hear about progress.
+
+        ``None`` means "not this request" — no ``progressToken``, so a single
+        JSON object it is. The spec lets the server choose per request, and a
+        stream whose only event is the final response costs a connection and
+        buys nothing.
+
+        Era-independent: the token sits at ``_meta.progressToken`` in both, so
+        a legacy client streams on the same terms as a modern one.
+        """
+        params: dict[str, Any] | None = _params_dict(message.params)
+        token: str | int | None = progress_token(params)
+        if token is None:
+            return None
+
+        # ⚠ Before the stream opens, while a status can still be chosen. See
+        # ``preflight_permissions`` for why this one check moves out here.
+        denied: JsonRpcError | None = await acall(
+            preflight_permissions, message.method, params, context
+        )
+        if denied is not None:
+            response = _error_response(
+                code=denied.code,
+                message=denied.message,
+                data=denied.data,
+                status=403,
+                request_id=message.id,
+            )
+            response["WWW-Authenticate"] = insufficient_scope_challenge(
+                denied, self._require_auth_backend()
+            )
+            return response
+
+        def dispatch_with(reporter: ProgressReporter) -> Any:
+            return adispatch(
+                message.method, params, dataclasses.replace(context, progress=reporter)
+            )
+
+        return stream_with_progress(
+            dispatch=dispatch_with, request_id=message.id, token=token, context=context
+        )
 
     def _modern_era_requested(self, http_request: Any) -> bool:
         """Whether the caller named a modern revision in its version header.

@@ -90,7 +90,7 @@ def test_reserved_pool_seeds_shape() -> None:
     # here is what would have caught that, so keep asserting the full set rather
     # than deferring to the import.
     assert (
-        frozenset({"request", "user", "data", "instance", "serializer", "collection"})
+        frozenset({"request", "user", "data", "instance", "serializer", "collection", "progress"})
         == RESERVED_POOL_SEEDS
     )
 
