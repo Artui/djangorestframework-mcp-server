@@ -7,6 +7,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- **Requires `djangorestframework-services>=0.32,<0.33`.** The previous pin
+  (`<0.31`) excluded 0.31 outright, so a project on the current sister release
+  could not install this package at all.
+
+  Two releases are picked up. 0.31 adds a consumer-owned `metadata` mapping to
+  the specs, which the framework never reads and nothing here depends on yet.
+  0.32 adds `AdditionalInputRequired` — the exception a service raises to say
+  what input it still needs, which the MCP elicitation surface will build on —
+  and fixes an `AttributeError` that made **every OPTIONS request** to a
+  spec-backed viewset an unhandled 500. ⚠ That one is worth noting even though
+  this package does not mount those viewsets: a CORS preflight is an OPTIONS
+  request, so any project pairing this package with `ServiceViewSet` over HTTP
+  was exposed.
+
 ### Added
 
 - **`invalidates=` — a mutation tool announcing its own changes.** Declared at
