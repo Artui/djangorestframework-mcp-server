@@ -640,6 +640,241 @@ wrapped in a quoted string literal instead of as itself. A `TEXT` resource's
 selector must return a `str`; anything else is reported as a JSON-RPC error on
 the read rather than raising through the transport.
 
+`ResourceEncoding.BLOB` is the binary case — a PDF, an image, a generated
+spreadsheet. The selector returns `bytes` and the body is base64-encoded into
+the spec's `blob` field instead of `text`; the two are mutually exclusive on a
+`contents` entry, so a client reads whichever is present.
+
+```python
+server.register_resource(
+    name="invoice_pdf",
+    uri_template="invoices://{pk}.pdf",
+    selector=SelectorSpec(kind=SelectorKind.RETRIEVE, selector=render_pdf),
+    mime_type="application/pdf",
+    encoding=ResourceEncoding.BLOB,
+)
+```
+
+## Non-text tool results
+
+A tool result's `content` array is the same content vocabulary — text, image,
+audio, a link to a resource, or an embedded resource. As with resource bodies,
+a binding *declares* what it returns rather than having it guessed, because a
+base64 string and a text body are indistinguishable by inspection:
+
+```python
+server.register_service_tool(
+    name="charts.render",
+    spec=ServiceSpec(service=render_chart, atomic=False),   # returns bytes
+    content_kind=ToolContentKind.IMAGE,
+    content_mime_type="image/png",
+)
+```
+
+`ToolContentKind.TEXT` (the default) renders JSON per the binding's
+`output_format` and mirrors it in `structuredContent`. `IMAGE` and `AUDIO` take
+the media itself — `bytes`, or a `str` already in base64 — and carry **no**
+`structuredContent` or `outputSchema`, since neither can describe a PNG;
+registering one alongside those is refused rather than ignored.
+
+`ToolContentKind.RESOURCE_LINK` is usually the better answer for anything
+large. The tool returns a mapping with `uri` and `name` (or a list of them),
+each becoming a link the client can read through `resources/read` — so no bytes
+ride on the tool-result path and the client fetches only what it decides it
+wants. `structuredContent` is kept for this kind: the links are ordinary JSON.
+
+```python
+server.register_selector_tool(
+    name="invoices.attachments",
+    spec=SelectorSpec(kind=SelectorKind.LIST, selector=list_attachments),
+    content_kind=ToolContentKind.RESOURCE_LINK,
+)
+# → [{"uri": "invoices://1.pdf", "name": "Invoice 1", "mimeType": "application/pdf"}, ...]
+```
+
+A payload that doesn't match the declared kind comes back as an `isError`
+result naming the binding — the same treatment an oversized result or a missed
+deadline gets, so the client always has a well-formed response to read.
+
+## Argument completion
+
+Clients offer autocompletion while a user fills in a prompt argument or a URI
+template variable. Register a completer per argument and this server answers
+`completion/complete`:
+
+```python
+server.register_prompt(
+    name="code_review",
+    render=review_prompt,
+    arguments=[PromptArgument(name="language")],
+    completions={"language": lambda value: Language.objects.filter(
+        name__startswith=value
+    ).values_list("name", flat=True)},
+)
+```
+
+Completers are dispatched through the same kwarg-pool machinery as everything
+else, so declare whichever of `value` (the text typed so far), `arguments`
+(siblings the client has already resolved, also spread by name), `request` and
+`user` you need. Return any iterable — a list, a generator, a queryset: the
+handler slices it to the spec's cap of 100 and sets `hasMore` rather than
+draining it, so a queryset reads 101 rows, not the table.
+
+Resource templates work the same way, keyed by the `{variable}` name:
+
+```python
+server.register_resource(
+    name="invoice",
+    uri_template="invoices://{pk}",
+    selector=SelectorSpec(kind=SelectorKind.RETRIEVE, selector=get_invoice),
+    completions={"pk": recent_invoice_ids},
+)
+```
+
+A completer keyed to an argument the binding doesn't have is refused at
+registration — the failure mode otherwise is an empty dropdown with nothing in
+the logs.
+
+!!! warning "A completion is a read"
+
+    Completion runs the binding's `permissions` and `rate_limits` before the
+    completer. Without that, a resource a caller may not read would still
+    answer "which ids exist?" one keystroke at a time.
+
+The `completions` capability is advertised only when something is actually
+completable, which is the same rule `tools`, `resources` and `prompts` follow:
+a capability is a promise, and a server that declares one and then answers
+`-32601` is worse off than one that never declared it.
+
+## Icons
+
+Tools, resources, resource templates, prompts and the server itself can carry
+display icons. This package only emits them — fetching, sanitising and
+rendering are the client's problem, and the spec puts a long list of MUSTs on
+that side.
+
+```python
+server.register_service_tool(
+    name="invoices.create",
+    spec=spec,
+    icons=(Icon(src="https://cdn.example.com/invoice.png", sizes=("48x48",)),),
+)
+
+MCPServer(name="billing", website_url="https://example.com", icons=(...,))
+```
+
+`src` must be `https:` or a `data:` URI — clients are required to reject
+anything else, so a `http://localhost/...` icon is refused at registration
+rather than shipped as an icon nobody will ever see. The server's own identity
+(`title`, `description`, `websiteUrl`, `icons`) can also come from the
+`SERVER_INFO` setting.
+
+## Streaming progress
+
+A long-running tool can report how far it has got, and the client sees it as it
+happens. Declare `progress` on the service or selector and call it:
+
+```python
+def export_invoices(*, data, progress):
+    rows = list(build_rows(data))
+    for index, row in enumerate(rows):
+        write(row)
+        progress(index + 1, total=len(rows), message="writing rows",
+                 meta={"com.example/file": data.path})
+```
+
+Nothing about the registration changes — `progress` is a kwarg-pool seed from
+`djangorestframework-services`, so it arrives like `request` and `user` do, and
+the same service runs unchanged over HTTP where nobody is listening.
+
+**The client opts in** by putting a `progressToken` in the request's `_meta`:
+
+```json
+{"jsonrpc": "2.0", "id": 1, "method": "tools/call",
+ "params": {"name": "invoices.export", "arguments": {},
+            "_meta": {"progressToken": "abc123"}}}
+```
+
+That token is the *only* trigger. With it, the response becomes
+`text/event-stream` carrying `notifications/progress` frames followed by the
+result; without it, a single JSON object as before — a stream whose only event
+is the final response costs a connection and buys nothing.
+
+⭐ **Era-independent.** `_meta.progressToken` sits in the same place in
+`2025-11-25` and `2026-07-28`, so a legacy client gets streamed progress on
+exactly the same terms as a modern one.
+
+⚠ **ASGI only.** A sync WSGI view cannot yield while its dispatch is still
+running, so `server.urls` keeps answering `application/json`. That stays
+spec-legal — a single JSON object is always permitted. Use `server.async_urls`
+if you want progress.
+
+### What the server does with your reports
+
+| | |
+|---|---|
+| `progress` must increase | A non-increasing report is **dropped**. The spec makes increase a MUST, so forwarding one would put this server in violation on the service's behalf. |
+| Frames are capped | `MAX_PROGRESS_NOTIFICATIONS` (default 1000) per request. The spec asks both parties to rate-limit; a per-row reporter over a large table is a flood. Past the cap reports are dropped — **the dispatch is untouched and the result still arrives**. |
+| `meta` rides in `_meta` | Structured detail goes where the protocol puts extension data, so `message` stays prose. Namespace your keys. |
+| Closing the stream cancels | Client disconnect *is* the cancellation signal in `2026-07-28`. ⚠ It cancels the await, not the work — a thread parked in a driver's socket read is not interruptible by asyncio, the same caveat `DISPATCH_TIMEOUT` carries. |
+
+!!! warning "Permissions are checked before the stream opens"
+
+    A streaming response commits its HTTP status before the handler runs, so a
+    permission denial found inside could only ride as an in-stream error inside
+    a `200` — losing the `403` the authorization spec makes normative. The
+    permission stack therefore runs once at the transport before the stream is
+    opened, so a denied call still gets `403` and a `WWW-Authenticate`
+    challenge. Rate limits stay inside the handler: consuming one is not
+    idempotent, and a rate-limit rejection was already a `200` with the detail
+    in the body.
+
+## Protocol eras
+
+This server speaks two revisions of MCP at once, on one endpoint, and picks
+which by reading the request:
+
+| | Legacy (`2025-11-25`, `2025-06-18`) | Modern (`2026-07-28`) |
+|---|---|---|
+| Opens with | `initialize` | nothing — every request stands alone |
+| State | a session, in `Mcp-Session-Id` | none |
+| Version | negotiated once | declared per request |
+| Detected by | absence of the marker below | `_meta["io.modelcontextprotocol/protocolVersion"]` |
+
+A modern request carries its version, client identity and client capabilities
+in `params._meta`, and mirrors selected body fields into headers so gateways
+can route without parsing JSON:
+
+```http
+POST /mcp/ HTTP/1.1
+Mcp-Protocol-Version: 2026-07-28
+Mcp-Method: tools/call
+Mcp-Name: invoices.create
+```
+
+Those headers are **validated against the body**. A mismatch is `400` with
+JSON-RPC `-32020` — not pedantry: a load balancer that routes on the header
+while the server executes the body is a confused deputy, and the check is what
+closes it. `Mcp-Name` may arrive Base64-wrapped (`=?base64?…?=`) when the value
+would not survive as a plain ASCII header; it is decoded before comparison.
+
+Two more modern-only status codes matter, because clients use them to work out
+which era they are talking to: an unknown method is `404` with a `-32601` body
+(the body is what distinguishes this endpoint from a server that does not host
+one), and an unsupported version is `400` with `-32022` listing what *is*
+supported. `GET` and `DELETE` return `405` to a caller naming a modern
+revision — the SSE stream and session termination were both removed there.
+
+!!! note "Keeping legacy is a deliberate choice"
+
+    Legacy clients have no fall-forward mechanism: drop the era and every
+    client that has not migrated is stranded with nothing but an error string.
+    The cost of carrying both is one branch at the transport edge — everything
+    below it is era-agnostic, with one exception. `resources/read` answers a
+    missing URI with `-32002` for a legacy caller and `-32602` for a modern
+    one, because the revision that retired `-32002` also told clients to keep
+    recognising it, so neither value is safe to send to both.
+
 ## Interactive views (MCP Apps)
 
 A tool can declare an HTML view that an MCP **host** renders inline in the

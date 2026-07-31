@@ -430,7 +430,7 @@ async def test_async_dispatch_error_envelope(async_urlconf) -> None:
         headers={"Mcp-Protocol-Version": "2025-11-25", "Mcp-Session-Id": sid},
     )
     body = response.json()
-    assert body["error"]["code"] == -32004
+    assert body["error"]["code"] == -32602
 
 
 async def test_async_delete_without_session_id_is_204(async_urlconf) -> None:
@@ -449,7 +449,7 @@ async def test_async_request_with_no_params_field(async_urlconf) -> None:
         content_type="application/json",
         headers={"Mcp-Protocol-Version": "2025-11-25", "Mcp-Session-Id": sid},
     )
-    assert response.json()["result"] == {}
+    assert response.json()["result"] == {"resultType": "complete"}
 
 
 async def test_acall_invokes_async_function_directly() -> None:

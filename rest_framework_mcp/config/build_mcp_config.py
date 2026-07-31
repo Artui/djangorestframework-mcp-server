@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from typing import Any
 
+from django.core.exceptions import ImproperlyConfigured
 from rest_framework_services import UNSET, UnsetType
 
 from rest_framework_mcp.conf import get_setting
@@ -42,6 +43,7 @@ def build_mcp_config(
     allowed_origins: tuple[str, ...] | list[str] | None = None,
     default_output_format: OutputFormat | str | None = None,
     max_request_bytes: int | None = None,
+    max_progress_notifications: int | None = None,
     max_result_bytes: int | None | UnsetType = UNSET,
     max_page_size: int | None | UnsetType = UNSET,
     dispatch_timeout: float | None | UnsetType = UNSET,
@@ -52,6 +54,8 @@ def build_mcp_config(
     require_tool_permissions: bool | None = None,
     require_tool_descriptions: bool | None = None,
     require_list_pagination: bool | None = None,
+    catalog_cache_ttl_ms: int | None = None,
+    resource_cache_ttl_ms: int | None = None,
 ) -> MCPConfig:
     """Resolve a :class:`MCPConfig` from ``REST_FRAMEWORK_MCP``, applying overrides.
 
@@ -68,10 +72,21 @@ def build_mcp_config(
     layers your overrides *over* the project's settings instead of discarding
     them.
     """
+    resolved_versions: tuple[str, ...] = tuple(
+        protocol_versions if protocol_versions is not None else get_setting("PROTOCOL_VERSIONS")
+    )
+    if not resolved_versions:
+        # The only genuinely unusable value: a server that supports no revision
+        # can answer nothing, and every version lookup downstream would be an
+        # index into an empty tuple. Caught here, once, at construction —
+        # rather than as an ``IndexError`` out of a view on the first request.
+        raise ImproperlyConfigured(
+            "REST_FRAMEWORK_MCP['PROTOCOL_VERSIONS'] is empty, so this server supports "
+            "no MCP revision and cannot answer any request. List at least one."
+        )
+
     return MCPConfig(
-        protocol_versions=tuple(
-            protocol_versions if protocol_versions is not None else get_setting("PROTOCOL_VERSIONS")
-        ),
+        protocol_versions=resolved_versions,
         require_protocol_version_header=bool(
             require_protocol_version_header
             if require_protocol_version_header is not None
@@ -131,6 +146,21 @@ def build_mcp_config(
             require_list_pagination
             if require_list_pagination is not None
             else get_setting("REQUIRE_LIST_PAGINATION")
+        ),
+        max_progress_notifications=int(
+            max_progress_notifications
+            if max_progress_notifications is not None
+            else get_setting("MAX_PROGRESS_NOTIFICATIONS")
+        ),
+        catalog_cache_ttl_ms=int(
+            catalog_cache_ttl_ms
+            if catalog_cache_ttl_ms is not None
+            else get_setting("CATALOG_CACHE_TTL_MS")
+        ),
+        resource_cache_ttl_ms=int(
+            resource_cache_ttl_ms
+            if resource_cache_ttl_ms is not None
+            else get_setting("RESOURCE_CACHE_TTL_MS")
         ),
     )
 

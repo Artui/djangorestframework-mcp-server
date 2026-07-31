@@ -34,6 +34,18 @@ class ToolRegistry:
         return self._bindings.get(name)
 
     def all(self) -> list[ToolBindingLike]:
+        """Every binding, in **registration order**.
+
+        The spec asks that ``tools/list`` be deterministic, so clients can
+        cache the catalog and so cursor pagination is stable. A dict satisfies
+        that: insertion order is preserved, and registration runs the same code
+        in the same order on every boot.
+
+        Deliberately not sorted by name. Registration order is *authored*
+        order — the sequence a server's author put the tools in — which is a
+        better first page for a model than an alphabetical one, and sorting
+        would buy nothing the dict does not already give.
+        """
         return list(self._bindings.values())
 
     def __len__(self) -> int:

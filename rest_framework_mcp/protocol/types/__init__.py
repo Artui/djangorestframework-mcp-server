@@ -1,5 +1,6 @@
 from rest_framework_mcp.protocol.types.client_capabilities import ClientCapabilities
 from rest_framework_mcp.protocol.types.get_prompt_result import GetPromptResult
+from rest_framework_mcp.protocol.types.icon import Icon
 from rest_framework_mcp.protocol.types.implementation import Implementation
 from rest_framework_mcp.protocol.types.initialize_params import InitializeParams
 from rest_framework_mcp.protocol.types.initialize_result import InitializeResult
@@ -22,6 +23,7 @@ from rest_framework_mcp.protocol.types.tool_result import ToolResult
 __all__ = [
     "ClientCapabilities",
     "GetPromptResult",
+    "Icon",
     "Implementation",
     "InitializeParams",
     "InitializeResult",

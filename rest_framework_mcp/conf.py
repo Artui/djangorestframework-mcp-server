@@ -5,7 +5,11 @@ from typing import Any
 from django.conf import settings as django_settings
 
 DEFAULTS: dict[str, Any] = {
-    "PROTOCOL_VERSIONS": ["2025-11-25", "2025-06-18"],
+    # Every revision this server speaks, most-preferred first, across both
+    # eras. ``2026-07-28`` is *modern* (per-request metadata, no session);
+    # the rest are *legacy* (``initialize`` handshake). One list, because a
+    # version belongs to exactly one era — see ``MODERN_PROTOCOL_VERSIONS``.
+    "PROTOCOL_VERSIONS": ["2026-07-28", "2025-11-25", "2025-06-18"],
     # When True (the spec-compliant default), non-``initialize`` requests must
     # carry an ``MCP-Protocol-Version`` header naming a supported version, or
     # they are rejected with HTTP 400. Some real-world clients omit the header
@@ -41,9 +45,39 @@ DEFAULTS: dict[str, Any] = {
     # ``structuredContent`` suppressed — is a spec violation and is
     # rejected with ``ImproperlyConfigured`` at request time.
     "INCLUDE_OUTPUT_SCHEMA": True,
+    # How long a client may cache a catalog result (``server/discover`` plus
+    # the four list methods), in milliseconds. ``0`` = immediately stale.
+    #
+    # A catalog is fixed once the process boots, so the honest answer is "until
+    # the next deploy" — which nothing here can know. One minute costs a client
+    # a stale minute after a release rather than a stale catalog for the life of
+    # its connection.
+    "CATALOG_CACHE_TTL_MS": 60_000,
+    # The same, for ``resources/read``. ``0`` by default because a resource body
+    # is whatever a selector just produced — caching live data by default would
+    # serve yesterday's invoice. Static resources opt in per binding with
+    # ``cache_ttl_ms=``.
+    "RESOURCE_CACHE_TTL_MS": 0,
     "ALLOWED_ORIGINS": [],
     "DEFAULT_OUTPUT_FORMAT": "json",
+    # The server's wire identity. Recognised keys: ``name``, ``version``,
+    # ``title``, ``description``, ``websiteUrl``, ``icons``. Every one of them
+    # is also a constructor kwarg on ``MCPServer`` — except ``description``,
+    # which is settings-only because the constructor's ``description=`` already
+    # means the ``initialize`` ``instructions`` string (see ``Implementation``).
+    #
+    # ``icons`` is a list of dicts mirroring the spec's ``Icon`` — ``src``
+    # (required, https: or data: only), ``mimeType``, ``sizes``, ``theme``.
     "SERVER_INFO": {"name": "djangorestframework-mcp-server"},
+    # Ceiling on ``notifications/progress`` frames emitted for one request.
+    #
+    # The spec asks both parties to rate-limit progress, and the failure mode is
+    # familiar from the outbound bounds below: a service reporting per row over
+    # a large table turns one call into a flood of frames, each of which costs a
+    # write and some of the client's attention. Past the cap, further reports
+    # are dropped — the dispatch itself is untouched, and the final response
+    # still arrives.
+    "MAX_PROGRESS_NOTIFICATIONS": 1_000,
     "MAX_REQUEST_BYTES": 1_048_576,
     # Ceiling on a single tool result / resource read, measured on the encoded
     # JSON-RPC ``result`` payload — the mirror of ``MAX_REQUEST_BYTES`` on the

@@ -17,9 +17,12 @@ from rest_framework_services.types.service_spec import ServiceSpec
 from rest_framework_mcp.auth.rate_limits.types.mcp_rate_limit import MCPRateLimit
 from rest_framework_mcp.auth.types.token_info import TokenInfo
 from rest_framework_mcp.constants import (
+    MODERN_PROTOCOL_VERSIONS,
     RESERVED_POOL_SEEDS,
     RESERVED_POST_FETCH_KEYS,
     ArgumentBinding,
+    CacheScope,
+    JsonRpcErrorCode,
     UnknownArguments,
 )
 from rest_framework_mcp.output.enforce_result_bytes import enforce_result_bytes
@@ -400,6 +403,51 @@ def resolve_bound(override: Any, default: Any) -> Any:
     inexpressible.
     """
     return default if isinstance(override, UnsetType) else override
+
+
+def resource_not_found_code(protocol_version: str) -> JsonRpcErrorCode:
+    """Which code a missing ``resources/read`` target gets, by era.
+
+    The one place the two eras genuinely disagree on a wire value. ``-32002``
+    is what ``2025-11-25`` names for "Resource not found"; ``2026-07-28``
+    retired it in favour of ``-32602`` while telling clients to keep
+    *recognising* the old one — so a dual-era server has to answer each caller
+    in the vocabulary that caller reads, and neither value is safe to emit to
+    both.
+    """
+    if protocol_version in MODERN_PROTOCOL_VERSIONS:
+        return JsonRpcErrorCode.INVALID_PARAMS
+    return JsonRpcErrorCode.RESOURCE_NOT_FOUND
+
+
+def catalog_cache_hints(*, ttl_ms: int, filtered_by_permissions: bool) -> dict[str, Any]:
+    """``ttlMs`` / ``cacheScope`` for a catalog result.
+
+    Covers ``server/discover`` and the four list methods, which the spec makes
+    cacheable and which share one answer: the catalog is fixed for the life of
+    the process, and whether it is *shareable* depends on one thing only.
+
+    ⚠ **``cacheScope`` is derived from ``FILTER_LISTINGS_BY_PERMISSIONS``, not
+    configured.** With filtering on, a listing is a function of the caller's
+    permissions, so labelling it ``public`` would licence a shared proxy to
+    serve one tenant's visible tools to another. With filtering off, every
+    caller gets byte-identical output and ``public`` is both true and useful.
+    Neither is a preference, which is why there is no setting for it.
+    """
+    scope = CacheScope.PRIVATE if filtered_by_permissions else CacheScope.PUBLIC
+    return {"ttlMs": ttl_ms, "cacheScope": scope.value}
+
+
+def resource_cache_hints(ttl_ms: int) -> dict[str, Any]:
+    """``ttlMs`` / ``cacheScope`` for a ``resources/read`` result.
+
+    Always ``private``. A resource body is whatever the binding's selector
+    produced *for this caller* — it ran with their user in the kwarg pool and
+    their permissions already checked — so there is no configuration under
+    which sharing it across authorization contexts is correct. The TTL is the
+    only knob, and it defaults to ``0``.
+    """
+    return {"ttlMs": ttl_ms, "cacheScope": CacheScope.PRIVATE.value}
 
 
 def enforce_result_ceiling(result: Any, *, max_result_bytes: int | None, label: str) -> Any:

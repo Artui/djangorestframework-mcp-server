@@ -3,6 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 
 from django.http import HttpRequest
+from rest_framework_services.types.progress_reporter import ProgressReporter
 
 from rest_framework_mcp.auth.types.token_info import TokenInfo
 from rest_framework_mcp.config.build_mcp_config import build_mcp_config
@@ -42,6 +43,19 @@ class MCPCallContext:
     """The server's ``description``, surfaced as the spec's ``initialize``
     ``instructions`` field — the only slot the protocol gives a server to
     describe itself to a client. ``None`` omits it from the response."""
+
+    progress: ProgressReporter | None = None
+    """Where this request's progress reports go, or ``None`` for nowhere.
+
+    Populated by the transport only when the client asked — a ``progressToken``
+    in the request's ``_meta`` — and only on the async path, which is the one
+    that can stream while the dispatch is still running. Handlers forward it to
+    ``adispatch_spec`` and it lands in the dispatched callable's kwarg pool as
+    the ``progress`` seed.
+
+    ``None`` is the ordinary case and costs nothing: drf-services substitutes
+    its no-op reporter, so a service that declares ``progress`` runs unchanged
+    whether or not anyone is listening."""
 
     config: MCPConfig = field(default_factory=build_mcp_config)
     """The owning server's resolved scalars, snapshotted in

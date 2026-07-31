@@ -83,7 +83,6 @@ def test_server_capabilities_full() -> None:
         tools={"list": {}},
         resources={"r": True},
         prompts={"p": True},
-        logging={"l": 1},
         completions={"c": 1},
         experimental={"e": 1},
     )
@@ -92,7 +91,6 @@ def test_server_capabilities_full() -> None:
         "tools",
         "resources",
         "prompts",
-        "logging",
         "completions",
         "experimental",
     }
@@ -187,7 +185,8 @@ def test_json_rpc_notification_to_dict_no_params() -> None:
 
 def test_json_rpc_response_to_dict_result() -> None:
     res = JsonRpcResponse(id=1, result={"ok": True})
-    assert res.to_dict()["result"] == {"ok": True}
+    # Every result carries the 2026-07-28 discriminator, stamped once here.
+    assert res.to_dict()["result"] == {"resultType": "complete", "ok": True}
 
 
 def test_json_rpc_response_to_dict_error() -> None:
@@ -370,3 +369,15 @@ def test_parse_message_rejects_unknown_shape() -> None:
 
     with pytest.raises(ValueError, match="must contain"):
         parse_message({"jsonrpc": "2.0", "id": 1})
+
+
+def test_completion_emits_total_when_it_is_known() -> None:
+    """``total`` is optional on the wire; the handler leaves it unset, but a
+    consumer building a :class:`Completion` directly may know the count."""
+    from rest_framework_mcp.protocol.types.completion import Completion
+
+    assert Completion(values=("a",), total=42, has_more=True).to_dict() == {
+        "values": ["a"],
+        "total": 42,
+        "hasMore": True,
+    }

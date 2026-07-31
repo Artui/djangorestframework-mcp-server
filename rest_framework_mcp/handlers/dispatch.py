@@ -4,6 +4,7 @@ from collections.abc import Callable
 from typing import Any
 
 from rest_framework_mcp.constants import JsonRpcErrorCode
+from rest_framework_mcp.handlers.handle_completion_complete import handle_completion_complete
 from rest_framework_mcp.handlers.handle_initialize import handle_initialize
 from rest_framework_mcp.handlers.handle_ping import handle_ping
 from rest_framework_mcp.handlers.handle_prompts_get import handle_prompts_get
@@ -13,6 +14,7 @@ from rest_framework_mcp.handlers.handle_resources_read import handle_resources_r
 from rest_framework_mcp.handlers.handle_resources_templates_list import (
     handle_resources_templates_list,
 )
+from rest_framework_mcp.handlers.handle_server_discover import handle_server_discover
 from rest_framework_mcp.handlers.handle_tools_call import handle_tools_call
 from rest_framework_mcp.handlers.handle_tools_list import handle_tools_list
 from rest_framework_mcp.handlers.types.context import MCPCallContext
@@ -26,6 +28,9 @@ from rest_framework_mcp.protocol.types.json_rpc_error import JsonRpcError
 _HandlerFn = Callable[[dict[str, Any] | None, MCPCallContext], Any]
 
 _HANDLERS: dict[str, _HandlerFn] = {
+    # Answered in both eras: the versions, capabilities and identity it
+    # reports are properties of the server, not of the era asking.
+    "server/discover": handle_server_discover,
     "initialize": handle_initialize,
     "ping": handle_ping,
     "tools/list": handle_tools_list,
@@ -35,6 +40,7 @@ _HANDLERS: dict[str, _HandlerFn] = {
     "resources/read": handle_resources_read,
     "prompts/list": handle_prompts_list,
     "prompts/get": handle_prompts_get,
+    "completion/complete": handle_completion_complete,
 }
 
 

@@ -240,3 +240,73 @@ async def test_async_delete_owner_destroys_session() -> None:
     )
     assert response.status_code == 204
     assert not store.exists(sid)
+
+
+# ---------- modern era: the same rules, minus the session ----------
+
+
+def _modern_post(view: Any, *, principal: str | None = None, method: str = "ping") -> Any:
+    """A modern POST: per-request ``_meta``, mirrored headers, no session."""
+    meta = {
+        "io.modelcontextprotocol/protocolVersion": "2026-07-28",
+        "io.modelcontextprotocol/clientCapabilities": {},
+    }
+    headers: dict[str, str] = {
+        "Mcp-Protocol-Version": "2026-07-28",
+        "Mcp-Method": method,
+    }
+    if principal is not None:
+        headers["X-Principal"] = principal
+    request = factory.post(
+        "/mcp/",
+        data=json.dumps({"jsonrpc": "2.0", "id": 1, "method": method, "params": {"_meta": meta}}),
+        content_type="application/json",
+        headers=headers,
+    )
+    return view(request)
+
+
+def test_an_unauthenticated_modern_post_is_401() -> None:
+    """Statelessness removes the session, not the credential."""
+    response = _modern_post(_sync_view(InMemorySessionStore()))
+    assert response.status_code == 401
+    assert response["WWW-Authenticate"].startswith("Bearer")
+
+
+async def test_an_unauthenticated_modern_post_is_401_async() -> None:
+    response = await _modern_post(_async_view(InMemorySessionStore()))
+    assert response.status_code == 401
+
+
+async def test_an_authenticated_modern_post_needs_no_session_async() -> None:
+    response = await _modern_post(_async_view(InMemorySessionStore()), principal="alice")
+    assert response.status_code == 200
+    assert "Mcp-Session-Id" not in response.headers
+
+
+async def test_a_modern_notification_is_202_async() -> None:
+    meta = {"io.modelcontextprotocol/protocolVersion": "2026-07-28"}
+    request = factory.post(
+        "/mcp/",
+        data=json.dumps(
+            {"jsonrpc": "2.0", "method": "notifications/initialized", "params": {"_meta": meta}}
+        ),
+        content_type="application/json",
+        headers={"Mcp-Protocol-Version": "2026-07-28", "X-Principal": "alice"},
+    )
+    response = await _async_view(InMemorySessionStore())(request)
+    assert response.status_code == 202
+
+
+async def test_an_unknown_modern_method_is_404_async() -> None:
+    response = await _modern_post(
+        _async_view(InMemorySessionStore()), principal="alice", method="nonsense/method"
+    )
+    assert response.status_code == 404
+    assert json.loads(response.content)["error"]["code"] == -32601
+
+
+async def test_modern_delete_is_405_async() -> None:
+    request = factory.delete("/mcp/", headers={"Mcp-Protocol-Version": "2026-07-28"})
+    response = await _async_view(InMemorySessionStore())(request)
+    assert response.status_code == 405

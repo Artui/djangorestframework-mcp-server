@@ -11,7 +11,11 @@ from rest_framework.viewsets import ViewSet
 
 from rest_framework_mcp.auth.types.auth_backend import MCPAuthBackend
 from rest_framework_mcp.config.types.mcp_config import MCPConfig
-from rest_framework_mcp.constants import JsonRpcErrorCode
+from rest_framework_mcp.constants import (
+    MODERN_PROTOCOL_VERSIONS,
+    SESSIONLESS_METHODS,
+    JsonRpcErrorCode,
+)
 from rest_framework_mcp.handlers.dispatch import dispatch
 from rest_framework_mcp.handlers.types.context import MCPCallContext
 from rest_framework_mcp.protocol.parse_message import parse_message
@@ -25,12 +29,15 @@ from rest_framework_mcp.registry.resource_registry import ResourceRegistry
 from rest_framework_mcp.registry.tool_registry import ToolRegistry
 from rest_framework_mcp.transport.negotiate_protocol_version import negotiate_protocol_version
 from rest_framework_mcp.transport.origin_validation import is_origin_allowed
+from rest_framework_mcp.transport.types.request_metadata import RequestMetadata
 from rest_framework_mcp.transport.types.session_store import SessionStore
 from rest_framework_mcp.transport.utils import (
     insufficient_scope_challenge,
     is_permission_denial,
+    modern_error_status,
     principal_for_token,
 )
+from rest_framework_mcp.transport.validate_modern_request import validate_modern_request
 
 _SESSION_HEADER: str = "Mcp-Session-Id"
 _VERSION_HEADER: str = "Mcp-Protocol-Version"
@@ -124,10 +131,28 @@ class StreamableHttpViewSet(ViewSet):
             return _error_response(code=JsonRpcErrorCode.INVALID_REQUEST, message=str(exc))
 
         is_initialize: bool = isinstance(message, JsonRpcRequest) and message.method == "initialize"
+        # ``server/discover`` joins ``initialize`` in being answerable without a
+        # session — a client sends it precisely because it has nothing yet. It
+        # does *not* mint one, which is why this is a second flag rather than a
+        # widening of the first.
+        is_sessionless: bool = (
+            isinstance(message, JsonRpcRequest) and message.method in SESSIONLESS_METHODS
+        )
+
+        # ⭐ **The era fork.** A dual-era server picks its behaviour from how the
+        # client opened: per-request ``_meta`` carrying a protocol version means
+        # modern (stateless, header-validated), its absence means legacy
+        # (``initialize`` handshake, sessions). One branch, here, at the edge —
+        # everything below the transport is era-agnostic by construction.
+        metadata: RequestMetadata | None = RequestMetadata.from_params(
+            _params_dict(getattr(message, "params", None))
+        )
+        if metadata is not None:
+            return self._handle_modern(http_request, message, metadata)
 
         version_header: str | None = http_request.headers.get(_VERSION_HEADER)
         negotiated: str | None = negotiate_protocol_version(
-            version_header, is_initialize=is_initialize, config=self._require_config()
+            version_header, is_sessionless=is_sessionless, config=self._require_config()
         )
         if negotiated is None:
             return _error_response(
@@ -151,7 +176,7 @@ class StreamableHttpViewSet(ViewSet):
         store = self._require_session_store()
         session_id: str | None = http_request.headers.get(_SESSION_HEADER)
         principal: str = principal_for_token(token)
-        if not is_initialize and (not session_id or store.owner(session_id) != principal):
+        if not is_sessionless and (not session_id or store.owner(session_id) != principal):
             return _error_response(
                 code=JsonRpcErrorCode.INVALID_REQUEST,
                 message="Unknown or missing MCP-Session-Id",
@@ -204,6 +229,79 @@ class StreamableHttpViewSet(ViewSet):
             http_response[_SESSION_HEADER] = new_session
         return http_response
 
+    def _handle_modern(
+        self, http_request: Any, message: Any, metadata: RequestMetadata
+    ) -> HttpResponse:
+        """Serve one request under the stateless (``2026-07-28``) rules.
+
+        Everything the legacy path does with a session is simply absent here:
+        no lookup, no minting, no echo. An ``Mcp-Session-Id`` a legacy-minded
+        client sends anyway is ignored rather than rejected, which is what the
+        spec asks of a modern server receiving older traffic.
+
+        Header validation runs **before** authentication, unlike the session
+        check on the legacy path. A header/body mismatch is a malformed request
+        that reveals nothing about who is asking — and it is the one signal a
+        client uses to tell a modern server from a legacy one, so making it
+        conditional on credentials would break era detection for anonymous
+        probes.
+        """
+        config: MCPConfig = self._require_config()
+        request_id: Any = getattr(message, "id", None)
+        if isinstance(message, JsonRpcRequest):
+            invalid: JsonRpcError | None = validate_modern_request(
+                method=message.method,
+                params=_params_dict(message.params),
+                metadata=metadata,
+                headers=http_request.headers,
+                supported_versions=config.modern_protocol_versions,
+            )
+            if invalid is not None:
+                return _error_response(
+                    code=invalid.code,
+                    message=invalid.message,
+                    data=invalid.data,
+                    status=modern_error_status(invalid),
+                    request_id=request_id,
+                )
+
+        token = self._authenticate(http_request)
+        if token is None:
+            return self._unauthenticated_response()
+
+        context = MCPCallContext(
+            http_request=http_request,
+            token=token,
+            tools=self._require_tools(),
+            resources=self._require_resources(),
+            prompts=self._require_prompts(),
+            protocol_version=metadata.protocol_version,
+            # No session exists to name. The field stays on the context because
+            # the legacy path still populates it; modern spans simply omit it.
+            session_id=None,
+            server_info=self.server_info,
+            instructions=self.instructions,
+            config=config,
+        )
+
+        if isinstance(message, JsonRpcNotification):
+            return HttpResponse(status=202)
+
+        # Necessarily a request by now. The era test reads ``params``, which a
+        # JSON-RPC *response* does not carry, so a response body is always
+        # routed to the legacy path — and rejected there.
+        result: Any = dispatch(message.method, _params_dict(message.params), context)
+        if isinstance(result, JsonRpcError):
+            body = JsonRpcResponse(id=message.id, error=result).to_dict()
+            status: int = modern_error_status(result)
+            response = JsonResponse(body, status=status)
+            if status == 403:
+                response["WWW-Authenticate"] = insufficient_scope_challenge(
+                    result, self._require_auth_backend()
+                )
+            return response
+        return JsonResponse(JsonRpcResponse(id=message.id, result=result).to_dict())
+
     def handle_get(self, request: Request) -> HttpResponse:
         """GET action: SSE-from-server isn't implemented in v1; 405 per spec.
 
@@ -230,6 +328,8 @@ class StreamableHttpViewSet(ViewSet):
         guard: HttpResponse | None = self._check_origin(http_request)
         if guard is not None:
             return guard
+        if self._modern_era_requested(http_request):
+            return HttpResponse(status=405)
         token = self._authenticate(http_request)
         if token is None:
             return self._unauthenticated_response()
@@ -244,6 +344,19 @@ class StreamableHttpViewSet(ViewSet):
                 )
             store.destroy(session_id)
         return HttpResponse(status=204)
+
+    def _modern_era_requested(self, http_request: Any) -> bool:
+        """Whether the caller named a modern revision in its version header.
+
+        GET and DELETE carry no body, so the per-request ``_meta`` that decides
+        the era everywhere else is unavailable — the header is the only signal
+        there is. A modern client should never send either verb; answering
+        ``405`` when it does is what the spec asks of a server receiving
+        wrong-era traffic, and it is a clearer diagnostic than silently
+        serving a mechanism the caller's revision removed.
+        """
+        version: str | None = http_request.headers.get(_VERSION_HEADER)
+        return version in MODERN_PROTOCOL_VERSIONS
 
     # ----- collaborator accessors -----
 

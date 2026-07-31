@@ -32,17 +32,41 @@ and now raise `ImproperlyConfigured` if still present: `AUTH_BACKEND`,
 
 ## Protocol
 
+The companion `cacheScope` is **derived, not configured**: a listing filtered by
+`FILTER_LISTINGS_BY_PERMISSIONS` is `private`, an unfiltered one is `public`, and
+a resource body is always `private`. `public` licenses a shared proxy to serve
+one response across authorization contexts, which is not a preference — getting
+it wrong is a cross-tenant disclosure with a cache in front of it.
+
+!!! note "What `public` on a catalog does and doesn't say"
+
+    The spec's criterion for `public` is that *"the response does not contain
+    user-specific data"* — which an unfiltered catalog satisfies exactly: every
+    caller gets byte-identical output, so the derivation is the spec's own test
+    rather than a judgement call.
+
+    It is worth being clear what follows, though. `public` is not a statement
+    that the catalog is *non-confidential*. It permits a shared intermediary to
+    serve a stored copy across authorization contexts, and a tool catalog does
+    describe the server's capability surface. If that surface is something you
+    would rather not have cached in front of an authenticated endpoint, turn on
+    `FILTER_LISTINGS_BY_PERMISSIONS` — the result becomes per-caller and the
+    derivation follows it to `private`.
+
 | Key | Default | What it does |
 |---|---|---|
-| `PROTOCOL_VERSIONS` | `["2025-11-25", "2025-06-18"]` | Accepted `MCP-Protocol-Version` values. The first entry is the fallback when the header is absent and not required. |
+| `PROTOCOL_VERSIONS` | `["2026-07-28", "2025-11-25", "2025-06-18"]` | Every revision this server speaks, most-preferred first, across **both eras** — `2026-07-28` is modern (per-request metadata, no session), the rest are legacy (`initialize` handshake). `server/discover` reports the whole list; each era validates against its own half. ⚠ `initialize` never offers a modern version whatever heads the list: the handshake does not exist there, so answering with it would hand the client a protocol the transport would refuse on its next request. |
 | `REQUIRE_PROTOCOL_VERSION_HEADER` | `True` | Reject a post-`initialize` request that omits `MCP-Protocol-Version` (HTTP 400). Set `False` for clients that never send it. A header that is *present but unsupported* is rejected either way — downgrading silently there would mask a real version mismatch. |
-| `SERVER_INFO` | `{"name": "djangorestframework-mcp-server"}` | Default `serverInfo` for `initialize`. Prefer per-server identity: `MCPServer(name=…, version=…, title=…)`. |
+| `SERVER_INFO` | `{"name": "djangorestframework-mcp-server"}` | Default `serverInfo` for `initialize`. Recognised keys: `name`, `version`, `title`, `description`, `websiteUrl`, `icons` (a list of `{src, mimeType, sizes, theme}` dicts). Prefer per-server identity: `MCPServer(name=…, version=…, title=…, website_url=…, icons=…)`. `description` is settings-only — the constructor's `description=` is the `initialize` `instructions` string, which is written for the model rather than for a connection list. |
+| `CATALOG_CACHE_TTL_MS` | `60000` | How long a client may cache a catalog result — `server/discover` plus the four list methods — emitted as `ttlMs`. `0` means "immediately stale". A catalog is fixed once the process boots, so the honest ceiling is "until the next deploy", which nothing here can know; a minute costs a client one stale minute after a release rather than a stale catalog for the life of its connection. |
+| `RESOURCE_CACHE_TTL_MS` | `0` | The same for `resources/read`. `0` by default because a resource body is whatever a selector just produced. A genuinely static resource — an interactive view, a rendered document — opts in per binding with `cache_ttl_ms=`. |
 
 ## Transport & security
 
 | Key | Default | What it does |
 |---|---|---|
 | `ALLOWED_ORIGINS` | `[]` | Origin allowlist, enforced on every request (mandatory per the MCP spec). `["*"]` allows any origin — local development only. |
+| `MAX_PROGRESS_NOTIFICATIONS` | `1000` | Ceiling on `notifications/progress` frames emitted for one request. The spec asks both parties to rate-limit progress, and the failure mode is the familiar one: a service reporting per row over a large table turns one call into a flood. Past the cap further reports are dropped — the dispatch is untouched and the final response still arrives. |
 | `MAX_REQUEST_BYTES` | `1048576` (1 MiB) | Maximum accepted request body size. |
 | `RESOURCE_URL` | `None` | Canonical resource URL this server **publishes** — RFC 9728 requires it in protected-resource metadata, and it is what audience enforcement compares against when enabled. Setting it rejects nothing on its own; see `ENFORCE_AUDIENCE`. Only the **default** for `MCPServer(resource_url=…)` — RFC 8707 binds a token to *a* resource, so each server needs its own URL. Two servers sharing one URL means a token minted for one passes the audience check at the other, which is the exact replay the mechanism prevents. Leaving it unset publishes an empty `resource` plus a `_warning`. |
 | `ENFORCE_AUDIENCE` | `False` | Whether a token whose bound resource doesn't equal `RESOURCE_URL` is **rejected**. Off by default because enforcement needs the access token to record its resource, and **DOT's stock `AccessToken` has no such field** — DOT implements no RFC 8707 resource indicators. Enforcement was once implied by `RESOURCE_URL` alone, so the bundled backend rejected every token as soon as a resource URL was configured. Turn it on with a swapped `OAUTH2_PROVIDER["ACCESS_TOKEN_MODEL"]` carrying a `resource` field, or `DjangoOAuthToolkitBackend(audience_getter=…)`; without either the backend raises `ImproperlyConfigured` at startup rather than 401-ing every request. See [Authentication](../auth.md#audience-binding-rfc-8707). |

@@ -233,7 +233,7 @@ async def test_acall_tool_unknown_tool_is_a_jsonrpc_error() -> None:
     server = _server()
     result = await server.acall_tool("nope", user=None)
     assert isinstance(result, JsonRpcError)
-    assert result.code == JsonRpcErrorCode.TOOL_NOT_FOUND
+    assert result.code == JsonRpcErrorCode.INVALID_PARAMS
 
 
 # ----- _call_context -----

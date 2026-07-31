@@ -61,7 +61,11 @@ def handle_tools_call(
 
     binding = context.tools.get(tool_name)
     if binding is None:
-        return JsonRpcError(JsonRpcErrorCode.TOOL_NOT_FOUND, f"Unknown tool: {tool_name!r}")
+        # The tools spec's own worked example of a protocol error is an
+        # unknown tool answered with ``-32602`` — the name is a bad param,
+        # and the model cannot self-correct from it, so it is a JSON-RPC
+        # error rather than an ``isError`` result.
+        return JsonRpcError(JsonRpcErrorCode.INVALID_PARAMS, f"Unknown tool: {tool_name!r}")
 
     arguments_raw: Any = params.get("arguments") or {}
     if not isinstance(arguments_raw, dict):
@@ -215,6 +219,9 @@ def _dispatch_tool_call(
             payload,
             output_format=output_format,
             include_structured_content=emit_structured_content,
+            content_kind=binding.content_kind,
+            content_mime_type=binding.content_mime_type,
+            binding_name=binding.name,
         ).to_dict()
 
 

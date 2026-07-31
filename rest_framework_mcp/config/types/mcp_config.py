@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from rest_framework_mcp.constants import OutputFormat
+from rest_framework_mcp.constants import MODERN_PROTOCOL_VERSIONS, OutputFormat
 
 
 @dataclass(frozen=True)
@@ -29,8 +29,12 @@ class MCPConfig:
     """
 
     protocol_versions: tuple[str, ...]
-    """Supported MCP protocol versions, most-preferred first. ``initialize``
-    echoes the client's version when supported, else offers ``[0]``."""
+    """Supported MCP protocol versions, most-preferred first, across both eras.
+
+    What ``server/discover`` reports as ``supportedVersions``. The two eras are
+    served from this one list rather than two, because a version belongs to
+    exactly one era and splitting the setting would let a project configure a
+    contradiction."""
 
     require_protocol_version_header: bool
     """Whether a non-``initialize`` request must carry a supported
@@ -55,6 +59,13 @@ class MCPConfig:
 
     max_request_bytes: int
     """Request-body ceiling; larger bodies get a ``413`` before parsing."""
+
+    max_progress_notifications: int
+    """Ceiling on ``notifications/progress`` frames emitted for one request.
+
+    The spec asks both parties to rate-limit progress. Past the cap further
+    reports are dropped; the dispatch is untouched and the final response still
+    arrives."""
 
     max_result_bytes: int | None
     """Outbound mirror of :attr:`max_request_bytes`: ceiling on one tool result
@@ -106,6 +117,60 @@ class MCPConfig:
     require_list_pagination: bool
     """Whether registering an unpaginated LIST selector tool raises instead of
     warning. Read at *registration* time, not per request."""
+
+    catalog_cache_ttl_ms: int
+    """How long, in milliseconds, a client may cache a catalog result —
+    ``server/discover`` and the four list methods. ``0`` means "immediately
+    stale, re-fetch every time".
+
+    Catalogs are fixed once a process boots (registration happens at
+    configuration time), so the honest ceiling is "until the next deploy" —
+    which nothing here can know. The default is a short window that costs a
+    client one stale minute after a release rather than a stale catalog until
+    it reconnects."""
+
+    resource_cache_ttl_ms: int
+    """The same, for ``resources/read``. Defaults to ``0``: a resource body is
+    whatever a selector just produced, and caching live data by default would
+    serve yesterday's invoice. A genuinely static resource — an interactive
+    view, a rendered document — sets ``cache_ttl_ms=`` at registration."""
+
+    @property
+    def modern_protocol_versions(self) -> tuple[str, ...]:
+        """The configured versions that carry per-request metadata."""
+        return tuple(v for v in self.protocol_versions if v in MODERN_PROTOCOL_VERSIONS)
+
+    @property
+    def legacy_protocol_versions(self) -> tuple[str, ...]:
+        """The configured versions that negotiate through ``initialize``.
+
+        ⚠ Not interchangeable with :attr:`protocol_versions`. ``initialize``
+        falls back to the first *supported* version when a client omits the
+        header, and once a modern revision sits at the head of the list that
+        fallback would answer a legacy handshake with a version in which the
+        handshake does not exist. Legacy negotiation reads this; modern
+        validation reads :attr:`modern_protocol_versions`.
+        """
+        return tuple(v for v in self.protocol_versions if v not in MODERN_PROTOCOL_VERSIONS)
+
+    @property
+    def legacy_fallback_version(self) -> str | None:
+        """The version a legacy client is answered with when it names none.
+
+        ``None`` when this server serves **no** legacy revision at all — which
+        is a supported configuration (``PROTOCOL_VERSIONS = ["2026-07-28"]``)
+        and the natural end state once legacy is dropped.
+
+        ⚠ **Exists because indexing ``legacy_protocol_versions[0]`` was a 500.**
+        Two call sites reached for the first legacy version as "the default",
+        and on a modern-only server that tuple is empty: every ``initialize``,
+        and every header-less ``server/discover``, raised ``IndexError`` out of
+        the view. Nothing validated the setting either, so the failure appeared
+        only in production traffic. Callers now branch on ``None`` and answer
+        with something a client can act on.
+        """
+        legacy: tuple[str, ...] = self.legacy_protocol_versions
+        return legacy[0] if legacy else None
 
 
 __all__ = ["MCPConfig"]

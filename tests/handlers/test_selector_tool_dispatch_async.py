@@ -194,7 +194,7 @@ async def test_async_denies_on_permission() -> None:
     )
     out = await handle_tools_call_async({"name": "x", "arguments": {}}, _ctx(server))
     assert isinstance(out, JsonRpcError)
-    assert out.code == -32002
+    assert out.code == -32006
 
 
 @pytest.mark.django_db(transaction=True)

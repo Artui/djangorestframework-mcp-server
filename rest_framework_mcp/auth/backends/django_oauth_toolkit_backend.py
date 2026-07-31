@@ -259,6 +259,9 @@ class DjangoOAuthToolkitBackend:
         Missing values fall through as empty strings / lists so the wire
         shape is always valid JSON; consumers are expected to configure
         ``authorization_servers`` for production deployments.
+
+        ``client_id_metadata_document_supported`` is read from DOT rather than
+        asserted here — see :func:`_cimd_enabled`.
         """
         as_list: list[str] = self._authorization_servers
         issuer: str = as_list[0] if as_list else ""
@@ -271,6 +274,7 @@ class DjangoOAuthToolkitBackend:
             token_endpoint=f"{base}/oauth/token/" if base else "",
             registration_endpoint=f"{base}/oauth/register/" if base else "",
             scopes_supported=list(self._scopes_supported),
+            client_id_metadata_document_supported=_cimd_enabled(),
         )
 
     def www_authenticate_challenge(
@@ -284,6 +288,30 @@ class DjangoOAuthToolkitBackend:
         if scopes:
             parts.append(f'scope="{" ".join(scopes)}"')
         return ", ".join(parts)
+
+
+def _cimd_enabled() -> bool:
+    """Whether DOT is configured to accept URL ``client_id``s.
+
+    **Feature-detected, not version-gated.** Client ID Metadata Document
+    support landed in ``django-oauth-toolkit`` 3.4.0 as the opt-in
+    ``CIMD_ENABLED`` setting; older releases have no such key. Reading it with
+    a default keeps the ``[oauth]`` extra's floor where it is — CIMD is opt-in
+    even on 3.4, so raising the floor would force a migration on every existing
+    installation to advertise something most of them have not switched on.
+
+    Sourced from DOT rather than from a setting of our own so the two can never
+    disagree: DOT's own RFC 8414 endpoint advertises the same value, and a
+    project that runs both would otherwise get contradictory metadata from the
+    same authorization server.
+    """
+    try:
+        from oauth2_provider.settings import (  # type: ignore[import-not-found]
+            oauth2_settings,
+        )
+    except ImportError:  # pragma: no cover - exercised by the smoke job w/o DOT
+        return False
+    return bool(getattr(oauth2_settings, "CIMD_ENABLED", False))
 
 
 def _derive_metadata_url(resource_url: str | None) -> str | None:

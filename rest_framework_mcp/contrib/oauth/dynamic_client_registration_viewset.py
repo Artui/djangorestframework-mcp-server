@@ -230,6 +230,9 @@ class DynamicClientRegistrationViewSet(ViewSet):
             response_types=list(instance.response_types),
             token_endpoint_auth_method=instance.token_endpoint_auth_method,
             id_token_signed_response_alg=application.algorithm,
+            # Nothing persisted it — DOT has no column — so this is the
+            # request's value, unlike every other field here.
+            application_type=instance.application_type,
             client_type=client_type,
             authorization_grant_type=grant_type,
             scope=instance.scope or None,

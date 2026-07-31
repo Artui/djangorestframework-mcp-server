@@ -4,6 +4,7 @@ from collections.abc import Callable
 from typing import Any
 
 from django.template.loader import render_to_string
+from rest_framework_services import UNSET, UnsetType
 from rest_framework_services.types.selector_kind import SelectorKind
 
 from rest_framework_mcp.adapters.utils import merge_meta
@@ -12,6 +13,7 @@ from rest_framework_mcp.constants import (
     UI_RESOURCE_MIME_TYPE,
     ResourceEncoding,
 )
+from rest_framework_mcp.protocol.types.icon import Icon
 from rest_framework_mcp.registry.types.resource_binding import ResourceBinding
 from rest_framework_mcp.registry.types.ui_resource_meta import UIResourceMeta
 
@@ -25,6 +27,8 @@ def ui_view_to_resource(
     selector: Callable[[], str] | None = None,
     description: str | None = None,
     title: str | None = None,
+    icons: tuple[Icon, ...] = (),
+    cache_ttl_ms: int | UnsetType = UNSET,
     ui: UIResourceMeta | None = None,
     mime_type: str = UI_RESOURCE_MIME_TYPE,
     permissions: tuple[Any, ...] = (),
@@ -93,6 +97,8 @@ def ui_view_to_resource(
         uri_template=uri,
         description=description,
         title=title,
+        icons=icons,
+        cache_ttl_ms=cache_ttl_ms,
         selector=resolved,
         # A view has no output serializer, so ``kind`` never reaches one; it is
         # RETRIEVE because a view is one document, not a collection.

@@ -22,17 +22,22 @@ from rest_framework_mcp.constants import (
     UI_EXTENSION_ID,
     UI_RESOURCE_MIME_TYPE,
     ArgumentBinding,
+    IconTheme,
     JsonRpcErrorCode,
     OutputFormat,
     ResourceEncoding,
+    ToolContentKind,
     ToolKind,
     UIPermission,
     UIVisibility,
     UnknownArguments,
 )
+from rest_framework_mcp.protocol.types.icon import Icon
 from rest_framework_mcp.protocol.types.json_rpc_error import JsonRpcError
 from rest_framework_mcp.protocol.types.prompt_argument import PromptArgument
 from rest_framework_mcp.protocol.types.prompt_message import PromptMessage
+from rest_framework_mcp.protocol.types.resource_contents import ResourceContents
+from rest_framework_mcp.protocol.types.tool_content_block import ToolContentBlock
 from rest_framework_mcp.registry.prompt_registry import PromptRegistry
 from rest_framework_mcp.registry.register_tools import register_tools
 from rest_framework_mcp.registry.resource_registry import ResourceRegistry
@@ -70,6 +75,8 @@ __all__ = [
     "DjangoPermRequired",
     "InMemorySSEBroker",
     "InMemorySSEReplayBuffer",
+    "Icon",
+    "IconTheme",
     "InMemorySessionStore",
     "JsonRpcError",
     "JsonRpcErrorCode",
@@ -81,6 +88,7 @@ __all__ = [
     "PromptArgument",
     "PromptMessage",
     "PromptRegistry",
+    "ResourceContents",
     "ResourceEncoding",
     "ResourceRegistry",
     "RetrieveSelector",
@@ -95,6 +103,8 @@ __all__ = [
     "ServiceView",
     "SessionStore",
     "TokenInfo",
+    "ToolContentBlock",
+    "ToolContentKind",
     "ToolDefinition",
     "ToolKind",
     "ToolRegistry",

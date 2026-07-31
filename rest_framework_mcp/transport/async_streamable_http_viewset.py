@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import dataclasses
 import json
 from typing import Any, cast
 
@@ -10,11 +11,16 @@ from rest_framework.permissions import AllowAny
 from rest_framework.renderers import JSONRenderer
 from rest_framework.request import Request
 from rest_framework.viewsets import ViewSet
+from rest_framework_services.types.progress_reporter import ProgressReporter
 
 from rest_framework_mcp._compat.acall import acall
 from rest_framework_mcp.auth.types.auth_backend import MCPAuthBackend
 from rest_framework_mcp.config.types.mcp_config import MCPConfig
-from rest_framework_mcp.constants import JsonRpcErrorCode
+from rest_framework_mcp.constants import (
+    MODERN_PROTOCOL_VERSIONS,
+    SESSIONLESS_METHODS,
+    JsonRpcErrorCode,
+)
 from rest_framework_mcp.handlers.async_dispatch import adispatch
 from rest_framework_mcp.handlers.types.context import MCPCallContext
 from rest_framework_mcp.protocol.parse_message import parse_message
@@ -28,15 +34,24 @@ from rest_framework_mcp.registry.resource_registry import ResourceRegistry
 from rest_framework_mcp.registry.tool_registry import ToolRegistry
 from rest_framework_mcp.transport.negotiate_protocol_version import negotiate_protocol_version
 from rest_framework_mcp.transport.origin_validation import is_origin_allowed
+from rest_framework_mcp.transport.progress_dispatch import (
+    can_report_progress,
+    preflight_permissions,
+    progress_token,
+    stream_with_progress,
+)
 from rest_framework_mcp.transport.sse_response import build_sse_response
+from rest_framework_mcp.transport.types.request_metadata import RequestMetadata
 from rest_framework_mcp.transport.types.session_store import SessionStore
 from rest_framework_mcp.transport.types.sse_broker import SSEBroker
 from rest_framework_mcp.transport.types.sse_replay_buffer import SSEReplayBuffer
 from rest_framework_mcp.transport.utils import (
     insufficient_scope_challenge,
     is_permission_denial,
+    modern_error_status,
     principal_for_token,
 )
+from rest_framework_mcp.transport.validate_modern_request import validate_modern_request
 
 _SESSION_HEADER: str = "Mcp-Session-Id"
 _VERSION_HEADER: str = "Mcp-Protocol-Version"
@@ -201,7 +216,7 @@ class AsyncStreamableHttpViewSet(ViewSet):
 
     # ----- DRF async action methods -----
 
-    async def handle_jsonrpc(self, request: Request) -> HttpResponse:
+    async def handle_jsonrpc(self, request: Request) -> HttpResponseBase:
         http_request = request._request  # noqa: SLF001
         guard: HttpResponse | None = self._check_origin(http_request)
         if guard is not None:
@@ -228,10 +243,26 @@ class AsyncStreamableHttpViewSet(ViewSet):
             return _error_response(code=JsonRpcErrorCode.INVALID_REQUEST, message=str(exc))
 
         is_initialize: bool = isinstance(message, JsonRpcRequest) and message.method == "initialize"
+        # ``server/discover`` joins ``initialize`` in being answerable without a
+        # session — a client sends it precisely because it has nothing yet. It
+        # does *not* mint one, which is why this is a second flag rather than a
+        # widening of the first.
+        is_sessionless: bool = (
+            isinstance(message, JsonRpcRequest) and message.method in SESSIONLESS_METHODS
+        )
+
+        # ⭐ **The era fork** — see the sync sibling. Per-request ``_meta``
+        # carrying a protocol version means modern (stateless, header-validated);
+        # its absence means legacy (``initialize`` handshake, sessions).
+        metadata: RequestMetadata | None = RequestMetadata.from_params(
+            _params_dict(getattr(message, "params", None))
+        )
+        if metadata is not None:
+            return await self._handle_modern(http_request, message, metadata)
 
         version_header: str | None = http_request.headers.get(_VERSION_HEADER)
         negotiated: str | None = negotiate_protocol_version(
-            version_header, is_initialize=is_initialize, config=self._require_config()
+            version_header, is_sessionless=is_sessionless, config=self._require_config()
         )
         if negotiated is None:
             return _error_response(
@@ -255,7 +286,7 @@ class AsyncStreamableHttpViewSet(ViewSet):
         store = self._require_session_store()
         session_id: str | None = http_request.headers.get(_SESSION_HEADER)
         principal: str = principal_for_token(token)
-        if not is_initialize and (
+        if not is_sessionless and (
             not session_id or await acall(store.owner, session_id) != principal
         ):
             return _error_response(
@@ -286,6 +317,10 @@ class AsyncStreamableHttpViewSet(ViewSet):
                 code=JsonRpcErrorCode.INVALID_REQUEST, message="Expected a JSON-RPC request"
             )
 
+        streamed: HttpResponseBase | None = await self._maybe_stream(message, context)
+        if streamed is not None:
+            return streamed
+
         result: Any = await adispatch(message.method, _params_dict(message.params), context)
 
         if isinstance(result, JsonRpcError):
@@ -310,6 +345,74 @@ class AsyncStreamableHttpViewSet(ViewSet):
             http_response[_SESSION_HEADER] = new_session
         return http_response
 
+    async def _handle_modern(
+        self, http_request: Any, message: Any, metadata: RequestMetadata
+    ) -> HttpResponseBase:
+        """Async sibling of the sync viewset's modern path — same rules.
+
+        A full parallel implementation rather than a wrapper, as everywhere
+        else in this transport: the only difference is which dispatcher runs,
+        and threading a sync/async switch through would put the era branch
+        somewhere it does not belong.
+        """
+        config: MCPConfig = self._require_config()
+        request_id: Any = getattr(message, "id", None)
+        if isinstance(message, JsonRpcRequest):
+            invalid: JsonRpcError | None = validate_modern_request(
+                method=message.method,
+                params=_params_dict(message.params),
+                metadata=metadata,
+                headers=http_request.headers,
+                supported_versions=config.modern_protocol_versions,
+            )
+            if invalid is not None:
+                return _error_response(
+                    code=invalid.code,
+                    message=invalid.message,
+                    data=invalid.data,
+                    status=modern_error_status(invalid),
+                    request_id=request_id,
+                )
+
+        token = await self._authenticate(http_request)
+        if token is None:
+            return self._unauthenticated_response()
+
+        context = MCPCallContext(
+            http_request=http_request,
+            token=token,
+            tools=self._require_tools(),
+            resources=self._require_resources(),
+            prompts=self._require_prompts(),
+            protocol_version=metadata.protocol_version,
+            session_id=None,
+            server_info=self.server_info,
+            instructions=self.instructions,
+            config=config,
+        )
+
+        if isinstance(message, JsonRpcNotification):
+            return HttpResponse(status=202)
+
+        # Necessarily a request by now. The era test reads ``params``, which a
+        # JSON-RPC *response* does not carry, so a response body is always
+        # routed to the legacy path — and rejected there.
+        streamed: HttpResponseBase | None = await self._maybe_stream(message, context)
+        if streamed is not None:
+            return streamed
+
+        result: Any = await adispatch(message.method, _params_dict(message.params), context)
+        if isinstance(result, JsonRpcError):
+            body = JsonRpcResponse(id=message.id, error=result).to_dict()
+            status: int = modern_error_status(result)
+            response = JsonResponse(body, status=status)
+            if status == 403:
+                response["WWW-Authenticate"] = insufficient_scope_challenge(
+                    result, self._require_auth_backend()
+                )
+            return response
+        return JsonResponse(JsonRpcResponse(id=message.id, result=result).to_dict())
+
     async def handle_get(self, request: Request) -> HttpResponseBase:
         """GET action: open a server-pushed SSE stream for the current session.
 
@@ -331,6 +434,8 @@ class AsyncStreamableHttpViewSet(ViewSet):
         guard: HttpResponse | None = self._check_origin(http_request)
         if guard is not None:
             return guard
+        if self._modern_era_requested(http_request):
+            return HttpResponse(status=405)
 
         token = await self._authenticate(http_request)
         if token is None:
@@ -342,7 +447,7 @@ class AsyncStreamableHttpViewSet(ViewSet):
         version_header: str | None = http_request.headers.get(_VERSION_HEADER)
         if (
             negotiate_protocol_version(
-                version_header, is_initialize=False, config=self._require_config()
+                version_header, is_sessionless=False, config=self._require_config()
             )
             is None
         ):
@@ -385,6 +490,8 @@ class AsyncStreamableHttpViewSet(ViewSet):
         guard: HttpResponse | None = self._check_origin(http_request)
         if guard is not None:
             return guard
+        if self._modern_era_requested(http_request):
+            return HttpResponse(status=405)
         token = await self._authenticate(http_request)
         if token is None:
             return self._unauthenticated_response()
@@ -403,6 +510,69 @@ class AsyncStreamableHttpViewSet(ViewSet):
                 await self.sse_replay_buffer.forget(session_id)
             await acall(store.destroy, session_id)
         return HttpResponse(status=204)
+
+    async def _maybe_stream(self, message: Any, context: MCPCallContext) -> HttpResponseBase | None:
+        """Answer with an SSE stream when the client asked to hear about progress.
+
+        ``None`` means "not this request" — no ``progressToken``, so a single
+        JSON object it is. The spec lets the server choose per request, and a
+        stream whose only event is the final response costs a connection and
+        buys nothing.
+
+        Era-independent: the token sits at ``_meta.progressToken`` in both, so
+        a legacy client streams on the same terms as a modern one.
+        """
+        params: dict[str, Any] | None = _params_dict(message.params)
+        token: str | int | None = progress_token(params)
+        if token is None:
+            return None
+
+        # ⚠ Asking is not enough — the dispatch has to be able to answer. A
+        # stream over a path that threads no reporter emits keepalives and one
+        # event, and gives up the normative ``403`` on the way. See
+        # ``can_report_progress`` for which paths qualify and why the rest lose
+        # nothing by being excluded.
+        if not await acall(can_report_progress, message.method, params, context):
+            return None
+
+        # ⚠ Before the stream opens, while a status can still be chosen. See
+        # ``preflight_permissions`` for why this one check moves out here.
+        denied: JsonRpcError | None = await acall(
+            preflight_permissions, message.method, params, context
+        )
+        if denied is not None:
+            response = _error_response(
+                code=denied.code,
+                message=denied.message,
+                data=denied.data,
+                status=403,
+                request_id=message.id,
+            )
+            response["WWW-Authenticate"] = insufficient_scope_challenge(
+                denied, self._require_auth_backend()
+            )
+            return response
+
+        def dispatch_with(reporter: ProgressReporter) -> Any:
+            return adispatch(
+                message.method, params, dataclasses.replace(context, progress=reporter)
+            )
+
+        return stream_with_progress(
+            dispatch=dispatch_with, request_id=message.id, token=token, context=context
+        )
+
+    def _modern_era_requested(self, http_request: Any) -> bool:
+        """Whether the caller named a modern revision in its version header.
+
+        GET and DELETE carry no body, so the per-request ``_meta`` that decides
+        the era everywhere else is unavailable — the header is the only signal
+        there is. ``2026-07-28`` removed both the GET stream and session
+        termination, so a caller naming that revision and then using either
+        verb gets ``405`` rather than a mechanism its own revision retired.
+        """
+        version: str | None = http_request.headers.get(_VERSION_HEADER)
+        return version in MODERN_PROTOCOL_VERSIONS
 
     # ----- collaborator accessors -----
 

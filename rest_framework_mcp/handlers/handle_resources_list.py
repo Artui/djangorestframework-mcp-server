@@ -6,6 +6,7 @@ from rest_framework_mcp.constants import JsonRpcErrorCode
 from rest_framework_mcp.handlers.is_binding_listable import is_binding_listable
 from rest_framework_mcp.handlers.pagination import paginate
 from rest_framework_mcp.handlers.types.context import MCPCallContext
+from rest_framework_mcp.handlers.utils import catalog_cache_hints
 from rest_framework_mcp.protocol.types.json_rpc_error import JsonRpcError
 from rest_framework_mcp.protocol.types.resource import Resource
 
@@ -40,12 +41,19 @@ def handle_resources_list(
             name=binding.name,
             description=binding.description,
             title=binding.title,
+            icons=binding.icons,
             mime_type=binding.mime_type,
             annotations=dict(binding.annotations) or None,
             meta=dict(binding.meta) or None,
         )
         items.append(resource.to_dict())
-    response: dict[str, Any] = {"resources": items}
+    response: dict[str, Any] = {
+        "resources": items,
+        **catalog_cache_hints(
+            ttl_ms=context.config.catalog_cache_ttl_ms,
+            filtered_by_permissions=context.config.filter_listings_by_permissions,
+        ),
+    }
     if next_cursor is not None:
         response["nextCursor"] = next_cursor
     return response

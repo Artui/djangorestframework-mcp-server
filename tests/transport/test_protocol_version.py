@@ -34,35 +34,35 @@ def test_supported_version_passthrough() -> None:
 
 def test_negotiate_supported_passthrough() -> None:
     config = _config(versions=["2025-11-25"])
-    assert negotiate_protocol_version("2025-11-25", is_initialize=False, config=config) == (
+    assert negotiate_protocol_version("2025-11-25", is_sessionless=False, config=config) == (
         "2025-11-25"
     )
 
 
 def test_negotiate_initialize_missing_header_uses_default() -> None:
     config = _config(versions=["2025-11-25", "2025-06-18"])
-    assert negotiate_protocol_version(None, is_initialize=True, config=config) == "2025-11-25"
+    assert negotiate_protocol_version(None, is_sessionless=True, config=config) == "2025-11-25"
 
 
 def test_negotiate_initialize_unsupported_header_uses_default() -> None:
     config = _config(versions=["2025-11-25"])
-    assert negotiate_protocol_version("9999-99-99", is_initialize=True, config=config) == (
+    assert negotiate_protocol_version("9999-99-99", is_sessionless=True, config=config) == (
         "2025-11-25"
     )
 
 
 def test_negotiate_non_initialize_missing_header_rejected_by_default() -> None:
     config = _config(versions=["2025-11-25"])
-    assert negotiate_protocol_version(None, is_initialize=False, config=config) is None
+    assert negotiate_protocol_version(None, is_sessionless=False, config=config) is None
 
 
 def test_negotiate_non_initialize_missing_header_allowed_when_disabled() -> None:
     config = _config(versions=["2025-11-25", "2025-06-18"], require_header=False)
-    assert negotiate_protocol_version(None, is_initialize=False, config=config) == "2025-11-25"
-    assert negotiate_protocol_version("", is_initialize=False, config=config) == "2025-11-25"
+    assert negotiate_protocol_version(None, is_sessionless=False, config=config) == "2025-11-25"
+    assert negotiate_protocol_version("", is_sessionless=False, config=config) == "2025-11-25"
 
 
 def test_negotiate_unsupported_header_still_rejected_when_disabled() -> None:
     config = _config(versions=["2025-11-25"], require_header=False)
     # A present-but-unsupported header is a real mismatch; never silently downgrade.
-    assert negotiate_protocol_version("9999-99-99", is_initialize=False, config=config) is None
+    assert negotiate_protocol_version("9999-99-99", is_sessionless=False, config=config) is None

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import re
 from collections.abc import Callable, Mapping, Sequence
 from typing import Any
 
@@ -34,6 +35,7 @@ from rest_framework_mcp.constants import (
     ArgumentBinding,
     OutputFormat,
     ResourceEncoding,
+    ToolContentKind,
     UnknownArguments,
 )
 from rest_framework_mcp.handlers.call_spec_tool import call_spec_tool
@@ -41,6 +43,7 @@ from rest_framework_mcp.handlers.handle_tools_call_async import handle_tools_cal
 from rest_framework_mcp.handlers.handle_tools_list import handle_tools_list
 from rest_framework_mcp.handlers.types.context import MCPCallContext
 from rest_framework_mcp.protocol.build_server_info import build_server_info
+from rest_framework_mcp.protocol.types.icon import Icon
 from rest_framework_mcp.protocol.types.implementation import Implementation
 from rest_framework_mcp.protocol.types.json_rpc_error import JsonRpcError
 from rest_framework_mcp.protocol.types.prompt_argument import PromptArgument
@@ -60,6 +63,7 @@ from rest_framework_mcp.registry.types.ui_tool_meta import UIToolMeta
 from rest_framework_mcp.registry.types.url_kwarg import UrlKwarg
 from rest_framework_mcp.server.utils import (
     build_ui_tool_meta,
+    check_completions_declared,
     check_list_pagination_declared,
     check_permissions_shape,
     check_tool_description_present,
@@ -122,6 +126,8 @@ class MCPServer:
         name: str | None = None,
         version: str | None = None,
         title: str | None = None,
+        icons: tuple[Icon, ...] = (),
+        website_url: str | None = None,
         description: str | None = None,
         resource_url: str | None = None,
         config: MCPConfig | None = None,
@@ -138,8 +144,15 @@ class MCPServer:
         # project introduce themselves differently. ``name=None`` /
         # ``version=None`` defer to ``SERVER_INFO``, keeping the wire identity
         # of a project that configures the setting and never passes ``name=``.
+        # ``icons=()`` and ``website_url=None`` mean "unset", so both defer to
+        # ``SERVER_INFO`` exactly as ``name`` / ``version`` / ``title`` do —
+        # passing an empty tuple is not a way to suppress configured icons.
         self._server_info: Implementation = build_server_info(
-            name=name, version=version, title=title
+            name=name,
+            version=version,
+            title=title,
+            website_url=website_url,
+            icons=icons or None,
         )
         self.name: str = self._server_info.name
         self.version: str = self._server_info.version
@@ -217,9 +230,12 @@ class MCPServer:
         spec: ServiceSpec,
         description: str | None = None,
         title: str | None = None,
+        icons: tuple[Icon, ...] = (),
         display_name: str | None = None,
         display_description: str | None = None,
         output_format: OutputFormat | str = OutputFormat.JSON,
+        content_kind: ToolContentKind = ToolContentKind.TEXT,
+        content_mime_type: str | None = None,
         permissions: list[Any] | None = None,
         rate_limits: list[Any] | None = None,
         annotations: dict[str, Any] | None = None,
@@ -279,9 +295,12 @@ class MCPServer:
             spec=spec,
             description=description,
             title=title,
+            icons=icons,
             display_name=display_name,
             display_description=display_description,
             output_format=OutputFormat.coerce(output_format),
+            content_kind=content_kind,
+            content_mime_type=content_mime_type,
             permissions=check_permissions_shape(f"MCP binding {name!r}", permissions),
             rate_limits=tuple(rate_limits or ()),
             annotations=annotations,
@@ -313,10 +332,13 @@ class MCPServer:
         spec: SelectorSpec,
         description: str | None = None,
         title: str | None = None,
+        icons: tuple[Icon, ...] = (),
         display_name: str | None = None,
         display_description: str | None = None,
         input_serializer: type | None = None,
         output_format: OutputFormat | str = OutputFormat.JSON,
+        content_kind: ToolContentKind = ToolContentKind.TEXT,
+        content_mime_type: str | None = None,
         permissions: list[Any] | None = None,
         rate_limits: list[Any] | None = None,
         annotations: dict[str, Any] | None = None,
@@ -391,10 +413,13 @@ class MCPServer:
             spec=spec,
             description=description,
             title=title,
+            icons=icons,
             display_name=display_name,
             display_description=display_description,
             input_serializer=input_serializer,
             output_format=OutputFormat.coerce(output_format),
+            content_kind=content_kind,
+            content_mime_type=content_mime_type,
             permissions=check_permissions_shape(f"MCP binding {name!r}", permissions),
             rate_limits=tuple(rate_limits or ()),
             annotations=annotations,
@@ -508,6 +533,7 @@ class MCPServer:
         steps: list[ChainStep] | tuple[ChainStep, ...],
         description: str | None = None,
         title: str | None = None,
+        icons: tuple[Icon, ...] = (),
         display_name: str | None = None,
         display_description: str | None = None,
         input_serializer: type | None = None,
@@ -515,6 +541,8 @@ class MCPServer:
         output_alias: str | None = None,
         output_all: bool = False,
         output_format: OutputFormat | str = OutputFormat.JSON,
+        content_kind: ToolContentKind = ToolContentKind.TEXT,
+        content_mime_type: str | None = None,
         permissions: list[Any] | None = None,
         rate_limits: list[Any] | None = None,
         annotations: dict[str, Any] | None = None,
@@ -573,6 +601,7 @@ class MCPServer:
             steps=tuple(steps),
             description=description,
             title=title,
+            icons=icons,
             display_name=display_name,
             display_description=display_description,
             input_serializer=input_serializer,
@@ -580,6 +609,8 @@ class MCPServer:
             output_alias=output_alias,
             output_all=output_all,
             output_format=OutputFormat.coerce(output_format),
+            content_kind=content_kind,
+            content_mime_type=content_mime_type,
             permissions=check_permissions_shape(f"MCP binding {name!r}", permissions),
             rate_limits=tuple(rate_limits or ()),
             annotations=annotations,
@@ -780,6 +811,7 @@ class MCPServer:
         selector: SelectorSpec,
         description: str | None = None,
         title: str | None = None,
+        icons: tuple[Icon, ...] = (),
         output_serializer: type | None = None,
         mime_type: str = "application/json",
         encoding: ResourceEncoding = ResourceEncoding.JSON,
@@ -788,6 +820,8 @@ class MCPServer:
         annotations: dict[str, Any] | None = None,
         meta: dict[str, Any] | None = None,
         always_listed: bool = False,
+        cache_ttl_ms: int | UnsetType = UNSET,
+        completions: dict[str, Callable[..., Any]] | None = None,
     ) -> ResourceBinding:
         """Register a :class:`SelectorSpec` as an MCP resource.
 
@@ -827,6 +861,7 @@ class MCPServer:
             selector=selector,
             description=description,
             title=title,
+            icons=icons,
             output_serializer=output_serializer,
             mime_type=mime_type,
             encoding=encoding,
@@ -835,6 +870,12 @@ class MCPServer:
             annotations=annotations,
             meta=meta,
             always_listed=always_listed,
+            cache_ttl_ms=cache_ttl_ms,
+            completions=completions,
+        )
+        # Template variables are the only completable arguments a resource has.
+        check_completions_declared(
+            f"Resource {name!r}", binding.completions, _template_variables(uri_template)
         )
         self._resources.register(binding)
         return binding
@@ -849,6 +890,7 @@ class MCPServer:
         selector: Callable[[], str] | None = None,
         description: str | None = None,
         title: str | None = None,
+        icons: tuple[Icon, ...] = (),
         ui: UIResourceMeta | None = None,
         mime_type: str = UI_RESOURCE_MIME_TYPE,
         permissions: list[Any] | None = None,
@@ -856,6 +898,7 @@ class MCPServer:
         annotations: dict[str, Any] | None = None,
         meta: dict[str, Any] | None = None,
         always_listed: bool = False,
+        cache_ttl_ms: int | UnsetType = UNSET,
     ) -> ResourceBinding:
         """Register an interactive HTML view (an MCP App) as a resource.
 
@@ -896,6 +939,7 @@ class MCPServer:
             selector=selector,
             description=description,
             title=title,
+            icons=icons,
             ui=ui,
             mime_type=mime_type,
             permissions=check_permissions_shape(f"MCP binding {name!r}", permissions),
@@ -903,6 +947,7 @@ class MCPServer:
             annotations=annotations,
             meta=meta,
             always_listed=always_listed,
+            cache_ttl_ms=cache_ttl_ms,
         )
         self._resources.register(binding)
         return binding
@@ -914,7 +959,9 @@ class MCPServer:
         render: Callable[..., Any],
         description: str | None = None,
         title: str | None = None,
+        icons: tuple[Icon, ...] = (),
         arguments: list[PromptArgument] | None = None,
+        completions: dict[str, Callable[..., Any]] | None = None,
         permissions: list[Any] | None = None,
         rate_limits: list[Any] | None = None,
         annotations: dict[str, Any] | None = None,
@@ -935,6 +982,7 @@ class MCPServer:
             name=name,
             description=description,
             title=title,
+            icons=icons,
             render=render,
             arguments=tuple(arguments or ()),
             permissions=check_permissions_shape(f"MCP binding {name!r}", permissions),
@@ -942,6 +990,10 @@ class MCPServer:
             annotations=annotations or {},
             meta=merge_meta(meta),
             always_listed=always_listed,
+            completions=dict(completions or {}),
+        )
+        check_completions_declared(
+            f"Prompt {name!r}", binding.completions, (arg.name for arg in binding.arguments)
         )
         self._prompts.register(binding)
         return binding
@@ -960,7 +1012,10 @@ class MCPServer:
         success_status: int | None = None,
         description: str | None = None,
         title: str | None = None,
+        icons: tuple[Icon, ...] = (),
         output_format: OutputFormat | str = OutputFormat.JSON,
+        content_kind: ToolContentKind = ToolContentKind.TEXT,
+        content_mime_type: str | None = None,
         permissions: list[Any] | None = None,
         rate_limits: list[Any] | None = None,
         annotations: dict[str, Any] | None = None,
@@ -1007,7 +1062,10 @@ class MCPServer:
                 spec=effective_spec,
                 description=description or fn.__doc__,
                 title=title,
+                icons=icons,
                 output_format=output_format,
+                content_kind=content_kind,
+                content_mime_type=content_mime_type,
                 permissions=permissions,
                 rate_limits=rate_limits,
                 annotations=annotations,
@@ -1036,7 +1094,10 @@ class MCPServer:
         output_serializer: type[Serializer] | None = None,
         description: str | None = None,
         title: str | None = None,
+        icons: tuple[Icon, ...] = (),
         output_format: OutputFormat | str = OutputFormat.JSON,
+        content_kind: ToolContentKind = ToolContentKind.TEXT,
+        content_mime_type: str | None = None,
         permissions: list[Any] | None = None,
         rate_limits: list[Any] | None = None,
         annotations: dict[str, Any] | None = None,
@@ -1089,8 +1150,11 @@ class MCPServer:
                 spec=effective_spec,
                 description=description or fn.__doc__,
                 title=title,
+                icons=icons,
                 input_serializer=input_serializer,
                 output_format=output_format,
+                content_kind=content_kind,
+                content_mime_type=content_mime_type,
                 permissions=permissions,
                 rate_limits=rate_limits,
                 annotations=annotations,
@@ -1120,6 +1184,7 @@ class MCPServer:
         spec: SelectorSpec | None = None,
         description: str | None = None,
         title: str | None = None,
+        icons: tuple[Icon, ...] = (),
         output_serializer: type[Serializer] | None = None,
         mime_type: str = "application/json",
         encoding: ResourceEncoding = ResourceEncoding.JSON,
@@ -1128,6 +1193,8 @@ class MCPServer:
         annotations: dict[str, Any] | None = None,
         meta: dict[str, Any] | None = None,
         always_listed: bool = False,
+        cache_ttl_ms: int | UnsetType = UNSET,
+        completions: dict[str, Callable[..., Any]] | None = None,
     ) -> Callable[[Callable[..., Any]], Callable[..., Any]]:
         """Decorator form: register the wrapped callable as a resource.
 
@@ -1163,6 +1230,7 @@ class MCPServer:
                 selector=effective_spec,
                 description=description or fn.__doc__,
                 title=title,
+                icons=icons,
                 output_serializer=output_serializer,
                 mime_type=mime_type,
                 encoding=encoding,
@@ -1171,6 +1239,8 @@ class MCPServer:
                 annotations=annotations,
                 meta=meta,
                 always_listed=always_listed,
+                cache_ttl_ms=cache_ttl_ms,
+                completions=completions,
             )
             return fn
 
@@ -1182,7 +1252,9 @@ class MCPServer:
         name: str | None = None,
         description: str | None = None,
         title: str | None = None,
+        icons: tuple[Icon, ...] = (),
         arguments: list[PromptArgument] | None = None,
+        completions: dict[str, Callable[..., Any]] | None = None,
         permissions: list[Any] | None = None,
         rate_limits: list[Any] | None = None,
         annotations: dict[str, Any] | None = None,
@@ -1197,7 +1269,9 @@ class MCPServer:
                 render=fn,
                 description=description or fn.__doc__,
                 title=title,
+                icons=icons,
                 arguments=arguments,
+                completions=completions,
                 permissions=permissions,
                 rate_limits=rate_limits,
                 annotations=annotations,
@@ -1344,6 +1418,15 @@ class MCPServer:
             ),
         ]
         return patterns, self._url_namespace, self._url_namespace
+
+
+def _template_variables(uri_template: str) -> tuple[str, ...]:
+    """The ``{var}`` names in a URI template — a resource's completable arguments.
+
+    Duplicated pattern rather than imported from ``ResourceRegistry``: that
+    one compiles templates to matching regexes, and this only needs the names.
+    """
+    return tuple(re.findall(r"\{([^}]+)\}", uri_template))
 
 
 __all__ = ["MCPServer"]

@@ -6,14 +6,14 @@ import json
 from rest_framework_mcp.transport.in_memory_sse_broker import InMemorySSEBroker
 from rest_framework_mcp.transport.in_memory_sse_replay_buffer import InMemorySSEReplayBuffer
 from rest_framework_mcp.transport.sse_response import (
-    _format_event,
     build_sse_response,
+    format_event,
     stream_events,
 )
 
 
-def test_format_event_emits_data_line_with_blank_separator() -> None:
-    out = _format_event({"a": 1})
+def testformat_event_emits_data_line_with_blank_separator() -> None:
+    out = format_event({"a": 1})
     assert out.endswith(b"\n\n")
     assert b"data: " in out
     payload = out[len(b"data: ") : -2].decode()
@@ -66,8 +66,8 @@ def test_build_sse_response_sets_required_headers() -> None:
 # ---------- replay-buffer-aware behaviour ----------
 
 
-def test_format_event_emits_id_line_when_event_id_set() -> None:
-    out = _format_event({"a": 1}, event_id="abc")
+def testformat_event_emits_id_line_when_event_id_set() -> None:
+    out = format_event({"a": 1}, event_id="abc")
     assert out.startswith(b"id: abc\ndata: ")
     assert out.endswith(b"\n\n")
 

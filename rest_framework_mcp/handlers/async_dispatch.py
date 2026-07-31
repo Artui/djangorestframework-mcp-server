@@ -4,8 +4,11 @@ import asyncio
 from collections.abc import Awaitable
 from typing import Any
 
+from asgiref.sync import sync_to_async
+
 from rest_framework_mcp.constants import JsonRpcErrorCode
 from rest_framework_mcp.handlers.dispatch import dispatch
+from rest_framework_mcp.handlers.handle_completion_complete import handle_completion_complete
 from rest_framework_mcp.handlers.handle_prompts_get_async import handle_prompts_get_async
 from rest_framework_mcp.handlers.handle_resources_read_async import handle_resources_read_async
 from rest_framework_mcp.handlers.handle_tools_call_async import handle_tools_call_async
@@ -22,10 +25,10 @@ async def adispatch(
     """Async sibling of :func:`dispatch`.
 
     Only the I/O-bound handlers (``tools/call``, ``resources/read``,
-    ``prompts/get``) have async-native variants. The rest are CPU-only —
-    schema generation, capability advertisement, error wrapping — and run
-    inline through the sync :func:`dispatch` table without blocking the
-    event loop noticeably.
+    ``prompts/get``) have async-native variants; ``completion/complete``
+    borrows the executor instead. The rest are CPU-only — schema generation,
+    capability advertisement, error wrapping — and run inline through the sync
+    :func:`dispatch` table without blocking the event loop noticeably.
     """
     if method == "tools/call":
         # Not wrapped here: a tool call resolves its own deadline from the
@@ -36,6 +39,16 @@ async def adispatch(
         return await _with_deadline(handle_resources_read_async(params, context), context)
     if method == "prompts/get":
         return await _with_deadline(handle_prompts_get_async(params, context), context)
+    if method == "completion/complete":
+        # No async-native sibling: a completer is a small sync callable, and
+        # the realistic implementation reads a queryset — which raises
+        # ``SynchronousOnlyOperation`` if called straight from the loop. The
+        # thread-sensitive executor is the same answer ``alist_tools`` uses,
+        # and it costs one hop instead of a parallel handler.
+        return await _with_deadline(
+            sync_to_async(handle_completion_complete, thread_sensitive=True)(params, context),
+            context,
+        )
     return dispatch(method, params, context)
 
 

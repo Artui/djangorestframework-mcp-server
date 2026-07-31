@@ -33,6 +33,18 @@ class AuthorizationServerMetadata:
     token_endpoint_auth_methods_supported: list[str] = field(
         default_factory=lambda: ["client_secret_basic", "client_secret_post", "none"]
     )
+    client_id_metadata_document_supported: bool = False
+    """Whether the authorization server accepts an HTTPS URL as a ``client_id``.
+
+    The field MCP clients check to decide *how* to register, and the reason it
+    matters here: the registration priority order is pre-registration → CIMD →
+    Dynamic Client Registration, and DCR is deprecated. A server that supports
+    CIMD but stays silent about it sends every client down the deprecated path
+    for no reason.
+
+    ⚠ Never hardcode this to ``True``. It describes the authorization server,
+    not this package — a backend must source it from whatever the AS actually
+    does, so the advertisement cannot drift from the behaviour."""
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -47,6 +59,7 @@ class AuthorizationServerMetadata:
             "token_endpoint_auth_methods_supported": list(
                 self.token_endpoint_auth_methods_supported
             ),
+            "client_id_metadata_document_supported": self.client_id_metadata_document_supported,
         }
 
 

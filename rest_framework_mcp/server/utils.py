@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import warnings
+from collections.abc import Iterable
 from typing import Any
 
 from django.core.exceptions import ImproperlyConfigured
@@ -269,11 +270,38 @@ def check_permissions_shape(label: str, permissions: Any) -> tuple[Any, ...]:
     return resolved
 
 
+def check_completions_declared(
+    label: str,
+    completions: dict[str, Any],
+    completable: Iterable[str],
+) -> None:
+    """Refuse a completer keyed to an argument that doesn't exist.
+
+    A completer for ``langauge`` is not a completer that never fires with a
+    warning in the logs — it is silence in a dropdown, on a surface nobody has
+    a test for. The argument names are known at registration (a prompt
+    declares them, a URI template contains them), so the typo is catchable
+    exactly once, at startup.
+
+    A binding with **no** completable arguments and no completers is the
+    ordinary case and passes straight through.
+    """
+    known: set[str] = set(completable)
+    unknown: list[str] = sorted(set(completions) - known)
+    if not unknown:
+        return
+    raise ImproperlyConfigured(
+        f"{label}: completions name argument(s) {unknown!r} that this binding "
+        f"does not have. Completable here: {sorted(known)!r}."
+    )
+
+
 __all__ = [
     "UnboundedListWarning",
     "UndescribedToolWarning",
     "UnguardedToolWarning",
     "build_ui_tool_meta",
+    "check_completions_declared",
     "check_list_pagination_declared",
     "check_permissions_shape",
     "check_tool_description_present",

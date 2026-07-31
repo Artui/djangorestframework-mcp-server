@@ -161,6 +161,9 @@ def dispatch_chain_tool(
         payload,
         output_format=output_format,
         include_structured_content=emit_structured_content,
+        content_kind=binding.content_kind,
+        content_mime_type=binding.content_mime_type,
+        binding_name=binding.name,
     ).to_dict()
 
 

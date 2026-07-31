@@ -87,3 +87,37 @@ def test_two_mounts_can_gate_dcr_differently(client) -> None:
 
     assert open_mount.status_code == 201
     assert closed_mount.status_code == 403
+
+
+@pytest.mark.django_db(transaction=True)
+def test_registration_echoes_the_application_type_it_was_sent(client) -> None:
+    """The MCP spec makes sending it a client MUST, so silently dropping it
+    would leave a native client unable to tell whether it had been heard."""
+    with override_settings(ROOT_URLCONF=conformance_urlconf(dcr_enabled=True)):
+        response = client.post(
+            "/oauth/register/",
+            data=json.dumps(
+                {
+                    "redirect_uris": ["http://localhost:3000/callback"],
+                    "client_name": "A CLI",
+                    "token_endpoint_auth_method": "none",
+                    "application_type": "native",
+                }
+            ),
+            content_type="application/json",
+        )
+    assert response.status_code == 201, response.content
+    assert response.json()["application_type"] == "native"
+
+
+@pytest.mark.django_db(transaction=True)
+def test_registration_omits_application_type_when_none_was_sent(client) -> None:
+    """Nothing persists it, so echoing a default would assert a choice nobody made."""
+    with override_settings(ROOT_URLCONF=conformance_urlconf(dcr_enabled=True)):
+        response = client.post(
+            "/oauth/register/",
+            data=json.dumps({"redirect_uris": ["https://c.example/cb"]}),
+            content_type="application/json",
+        )
+    assert response.status_code == 201, response.content
+    assert "application_type" not in response.json()

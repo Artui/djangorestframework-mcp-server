@@ -595,7 +595,7 @@ def test_selector_tool_denied_by_permission() -> None:
     )
     out = handle_tools_call({"name": "invoices.list", "arguments": {}}, _ctx(server))
     assert isinstance(out, JsonRpcError)
-    assert out.code == -32002
+    assert out.code == -32006
     assert out.data == {"requiredScopes": ["scope:x"]}
 
 

@@ -28,8 +28,27 @@ def handle_initialize(
             message="initialize params must be an object",
         )
 
+    # ⚠ **Legacy versions only.** ``initialize`` is a legacy-era method — it
+    # does not exist in ``2026-07-28`` — so offering the newest configured
+    # version here would answer a handshake with a revision in which handshakes
+    # were removed, and the client would then speak a protocol the transport
+    # would refuse on its next request.
     parsed: InitializeParams = InitializeParams.from_payload(params)
-    supported: tuple[str, ...] = context.config.protocol_versions
+    supported: tuple[str, ...] = context.config.legacy_protocol_versions
+    if not supported:
+        # ⚠ A modern-only ``PROTOCOL_VERSIONS`` is a supported configuration and
+        # the natural end state once legacy is dropped — this used to index an
+        # empty tuple and 500. Told plainly, a legacy client learns that the
+        # handshake era is gone and which revisions replaced it, which is
+        # something it can report to a human; a 500 is not.
+        return JsonRpcError(
+            code=JsonRpcErrorCode.INVALID_PARAMS,
+            message=(
+                "This server no longer serves the initialize handshake. It supports "
+                f"{', '.join(context.config.protocol_versions)}, which carry per-request "
+                "metadata instead of negotiating. Send server/discover."
+            ),
+        )
     chosen: str = parsed.protocol_version if parsed.protocol_version in supported else supported[0]
 
     # The owning server's identity wins: it is resolved once in
@@ -40,20 +59,47 @@ def handle_initialize(
     server_info: Implementation | None = context.server_info
     if server_info is None:
         server_info = build_server_info()
-    # Advertise ``prompts`` only when the server has at least one registered.
-    # Empty capability advertisement would tell clients to call ``prompts/list``
-    # that returns nothing — harmless but noisy.
-    capabilities = ServerCapabilities(
-        tools={},
-        resources={},
-        prompts={} if len(context.prompts) > 0 else None,
-    )
     return InitializeResult(
         protocol_version=chosen,
-        capabilities=capabilities,
+        capabilities=build_capabilities(context),
         server_info=server_info,
         instructions=context.instructions,
     )
 
 
-__all__ = ["handle_initialize"]
+def build_capabilities(context: MCPCallContext) -> ServerCapabilities:
+    """What this server can answer, from its registries.
+
+    One rule for all four: advertise a capability only when there is something
+    behind it. ``prompts`` alone worked this way and ``tools`` / ``resources``
+    were unconditional, which meant a resource-less server still told every
+    client to go and call ``resources/list``. A capability is a promise about
+    what this endpoint does, and the registries are the only honest source for
+    it. The spec's own remedy for an unsupported capability is ``-32601``, so a
+    server that declares one and then refuses every request is strictly worse
+    than one that never declared it.
+
+    ⚠ Deliberately **not** filtered by ``FILTER_LISTINGS_BY_PERMISSIONS``: that
+    decides what a given caller may see, and capabilities describe the server.
+    Making them per-caller would tell an under-privileged client the method does
+    not exist, rather than that it may not use it.
+
+    Shared with ``server/discover``, which reports the identical bundle — the
+    two methods differ in how they are reached, not in what this server can do.
+    """
+    return ServerCapabilities(
+        tools={} if len(context.tools) > 0 else None,
+        resources={} if len(context.resources) > 0 else None,
+        prompts={} if len(context.prompts) > 0 else None,
+        completions={} if _has_completers(context) else None,
+    )
+
+
+def _has_completers(context: MCPCallContext) -> bool:
+    """Whether any registered prompt or resource can complete an argument."""
+    return any(b.completions for b in context.prompts.all()) or any(
+        b.completions for b in context.resources.all()
+    )
+
+
+__all__ = ["build_capabilities", "handle_initialize"]

@@ -165,6 +165,9 @@ async def dispatch_selector_tool_async(
         result = await adispatch_spec(
             binding.spec,
             **_dispatch_kwargs(binding, validated, drf_request, view, arguments_raw, context),
+            # Async path only: the sync sibling has no stream to report on, and
+            # ``_dispatch_kwargs`` is shared between the two.
+            progress=context.progress,
         )
     except ServiceValidationError as exc:
         # See the sync sibling for the protocol-vs-tool error boundary.
@@ -370,6 +373,9 @@ def _post_fetch_and_render(
                 None,
                 output_format=output_format,
                 include_structured_content=emit_structured_content,
+                content_kind=binding.content_kind,
+                content_mime_type=binding.content_mime_type,
+                binding_name=binding.name,
             ).to_dict()
         payload: Any = render_spec_output(
             binding.spec,
@@ -383,6 +389,9 @@ def _post_fetch_and_render(
             payload,
             output_format=output_format,
             include_structured_content=emit_structured_content,
+            content_kind=binding.content_kind,
+            content_mime_type=binding.content_mime_type,
+            binding_name=binding.name,
         ).to_dict()
 
     qs: Any = result.value
@@ -426,6 +435,9 @@ def _post_fetch_and_render(
         payload,
         output_format=output_format,
         include_structured_content=emit_structured_content,
+        content_kind=binding.content_kind,
+        content_mime_type=binding.content_mime_type,
+        binding_name=binding.name,
     ).to_dict()
 
 

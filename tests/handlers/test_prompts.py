@@ -149,10 +149,10 @@ def test_prompts_get_missing_required_arg() -> None:
     assert out.data == {"missing": ["who"]}
 
 
-def test_prompts_get_unknown_returns_resource_not_found() -> None:
+def test_prompts_get_unknown_returns_invalid_params() -> None:
     server = _server()
     out = handle_prompts_get({"name": "nope", "arguments": {}}, _ctx(server))
-    assert isinstance(out, JsonRpcError) and out.code == -32003
+    assert isinstance(out, JsonRpcError) and out.code == -32602
 
 
 def test_prompts_get_rejects_non_dict_params() -> None:
@@ -193,7 +193,7 @@ def test_prompts_get_permission_denied() -> None:
     server = _server()
     server.register_prompt(name="p", render=lambda **_: "x", permissions=[_DenyAll()])
     out = handle_prompts_get({"name": "p", "arguments": {}}, _ctx(server))
-    assert isinstance(out, JsonRpcError) and out.code == -32002
+    assert isinstance(out, JsonRpcError) and out.code == -32006
 
 
 def test_decorator_uses_function_name_and_docstring() -> None:
@@ -224,10 +224,10 @@ async def test_async_prompts_get_dispatches_async_render() -> None:
     assert out["messages"][0]["content"]["text"] == "async-rendered"
 
 
-async def test_async_prompts_get_unknown_returns_resource_not_found() -> None:
+async def test_async_prompts_get_unknown_returns_invalid_params() -> None:
     server = _server()
     out = await handle_prompts_get_async({"name": "nope", "arguments": {}}, _ctx(server))
-    assert isinstance(out, JsonRpcError) and out.code == -32003
+    assert isinstance(out, JsonRpcError) and out.code == -32602
 
 
 async def test_async_prompts_get_rejects_non_dict_params() -> None:
@@ -264,7 +264,7 @@ async def test_async_prompts_get_permission_denied() -> None:
     server = _server()
     server.register_prompt(name="p", render=lambda **_: "x", permissions=[_DenyAll()])
     out = await handle_prompts_get_async({"name": "p", "arguments": {}}, _ctx(server))
-    assert isinstance(out, JsonRpcError) and out.code == -32002
+    assert isinstance(out, JsonRpcError) and out.code == -32006
 
 
 async def test_async_prompts_get_handles_unsupported_render_value() -> None:

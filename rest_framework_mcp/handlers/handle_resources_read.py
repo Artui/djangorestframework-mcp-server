@@ -16,6 +16,9 @@ from rest_framework_mcp.handlers.types.context import MCPCallContext
 from rest_framework_mcp.handlers.utils import (
     check_permissions,
     consume_rate_limits,
+    resolve_bound,
+    resource_cache_hints,
+    resource_not_found_code,
 )
 from rest_framework_mcp.output.build_resource_contents import build_resource_contents
 from rest_framework_mcp.output.enforce_result_bytes import enforce_result_bytes
@@ -47,7 +50,14 @@ def handle_resources_read(
 
     resolved = context.resources.resolve(uri)
     if resolved is None:
-        return JsonRpcError(JsonRpcErrorCode.RESOURCE_NOT_FOUND, f"Unknown resource: {uri!r}")
+        # ``-32002`` with the URI echoed in ``data`` is the spec's own worked
+        # example for this case, so a client that special-cases resource
+        # not-found finds both halves where it expects them.
+        return JsonRpcError(
+            resource_not_found_code(context.protocol_version),
+            f"Unknown resource: {uri!r}",
+            data={"uri": uri},
+        )
     binding, vars_ = resolved
 
     with span(
@@ -112,7 +122,12 @@ def handle_resources_read(
         )
         if isinstance(contents, JsonRpcError):
             return contents
-        result: dict[str, Any] = {"contents": [contents.to_dict()]}
+        result: dict[str, Any] = {
+            "contents": [contents.to_dict()],
+            **resource_cache_hints(
+                resolve_bound(binding.cache_ttl_ms, context.config.resource_cache_ttl_ms)
+            ),
+        }
         # Same outbound ceiling as a tool result, different envelope: a resource
         # read has no ``isError`` shape to carry the explanation, so an
         # over-ceiling read is a protocol error. The message is identical, and

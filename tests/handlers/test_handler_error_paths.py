@@ -97,7 +97,7 @@ def test_handle_resources_read_rejects_missing_uri() -> None:
 def test_handle_resources_read_unknown_uri() -> None:
     out = handle_resources_read({"uri": "nope://x"}, _ctx_from_test_app())
     assert isinstance(out, JsonRpcError)
-    assert out.code == -32003
+    assert out.code == -32002
 
 
 def test_handle_resources_list_returns_concrete() -> None:

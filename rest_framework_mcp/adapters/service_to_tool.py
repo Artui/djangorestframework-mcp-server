@@ -13,7 +13,13 @@ from rest_framework_mcp.adapters.utils import (
     validate_url_kwargs,
 )
 from rest_framework_mcp.auth.permissions.wrap_spec_permissions import wrap_spec_permissions
-from rest_framework_mcp.constants import ArgumentBinding, OutputFormat, UnknownArguments
+from rest_framework_mcp.constants import (
+    ArgumentBinding,
+    OutputFormat,
+    ToolContentKind,
+    UnknownArguments,
+)
+from rest_framework_mcp.protocol.types.icon import Icon
 from rest_framework_mcp.registry.types.query_param import QueryParam
 from rest_framework_mcp.registry.types.tool_binding import ToolBinding
 from rest_framework_mcp.registry.types.url_kwarg import UrlKwarg
@@ -25,6 +31,9 @@ def service_spec_to_tool(
     spec: ServiceSpec,
     description: str | None = None,
     title: str | None = None,
+    icons: tuple[Icon, ...] = (),
+    content_kind: ToolContentKind = ToolContentKind.TEXT,
+    content_mime_type: str | None = None,
     display_name: str | None = None,
     display_description: str | None = None,
     output_format: OutputFormat = OutputFormat.JSON,
@@ -84,6 +93,9 @@ def service_spec_to_tool(
         name=name,
         description=description,
         title=title,
+        icons=icons,
+        content_kind=content_kind,
+        content_mime_type=content_mime_type,
         display_name=display_name,
         display_description=display_description,
         spec=spec,
