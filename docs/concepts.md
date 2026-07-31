@@ -1198,6 +1198,8 @@ which by reading the request:
 | State | a session, in `Mcp-Session-Id` | none |
 | Version | negotiated once | declared per request |
 | Detected by | absence of the marker below | `_meta["io.modelcontextprotocol/protocolVersion"]` |
+| Push notifications | none | `subscriptions/listen` |
+| Tasks, elicitation | not offered | available |
 
 A modern request carries its version, client identity and client capabilities
 in `params._meta`, and mirrors selected body fields into headers so gateways
@@ -1228,10 +1230,28 @@ revision — the SSE stream and session termination were both removed there.
     Legacy clients have no fall-forward mechanism: drop the era and every
     client that has not migrated is stranded with nothing but an error string.
     The cost of carrying both is one branch at the transport edge — everything
-    below it is era-agnostic, with one exception. `resources/read` answers a
-    missing URI with `-32002` for a legacy caller and `-32602` for a modern
-    one, because the revision that retired `-32002` also told clients to keep
-    recognising it, so neither value is safe to send to both.
+    below it is era-agnostic, with two exceptions.
+
+    **`resources/read`** answers a missing URI with `-32002` for a legacy caller
+    and `-32602` for a modern one, because the revision that retired `-32002`
+    also told clients to keep recognising it, so neither value is safe to send
+    to both.
+
+    **The advertised capabilities** follow the caller, not the server. A
+    capability is a promise, and two of them can only be kept for a modern
+    client: every push flag (`subscribe`, and the three `listChanged` fields)
+    describes a notification that leaves through `subscriptions/listen`, and
+    `extensions` is not a field on the legacy `ServerCapabilities` at all. So a
+    legacy `initialize` is told about neither, however the server is configured
+    — and `server/discover`, which both eras may call, answers according to the
+    version the caller declared.
+
+    ⛔ **`resources/subscribe` is deliberately not implemented.** It is optional
+    in `2025-11-25` and gone from `2026-07-28`, where the schema says
+    `SubscriptionFilter.resourceUris` *"replaces the former `resources/subscribe`
+    RPC"* — which this server does implement. Building the legacy RPC would mean
+    a cross-process session→URI registry serving only the era being carried for
+    compatibility rather than grown.
 
 ## Interactive views (MCP Apps)
 

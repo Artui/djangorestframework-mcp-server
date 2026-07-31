@@ -593,6 +593,30 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   naturally wrote the same thing here — so the fix removes the inconsistency
   rather than documenting it.
 
+- **A legacy client was promised push notifications it could never receive.**
+  `initialize` advertised `resources.subscribe` and all three `listChanged`
+  flags whenever a subscription broker was configured — but every one of those
+  notifications leaves through `subscriptions/listen`, which is a modern-only
+  method. A legacy client acting on `subscribe` sent `resources/subscribe` and
+  got `-32601`; one acting on a `listChanged` got something worse, because
+  nothing answered at all and it simply waited. The same handshake also
+  advertised `extensions`, which is not a field on the legacy
+  `ServerCapabilities` and names a tasks extension a legacy client cannot
+  declare per request and so can never reach.
+
+  The advertised capabilities now follow **the caller's era**. `initialize` is a
+  legacy method by definition, so it never offers either; `server/discover`,
+  which both eras may call, answers according to the version the caller
+  declared. Nothing changes for a modern client, and the registry-presence half
+  is untouched — a legacy client is still told it has resources to read.
+
+  ⛔ **`resources/subscribe` is deliberately not implemented**, which is why the
+  fix is the advertisement. It is optional in `2025-11-25` and gone from
+  `2026-07-28`, where the schema says `SubscriptionFilter.resourceUris`
+  *"replaces the former `resources/subscribe` RPC"* — and that is implemented.
+  Building the legacy RPC would mean a cross-process session→URI registry
+  serving only the era being carried for compatibility rather than grown.
+
 ## [0.23.0] — 2026-07-30
 
 ### Added

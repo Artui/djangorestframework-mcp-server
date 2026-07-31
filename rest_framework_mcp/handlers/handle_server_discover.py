@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from typing import Any
 
+from rest_framework_mcp.constants import MODERN_PROTOCOL_VERSIONS
 from rest_framework_mcp.handlers.handle_initialize import build_capabilities
 from rest_framework_mcp.handlers.types.context import MCPCallContext
 from rest_framework_mcp.handlers.utils import catalog_cache_hints
@@ -23,11 +24,17 @@ def handle_server_discover(
     already knows what it wants may skip it entirely and handle a version error
     if it guessed wrong.
 
-    ⚠ **Answered in both eras, deliberately.** Nothing in the result depends on
-    which era the caller is speaking — the versions, capabilities and identity
-    are properties of the server — and answering it before the transport fork
-    exists is what lets a modern client probe this server today. A legacy client
-    that never asks is unaffected.
+    ⚠ **Answered in both eras, deliberately** — answering it before the
+    transport fork exists is what lets a modern client probe this server today,
+    and a legacy client that never asks is unaffected.
+
+    ⚠ **But the capabilities are the caller's, not the server's.** The versions
+    and the identity are properties of the endpoint; two of the capabilities are
+    not, because they can only be *reached* by a modern client — see
+    :func:`~rest_framework_mcp.handlers.handle_initialize.build_capabilities`.
+    So the era comes from what this caller declared, which for a header-less
+    request is the configured default and therefore modern on a modern-only
+    server.
 
     ``params`` is accepted and ignored: the request carries no parameters beyond
     the standard ``_meta``, whose per-request protocol fields belong to the
@@ -40,7 +47,9 @@ def handle_server_discover(
         server_info = build_server_info()
     result: dict[str, Any] = DiscoverResult(
         supported_versions=context.config.protocol_versions,
-        capabilities=build_capabilities(context),
+        capabilities=build_capabilities(
+            context, modern=context.protocol_version in MODERN_PROTOCOL_VERSIONS
+        ),
         server_info=server_info,
         instructions=context.instructions,
     ).to_dict()
