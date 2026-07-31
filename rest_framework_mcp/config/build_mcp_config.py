@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from typing import Any
 
+from django.core.exceptions import ImproperlyConfigured
 from rest_framework_services import UNSET, UnsetType
 
 from rest_framework_mcp.conf import get_setting
@@ -71,10 +72,21 @@ def build_mcp_config(
     layers your overrides *over* the project's settings instead of discarding
     them.
     """
+    resolved_versions: tuple[str, ...] = tuple(
+        protocol_versions if protocol_versions is not None else get_setting("PROTOCOL_VERSIONS")
+    )
+    if not resolved_versions:
+        # The only genuinely unusable value: a server that supports no revision
+        # can answer nothing, and every version lookup downstream would be an
+        # index into an empty tuple. Caught here, once, at construction —
+        # rather than as an ``IndexError`` out of a view on the first request.
+        raise ImproperlyConfigured(
+            "REST_FRAMEWORK_MCP['PROTOCOL_VERSIONS'] is empty, so this server supports "
+            "no MCP revision and cannot answer any request. List at least one."
+        )
+
     return MCPConfig(
-        protocol_versions=tuple(
-            protocol_versions if protocol_versions is not None else get_setting("PROTOCOL_VERSIONS")
-        ),
+        protocol_versions=resolved_versions,
         require_protocol_version_header=bool(
             require_protocol_version_header
             if require_protocol_version_header is not None

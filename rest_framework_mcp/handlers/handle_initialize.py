@@ -35,6 +35,20 @@ def handle_initialize(
     # would refuse on its next request.
     parsed: InitializeParams = InitializeParams.from_payload(params)
     supported: tuple[str, ...] = context.config.legacy_protocol_versions
+    if not supported:
+        # ⚠ A modern-only ``PROTOCOL_VERSIONS`` is a supported configuration and
+        # the natural end state once legacy is dropped — this used to index an
+        # empty tuple and 500. Told plainly, a legacy client learns that the
+        # handshake era is gone and which revisions replaced it, which is
+        # something it can report to a human; a 500 is not.
+        return JsonRpcError(
+            code=JsonRpcErrorCode.INVALID_PARAMS,
+            message=(
+                "This server no longer serves the initialize handshake. It supports "
+                f"{', '.join(context.config.protocol_versions)}, which carry per-request "
+                "metadata instead of negotiating. Send server/discover."
+            ),
+        )
     chosen: str = parsed.protocol_version if parsed.protocol_version in supported else supported[0]
 
     # The owning server's identity wins: it is resolved once in

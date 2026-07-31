@@ -297,6 +297,46 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- ⚠ **A permission denial on `resources/read` or `prompts/get` lost its `403`
+  when the client asked for progress.** A `progressToken` opened an SSE stream
+  for *any* method, but the pre-flight that recovers the normative status could
+  only speak for `tools/call` — so those two answered a denial inside a `200`
+  with no `WWW-Authenticate`, and a client acting on status read the denial as
+  success. Access was still denied; the status and the challenge were not.
+
+  Streaming is now gated on the dispatch being able to report at all, which
+  fixes the same bug's other half: a chain tool, `resources/read` and
+  `prompts/get` thread no reporter, so they were being handed a stream that
+  emitted keepalives and exactly one event. Nothing loses a capability — none
+  of them ever sent a frame. Threading a reporter through the chain path is
+  worth doing separately, and `can_report_progress` is where it gets switched
+  back on.
+
+- ⚠ **A modern-only `PROTOCOL_VERSIONS` was an unhandled 500.**
+  `["2026-07-28"]` is a supported configuration and the natural end state once
+  legacy is dropped, but two call sites indexed the *legacy* version list for
+  their default, and on such a server that list is empty: every `initialize`
+  and every header-less `server/discover` raised `IndexError` out of the view.
+
+  `server/discover` now answers on a modern-only server — refusing it would
+  leave the server undiscoverable by exactly the clients it still serves — and
+  `initialize` returns a JSON-RPC error naming the revisions that replaced the
+  handshake. A header-less request mid-session is still rejected, since
+  answering it with a modern version would tell a legacy client to speak a
+  revision it cannot. An entirely empty `PROTOCOL_VERSIONS` is now refused at
+  construction.
+
+- **`content_kind=RESOURCE_LINK` rejected a tuple of mappings.** A selector
+  returning one got an error explaining it had produced the wrong shape, which
+  it had not.
+
+- **`_StreamReporter`'s cap and monotonicity counters are guarded by a lock.**
+  Frame delivery was already thread-safe; the two counters were plain
+  read-modify-write on the same worker-thread path. Correct today only because
+  `adispatch_spec` bridges to a single thread — a property of a collaborator,
+  not of the class, and a service fanning reports across a pool could over-emit
+  past `MAX_PROGRESS_NOTIFICATIONS` or slip a non-increasing frame through.
+
 - ⚠ **A permission implementing only `has_permission` hid a binding from
   listings but did not gate the call.** `is_binding_listable` duck-types;
   `check_permissions` skipped anything failing

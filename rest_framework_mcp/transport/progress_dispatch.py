@@ -10,6 +10,7 @@ from rest_framework_mcp.constants import PROGRESS_TOKEN_META_KEY, JsonRpcErrorCo
 from rest_framework_mcp.handlers.types.context import MCPCallContext
 from rest_framework_mcp.handlers.utils import check_permissions
 from rest_framework_mcp.protocol.types.json_rpc_error import JsonRpcError
+from rest_framework_mcp.registry.types.chain_tool_binding import ChainToolBinding
 from rest_framework_mcp.transport.response_stream import build_response_stream
 
 
@@ -38,6 +39,41 @@ def progress_token(params: Any) -> str | int | None:
     return token
 
 
+def can_report_progress(method: str, params: Any, context: MCPCallContext) -> bool:
+    """Whether this request's dispatch can actually emit progress.
+
+    ⚠ **The gate that keeps two other guarantees true**, and it is narrower
+    than "the client asked". A ``progressToken`` is a request to stream, but
+    opening a stream for a dispatch that will never report costs a connection
+    and buys nothing — which is the design's own argument against streaming —
+    and it silently gives up the normative ``403``, because a
+    ``StreamingHttpResponse`` commits its status before the handler runs and
+    :func:`preflight_permissions` can only speak for ``tools/call``.
+
+    Both problems have the same shape and the same fix: stream only where a
+    reporter is actually threaded through. Today that is ``tools/call`` on a
+    service or selector binding — the two paths that pass ``progress=`` into
+    dispatch.
+
+    Deliberately **excluded**, and none of them loses anything, because none of
+    them emitted a frame before either:
+
+    - ``resources/read`` and ``prompts/get`` never receive a reporter. Streamed,
+      their permission denials rode inside a ``200`` with no challenge; answered
+      as plain JSON they keep the ``403`` the authorization spec makes
+      normative.
+    - **Chain tools** run the whole sync pipeline in a worker thread and their
+      steps build their own kwarg pool, which has no ``progress`` seed. A chain
+      is the tool kind that would benefit most from reporting ("step 3 of 5"),
+      so threading one through is worth doing — and when it is, this gate is
+      where it gets re-enabled.
+    """
+    if method != "tools/call" or not isinstance(params, dict):
+        return False
+    binding = _tool_binding(params, context)
+    return binding is not None and not isinstance(binding, ChainToolBinding)
+
+
 def preflight_permissions(method: str, params: Any, context: MCPCallContext) -> JsonRpcError | None:
     """Run a tool's permission stack *before* deciding to stream.
 
@@ -59,14 +95,13 @@ def preflight_permissions(method: str, params: Any, context: MCPCallContext) -> 
 
     Returns ``None`` when there is nothing to deny: only ``tools/call`` has a
     binding to check at this point, and an unknown tool is the handler's error
-    to report.
+    to report. That narrowness is safe **because** :func:`can_report_progress`
+    refuses to stream anything this cannot speak for — the two run together, and
+    changing one without the other reopens the hole.
     """
     if method != "tools/call" or not isinstance(params, dict):
         return None
-    name: Any = params.get("name")
-    if not isinstance(name, str):
-        return None
-    binding = context.tools.get(name)
+    binding = _tool_binding(params, context)
     if binding is None:
         return None
     allowed, required_scopes = check_permissions(
@@ -79,6 +114,19 @@ def preflight_permissions(method: str, params: Any, context: MCPCallContext) -> 
         "Insufficient permission",
         data={"requiredScopes": required_scopes} if required_scopes else None,
     )
+
+
+def _tool_binding(params: dict[str, Any], context: MCPCallContext) -> Any:
+    """The binding a ``tools/call`` names, or ``None`` if it names none.
+
+    Shared so the streaming gate and the permission pre-flight resolve the
+    *same* binding from the same params — two lookups that disagreed would be
+    the exact bug this pairing exists to prevent.
+    """
+    name: Any = params.get("name")
+    if not isinstance(name, str):
+        return None
+    return context.tools.get(name)
 
 
 def stream_with_progress(
@@ -97,4 +145,9 @@ def stream_with_progress(
     )
 
 
-__all__ = ["preflight_permissions", "progress_token", "stream_with_progress"]
+__all__ = [
+    "can_report_progress",
+    "preflight_permissions",
+    "progress_token",
+    "stream_with_progress",
+]

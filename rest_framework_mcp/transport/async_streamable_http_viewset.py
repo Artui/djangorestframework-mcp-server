@@ -35,6 +35,7 @@ from rest_framework_mcp.registry.tool_registry import ToolRegistry
 from rest_framework_mcp.transport.negotiate_protocol_version import negotiate_protocol_version
 from rest_framework_mcp.transport.origin_validation import is_origin_allowed
 from rest_framework_mcp.transport.progress_dispatch import (
+    can_report_progress,
     preflight_permissions,
     progress_token,
     stream_with_progress,
@@ -524,6 +525,14 @@ class AsyncStreamableHttpViewSet(ViewSet):
         params: dict[str, Any] | None = _params_dict(message.params)
         token: str | int | None = progress_token(params)
         if token is None:
+            return None
+
+        # ⚠ Asking is not enough — the dispatch has to be able to answer. A
+        # stream over a path that threads no reporter emits keepalives and one
+        # event, and gives up the normative ``403`` on the way. See
+        # ``can_report_progress`` for which paths qualify and why the rest lose
+        # nothing by being excluded.
+        if not await acall(can_report_progress, message.method, params, context):
             return None
 
         # ⚠ Before the stream opens, while a status can still be chosen. See

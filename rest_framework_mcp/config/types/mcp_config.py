@@ -153,5 +153,24 @@ class MCPConfig:
         """
         return tuple(v for v in self.protocol_versions if v not in MODERN_PROTOCOL_VERSIONS)
 
+    @property
+    def legacy_fallback_version(self) -> str | None:
+        """The version a legacy client is answered with when it names none.
+
+        ``None`` when this server serves **no** legacy revision at all — which
+        is a supported configuration (``PROTOCOL_VERSIONS = ["2026-07-28"]``)
+        and the natural end state once legacy is dropped.
+
+        ⚠ **Exists because indexing ``legacy_protocol_versions[0]`` was a 500.**
+        Two call sites reached for the first legacy version as "the default",
+        and on a modern-only server that tuple is empty: every ``initialize``,
+        and every header-less ``server/discover``, raised ``IndexError`` out of
+        the view. Nothing validated the setting either, so the failure appeared
+        only in production traffic. Callers now branch on ``None`` and answer
+        with something a client can act on.
+        """
+        legacy: tuple[str, ...] = self.legacy_protocol_versions
+        return legacy[0] if legacy else None
+
 
 __all__ = ["MCPConfig"]

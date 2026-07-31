@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import threading
 from collections.abc import AsyncIterator, Awaitable, Callable, Mapping
 from dataclasses import dataclass
 from typing import Any
@@ -164,6 +165,16 @@ class _StreamReporter:
 
     State is per-instance, one instance per request — no module-level
     bookkeeping, per the package's no-shared-mutable-state rule.
+
+    ⚠ **The counters are guarded by a lock, not by an assumption.** The frame
+    hand-off is thread-safe by construction, but ``_remaining`` and the
+    monotonicity check are plain read-modify-write on the same
+    worker-thread-called path. Today ``adispatch_spec`` bridges to a single
+    thread, so nothing races — but that is a property of a collaborator, not of
+    this class, and a service fanning reports out across a thread pool would
+    quietly over-emit past the cap or slip a non-increasing frame through. The
+    lock is uncontended in the ordinary case and costs nothing worth measuring
+    against a queue hop.
     """
 
     def __init__(
@@ -179,6 +190,7 @@ class _StreamReporter:
         self._token = token
         self._remaining = remaining
         self._last: float | None = None
+        self._lock = threading.Lock()
 
     def __call__(
         self,
@@ -188,18 +200,22 @@ class _StreamReporter:
         message: str | None = None,
         meta: Mapping[str, Any] | None = None,
     ) -> None:
-        if self._remaining <= 0:
-            # The spec asks both parties to rate-limit progress; a service
-            # reporting per row over a large table would otherwise turn one
-            # call into a flood of frames.
-            return
-        if self._last is not None and progress <= self._last:
-            # ⚠ Dropped rather than forwarded. The spec makes increase a MUST,
-            # so passing a service's non-monotonic report through would put
-            # *this server* in violation on its behalf.
-            return
-        self._last = progress
-        self._remaining -= 1
+        with self._lock:
+            # Both decisions and both writes inside one critical section: read
+            # the cap, read the last value, then claim them. Splitting it would
+            # let two threads both pass a check that only one should.
+            if self._remaining <= 0:
+                # The spec asks both parties to rate-limit progress; a service
+                # reporting per row over a large table would otherwise turn one
+                # call into a flood of frames.
+                return
+            if self._last is not None and progress <= self._last:
+                # ⚠ Dropped rather than forwarded. The spec makes increase a
+                # MUST, so passing a service's non-monotonic report through
+                # would put *this server* in violation on its behalf.
+                return
+            self._last = progress
+            self._remaining -= 1
         params: dict[str, Any] = {"progressToken": self._token, "progress": progress}
         if total is not None:
             params["total"] = total

@@ -38,6 +38,21 @@ a resource body is always `private`. `public` licenses a shared proxy to serve
 one response across authorization contexts, which is not a preference — getting
 it wrong is a cross-tenant disclosure with a cache in front of it.
 
+!!! note "What `public` on a catalog does and doesn't say"
+
+    The spec's criterion for `public` is that *"the response does not contain
+    user-specific data"* — which an unfiltered catalog satisfies exactly: every
+    caller gets byte-identical output, so the derivation is the spec's own test
+    rather than a judgement call.
+
+    It is worth being clear what follows, though. `public` is not a statement
+    that the catalog is *non-confidential*. It permits a shared intermediary to
+    serve a stored copy across authorization contexts, and a tool catalog does
+    describe the server's capability surface. If that surface is something you
+    would rather not have cached in front of an authenticated endpoint, turn on
+    `FILTER_LISTINGS_BY_PERMISSIONS` — the result becomes per-caller and the
+    derivation follows it to `private`.
+
 | Key | Default | What it does |
 |---|---|---|
 | `PROTOCOL_VERSIONS` | `["2026-07-28", "2025-11-25", "2025-06-18"]` | Every revision this server speaks, most-preferred first, across **both eras** — `2026-07-28` is modern (per-request metadata, no session), the rest are legacy (`initialize` handshake). `server/discover` reports the whole list; each era validates against its own half. ⚠ `initialize` never offers a modern version whatever heads the list: the handshake does not exist there, so answering with it would hand the client a protocol the transport would refuse on its next request. |

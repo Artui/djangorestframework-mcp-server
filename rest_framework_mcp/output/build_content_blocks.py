@@ -59,12 +59,14 @@ def _as_bytes(payload: bytes | bytearray | memoryview | str) -> bytes | str:
 def _resource_links(payload: Any) -> list[ToolContentBlock] | str:
     """One ``resource_link`` per mapping in the payload.
 
-    A single mapping and a list of them are both accepted — a tool that
+    A single mapping and a sequence of them are both accepted — a tool that
     resolves one document and one that resolves several should not need
-    different plumbing.
+    different plumbing. Tuples count: a selector returning one is producing the
+    right shape, and rejecting it with a message about the wrong shape would
+    read as nonsense.
     """
-    items: list[Any] = [payload] if isinstance(payload, Mapping) else payload
-    if not isinstance(items, list) or not all(isinstance(item, Mapping) for item in items):
+    items: Any = [payload] if isinstance(payload, Mapping) else payload
+    if not isinstance(items, list | tuple) or not all(isinstance(item, Mapping) for item in items):
         return (
             "declares content_kind=RESOURCE_LINK but produced "
             f"{type(payload).__name__}. Resource links are described by a "

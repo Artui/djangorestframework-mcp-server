@@ -101,4 +101,9 @@ def principal_for_token(token: TokenInfo) -> str:
     return "anonymous"
 
 
-__all__ = ["insufficient_scope_challenge", "is_permission_denial", "principal_for_token"]
+__all__ = [
+    "insufficient_scope_challenge",
+    "is_permission_denial",
+    "modern_error_status",
+    "principal_for_token",
+]
