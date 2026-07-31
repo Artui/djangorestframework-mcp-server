@@ -15,6 +15,7 @@ from rest_framework_mcp._compat.tracing import span
 from rest_framework_mcp.constants import JsonRpcErrorCode, OutputFormat
 from rest_framework_mcp.handlers.chain_tool_dispatch import dispatch_chain_tool_async
 from rest_framework_mcp.handlers.handle_tools_call import _render, _span_attrs
+from rest_framework_mcp.handlers.invalidation_dispatch import announce_invalidations_async
 from rest_framework_mcp.handlers.selector_tool_dispatch import dispatch_selector_tool_async
 from rest_framework_mcp.handlers.task_dispatch import maybe_create_task
 from rest_framework_mcp.handlers.types.context import MCPCallContext
@@ -103,11 +104,15 @@ async def handle_tools_call_async(
             "filter, lower 'limit' — and try again.",
             error_type="timeout",
         ).to_dict()
-    return enforce_result_ceiling(
+    bounded: dict[str, Any] | JsonRpcError = enforce_result_ceiling(
         result,
         max_result_bytes=resolve_bound(binding.max_result_bytes, context.config.max_result_bytes),
         label=f"Tool {binding.name!r}",
     )
+    # See the sync sibling: after the ceiling, so an oversized result does not
+    # announce a change the client cannot read back.
+    await announce_invalidations_async(binding, bounded, arguments_raw, context)
+    return bounded
 
 
 async def _dispatch_tool_call_async(
