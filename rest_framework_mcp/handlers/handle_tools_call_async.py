@@ -3,6 +3,7 @@ from __future__ import annotations
 import asyncio
 from typing import Any
 
+from asgiref.sync import sync_to_async
 from rest_framework import serializers as drf_serializers
 from rest_framework.exceptions import PermissionDenied
 from rest_framework_services import adispatch_spec, build_offline_context, enforce_permissions
@@ -15,10 +16,12 @@ from rest_framework_mcp.constants import JsonRpcErrorCode, OutputFormat
 from rest_framework_mcp.handlers.chain_tool_dispatch import dispatch_chain_tool_async
 from rest_framework_mcp.handlers.handle_tools_call import _render, _span_attrs
 from rest_framework_mcp.handlers.selector_tool_dispatch import dispatch_selector_tool_async
+from rest_framework_mcp.handlers.task_dispatch import maybe_create_task
 from rest_framework_mcp.handlers.types.context import MCPCallContext
 from rest_framework_mcp.handlers.utils import (
     check_permissions,
     consume_rate_limits,
+    effective_rate_limits,
     enforce_result_ceiling,
     resolve_bound,
     run_with_deadline,
@@ -66,6 +69,22 @@ async def handle_tools_call_async(
     arguments_raw: Any = params.get("arguments") or {}
     if not isinstance(arguments_raw, dict):
         return JsonRpcError(JsonRpcErrorCode.INVALID_PARAMS, "'arguments' must be an object")
+
+    # See the sync sibling: the task branch sits after argument-shape
+    # validation and before dispatch, and is deliberately *outside* the
+    # deadline — creating a task is a store write and a queue hand-off, not the
+    # work, and timing it out would abandon a task that had already been
+    # durably created.
+    # ⚠ Through the thread-sensitive executor, not called directly. It reads
+    # the cache and runs the binding's permissions, and both reach code Django
+    # marks async-unsafe — a database-backed cache raises outright, and
+    # ``DjangoPermRequired`` runs an ORM query. The same hop
+    # ``completion/complete`` takes, for the same reason.
+    as_task: dict[str, Any] | JsonRpcError | None = await sync_to_async(
+        maybe_create_task, thread_sensitive=True
+    )(binding, arguments_raw, context)
+    if as_task is not None:
+        return as_task
 
     try:
         result: dict[str, Any] | JsonRpcError = await run_with_deadline(
@@ -128,7 +147,10 @@ async def _dispatch_tool_call_async(
             )
 
         retry_after: int | None = await acall(
-            consume_rate_limits, binding.rate_limits, context.http_request, context.token
+            consume_rate_limits,
+            effective_rate_limits(binding, context),
+            context.http_request,
+            context.token,
         )
         if retry_after is not None:
             return JsonRpcError(

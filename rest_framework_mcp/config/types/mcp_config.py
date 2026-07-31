@@ -135,6 +135,29 @@ class MCPConfig:
     serve yesterday's invoice. A genuinely static resource — an interactive
     view, a rendered document — sets ``cache_ttl_ms=`` at registration."""
 
+    task_ttl_ms: int | None
+    """How long a created task stays readable, in milliseconds; ``None`` for no
+    expiry.
+
+    Reported to the client as ``ttlMs`` and enforced by the store, so it is both
+    a promise and a bound: after it elapses the record may be dropped, and a
+    client that has not finished polling gets "unknown task". The default is
+    generous, because the failure it guards against — a queue backlog outliving
+    the window — looks to a client exactly like work that vanished.
+
+    ⚠ ``None`` means tasks accumulate until something else evicts them. Sound
+    only for a store that expires entries on its own; the cache-backed one
+    falls back to a week so an un-polled task cannot pin memory forever."""
+
+    task_poll_interval_ms: int | None
+    """How often the server suggests a client polls ``tasks/get``, or ``None``
+    to omit the hint.
+
+    Advisory — the spec has clients *SHOULD* honour it and lets servers
+    rate-limit anyone who does not. Worth setting close to how long the work
+    actually takes: too low and every task costs a stream of no-op polls, too
+    high and a fast task sits finished while its client waits."""
+
     @property
     def modern_protocol_versions(self) -> tuple[str, ...]:
         """The configured versions that carry per-request metadata."""

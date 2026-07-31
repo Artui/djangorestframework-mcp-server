@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+from typing import Any
 
 from django.http import HttpRequest
 from rest_framework_services.types.progress_reporter import ProgressReporter
@@ -12,6 +13,8 @@ from rest_framework_mcp.protocol.types.implementation import Implementation
 from rest_framework_mcp.registry.prompt_registry import PromptRegistry
 from rest_framework_mcp.registry.resource_registry import ResourceRegistry
 from rest_framework_mcp.registry.tool_registry import ToolRegistry
+from rest_framework_mcp.tasks.types.task_executor import TaskExecutor
+from rest_framework_mcp.tasks.types.task_store import TaskStore
 
 
 @dataclass(frozen=True)
@@ -56,6 +59,41 @@ class MCPCallContext:
     ``None`` is the ordinary case and costs nothing: drf-services substitutes
     its no-op reporter, so a service that declares ``progress`` runs unchanged
     whether or not anyone is listening."""
+
+    client_capabilities: dict[str, Any] = field(default_factory=dict)
+    """What the client declared **on this request**, verbatim.
+
+    Modern-only by construction: it comes out of the request's ``_meta``, which
+    is what a legacy client does not send. So a handler that gates on a
+    capability gets ``{}`` for every legacy request and denies — which is the
+    correct answer, since a legacy client had no way to declare one per
+    request, and the spec forbids relying on a declaration that did not arrive
+    with the request."""
+
+    tasks: TaskStore | None = None
+    """Where this server's tasks live, or ``None`` if it runs none.
+
+    ``None`` is the ordinary case: a server that has not been given a store and
+    an executor does not advertise the tasks extension, never answers with a
+    task handle, and treats every task id as unknown."""
+
+    task_executor: TaskExecutor | None = None
+    """Where a newly created task is handed off to be worked on.
+
+    Paired with :attr:`tasks` — one without the other cannot run a task, so the
+    server treats the extension as unavailable unless it has both."""
+
+    enforce_rate_limits: bool = True
+    """Whether a tool's rate limiters are consumed on this dispatch.
+
+    ``True`` everywhere except inside a task worker. A task charges its limits
+    once, when the client asks for it, on the request that actually carries the
+    caller's address and token — charging them again when the worker replays
+    the call would bill one client call twice and halve every configured quota.
+
+    Permissions are *not* treated this way, and the asymmetry is the point:
+    testing a permission is a pure predicate that costs nothing to repeat,
+    while consuming a quota is a side effect that must happen exactly once."""
 
     config: MCPConfig = field(default_factory=build_mcp_config)
     """The owning server's resolved scalars, snapshotted in

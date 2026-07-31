@@ -268,6 +268,16 @@ class ResultType(str, Enum):
 
     COMPLETE = "complete"
     INPUT_REQUIRED = "input_required"
+    TASK = "task"
+    """A durable handle instead of the result — see :mod:`rest_framework_mcp.tasks`.
+
+    The spec types ``ResultType`` as ``"complete" | "input_required" | string``,
+    the open tail being how extensions add their own; ``"task"`` is the tasks
+    extension's. Servers **MUST NOT** set it on any result other than a
+    ``CreateTaskResult``, which is why nothing stamps it centrally the way
+    ``COMPLETE`` is stamped — the task handler sets it explicitly and no other
+    handler can reach it.
+    """
 
 
 class CacheScope(str, Enum):
@@ -427,6 +437,97 @@ class UIVisibility(str, Enum):
     APP = "app"
 
 
+# ---------- Tasks extension ----------
+
+
+TASKS_EXTENSION_ID: str = "io.modelcontextprotocol/tasks"
+"""Identifier for the tasks extension, in both directions.
+
+Unlike :data:`UI_EXTENSION_ID`, this one is symmetric: the client declares it
+under ``clientCapabilities.extensions`` on **every** request, and the server
+declares it under ``capabilities.extensions`` in ``server/discover``. The value
+is an empty settings object in both directions — support is the whole message.
+
+⚠ The client's declaration is **per request**, and the spec means it: a server
+**MUST NOT** answer with a task "regardless of prior declarations". There is
+nowhere to remember one anyway, which is the point of the stateless revision.
+"""
+
+TASK_METHODS: frozenset[str] = frozenset({"tasks/get", "tasks/update", "tasks/cancel"})
+"""The extension's three methods.
+
+⛔ There is no ``tasks/list``. That is a deliberate omission in the spec, not
+one of ours: without sessions there is no principal-scoped view to list *over*,
+so the only defence against one caller reading another's work is that task ids
+are unguessable. Adding a listing would quietly remove it.
+
+⛔ There is no ``tasks/result`` either — an earlier draft had one that blocked
+until terminal. Retrieval is polling ``tasks/get``, paced by ``pollIntervalMs``.
+"""
+
+
+class TaskStatus(str, Enum):
+    """Lifecycle of a task, per the extension.
+
+    ``WORKING`` and ``INPUT_REQUIRED`` are live; the other three are terminal
+    and a task never leaves them.
+
+    ⚠ **``FAILED`` is narrower than it looks.** The spec: the status **MUST
+    NOT** be used to represent non-JSON-RPC errors. A tool that raises
+    ``ServiceError`` has *completed* — it produced a well-formed
+    ``CallToolResult`` carrying ``isError: true``, which is what this package
+    already builds in ``build_error_tool_result``. ``FAILED`` is for the task
+    machinery itself failing: the worker died, the payload could not be
+    revived. Getting this backwards would hide every tool error behind a status
+    the client reads as "the server broke".
+    """
+
+    WORKING = "working"
+    INPUT_REQUIRED = "input_required"
+    COMPLETED = "completed"
+    FAILED = "failed"
+    CANCELLED = "cancelled"
+
+    @property
+    def is_terminal(self) -> bool:
+        return self in _TERMINAL_TASK_STATUSES
+
+
+_TERMINAL_TASK_STATUSES: frozenset[TaskStatus] = frozenset(
+    {TaskStatus.COMPLETED, TaskStatus.FAILED, TaskStatus.CANCELLED}
+)
+
+
+class TaskPolicy(str, Enum):
+    """Whether a binding may — or must — answer with a task handle.
+
+    ⚠ **This is our policy surface, not a wire field.** An earlier draft of the
+    extension negotiated per tool via ``execution.taskSupport`` on
+    ``tools/list``; the shipped extension removed it and says instead that *"the
+    server is the sole decider; clients do not signal task preference on the
+    request itself."* So the decision has to be made somewhere on this side, and
+    the binding is where every other per-tool knob already lives.
+
+    The three values are not invented — they are the two branches the spec
+    actually distinguishes, plus the default:
+
+    - ``FORBIDDEN`` (default): never a task. Every tool registered before this
+      existed keeps behaving exactly as it did.
+    - ``OPTIONAL``: a task for a client that declared the extension, an ordinary
+      inline call for one that did not. The safe choice for a slow tool that can
+      still run inline if it has to.
+    - ``REQUIRED``: a task, or nothing. A client that did not declare the
+      extension gets ``-32021`` — this is the case the spec covers with *"if a
+      server is unable to service a request ... without returning
+      CreateTaskResult"*. For work that genuinely cannot finish inside a
+      request, where running it anyway would just hit the deadline.
+    """
+
+    FORBIDDEN = "forbidden"
+    OPTIONAL = "optional"
+    REQUIRED = "required"
+
+
 UI_EXTENSION_ID: str = "io.modelcontextprotocol/ui"
 """Identifier a client uses to advertise MCP Apps support.
 
@@ -457,6 +558,10 @@ __all__ = [
     "ResultType",
     "SERVER_INFO_META_KEY",
     "SESSIONLESS_METHODS",
+    "TASKS_EXTENSION_ID",
+    "TASK_METHODS",
+    "TaskPolicy",
+    "TaskStatus",
     "ToolContentKind",
     "ToolKind",
     "UIPermission",

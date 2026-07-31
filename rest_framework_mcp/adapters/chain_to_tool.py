@@ -7,7 +7,12 @@ from rest_framework_services.types.selector_spec import SelectorSpec
 
 from rest_framework_mcp.adapters.utils import merge_meta, merge_tool_annotations
 from rest_framework_mcp.auth.permissions.wrap_spec_permissions import wrap_spec_permissions
-from rest_framework_mcp.constants import OutputFormat, ToolContentKind, UnknownArguments
+from rest_framework_mcp.constants import (
+    OutputFormat,
+    TaskPolicy,
+    ToolContentKind,
+    UnknownArguments,
+)
 from rest_framework_mcp.protocol.types.icon import Icon
 from rest_framework_mcp.registry.types.chain_step import ChainStep
 from rest_framework_mcp.registry.types.chain_tool_binding import ChainToolBinding
@@ -21,6 +26,7 @@ def chain_steps_to_tool(
     title: str | None = None,
     icons: tuple[Icon, ...] = (),
     content_kind: ToolContentKind = ToolContentKind.TEXT,
+    task_policy: TaskPolicy = TaskPolicy.FORBIDDEN,
     content_mime_type: str | None = None,
     display_name: str | None = None,
     display_description: str | None = None,
@@ -71,6 +77,7 @@ def chain_steps_to_tool(
         title=title,
         icons=icons,
         content_kind=content_kind,
+        task_policy=task_policy,
         content_mime_type=content_mime_type,
         display_name=display_name,
         display_description=display_description,

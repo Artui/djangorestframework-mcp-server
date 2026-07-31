@@ -15,6 +15,9 @@ from rest_framework_mcp.handlers.handle_resources_templates_list import (
     handle_resources_templates_list,
 )
 from rest_framework_mcp.handlers.handle_server_discover import handle_server_discover
+from rest_framework_mcp.handlers.handle_tasks_cancel import handle_tasks_cancel
+from rest_framework_mcp.handlers.handle_tasks_get import handle_tasks_get
+from rest_framework_mcp.handlers.handle_tasks_update import handle_tasks_update
 from rest_framework_mcp.handlers.handle_tools_call import handle_tools_call
 from rest_framework_mcp.handlers.handle_tools_list import handle_tools_list
 from rest_framework_mcp.handlers.types.context import MCPCallContext
@@ -41,6 +44,13 @@ _HANDLERS: dict[str, _HandlerFn] = {
     "prompts/list": handle_prompts_list,
     "prompts/get": handle_prompts_get,
     "completion/complete": handle_completion_complete,
+    # The tasks extension. Registered unconditionally, like every other method:
+    # a server running no tasks answers them with "unknown task" rather than
+    # "unknown method", which is the more useful thing to tell a client that
+    # holds an id and wants to know whether it is still good.
+    "tasks/get": handle_tasks_get,
+    "tasks/update": handle_tasks_update,
+    "tasks/cancel": handle_tasks_cancel,
 }
 
 

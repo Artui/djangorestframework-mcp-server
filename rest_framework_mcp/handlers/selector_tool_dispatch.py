@@ -64,6 +64,7 @@ from rest_framework_mcp.handlers.types.context import MCPCallContext
 from rest_framework_mcp.handlers.utils import (
     check_permissions,
     consume_rate_limits,
+    effective_rate_limits,
     resolve_bound,
     services_dispatch_policies,
     split_query_params,
@@ -204,7 +205,7 @@ def _check_auth_and_rate_limits(
             data={"requiredScopes": required_scopes} if required_scopes else None,
         )
     retry_after: int | None = consume_rate_limits(
-        binding.rate_limits, context.http_request, context.token
+        effective_rate_limits(binding, context), context.http_request, context.token
     )
     if retry_after is not None:
         return JsonRpcError(

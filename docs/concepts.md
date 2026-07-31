@@ -829,6 +829,101 @@ if you want progress.
     idempotent, and a rate-limit rejection was already a `200` with the detail
     in the body.
 
+## Long-running work: tasks
+
+Streaming progress keeps the client informed while it waits. **Tasks remove the
+waiting.** A task-eligible tool answers `tools/call` with a durable handle
+instead of a result; the work happens in a queue worker, and the client polls
+`tasks/get` until the status is terminal.
+
+This is the `io.modelcontextprotocol/tasks` extension, and it is **modern-era
+only** — the client declares support on every request, which a legacy client has
+no way to do.
+
+### Wiring it up
+
+Two pieces. An **executor** says where work goes, and a **store** is where tasks
+live between the request that created one and the worker that finishes it:
+
+```python
+from celery import shared_task
+
+@shared_task
+def run_mcp_task(task_id: str) -> None:
+    server.run_task(task_id)
+
+class CeleryExecutor:
+    def enqueue(self, task_id: str) -> None:
+        run_mcp_task.delay(task_id)
+
+server = MCPServer(name="invoices", task_executor=CeleryExecutor())
+```
+
+That is the whole seam: one method taking one string. Nothing in this package
+imports Celery, and an RQ or Dramatiq call, or a `ThreadPoolExecutor.submit` in
+a test, satisfies it just as well. Passing `task_executor=` also builds a
+`DjangoCacheTaskStore` namespaced to the server, so the common case is one
+argument; pass `task_store=` to override it.
+
+!!! danger "`InMemoryTaskStore` is not deployable"
+
+    Unlike an in-memory *session* store, which is merely restart-fragile, an
+    in-memory *task* store is broken by design: the web worker that creates a
+    task and the worker that finishes it are different processes. The result is
+    written into a dict the web process cannot see, and every poll answers
+    "unknown task" until the client gives up. It fails silently and looks like a
+    hung job. Use it for tests and a single-process `runserver`.
+
+### Opting a tool in
+
+The extension makes the **server** the sole decider — a client cannot ask for a
+task — so the choice lives on the binding, next to every other per-tool knob:
+
+```python
+server.register_service_tool(
+    name="reports.generate",
+    spec=ServiceSpec(service=generate_report),
+    task_policy=TaskPolicy.OPTIONAL,
+)
+```
+
+| `task_policy` | A client that declared the extension | A client that did not |
+|---|---|---|
+| `FORBIDDEN` (default) | runs inline | runs inline |
+| `OPTIONAL` | gets a task handle | runs inline |
+| `REQUIRED` | gets a task handle | `-32021`, missing capability |
+
+`FORBIDDEN` is the default, so **every tool registered before this existed
+behaves exactly as it did**. Reach for `OPTIONAL` when a tool is slow but can
+still finish inside a request, and `REQUIRED` when it genuinely cannot — where
+running it inline would only hit the dispatch deadline.
+
+### What a client sees
+
+```json
+{"resultType": "task", "taskId": "…", "status": "working",
+ "ttlMs": 86400000, "pollIntervalMs": 5000}
+```
+
+Then `tasks/get` until `completed` / `failed` / `cancelled`, honouring
+`pollIntervalMs`. `tasks/cancel` signals intent to stop; `tasks/update` answers
+a task that is parked on `input_required`.
+
+⚠ **`Mcp-Name` must carry the `taskId`** on all three methods — the extension
+requires it so a gateway can route a follow-up to the instance holding the
+task's state. A mismatch is `-32020`, exactly as for `tools/call`.
+
+### Things worth knowing
+
+| | |
+|---|---|
+| Permissions run **twice** | Once before the task is created, so a denied call never reaches the queue and still gets its `403`; once again in the worker, against the same rebuilt token. The task stores the caller's scopes for exactly this reason. |
+| Rate limits run **once** | Consuming a quota is a side effect, so it is charged when the client asks and not again on replay. Charging both would halve every configured limit. |
+| A tool error is `completed`, not `failed` | The spec is explicit. A `ServiceError` produces a well-formed result carrying `isError: true`, and that is a task that finished. `failed` means the task machinery broke. |
+| There is no `tasks/list` | Deliberate in the spec: without sessions there is nothing to scope a listing by. Ids are high-entropy and ownership is checked on top — an id belonging to someone else answers exactly as one that never existed. |
+| A queue that is down fails the *task* | The record is already durable when `enqueue` raises, so the handle comes back with `status: "failed"` and the reason in `statusMessage`. The client finds out through the channel it was already using. |
+| Redelivery runs the work once | Queues deliver at least once; a task is claimed as the worker starts. Best-effort, not a lock — an idempotent service is still the right thing to write. |
+
 ## Protocol eras
 
 This server speaks two revisions of MCP at once, on one endpoint, and picks

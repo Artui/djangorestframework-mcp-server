@@ -25,6 +25,7 @@ from rest_framework_mcp.constants import (
     JsonRpcErrorCode,
     UnknownArguments,
 )
+from rest_framework_mcp.handlers.types.context import MCPCallContext
 from rest_framework_mcp.output.enforce_result_bytes import enforce_result_bytes
 from rest_framework_mcp.output.error_tool_result import build_error_tool_result
 from rest_framework_mcp.protocol.types.json_rpc_error import JsonRpcError
@@ -239,6 +240,20 @@ def consume_rate_limits(
         if retry_after is not None:
             return retry_after
     return None
+
+
+def effective_rate_limits(binding: Any, context: MCPCallContext) -> tuple[Any, ...]:
+    """A tool binding's rate limiters, or none when this dispatch must not charge.
+
+    The one case that returns nothing is a task worker replaying a call whose
+    limits were already consumed when the client made the request. See
+    ``MCPCallContext.enforce_rate_limits`` for why that is charged once at the
+    front rather than once in each place the work happens.
+
+    Only the tool paths consult this — resources, prompts and completions have
+    no task equivalent, so their limiters are always live.
+    """
+    return binding.rate_limits if context.enforce_rate_limits else ()
 
 
 def build_validated_input_serializer(
@@ -497,6 +512,7 @@ __all__ = [
     "build_validated_input_serializer",
     "check_permissions",
     "consume_rate_limits",
+    "effective_rate_limits",
     "enforce_result_ceiling",
     "resolve_bound",
     "run_with_deadline",

@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from rest_framework_mcp.constants import JsonRpcErrorCode
+from rest_framework_mcp.constants import TASKS_EXTENSION_ID, JsonRpcErrorCode
 from rest_framework_mcp.handlers.types.context import MCPCallContext
 from rest_framework_mcp.protocol.build_server_info import build_server_info
 from rest_framework_mcp.protocol.types.implementation import Implementation
@@ -87,11 +87,20 @@ def build_capabilities(context: MCPCallContext) -> ServerCapabilities:
     Shared with ``server/discover``, which reports the identical bundle — the
     two methods differ in how they are reached, not in what this server can do.
     """
+    extensions: dict[str, Any] = {}
+    if context.tasks is not None and context.task_executor is not None:
+        # ⚠ Both, or neither. A store without an executor can create a task
+        # nothing will ever run, and an executor without a store has nothing to
+        # hand over — either way the promise is false, and a client that
+        # believes it will wait for a result that never comes.
+        extensions[TASKS_EXTENSION_ID] = {}
+
     return ServerCapabilities(
         tools={} if len(context.tools) > 0 else None,
         resources={} if len(context.resources) > 0 else None,
         prompts={} if len(context.prompts) > 0 else None,
         completions={} if _has_completers(context) else None,
+        extensions=extensions or None,
     )
 
 

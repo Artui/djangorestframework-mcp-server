@@ -53,6 +53,7 @@ from rest_framework_mcp.handlers.types.context import MCPCallContext
 from rest_framework_mcp.handlers.utils import (
     check_permissions,
     consume_rate_limits,
+    effective_rate_limits,
     validate_input_against_serializer,
     validation_error_data,
 )
@@ -95,7 +96,7 @@ def dispatch_chain_tool(
             data={"requiredScopes": required_scopes} if required_scopes else None,
         )
     retry_after: int | None = consume_rate_limits(
-        binding.rate_limits, context.http_request, context.token
+        effective_rate_limits(binding, context), context.http_request, context.token
     )
     if retry_after is not None:
         return JsonRpcError(

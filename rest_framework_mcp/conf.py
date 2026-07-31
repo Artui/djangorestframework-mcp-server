@@ -58,6 +58,17 @@ DEFAULTS: dict[str, Any] = {
     # serve yesterday's invoice. Static resources opt in per binding with
     # ``cache_ttl_ms=``.
     "RESOURCE_CACHE_TTL_MS": 0,
+    # How long a task stays readable, reported to the client as ``ttlMs``.
+    # 24 hours: long enough that a queue backlog, a retry or an overnight job
+    # does not turn into "unknown task" for a client that is still politely
+    # polling, which is the failure that looks like work simply vanishing.
+    # ``None`` disables expiry — see ``MCPConfig.task_ttl_ms`` for the caveat.
+    "TASK_TTL_MS": 86_400_000,
+    # Suggested ``tasks/get`` cadence, sent as ``pollIntervalMs``. Advisory;
+    # clients SHOULD honour it. Five seconds suits work measured in tens of
+    # seconds to minutes, which is what a task is for — tune it to the job
+    # rather than leaving it at a default that fits neither end.
+    "TASK_POLL_INTERVAL_MS": 5_000,
     "ALLOWED_ORIGINS": [],
     "DEFAULT_OUTPUT_FORMAT": "json",
     # The server's wire identity. Recognised keys: ``name``, ``version``,
