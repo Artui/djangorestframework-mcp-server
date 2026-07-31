@@ -49,6 +49,11 @@ Skip it when you don't need the MCP wire format — call your services directly.
   templated URIs.
 - **Prompts** — `prompts/list`, `prompts/get` against render callables
   returning strings, `PromptMessage`s, or async coroutines.
+- **Discovery** — `server/discover`, the 2026-07-28 revision's replacement
+  for the `initialize` handshake. Answered without a session, so a modern
+  client can lead with it.
+- **Argument completion** — `completion/complete` against per-argument
+  completers on prompts and resource templates.
 - **Pluggable auth** — `DjangoOAuthToolkitBackend` (default when
   `oauth2_provider` is installed) and `AllowAnyBackend` (dev only).
   Per-binding `MCPPermission` classes (`ScopeRequired`,

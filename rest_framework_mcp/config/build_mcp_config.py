@@ -52,6 +52,8 @@ def build_mcp_config(
     require_tool_permissions: bool | None = None,
     require_tool_descriptions: bool | None = None,
     require_list_pagination: bool | None = None,
+    catalog_cache_ttl_ms: int | None = None,
+    resource_cache_ttl_ms: int | None = None,
 ) -> MCPConfig:
     """Resolve a :class:`MCPConfig` from ``REST_FRAMEWORK_MCP``, applying overrides.
 
@@ -131,6 +133,16 @@ def build_mcp_config(
             require_list_pagination
             if require_list_pagination is not None
             else get_setting("REQUIRE_LIST_PAGINATION")
+        ),
+        catalog_cache_ttl_ms=int(
+            catalog_cache_ttl_ms
+            if catalog_cache_ttl_ms is not None
+            else get_setting("CATALOG_CACHE_TTL_MS")
+        ),
+        resource_cache_ttl_ms=int(
+            resource_cache_ttl_ms
+            if resource_cache_ttl_ms is not None
+            else get_setting("RESOURCE_CACHE_TTL_MS")
         ),
     )
 

@@ -15,6 +15,8 @@ somebody renumbered it.
 
 from __future__ import annotations
 
+import json
+
 import pytest
 
 pytestmark = pytest.mark.urls("tests.conformance.urls")
@@ -80,3 +82,36 @@ def test_permission_denial_does_not_squat_on_32002(jsonrpc, initialized_session:
     )
     assert response.status_code == 403, response.content
     assert response.json()["error"]["code"] != -32002
+
+
+@pytest.mark.django_db(transaction=True)
+def test_server_discover_needs_no_session_or_version_header(client) -> None:
+    """The whole point of it is being the first thing a client sends.
+
+    A modern client has no handshake to run and nothing to present, so gating
+    discovery behind a session would leave it reachable only by clients that
+    did not need it — and requiring a protocol-version header would mean naming
+    a version to find out which versions are supported.
+    """
+    response = client.post(
+        "/mcp/",
+        data=json.dumps({"jsonrpc": "2.0", "id": 1, "method": "server/discover"}),
+        content_type="application/json",
+    )
+    assert response.status_code == 200, response.content
+    result = response.json()["result"]
+    assert result["resultType"] == "complete"
+    assert result["supportedVersions"]
+    assert "Mcp-Session-Id" not in response.headers
+
+
+@pytest.mark.django_db(transaction=True)
+def test_a_non_sessionless_method_still_requires_a_session(client) -> None:
+    """Widening the gate for discovery must not have widened it for everything."""
+    response = client.post(
+        "/mcp/",
+        data=json.dumps({"jsonrpc": "2.0", "id": 1, "method": "tools/list"}),
+        content_type="application/json",
+        headers={"Mcp-Protocol-Version": "2025-11-25"},
+    )
+    assert response.status_code == 404, response.content

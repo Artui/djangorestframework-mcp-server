@@ -32,11 +32,19 @@ and now raise `ImproperlyConfigured` if still present: `AUTH_BACKEND`,
 
 ## Protocol
 
+The companion `cacheScope` is **derived, not configured**: a listing filtered by
+`FILTER_LISTINGS_BY_PERMISSIONS` is `private`, an unfiltered one is `public`, and
+a resource body is always `private`. `public` licenses a shared proxy to serve
+one response across authorization contexts, which is not a preference — getting
+it wrong is a cross-tenant disclosure with a cache in front of it.
+
 | Key | Default | What it does |
 |---|---|---|
 | `PROTOCOL_VERSIONS` | `["2025-11-25", "2025-06-18"]` | Accepted `MCP-Protocol-Version` values. The first entry is the fallback when the header is absent and not required. |
 | `REQUIRE_PROTOCOL_VERSION_HEADER` | `True` | Reject a post-`initialize` request that omits `MCP-Protocol-Version` (HTTP 400). Set `False` for clients that never send it. A header that is *present but unsupported* is rejected either way — downgrading silently there would mask a real version mismatch. |
 | `SERVER_INFO` | `{"name": "djangorestframework-mcp-server"}` | Default `serverInfo` for `initialize`. Recognised keys: `name`, `version`, `title`, `description`, `websiteUrl`, `icons` (a list of `{src, mimeType, sizes, theme}` dicts). Prefer per-server identity: `MCPServer(name=…, version=…, title=…, website_url=…, icons=…)`. `description` is settings-only — the constructor's `description=` is the `initialize` `instructions` string, which is written for the model rather than for a connection list. |
+| `CATALOG_CACHE_TTL_MS` | `60000` | How long a client may cache a catalog result — `server/discover` plus the four list methods — emitted as `ttlMs`. `0` means "immediately stale". A catalog is fixed once the process boots, so the honest ceiling is "until the next deploy", which nothing here can know; a minute costs a client one stale minute after a release rather than a stale catalog for the life of its connection. |
+| `RESOURCE_CACHE_TTL_MS` | `0` | The same for `resources/read`. `0` by default because a resource body is whatever a selector just produced. A genuinely static resource — an interactive view, a rendered document — opts in per binding with `cache_ttl_ms=`. |
 
 ## Transport & security
 

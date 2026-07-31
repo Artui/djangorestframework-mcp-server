@@ -3,6 +3,7 @@ from __future__ import annotations
 from collections.abc import Callable
 from typing import Any
 
+from rest_framework_services import UNSET, UnsetType
 from rest_framework_services.types.selector_spec import SelectorSpec
 
 from rest_framework_mcp.adapters.utils import merge_meta
@@ -20,6 +21,7 @@ def selector_to_resource(
     description: str | None = None,
     title: str | None = None,
     icons: tuple[Icon, ...] = (),
+    cache_ttl_ms: int | UnsetType = UNSET,
     completions: dict[str, Callable[..., Any]] | None = None,
     output_serializer: type | None = None,
     mime_type: str = "application/json",
@@ -74,6 +76,7 @@ def selector_to_resource(
         description=description,
         title=title,
         icons=icons,
+        cache_ttl_ms=cache_ttl_ms,
         completions=dict(completions or {}),
         selector=resolved_callable,
         kind=selector.kind,

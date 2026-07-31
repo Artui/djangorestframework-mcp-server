@@ -4,6 +4,7 @@ from collections.abc import Callable
 from dataclasses import dataclass, field
 from typing import Any, Generic, TypeVar
 
+from rest_framework_services import UNSET, UnsetType
 from rest_framework_services.types.selector_kind import SelectorKind
 
 from rest_framework_mcp.constants import ResourceEncoding
@@ -74,6 +75,14 @@ class ResourceBinding(Generic[ResultT]):
     ``user``. It returns an iterable of suggestions — a list, a generator or
     a queryset — and the handler slices it to the spec's cap rather than
     draining it."""
+
+    cache_ttl_ms: int | UnsetType = UNSET
+    """How long a client may cache this resource's body, in milliseconds.
+
+    ``UNSET`` takes the server's ``RESOURCE_CACHE_TTL_MS`` (``0`` by default —
+    live data). Worth setting on anything genuinely static: an interactive view
+    is a document that changes only on deploy, and hosts prefetch views before
+    any tool call, so a zero TTL means fetching the same HTML repeatedly."""
 
     icons: tuple[Icon, ...] = ()
     """Display icons for this entry, emitted in its listing. Purely

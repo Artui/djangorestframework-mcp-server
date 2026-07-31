@@ -41,6 +41,19 @@ DEFAULTS: dict[str, Any] = {
     # ``structuredContent`` suppressed — is a spec violation and is
     # rejected with ``ImproperlyConfigured`` at request time.
     "INCLUDE_OUTPUT_SCHEMA": True,
+    # How long a client may cache a catalog result (``server/discover`` plus
+    # the four list methods), in milliseconds. ``0`` = immediately stale.
+    #
+    # A catalog is fixed once the process boots, so the honest answer is "until
+    # the next deploy" — which nothing here can know. One minute costs a client
+    # a stale minute after a release rather than a stale catalog for the life of
+    # its connection.
+    "CATALOG_CACHE_TTL_MS": 60_000,
+    # The same, for ``resources/read``. ``0`` by default because a resource body
+    # is whatever a selector just produced — caching live data by default would
+    # serve yesterday's invoice. Static resources opt in per binding with
+    # ``cache_ttl_ms=``.
+    "RESOURCE_CACHE_TTL_MS": 0,
     "ALLOWED_ORIGINS": [],
     "DEFAULT_OUTPUT_FORMAT": "json",
     # The server's wire identity. Recognised keys: ``name``, ``version``,

@@ -185,7 +185,8 @@ def test_json_rpc_notification_to_dict_no_params() -> None:
 
 def test_json_rpc_response_to_dict_result() -> None:
     res = JsonRpcResponse(id=1, result={"ok": True})
-    assert res.to_dict()["result"] == {"ok": True}
+    # Every result carries the 2026-07-28 discriminator, stamped once here.
+    assert res.to_dict()["result"] == {"resultType": "complete", "ok": True}
 
 
 def test_json_rpc_response_to_dict_error() -> None:

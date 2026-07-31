@@ -16,8 +16,14 @@ JSON-RPC envelope, MCP message types, and error codes.
 ::: rest_framework_mcp.protocol.types.icon.Icon
 ::: rest_framework_mcp.constants.IconTheme
 
-## Initialize handshake
+## Result envelope
 
+::: rest_framework_mcp.constants.ResultType
+::: rest_framework_mcp.constants.CacheScope
+
+## Discovery and the initialize handshake
+
+::: rest_framework_mcp.protocol.types.discover_result.DiscoverResult
 ::: rest_framework_mcp.protocol.types.implementation.Implementation
 ::: rest_framework_mcp.protocol.types.client_capabilities.ClientCapabilities
 ::: rest_framework_mcp.protocol.types.server_capabilities.ServerCapabilities

@@ -20,6 +20,7 @@ from rest_framework_mcp.constants import (
     RESERVED_POOL_SEEDS,
     RESERVED_POST_FETCH_KEYS,
     ArgumentBinding,
+    CacheScope,
     UnknownArguments,
 )
 from rest_framework_mcp.output.enforce_result_bytes import enforce_result_bytes
@@ -400,6 +401,36 @@ def resolve_bound(override: Any, default: Any) -> Any:
     inexpressible.
     """
     return default if isinstance(override, UnsetType) else override
+
+
+def catalog_cache_hints(*, ttl_ms: int, filtered_by_permissions: bool) -> dict[str, Any]:
+    """``ttlMs`` / ``cacheScope`` for a catalog result.
+
+    Covers ``server/discover`` and the four list methods, which the spec makes
+    cacheable and which share one answer: the catalog is fixed for the life of
+    the process, and whether it is *shareable* depends on one thing only.
+
+    ⚠ **``cacheScope`` is derived from ``FILTER_LISTINGS_BY_PERMISSIONS``, not
+    configured.** With filtering on, a listing is a function of the caller's
+    permissions, so labelling it ``public`` would licence a shared proxy to
+    serve one tenant's visible tools to another. With filtering off, every
+    caller gets byte-identical output and ``public`` is both true and useful.
+    Neither is a preference, which is why there is no setting for it.
+    """
+    scope = CacheScope.PRIVATE if filtered_by_permissions else CacheScope.PUBLIC
+    return {"ttlMs": ttl_ms, "cacheScope": scope.value}
+
+
+def resource_cache_hints(ttl_ms: int) -> dict[str, Any]:
+    """``ttlMs`` / ``cacheScope`` for a ``resources/read`` result.
+
+    Always ``private``. A resource body is whatever the binding's selector
+    produced *for this caller* — it ran with their user in the kwarg pool and
+    their permissions already checked — so there is no configuration under
+    which sharing it across authorization contexts is correct. The TTL is the
+    only knob, and it defaults to ``0``.
+    """
+    return {"ttlMs": ttl_ms, "cacheScope": CacheScope.PRIVATE.value}
 
 
 def enforce_result_ceiling(result: Any, *, max_result_bytes: int | None, label: str) -> Any:

@@ -9,6 +9,52 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **`server/discover`.** The `2026-07-28` revision's replacement for the
+  `initialize` handshake, and a **MUST** for servers on that revision: same
+  three answers — supported versions, capabilities, identity — but as an
+  ordinary request. Nothing is negotiated and no state is created, so a client
+  may call it, repeat it, cache it, or skip it entirely.
+
+  ⚠ **Answered without a session or a protocol-version header**, alongside
+  `initialize`. A modern client sends it precisely because it has nothing yet:
+  gating discovery behind a session would leave it reachable only by clients
+  that did not need it, and requiring a version header would mean naming a
+  version in order to find out which versions are supported. It does not
+  *mint* a session either — discovery creating state would defeat the point.
+
+  Answered in both protocol eras: the versions, capabilities and identity it
+  reports are properties of the server, not of the era asking. `serverInfo`
+  rides in `_meta` under the spec's reserved key rather than at the top level,
+  which is the spec's way of saying it is self-reported and not something a
+  client should make decisions from.
+
+- **`resultType`, `ttlMs` and `cacheScope` on results.** `resultType:
+  "complete"` is stamped into every result in the JSON-RPC response envelope —
+  one place, so no handler can forget it — which is a MUST from `2026-07-28`
+  and inert before it, since older clients are told to read an absent
+  `resultType` as `complete`.
+
+  The six cacheable results (`server/discover` and the five list/read methods)
+  now carry `ttlMs` and `cacheScope`. Two new settings:
+  `CATALOG_CACHE_TTL_MS` (default 60 s) for catalogs, and
+  `RESOURCE_CACHE_TTL_MS` (default `0` — live data) for `resources/read`,
+  overridable per resource with `cache_ttl_ms=`. Worth setting on anything
+  genuinely static: an interactive view changes only on deploy, and hosts
+  prefetch views before any tool call.
+
+  ⚠ **`cacheScope` is derived, never configured.** `public` licenses a shared
+  gateway or proxy to serve one response *across authorization contexts*, so a
+  per-caller result labelled `public` is a cross-tenant disclosure with a cache
+  in front of it — not the kind of thing a settings knob should be able to get
+  wrong. A listing filtered by `FILTER_LISTINGS_BY_PERMISSIONS` is `private`,
+  an unfiltered one is `public`, and a resource body — produced by a selector
+  for this caller — is always `private`.
+
+- **The spec-reserved error codes** `-32020 HeaderMismatch`,
+  `-32021 MissingRequiredClientCapability` and `-32022
+  UnsupportedProtocolVersion` are now named in `JsonRpcErrorCode`. Nothing
+  emits them yet; they arrive with header validation.
+
 - **Non-text tool results and binary resources.** Every content block the MCP
   spec defines is now reachable, where before only `text` was ever constructed
   and `ResourceContents.blob` existed as a field nothing populated.

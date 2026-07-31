@@ -14,7 +14,7 @@ from rest_framework.viewsets import ViewSet
 from rest_framework_mcp._compat.acall import acall
 from rest_framework_mcp.auth.types.auth_backend import MCPAuthBackend
 from rest_framework_mcp.config.types.mcp_config import MCPConfig
-from rest_framework_mcp.constants import JsonRpcErrorCode
+from rest_framework_mcp.constants import SESSIONLESS_METHODS, JsonRpcErrorCode
 from rest_framework_mcp.handlers.async_dispatch import adispatch
 from rest_framework_mcp.handlers.types.context import MCPCallContext
 from rest_framework_mcp.protocol.parse_message import parse_message
@@ -228,10 +228,17 @@ class AsyncStreamableHttpViewSet(ViewSet):
             return _error_response(code=JsonRpcErrorCode.INVALID_REQUEST, message=str(exc))
 
         is_initialize: bool = isinstance(message, JsonRpcRequest) and message.method == "initialize"
+        # ``server/discover`` joins ``initialize`` in being answerable without a
+        # session — a client sends it precisely because it has nothing yet. It
+        # does *not* mint one, which is why this is a second flag rather than a
+        # widening of the first.
+        is_sessionless: bool = (
+            isinstance(message, JsonRpcRequest) and message.method in SESSIONLESS_METHODS
+        )
 
         version_header: str | None = http_request.headers.get(_VERSION_HEADER)
         negotiated: str | None = negotiate_protocol_version(
-            version_header, is_initialize=is_initialize, config=self._require_config()
+            version_header, is_sessionless=is_sessionless, config=self._require_config()
         )
         if negotiated is None:
             return _error_response(
@@ -255,7 +262,7 @@ class AsyncStreamableHttpViewSet(ViewSet):
         store = self._require_session_store()
         session_id: str | None = http_request.headers.get(_SESSION_HEADER)
         principal: str = principal_for_token(token)
-        if not is_initialize and (
+        if not is_sessionless and (
             not session_id or await acall(store.owner, session_id) != principal
         ):
             return _error_response(
@@ -342,7 +349,7 @@ class AsyncStreamableHttpViewSet(ViewSet):
         version_header: str | None = http_request.headers.get(_VERSION_HEADER)
         if (
             negotiate_protocol_version(
-                version_header, is_initialize=False, config=self._require_config()
+                version_header, is_sessionless=False, config=self._require_config()
             )
             is None
         ):

@@ -87,6 +87,11 @@ class JsonRpcErrorCode(IntEnum):
     # -32003, -32004: burned — see the class docstring.
     RATE_LIMITED = -32005
     FORBIDDEN = -32006
+    # Spec-reserved (``-32020..-32099``, allocated sequentially by the MCP
+    # specification itself). These are not ours to number or to repurpose.
+    HEADER_MISMATCH = -32020
+    MISSING_REQUIRED_CLIENT_CAPABILITY = -32021
+    UNSUPPORTED_PROTOCOL_VERSION = -32022
 
 
 # ---------- Output formatting ----------
@@ -163,6 +168,71 @@ dict directly; they must not also leak into the kwarg pool of the
 dispatched selector, or the selector would receive surprise kwargs it
 never declared.
 """
+
+
+SESSIONLESS_METHODS: frozenset[str] = frozenset({"initialize", "server/discover"})
+"""Methods answerable before a session exists.
+
+The legacy transport requires an ``Mcp-Session-Id`` on everything except the
+request that mints one. ``server/discover`` has to join it: its whole purpose
+is to be the first thing a client sends — a modern client has no handshake to
+run and nothing to present — so gating it behind a session would leave it
+reachable only by clients that did not need it.
+
+They are exempt from the ``MCP-Protocol-Version`` header requirement for the
+same reason, and only ``initialize`` mints a session. Discovery creates no
+state; that is the point of it.
+"""
+
+SERVER_INFO_META_KEY: str = "io.modelcontextprotocol/serverInfo"
+"""Reserved ``_meta`` key carrying the server's self-reported identity.
+
+Where ``server/discover`` puts what ``initialize`` returned as a top-level
+``serverInfo``. The move is deliberate on the spec's part: the value is
+unverified, and clients are told not to change behaviour or make security
+decisions from it, so it sits in the metadata namespace rather than looking
+like negotiated protocol state.
+"""
+
+
+# ---------- Result envelope ----------
+
+
+class ResultType(str, Enum):
+    """The discriminator every result carries from ``2026-07-28`` onward.
+
+    A **MUST** for servers implementing that revision, and harmless before it:
+    a legacy result object is an open shape, and a client on an older revision
+    is told to read an absent ``resultType`` as ``complete``. So this is
+    emitted unconditionally rather than era-branched — one less thing for the
+    transport fork to have to get right.
+
+    ``INPUT_REQUIRED`` is the other value the spec defines: a result that asks
+    the client for input and expects the original request to be retried with
+    the answers. Nothing here produces one yet — it is the shape elicitation
+    will take when it lands — but the vocabulary is the spec's, not ours, so
+    both members live here.
+    """
+
+    COMPLETE = "complete"
+    INPUT_REQUIRED = "input_required"
+
+
+class CacheScope(str, Enum):
+    """How widely a cacheable result may be reused, per ``Cache-Control``.
+
+    ⚠ **Derived, never configured.** ``PUBLIC`` licenses any intermediary — a
+    shared gateway, a caching proxy — to serve this response *across
+    authorization contexts*. A result that varies by caller and is labelled
+    ``PUBLIC`` is a cross-tenant disclosure with a cache in front of it, which
+    is precisely the kind of mistake a settings knob invites. The handlers work
+    it out from what actually shaped the response instead: a permission-filtered
+    listing is ``PRIVATE``, an unfiltered one is ``PUBLIC``, and a resource body
+    a selector produced for this caller is always ``PRIVATE``.
+    """
+
+    PUBLIC = "public"
+    PRIVATE = "private"
 
 
 # ---------- Argument completion ----------
@@ -319,15 +389,19 @@ __all__ = [
     "JSONRPC_VERSION",
     "MAX_COMPLETION_VALUES",
     "RESERVED_POOL_SEEDS",
+    "SERVER_INFO_META_KEY",
+    "SESSIONLESS_METHODS",
     "RESERVED_POST_FETCH_KEYS",
     "UI_EXTENSION_ID",
     "UI_META_KEY",
     "UI_RESOURCE_MIME_TYPE",
     "ArgumentBinding",
+    "CacheScope",
     "IconTheme",
     "JsonRpcErrorCode",
     "JsonRpcId",
     "OutputFormat",
+    "ResultType",
     "ResourceEncoding",
     "ToolContentKind",
     "ToolKind",

@@ -820,6 +820,7 @@ class MCPServer:
         annotations: dict[str, Any] | None = None,
         meta: dict[str, Any] | None = None,
         always_listed: bool = False,
+        cache_ttl_ms: int | UnsetType = UNSET,
         completions: dict[str, Callable[..., Any]] | None = None,
     ) -> ResourceBinding:
         """Register a :class:`SelectorSpec` as an MCP resource.
@@ -869,6 +870,7 @@ class MCPServer:
             annotations=annotations,
             meta=meta,
             always_listed=always_listed,
+            cache_ttl_ms=cache_ttl_ms,
             completions=completions,
         )
         # Template variables are the only completable arguments a resource has.
@@ -896,6 +898,7 @@ class MCPServer:
         annotations: dict[str, Any] | None = None,
         meta: dict[str, Any] | None = None,
         always_listed: bool = False,
+        cache_ttl_ms: int | UnsetType = UNSET,
     ) -> ResourceBinding:
         """Register an interactive HTML view (an MCP App) as a resource.
 
@@ -944,6 +947,7 @@ class MCPServer:
             annotations=annotations,
             meta=meta,
             always_listed=always_listed,
+            cache_ttl_ms=cache_ttl_ms,
         )
         self._resources.register(binding)
         return binding
@@ -1189,6 +1193,7 @@ class MCPServer:
         annotations: dict[str, Any] | None = None,
         meta: dict[str, Any] | None = None,
         always_listed: bool = False,
+        cache_ttl_ms: int | UnsetType = UNSET,
         completions: dict[str, Callable[..., Any]] | None = None,
     ) -> Callable[[Callable[..., Any]], Callable[..., Any]]:
         """Decorator form: register the wrapped callable as a resource.
@@ -1234,6 +1239,7 @@ class MCPServer:
                 annotations=annotations,
                 meta=meta,
                 always_listed=always_listed,
+                cache_ttl_ms=cache_ttl_ms,
                 completions=completions,
             )
             return fn

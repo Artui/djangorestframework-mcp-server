@@ -73,7 +73,7 @@ def test_request_with_no_params_field(client: Client, initialized_session: str) 
         HTTP_MCP_SESSION_ID=initialized_session,
     )
     body = response.json()
-    assert body["result"] == {}
+    assert body["result"] == {"resultType": "complete"}
 
 
 def test_response_shaped_input_is_rejected(client: Client, initialized_session: str) -> None:

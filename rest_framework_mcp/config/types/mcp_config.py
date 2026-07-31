@@ -107,5 +107,22 @@ class MCPConfig:
     """Whether registering an unpaginated LIST selector tool raises instead of
     warning. Read at *registration* time, not per request."""
 
+    catalog_cache_ttl_ms: int
+    """How long, in milliseconds, a client may cache a catalog result —
+    ``server/discover`` and the four list methods. ``0`` means "immediately
+    stale, re-fetch every time".
+
+    Catalogs are fixed once a process boots (registration happens at
+    configuration time), so the honest ceiling is "until the next deploy" —
+    which nothing here can know. The default is a short window that costs a
+    client one stale minute after a release rather than a stale catalog until
+    it reconnects."""
+
+    resource_cache_ttl_ms: int
+    """The same, for ``resources/read``. Defaults to ``0``: a resource body is
+    whatever a selector just produced, and caching live data by default would
+    serve yesterday's invoice. A genuinely static resource — an interactive
+    view, a rendered document — sets ``cache_ttl_ms=`` at registration."""
+
 
 __all__ = ["MCPConfig"]

@@ -5,14 +5,16 @@ from rest_framework_mcp.transport.protocol_version import resolve_protocol_versi
 
 
 def negotiate_protocol_version(
-    header_value: str | None, *, is_initialize: bool, config: MCPConfig
+    header_value: str | None, *, is_sessionless: bool, config: MCPConfig
 ) -> str | None:
     """Pick the protocol version to associate with a request, or ``None`` to reject.
 
     - Supported header -> that version.
-    - ``initialize`` request without a header -> the first supported version
-      (the spec allows ``initialize`` to omit the header).
-    - Missing header on a non-initialize request when
+    - A sessionless request without a header -> the first supported version.
+      The spec allows ``initialize`` to omit the header, and ``server/discover``
+      needs the same latitude: a client asking which versions a server supports
+      cannot be required to name one first.
+    - Missing header on any other request when
       ``config.require_protocol_version_header`` is False -> the first
       supported version. This exists for clients that omit the header entirely.
     - Otherwise (unsupported version, or missing header with the flag on)
@@ -24,7 +26,7 @@ def negotiate_protocol_version(
     resolved: str | None = resolve_protocol_version(header_value, config.protocol_versions)
     if resolved is not None:
         return resolved
-    if is_initialize:
+    if is_sessionless:
         return config.protocol_versions[0]
     if not header_value and not config.require_protocol_version_header:
         return config.protocol_versions[0]
