@@ -19,7 +19,11 @@ from rest_framework_mcp.subscriptions.grant_subscription import grant_subscripti
 from rest_framework_mcp.subscriptions.in_memory_subscription_broker import (
     InMemorySubscriptionBroker,
 )
-from rest_framework_mcp.subscriptions.utils import topic_for_kind, topic_for_resource
+from rest_framework_mcp.subscriptions.utils import (
+    topic_for_kind,
+    topic_for_resource,
+    topic_for_task,
+)
 from rest_framework_mcp.tasks.create_task import create_task
 from rest_framework_mcp.tasks.in_memory_task_store import InMemoryTaskStore
 from tests.tasks.conftest import RecordingExecutor, slow_service
@@ -277,11 +281,9 @@ def test_tools_list_changed_is_granted_when_tools_exist() -> None:
     assert granted.kinds == frozenset({NotificationKind.TOOLS_LIST_CHANGED})
 
 
-def test_task_ids_are_never_granted_because_nothing_publishes_to_them() -> None:
-    """⚠ The acknowledgement must not promise what cannot arrive. Nothing in
-    the package publishes to a task topic yet, so granting ``taskIds`` would
-    tell a client the server agreed to honour a subscription that can only ever
-    be silent."""
+def test_a_task_is_watchable_only_by_the_principal_that_created_it() -> None:
+    """A task's status is as revealing as its result — knowing someone else's
+    export finished is knowing they ran one."""
     store = InMemoryTaskStore()
     server = _server(task_store=store, task_executor=RecordingExecutor(store))
     task = create_task(
@@ -293,12 +295,32 @@ def test_task_ids_are_never_granted_because_nothing_publishes_to_them() -> None:
         ttl_ms=None,
         poll_interval_ms=None,
     )
-    granted, topics = grant_subscription(
+
+    class _Other:
+        pk = 99
+
+    mine, topics = grant_subscription(
         SubscriptionFilter(task_ids=(task.task_id,)), _context(server)
     )
+    theirs, _ = grant_subscription(
+        SubscriptionFilter(task_ids=(task.task_id,)),
+        _context(server, token=TokenInfo(user=_Other())),
+    )
+    assert mine.task_ids == (task.task_id,)
+    assert topics == frozenset({topic_for_task(task.task_id)})
+    assert theirs.task_ids == ()
+
+
+def test_an_unknown_task_is_not_watchable() -> None:
+    store = InMemoryTaskStore()
+    server = _server(task_store=store, task_executor=RecordingExecutor(store))
+    granted, _ = grant_subscription(SubscriptionFilter(task_ids=("nope",)), _context(server))
     assert granted.task_ids == ()
-    assert topics == frozenset()
-    assert "taskIds" not in granted.to_dict()
+
+
+def test_a_server_running_no_tasks_grants_no_task_subscriptions() -> None:
+    granted, _ = grant_subscription(SubscriptionFilter(task_ids=("t",)), _context(_server()))
+    assert granted.task_ids == ()
 
 
 def test_granted_and_topics_cannot_disagree() -> None:

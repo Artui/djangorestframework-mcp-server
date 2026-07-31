@@ -3,6 +3,8 @@ from __future__ import annotations
 from typing import Any
 
 from rest_framework_mcp.constants import TaskStatus
+from rest_framework_mcp.subscriptions.publish_after_task import publish_task_status
+from rest_framework_mcp.subscriptions.types.subscription_broker import SubscriptionBroker
 from rest_framework_mcp.tasks.types.task_record import TaskRecord
 from rest_framework_mcp.tasks.types.task_store import TaskStore
 from rest_framework_mcp.tasks.utils import now_iso
@@ -17,6 +19,7 @@ def transition_task(
     result: dict[str, Any] | None = None,
     error: dict[str, Any] | None = None,
     input_requests: dict[str, Any] | None = None,
+    broker: SubscriptionBroker | None = None,
 ) -> TaskRecord | None:
     """Move a task to ``status``, refusing to reopen a finished one.
 
@@ -40,6 +43,11 @@ def transition_task(
     ``lastUpdatedAt`` moves only on a transition that actually happened, so it
     stays an honest "when did this task last change" rather than "when was it
     last written to".
+
+    ``broker`` opts the transition into ``notifications/tasks``. Published only
+    for a transition that *happened* — a refused one changed nothing, and
+    telling a subscriber otherwise would have it re-read a status that had not
+    moved. ``None`` (a server that pushes nothing) skips it.
     """
     record: TaskRecord | None = store.get(task_id)
     if record is None:
@@ -56,6 +64,7 @@ def transition_task(
         input_requests=input_requests,
     )
     store.save(updated)
+    publish_task_status(broker, updated)
     return updated
 
 

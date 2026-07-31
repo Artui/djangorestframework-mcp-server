@@ -86,9 +86,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
     in a loop).
   - **A subscription granted nothing is acknowledged and closed**, not held
     open to deliver silence.
-  - ⛔ **`taskIds` is parsed but never granted.** Nothing publishes to a task
-    topic yet, and granting it would make the acknowledgement promise something
-    that can only ever be silent.
+  - **`taskIds` closes the loop with the tasks extension** — a client subscribes
+    to a task and stops polling `tasks/get`. Every status change pushes
+    `notifications/tasks` carrying the *whole* task, identical to what
+    `tasks/get` would have returned, so a missed notification costs nothing.
+    Watchable only by the principal that created the task. ⛔ Asking for
+    `taskIds` without declaring the tasks extension is a JSON-RPC error rather
+    than a quiet omission — the spec's one exception to dropping refused
+    entries, and not an oracle, since it turns on what the client declared
+    rather than on the ids it named.
 
   `SubscriptionBroker` is a new collaborator rather than a widening of
   `SSEBroker`: that one keys on session with a single subscriber, and both

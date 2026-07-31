@@ -37,4 +37,15 @@ def topic_for_resource(uri: str) -> str:
     return f"resource:{uri}"
 
 
-__all__ = ["topic_for_kind", "topic_for_resource"]
+def topic_for_task(task_id: str) -> str:
+    """The topic a task's ``notifications/tasks`` frames go to.
+
+    Task ids carry 32 bytes of entropy, so the topic name is unguessable too —
+    but that is a property of the id, not a substitute for the ownership check
+    :func:`grant_subscription` makes before attaching. A topic is not an
+    authorization boundary.
+    """
+    return f"task:{task_id}"
+
+
+__all__ = ["topic_for_kind", "topic_for_resource", "topic_for_task"]

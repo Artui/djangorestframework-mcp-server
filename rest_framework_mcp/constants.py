@@ -491,6 +491,13 @@ Named here rather than inline at the transport because it is the one method the
 viewset branches on before dispatch, and its siblings already live in this
 module."""
 
+TASK_STATUS_METHOD: str = "notifications/tasks"
+"""Pushed when a task changes status, to whoever subscribed to that task.
+
+Carries the **whole** task, not a delta — identical to what ``tasks/get`` would
+have returned at that moment — so a missed notification costs nothing and
+polling stays genuinely optional."""
+
 RESOURCE_UPDATED_METHOD: str = "notifications/resources/updated"
 """Sent when a subscribed resource changed and may need re-reading."""
 
@@ -629,6 +636,7 @@ __all__ = [
     "SUBSCRIPTIONS_LISTEN_METHOD",
     "SUBSCRIPTION_ID_META_KEY",
     "TASKS_EXTENSION_ID",
+    "TASK_STATUS_METHOD",
     "TASK_METHODS",
     "TaskPolicy",
     "TaskStatus",

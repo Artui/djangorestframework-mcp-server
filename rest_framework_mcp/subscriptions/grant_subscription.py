@@ -6,7 +6,11 @@ from rest_framework_mcp.constants import NotificationKind
 from rest_framework_mcp.handlers.types.context import MCPCallContext
 from rest_framework_mcp.handlers.utils import check_permissions
 from rest_framework_mcp.subscriptions.types.subscription_filter import SubscriptionFilter
-from rest_framework_mcp.subscriptions.utils import topic_for_kind, topic_for_resource
+from rest_framework_mcp.subscriptions.utils import (
+    topic_for_kind,
+    topic_for_resource,
+    topic_for_task,
+)
 
 
 def grant_subscription(
@@ -29,13 +33,9 @@ def grant_subscription(
       channel around ``resources/read``: a caller denied the body could still
       learn every time it changed, which leaks activity — often the more
       sensitive signal of the two.
-    - ⛔ **``taskIds`` is never granted yet.** Nothing in this package publishes
-      to a task topic — the tasks extension defines ``notifications/tasks`` over
-      this stream, but wiring ``transition_task`` to publish is separate work.
-      Granting it meanwhile would make the acknowledgement *lie*: the client
-      would be told the server agreed to honour a subscription that can only
-      ever be silent, which is the exact failure the acknowledgement exists to
-      prevent. It is refused here, visibly, until there is something to deliver.
+    - **A task id is granted only to the principal that created it**, and only
+      on a server that runs tasks at all. The same comparison ``tasks/get``
+      makes, for the same reason.
     - **A list-changed kind is granted only if the server has such a registry.**
       Matching the capability rule: advertising something this server cannot
       produce leaves a client waiting for an event that will never come.
@@ -45,6 +45,13 @@ def grant_subscription(
     unsupported types are *omitted* from the agreed set. Erroring on one bad URI
     would also make the endpoint an oracle: a client could distinguish "no such
     resource" from "not yours" by whether the subscription opened.
+
+    ⛔ **One exception, and it is the spec's:** a client asking for ``taskIds``
+    without declaring the tasks extension **MUST** get a JSON-RPC error rather
+    than a quiet omission. That check happens at the transport, before this runs
+    — see ``_maybe_subscribe`` — because it produces an error response rather
+    than a stream. It is not an oracle: it turns on what the *client* declared,
+    not on anything about the tasks it named.
     """
     kinds: frozenset[NotificationKind] = frozenset(
         kind for kind in requested.kinds if _has_registry(kind, context)
@@ -52,9 +59,14 @@ def grant_subscription(
     uris: tuple[str, ...] = tuple(
         uri for uri in requested.resource_uris if _may_watch_resource(uri, context)
     )
-    granted = SubscriptionFilter(kinds=kinds, resource_uris=uris)
+    task_ids: tuple[str, ...] = tuple(
+        task_id for task_id in requested.task_ids if _may_watch_task(task_id, context)
+    )
+    granted = SubscriptionFilter(kinds=kinds, resource_uris=uris, task_ids=task_ids)
     topics: frozenset[str] = frozenset(
-        [topic_for_kind(kind) for kind in kinds] + [topic_for_resource(uri) for uri in uris]
+        [topic_for_kind(kind) for kind in kinds]
+        + [topic_for_resource(uri) for uri in uris]
+        + [topic_for_task(task_id) for task_id in task_ids]
     )
     return granted, topics
 
@@ -91,6 +103,25 @@ def _may_watch_resource(uri: str, context: MCPCallContext) -> bool:
     binding: Any = resolved[0]
     allowed, _ = check_permissions(binding.permissions, context.http_request, context.token)
     return bool(allowed)
+
+
+def _may_watch_task(task_id: str, context: MCPCallContext) -> bool:
+    """Whether this caller may be told how ``task_id`` is progressing.
+
+    The same ownership comparison ``tasks/get`` makes. A task's status is as
+    revealing as its result — knowing that someone else's export finished is
+    knowing they ran one.
+    """
+    # Imported here rather than at module scope: ``handlers.tasks_utils`` reaches
+    # the handler layer, which reaches back to this module through the trigger
+    # path. The cycle is genuine and this is the documented exception.
+    from rest_framework_mcp.handlers.tasks_utils import owned_by_caller
+
+    store = context.tasks
+    if store is None:
+        return False
+    record = store.get(task_id)
+    return record is not None and owned_by_caller(record, context)
 
 
 __all__ = ["grant_subscription"]

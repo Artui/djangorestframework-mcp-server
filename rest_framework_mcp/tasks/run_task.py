@@ -60,6 +60,9 @@ def run_task(
     # the second, which keeps this module free of any import from ``server/``
     # (the one-way dependency the package holds everywhere else).
     context: MCPCallContext = context_factory(record)
+    # The broker travels on the context so the worker publishes to the same
+    # server's subscribers — there is no request here to carry it.
+    broker = context.subscriptions
     try:
         result: Any = handle_tools_call(
             {"name": record.tool_name, "arguments": record.arguments}, context
@@ -73,6 +76,7 @@ def run_task(
             task_id,
             status=TaskStatus.FAILED,
             status_message=f"The task raised an unhandled exception: {exc}",
+            broker=broker,
         )
         raise
 
@@ -83,9 +87,10 @@ def run_task(
             status=TaskStatus.FAILED,
             status_message=result.message,
             error={"code": int(result.code), "message": result.message, **_data(result)},
+            broker=broker,
         )
         return
-    transition_task(store, task_id, status=TaskStatus.COMPLETED, result=result)
+    transition_task(store, task_id, status=TaskStatus.COMPLETED, result=result, broker=broker)
 
 
 def _data(error: JsonRpcError) -> dict[str, Any]:

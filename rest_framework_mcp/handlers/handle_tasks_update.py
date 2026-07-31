@@ -13,6 +13,7 @@ from rest_framework_mcp.handlers.tasks_utils import (
 )
 from rest_framework_mcp.handlers.types.context import MCPCallContext
 from rest_framework_mcp.protocol.types.json_rpc_error import JsonRpcError
+from rest_framework_mcp.subscriptions.publish_after_task import publish_task_status
 from rest_framework_mcp.tasks.types.task_record import TaskRecord
 from rest_framework_mcp.tasks.utils import now_iso
 
@@ -90,6 +91,10 @@ def handle_tasks_update(
         status_message=None if not remaining else record.task.status_message,
     )
     store.save(updated)
+    # Answering an input request changes the task's status — back to
+    # ``working``, or to a smaller set of outstanding requests — so a subscriber
+    # watching it should hear, exactly as it would for any other transition.
+    publish_task_status(context.subscriptions, updated)
     return {}
 
 

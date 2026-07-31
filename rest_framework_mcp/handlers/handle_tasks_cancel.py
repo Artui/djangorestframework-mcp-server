@@ -58,6 +58,7 @@ def handle_tasks_cancel(
         task_id,
         status=TaskStatus.CANCELLED,
         status_message="Cancelled at the client's request.",
+        broker=context.subscriptions,
     )
     return {}
 

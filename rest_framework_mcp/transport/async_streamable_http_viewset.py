@@ -24,6 +24,10 @@ from rest_framework_mcp.constants import (
     JsonRpcErrorCode,
 )
 from rest_framework_mcp.handlers.async_dispatch import adispatch
+from rest_framework_mcp.handlers.tasks_utils import (
+    declares_tasks_extension,
+    missing_capability_error,
+)
 from rest_framework_mcp.handlers.types.context import MCPCallContext
 from rest_framework_mcp.protocol.parse_message import parse_message
 from rest_framework_mcp.protocol.types.implementation import Implementation
@@ -594,6 +598,19 @@ class AsyncStreamableHttpViewSet(ViewSet):
         requested = SubscriptionFilter.from_params(
             params.get("notifications") if params is not None else None
         )
+        # ⛔ The spec's one exception to "refused entries are dropped": a client
+        # asking for task notifications without declaring the tasks extension
+        # MUST get an error, not a quiet omission. Answered here rather than in
+        # the grant because it produces an error response instead of a stream.
+        if requested.task_ids and not declares_tasks_extension(context):
+            denied = missing_capability_error()
+            return _error_response(
+                code=denied.code,
+                message=denied.message,
+                data=denied.data,
+                status=modern_error_status(denied),
+                request_id=message.id,
+            )
         granted, topics = await acall(grant_subscription, requested, context)
         return build_subscription_stream(
             broker=broker,
