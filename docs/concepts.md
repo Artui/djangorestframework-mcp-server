@@ -1248,7 +1248,7 @@ revision — the SSE stream and session termination were both removed there.
 
     ⛔ **`resources/subscribe` is deliberately not implemented.** It is optional
     in `2025-11-25` and gone from `2026-07-28`, where the schema says
-    `SubscriptionFilter.resourceUris` *"replaces the former `resources/subscribe`
+    `SubscriptionFilter.resourceSubscriptions` *"replaces the former `resources/subscribe`
     RPC"* — which this server does implement. Building the legacy RPC would mean
     a cross-process session→URI registry serving only the era being carried for
     compatibility rather than grown.
