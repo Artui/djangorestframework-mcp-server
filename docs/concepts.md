@@ -829,6 +829,96 @@ if you want progress.
     idempotent, and a rate-limit rejection was already a `200` with the detail
     in the body.
 
+## Server-pushed notifications: subscriptions
+
+A client that wants to know when something changes opens `subscriptions/listen`
+— a POST whose response stream stays open — and names exactly what it wants:
+
+```json
+{"method": "subscriptions/listen",
+ "params": {"notifications": {
+     "resourceSubscriptions": ["invoices://42"],
+     "toolsListChanged": true}}}
+```
+
+⚠ **Every type is opt-in, and that is a MUST**: the server must not send a
+notification type the client did not ask for. So an absent field is a refusal,
+not a default, and a filter of `{}` opens a subscription that stays silent.
+
+The first frame is always `notifications/subscriptions/acknowledged`, carrying
+the subset the server **agreed to** honour. That is where a client learns it
+will not get something — a resource it may not read, a `promptsListChanged` on a
+server with no prompts — instead of waiting for an event that was never coming.
+Every frame after it carries the subscription id in `_meta`, so one client can
+run several subscriptions and tell them apart.
+
+### Wiring it up
+
+```python
+from redis.asyncio import Redis
+from rest_framework_mcp.subscriptions.redis_subscription_broker import (
+    RedisSubscriptionBroker,
+)
+
+server = MCPServer(
+    name="invoices",
+    subscription_broker=RedisSubscriptionBroker(Redis.from_url("redis://…")),
+)
+```
+
+There is **no default broker**, deliberately. A server that quietly got an
+in-process one would advertise support and then deliver nothing the moment a
+second worker existed.
+
+!!! danger "The in-memory broker is single-worker only"
+
+    `InMemorySubscriptionBroker` is for development and tests. The write that
+    triggers a notification lands on whichever worker served that request, and
+    the subscriber's stream is parked on a different one — so past one worker it
+    delivers to nobody, and the failure looks exactly like "the resource never
+    changed". `RedisSubscriptionBroker` (in the `[redis]` extra) is the
+    deployable one.
+
+⚠ **A subscription occupies a worker for as long as it is open.** One parked
+ASGI task per subscriber. That is inherent to the wire format — this method
+exists to replace the old GET endpoint — not something tuneable here. Size the
+worker pool for the number of concurrent subscribers you expect.
+
+### Publishing a change
+
+```python
+from django.db import transaction
+
+transaction.on_commit(
+    lambda: async_to_sync(server.notify_resource_updated)(f"invoices://{invoice.pk}")
+)
+```
+
+⚠ **Publish after the transaction commits.** Inside `transaction.atomic()` you
+would be announcing a change that may still roll back, and a subscriber that
+re-reads immediately sees the old value — worse than no notification at all.
+
+⚠ **Matching is exact, not by prefix.** Publish the concrete URI *and* the
+collection URI if you want watchers of the collection to hear about it. A prefix
+rule would match `invoices://1` against `invoices://11` and would miss a
+tenant-scoped scheme entirely, so the publisher says what it means instead.
+
+Calling `notify_resource_updated` on a server with no broker is a no-op rather
+than an error, which is what makes it safe to call unconditionally from a
+service.
+
+### Who may watch what
+
+Subscribing to a resource requires the same permission as reading it. Otherwise
+a subscription would be a side channel around `resources/read`: a caller denied
+the body could still learn every time it changed, and *when* something changes
+is often the more sensitive signal. A task may be watched only by the principal
+that created it.
+
+A refused entry is **dropped from the acknowledgement**, not turned into an
+error — matching the spec's own handling of unsupported types, and avoiding an
+oracle that would let a caller tell "no such resource" from "not yours".
+
 ## Long-running work: tasks
 
 Streaming progress keeps the client informed while it waits. **Tasks remove the

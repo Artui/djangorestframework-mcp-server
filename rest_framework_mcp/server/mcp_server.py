@@ -31,8 +31,11 @@ from rest_framework_mcp.check_removed_settings import check_removed_settings
 from rest_framework_mcp.config.build_mcp_config import build_mcp_config
 from rest_framework_mcp.config.types.mcp_config import MCPConfig
 from rest_framework_mcp.constants import (
+    JSONRPC_VERSION,
+    RESOURCE_UPDATED_METHOD,
     UI_RESOURCE_MIME_TYPE,
     ArgumentBinding,
+    NotificationKind,
     OutputFormat,
     ResourceEncoding,
     TaskPolicy,
@@ -69,6 +72,11 @@ from rest_framework_mcp.server.utils import (
     check_permissions_shape,
     check_tool_description_present,
     check_tool_permissions_declared,
+)
+from rest_framework_mcp.subscriptions.types.subscription_broker import SubscriptionBroker
+from rest_framework_mcp.subscriptions.utils import (
+    topic_for_kind,
+    topic_for_resource,
 )
 from rest_framework_mcp.tasks.build_worker_token import build_worker_token
 from rest_framework_mcp.tasks.django_cache_task_store import DjangoCacheTaskStore
@@ -144,6 +152,7 @@ class MCPServer:
         sse_replay_buffer: SSEReplayBuffer | None = None,
         task_store: TaskStore | None | UnsetType = UNSET,
         task_executor: TaskExecutor | None = None,
+        subscription_broker: SubscriptionBroker | None = None,
         url_namespace: str = "mcp",
     ) -> None:
         check_removed_settings()
@@ -240,6 +249,13 @@ class MCPServer:
         # ``task_store=None`` is distinguishable from "not passed", which is
         # what ``UNSET`` buys: passing ``None`` alongside an executor is a way
         # to say "I will wire the store later", not a request for the default.
+        # ⚠ No default is constructed. The in-memory broker works only in a
+        # single process, and a server that quietly got one would advertise
+        # subscription support and then deliver nothing as soon as a second
+        # worker existed — the failure looks exactly like "nothing ever
+        # changed". Subscriptions are opt-in, and opting in means naming the
+        # broker you actually want.
+        self._subscription_broker: SubscriptionBroker | None = subscription_broker
         self._task_executor: TaskExecutor | None = task_executor
         self._task_store: TaskStore | None
         if not isinstance(task_store, UnsetType):
@@ -837,6 +853,7 @@ class MCPServer:
             config=self._config,
             tasks=self._task_store,
             task_executor=self._task_executor,
+            subscriptions=self._subscription_broker,
         )
 
     def run_task(self, task_id: str) -> None:
@@ -902,8 +919,71 @@ class MCPServer:
             config=self._config,
             tasks=self._task_store,
             task_executor=self._task_executor,
+            subscriptions=self._subscription_broker,
             enforce_rate_limits=False,
         )
+
+    async def notify_resource_updated(self, uri: str) -> int:
+        """Tell every subscriber watching ``uri`` that it changed.
+
+        The explicit trigger, and the one that always works. Call it from
+        wherever the write actually happens — a management command, a Celery
+        job, a ``save()`` override, a signal handler you wrote yourself::
+
+            await server.notify_resource_updated(f"invoices://{invoice.pk}")
+
+        Returns how many subscribers were reached, which is a diagnostic rather
+        than a guarantee: ``0`` means nobody was listening, which is the
+        ordinary case and not an error. Notifications are best-effort by design
+        — a client that misses one re-reads the resource.
+
+        ⚠ **A URI, not a template.** Publish the concrete URI that changed, and
+        publish the collection URI too if you want watchers of the collection to
+        hear about it — matching is exact, deliberately (see
+        :func:`~rest_framework_mcp.subscriptions.utils.topic_for_resource`).
+
+        ⚠ **Publish after the transaction commits.** Inside
+        ``transaction.atomic()`` this announces a change that may still roll
+        back, and a subscriber that re-reads immediately sees the old value —
+        worse than no notification at all. ``transaction.on_commit`` is the
+        Django-native answer.
+        """
+        return await self._publish(
+            topic_for_resource(uri),
+            {
+                "jsonrpc": JSONRPC_VERSION,
+                "method": RESOURCE_UPDATED_METHOD,
+                "params": {"uri": uri},
+            },
+        )
+
+    async def notify_list_changed(self, kind: NotificationKind) -> int:
+        """Tell subscribers that one of the catalogs changed.
+
+        Rarely needed: registration happens once at configuration time, so a
+        catalog is fixed for the life of the process. It exists for the server
+        that registers tools from data — a plugin loader, a per-tenant
+        catalog — where the list genuinely can change under a running client.
+        """
+        return await self._publish(
+            topic_for_kind(kind), {"jsonrpc": JSONRPC_VERSION, "method": kind.method}
+        )
+
+    async def _publish(self, topic: str, payload: dict[str, Any]) -> int:
+        """Hand a notification to the broker, or drop it if there is none.
+
+        A server with no broker is not misconfigured — it simply does not push —
+        so publishing is a no-op rather than an error. That keeps
+        ``notify_resource_updated`` safe to call unconditionally from a service,
+        which is what makes it usable as the write path's own trigger.
+        """
+        if self._subscription_broker is None:
+            return 0
+        return await self._subscription_broker.publish(topic, payload)
+
+    @property
+    def subscription_broker(self) -> SubscriptionBroker | None:
+        return self._subscription_broker
 
     @property
     def task_store(self) -> TaskStore | None:
@@ -1516,6 +1596,7 @@ class MCPServer:
             session_store=self._session_store,
             task_store=self._task_store,
             task_executor=self._task_executor,
+            subscription_broker=self._subscription_broker,
             sse_broker=self._sse_broker,
             sse_replay_buffer=self._sse_replay_buffer,
             server_info=self._server_info,
