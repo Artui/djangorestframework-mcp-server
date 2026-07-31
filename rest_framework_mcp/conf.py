@@ -87,6 +87,25 @@ DEFAULTS: dict[str, Any] = {
     # Past the cap a new subscription is refused with ``-32603`` rather than
     # queued. ``None`` disables the check.
     "MAX_CONCURRENT_SUBSCRIPTIONS": 100,
+    # How long a ``requestState`` stays redeemable, in seconds.
+    #
+    # The clock a human is on: long enough to read a confirmation dialog, find
+    # the number it is asking about and decide, short enough that a token
+    # captured from a log or a proxy is dead before anyone gets round to
+    # replaying it. Ten minutes is generous for a form and stingy for an
+    # attacker. Expiry is one of the three replay defences the spec asks for —
+    # the other two, principal and originating request, are not configurable
+    # because there is no defensible value other than "enforced".
+    "INPUT_REQUEST_TTL_SECONDS": 600,
+    # How many times one call may ask the user for something before giving up.
+    #
+    # The spec explicitly allows asking repeatedly, and a service that gathers a
+    # confirmation and then a reason legitimately needs two rounds. What this
+    # bounds is the service that can never be satisfied — a condition that the
+    # answer does not actually clear — which without a cap becomes a client and
+    # a server volleying the same question at a user indefinitely. Past the cap
+    # the call fails with the service's own message instead of asking again.
+    "MAX_INPUT_ROUNDS": 5,
     "ALLOWED_ORIGINS": [],
     "DEFAULT_OUTPUT_FORMAT": "json",
     # The server's wire identity. Recognised keys: ``name``, ``version``,

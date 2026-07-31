@@ -172,6 +172,22 @@ class MCPConfig:
     authenticated caller exhausting the worker pool by opening streams in a
     loop."""
 
+    input_request_ttl_seconds: int
+    """How long a ``requestState`` handed to a client stays redeemable.
+
+    ⚠ Bounds the replay window on the one value in this protocol that travels
+    through the client and comes back trusted. Raise it for forms a human might
+    leave open; do not raise it to work around a client that loses tokens."""
+
+    max_input_rounds: int
+    """How many elicitation rounds one call may take before it fails instead of
+    asking again.
+
+    Guards against a service whose condition the answer never clears — the
+    failure mode where client and server keep re-asking a user the same
+    question. A service that genuinely needs several answers should be under
+    this, not above it."""
+
     @property
     def modern_protocol_versions(self) -> tuple[str, ...]:
         """The configured versions that carry per-request metadata."""

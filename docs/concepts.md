@@ -1070,6 +1070,123 @@ task's state. A mismatch is `-32020`, exactly as for `tools/call`.
 | A queue that is down fails the *task* | The record is already durable when `enqueue` raises, so the handle comes back with `status: "failed"` and the reason in `statusMessage`. The client finds out through the channel it was already using. |
 | Redelivery runs the work once | Queues deliver at least once; a task is claimed as the worker starts. Best-effort, not a lock — an idempotent service is still the right thing to write. |
 
+## Asking the user: elicitation
+
+Some calls cannot be decided by the arguments alone. "Delete everything matching
+this filter" is safe at three rows and alarming at nine thousand, and the service
+only finds out after it has looked.
+
+A service says so by raising, and that is the whole of its involvement:
+
+```python
+from rest_framework_services import AdditionalInputRequired
+
+def delete_rows(*, data):
+    doomed = rows_matching(data)
+    if len(doomed) > 100 and not data["confirmed"]:
+        raise AdditionalInputRequired(
+            f"{len(doomed)} rows match. Confirm to proceed.",
+            schema={"confirmed": {"type": "boolean"}},
+        )
+    ...
+```
+
+`confirmed` is an ordinary field on the tool's input serializer. The server turns
+the raise into a question, the client puts it to the user, and the answer arrives
+back as that ordinary field — so the service reads it exactly as it would read
+anything else a caller sent.
+
+### What goes over the wire
+
+```json
+{"resultType": "input_required",
+ "inputRequests": {"additionalInput": {
+   "method": "elicitation/create",
+   "params": {"mode": "form",
+              "message": "9412 rows match. Confirm to proceed.",
+              "requestedSchema": {"type": "object",
+                                  "properties": {"confirmed": {"type": "boolean"}},
+                                  "required": ["confirmed"]}}}},
+ "requestState": "…"}
+```
+
+⚠ **This is a success, not an error.** `input_required` is a second legal shape
+for a `tools/call` result, inside a `200`, and a client that treats a non-`complete`
+`resultType` as a failure will never retry.
+
+The client collects the input and **retries the original call** — a new request,
+a new JSON-RPC id — carrying `inputResponses` and the `requestState` verbatim:
+
+```json
+{"name": "rows.delete", "arguments": {"count": 9412},
+ "inputResponses": {"additionalInput": {"action": "accept",
+                                        "content": {"confirmed": true}}},
+ "requestState": "…"}
+```
+
+⭐ **Nothing is held between the two requests.** That is the point of the pattern
+— it replaced server-initiated requests precisely so the retry can land on a
+different process, behind a load balancer that knows nothing about the first one.
+The service is not resumed; it **runs again from the top**, with the answer
+present. A service that did irreversible non-transactional work before raising
+will do it twice, which is a reason to raise early and to keep `atomic=True`.
+
+### `requestState` is attacker-controlled
+
+It leaves the server, passes through the client, and comes back. So it is signed
+(HMAC, via `django.core.signing`) and carries three things that are checked
+before any of it is believed:
+
+| Bound to | Rejects |
+|---|---|
+| the authenticated principal | a token that leaked and is presented by someone else |
+| a digest of the original call | a confirmation given for a harmless call, replayed onto a destructive one |
+| a timestamp (`INPUT_REQUEST_TTL_SECONDS`) | anything captured from a log or a proxy and used later |
+
+All four failures — including a bad signature — answer identically: the state is
+ignored and the user is asked again. Distinguishing them would turn the endpoint
+into an oracle, and an honest client cannot use the distinction anyway, since it
+is forbidden from looking inside the token.
+
+Signed is not encrypted: a client can decode it. What is in there is the caller's
+own principal id, a digest of the caller's own request, and the answers the user
+at that client just typed. Form mode is documented for **non-sensitive** values
+for exactly this reason — do not ask for a password.
+
+### More than one question
+
+`requestState` accumulates the answers, so a service that wants a confirmation
+and then a reason works: the client sends only the latest round's response, and
+the earlier answers ride in the token. `MAX_INPUT_ROUNDS` bounds it, so a service
+whose condition an answer never clears fails instead of volleying the same
+question at a user forever.
+
+### Clients that cannot be asked
+
+The spec forbids sending an elicitation to a client that did not declare the
+capability. Rather than a protocol error, such a call gets an ordinary `isError`
+result carrying the service's message **and the schema**:
+
+```json
+{"error": {"type": "input_required",
+           "message": "9412 rows match. Confirm to proceed.",
+           "requestedInput": {"confirmed": {"type": "boolean"}}}}
+```
+
+A model reading that can simply pass `confirmed: true` on its next call, which
+is the same outcome by a shorter route. This is what a legacy-era client sees, a
+URL-only client, and a task worker replaying a call with nobody at the other end.
+
+### Boundaries
+
+| | |
+|---|---|
+| Service tools only | ⛔ A **chain** tool degrades instead of asking. MRTR completes a call by re-running it, and a chain that asked at step three would run steps one and two twice on the retry. A **selector** is a read — one that needs the user to decide something is a tool wearing the wrong registration. |
+| Form mode only | The spec's other mode hands the user a URL to complete out of band. Nothing here knows how to mint one; a service that needs it has a redirect to build, not a schema to declare. |
+| Top-level fields only | `requestedSchema` is a restricted subset: strings, numbers, booleans and enums, no nesting. A schema outside it raises `ImproperlyConfigured` at the moment it would have been sent, rather than shipping something the client must reject. |
+| `tools/call` only | The spec also permits `input_required` on `prompts/get` and `resources/read`. Neither is implemented: both dispatch a bare callable with no failure channel, and a prompt render or resource read that needs to stop and ask is not a shape this package has a caller for. |
+| Sampling and roots | ⛔ Not built. Both are **Deprecated** as of `2026-07-28`; elicitation is the only input worth asking for. |
+
 ## Protocol eras
 
 This server speaks two revisions of MCP at once, on one endpoint, and picks

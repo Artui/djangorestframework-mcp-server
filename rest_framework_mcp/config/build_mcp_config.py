@@ -60,6 +60,8 @@ def build_mcp_config(
     task_poll_interval_ms: int | None = None,
     subscription_max_seconds: float | None | UnsetType = UNSET,
     max_concurrent_subscriptions: int | None | UnsetType = UNSET,
+    input_request_ttl_seconds: int | None = None,
+    max_input_rounds: int | None = None,
 ) -> MCPConfig:
     """Resolve a :class:`MCPConfig` from ``REST_FRAMEWORK_MCP``, applying overrides.
 
@@ -179,6 +181,14 @@ def build_mcp_config(
         ),
         max_concurrent_subscriptions=_nullable_int(
             _bound(max_concurrent_subscriptions, "MAX_CONCURRENT_SUBSCRIPTIONS")
+        ),
+        input_request_ttl_seconds=int(
+            input_request_ttl_seconds
+            if input_request_ttl_seconds is not None
+            else get_setting("INPUT_REQUEST_TTL_SECONDS")
+        ),
+        max_input_rounds=int(
+            max_input_rounds if max_input_rounds is not None else get_setting("MAX_INPUT_ROUNDS")
         ),
     )
 

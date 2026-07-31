@@ -10,12 +10,19 @@ from rest_framework_services import (
     enforce_permissions,
     render_spec_output,
 )
+from rest_framework_services.exceptions.additional_input_required import AdditionalInputRequired
 from rest_framework_services.exceptions.service_error import ServiceError
 from rest_framework_services.exceptions.service_validation_error import ServiceValidationError
 
 from rest_framework_mcp._compat.tracing import span
 from rest_framework_mcp.constants import JsonRpcErrorCode, OutputFormat
+from rest_framework_mcp.elicitation.types.resolved_input import ResolvedInput
 from rest_framework_mcp.handlers.chain_tool_dispatch import dispatch_chain_tool
+from rest_framework_mcp.handlers.input_dispatch import (
+    ask_for_input,
+    refusal_result,
+    resolve_prior_input,
+)
 from rest_framework_mcp.handlers.invalidation_dispatch import announce_invalidations
 from rest_framework_mcp.handlers.selector_tool_dispatch import dispatch_selector_tool
 from rest_framework_mcp.handlers.task_dispatch import maybe_create_task
@@ -149,6 +156,14 @@ def _dispatch_tool_call(
                 data={"retryAfter": retry_after},
             )
 
+        # If this is a retry of a call that asked the user something, the answer
+        # arrives as ``inputResponses`` and becomes an ordinary argument here —
+        # which is the whole of what the service ever sees of the exchange.
+        prior: ResolvedInput = resolve_prior_input(params, binding.name, arguments_raw, context)
+        if prior.refused_with is not None:
+            return refusal_result(prior.refused_with)
+        arguments_raw = prior.arguments
+
         # Synthesise the off-HTTP request/view a spec's callables expect from the
         # real HTTP request + MCP-supplied arguments, then dispatch through the
         # neutral core. ``enforce_permissions`` is the object-permission hook —
@@ -209,6 +224,15 @@ def _dispatch_tool_call(
                     exc.detail, arguments_raw, include_value=context.config.include_validation_value
                 ),
             ).to_dict()
+        except AdditionalInputRequired as exc:
+            # ⚠ **Must precede the ``ServiceError`` arm below** — this is a
+            # subclass of it, and the generic handler would otherwise swallow
+            # the request for input and report it as a plain failure. The
+            # subclassing is deliberate on the drf-services side (a transport
+            # that has never heard of elicitation still says something useful);
+            # this ordering is what a transport that *has* heard of it owes in
+            # return.
+            return ask_for_input(exc, prior, context)
         except ServiceError as exc:
             # The "real failure" channel — recorded on the active span when the
             # consumer opted in. ``ServiceValidationError`` is deliberately not
