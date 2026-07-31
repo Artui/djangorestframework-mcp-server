@@ -6,11 +6,7 @@ from rest_framework_mcp.constants import NotificationKind
 from rest_framework_mcp.handlers.types.context import MCPCallContext
 from rest_framework_mcp.handlers.utils import check_permissions
 from rest_framework_mcp.subscriptions.types.subscription_filter import SubscriptionFilter
-from rest_framework_mcp.subscriptions.utils import (
-    topic_for_kind,
-    topic_for_resource,
-    topic_for_task,
-)
+from rest_framework_mcp.subscriptions.utils import topic_for_kind, topic_for_resource
 
 
 def grant_subscription(
@@ -33,8 +29,13 @@ def grant_subscription(
       channel around ``resources/read``: a caller denied the body could still
       learn every time it changed, which leaks activity — often the more
       sensitive signal of the two.
-    - **A task id is granted only to the principal that created it.** The same
-      comparison ``tasks/get`` makes, for the same reason.
+    - ⛔ **``taskIds`` is never granted yet.** Nothing in this package publishes
+      to a task topic — the tasks extension defines ``notifications/tasks`` over
+      this stream, but wiring ``transition_task`` to publish is separate work.
+      Granting it meanwhile would make the acknowledgement *lie*: the client
+      would be told the server agreed to honour a subscription that can only
+      ever be silent, which is the exact failure the acknowledgement exists to
+      prevent. It is refused here, visibly, until there is something to deliver.
     - **A list-changed kind is granted only if the server has such a registry.**
       Matching the capability rule: advertising something this server cannot
       produce leaves a client waiting for an event that will never come.
@@ -51,25 +52,30 @@ def grant_subscription(
     uris: tuple[str, ...] = tuple(
         uri for uri in requested.resource_uris if _may_watch_resource(uri, context)
     )
-    task_ids: tuple[str, ...] = tuple(
-        task_id for task_id in requested.task_ids if _may_watch_task(task_id, context)
-    )
-
-    granted = SubscriptionFilter(kinds=kinds, resource_uris=uris, task_ids=task_ids)
+    granted = SubscriptionFilter(kinds=kinds, resource_uris=uris)
     topics: frozenset[str] = frozenset(
-        [topic_for_kind(kind) for kind in kinds]
-        + [topic_for_resource(uri) for uri in uris]
-        + [topic_for_task(task_id) for task_id in task_ids]
+        [topic_for_kind(kind) for kind in kinds] + [topic_for_resource(uri) for uri in uris]
     )
     return granted, topics
 
 
 def _has_registry(kind: NotificationKind, context: MCPCallContext) -> bool:
-    if kind is NotificationKind.TOOLS_LIST_CHANGED:
-        return len(context.tools) > 0
-    if kind is NotificationKind.PROMPTS_LIST_CHANGED:
-        return len(context.prompts) > 0
-    return len(context.resources) > 0
+    """Whether the registry behind ``kind`` holds anything.
+
+    The spec's own example of a type to omit from the acknowledgement is
+    "``promptsListChanged`` when the server has no prompts", so this is the
+    rule rather than an invention.
+
+    ⚠ Mapped explicitly, with no fallthrough. A fourth kind used to land on the
+    resource registry by default — silently wrong, in a module that advertises
+    that new kinds need no change here. Now it raises on the way in.
+    """
+    registries: dict[NotificationKind, int] = {
+        NotificationKind.TOOLS_LIST_CHANGED: len(context.tools),
+        NotificationKind.PROMPTS_LIST_CHANGED: len(context.prompts),
+        NotificationKind.RESOURCES_LIST_CHANGED: len(context.resources),
+    }
+    return registries[kind] > 0
 
 
 def _may_watch_resource(uri: str, context: MCPCallContext) -> bool:
@@ -85,19 +91,6 @@ def _may_watch_resource(uri: str, context: MCPCallContext) -> bool:
     binding: Any = resolved[0]
     allowed, _ = check_permissions(binding.permissions, context.http_request, context.token)
     return bool(allowed)
-
-
-def _may_watch_task(task_id: str, context: MCPCallContext) -> bool:
-    # Imported here rather than at module scope: ``handlers.tasks_utils`` reaches
-    # the handler layer, and this module is imported *by* it in the trigger
-    # direction. The cycle is genuine and this is the documented exception.
-    from rest_framework_mcp.handlers.tasks_utils import owned_by_caller
-
-    store = context.tasks
-    if store is None:
-        return False
-    record = store.get(task_id)
-    return record is not None and owned_by_caller(record, context)
 
 
 __all__ = ["grant_subscription"]

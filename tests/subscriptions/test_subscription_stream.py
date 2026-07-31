@@ -39,6 +39,7 @@ def _open(broker: Any, topics: set[str], granted: SubscriptionFilter, **kw: Any)
         topics=frozenset(topics),
         granted=granted,
         request_id=kw.pop("request_id", 7),
+        max_seconds=kw.pop("max_seconds", None),
         keepalive=kw.pop("keepalive", 30.0),
     )
 
@@ -56,7 +57,7 @@ async def test_the_acknowledgement_is_the_first_frame() -> None:
 
 async def test_the_acknowledgement_carries_the_subscription_id() -> None:
     broker = InMemorySubscriptionBroker()
-    gen = _open(broker, set(), SubscriptionFilter(), request_id="sub-1")
+    gen = _open(broker, {"t"}, SubscriptionFilter(resource_uris=("t",)), request_id="sub-1")
     assert _frame(await anext(gen))["params"]["_meta"][SUBSCRIPTION_ID_META_KEY] == "sub-1"
     await gen.aclose()
 
@@ -65,7 +66,7 @@ async def test_the_acknowledgement_reports_the_granted_set_not_the_requested_one
     """A client that asked for something this server cannot produce learns on
     the first frame, instead of waiting for an event that will never come."""
     broker = InMemorySubscriptionBroker()
-    gen = _open(broker, set(), SubscriptionFilter())
+    gen = _open(broker, {"t"}, SubscriptionFilter())
     assert _frame(await anext(gen))["params"]["notifications"] == {}
     await gen.aclose()
 
@@ -185,9 +186,10 @@ async def test_the_response_carries_the_headers_a_stream_needs() -> None:
     receives nothing at all."""
     response = build_subscription_stream(
         broker=InMemorySubscriptionBroker(),
-        topics=frozenset(),
-        granted=SubscriptionFilter(),
+        topics=frozenset({"t"}),
+        granted=SubscriptionFilter(resource_uris=("t",)),
         request_id=1,
+        max_seconds=None,
     )
     assert response["Content-Type"] == "text/event-stream"
     assert response["Cache-Control"] == "no-cache"
@@ -221,10 +223,10 @@ async def test_kinds_render_deterministically_in_the_acknowledgement() -> None:
             {NotificationKind.TOOLS_LIST_CHANGED, NotificationKind.RESOURCES_LIST_CHANGED}
         )
     )
-    first = _frame(await anext(_open(broker, set(), granted)))
+    first = _frame(await anext(_open(broker, {"t"}, granted)))
     assert set(first["params"]["notifications"]) == {"toolsListChanged", "resourcesListChanged"}
     for _ in range(5):
-        again = _frame(await anext(_open(broker, set(), granted)))
+        again = _frame(await anext(_open(broker, {"t"}, granted)))
         assert list(again["params"]["notifications"]) == list(first["params"]["notifications"])
 
 
@@ -232,7 +234,7 @@ async def test_concurrent_publishes_do_not_disturb_an_unwinding_subscriber() -> 
     """A subscriber's ``finally`` can run while another request is mid-publish;
     iterating the live set would raise into whichever request that was."""
     broker = InMemorySubscriptionBroker()
-    queues = [broker.subscribe(frozenset({"t"})) for _ in range(3)]
+    queues = [await broker.subscribe(frozenset({"t"})) for _ in range(3)]
     broker.unsubscribe(queues[1])
     assert await broker.publish("t", {}) == 2
     assert isinstance(queues[0], asyncio.Queue)

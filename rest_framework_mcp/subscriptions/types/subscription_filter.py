@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from typing import Any
 
 from rest_framework_mcp.constants import NotificationKind
@@ -18,13 +18,13 @@ class SubscriptionFilter:
     ⚠ **Empty means nothing is delivered, and that is correct.** The spec makes
     every type opt-in and says the server **MUST NOT** send what was not
     requested, so an absent field is a refusal rather than a default. A client
-    that sends ``{}`` gets an acknowledgement listing nothing and a stream that
-    stays silent — which is strange but is exactly what it asked for.
+    that sends ``{}`` is acknowledged with nothing and its stream is closed
+    immediately, since nothing could ever reach it.
     """
 
     kinds: frozenset[NotificationKind] = frozenset()
     resource_uris: tuple[str, ...] = ()
-    task_ids: tuple[str, ...] = field(default_factory=tuple)
+    task_ids: tuple[str, ...] = ()
 
     @classmethod
     def from_params(cls, raw: Any) -> SubscriptionFilter:

@@ -20,6 +20,7 @@ from rest_framework_mcp.config.types.mcp_config import MCPConfig
 from rest_framework_mcp.constants import (
     MODERN_PROTOCOL_VERSIONS,
     SESSIONLESS_METHODS,
+    SUBSCRIPTIONS_LISTEN_METHOD,
     JsonRpcErrorCode,
 )
 from rest_framework_mcp.handlers.async_dispatch import adispatch
@@ -558,22 +559,48 @@ class AsyncStreamableHttpViewSet(ViewSet):
         wrong revision's docs — it gets the ordinary unknown-method answer from
         dispatch rather than a stream it has no way to interpret.
         """
-        if getattr(message, "method", None) != "subscriptions/listen":
+        if getattr(message, "method", None) != SUBSCRIPTIONS_LISTEN_METHOD:
             return None
         broker = context.subscriptions
+        if broker is None:
+            # Checked before granting: evaluating permissions and reading the
+            # task store to build a grant we are about to discard is work for
+            # nothing. An empty grant closes after the acknowledgement.
+            return build_subscription_stream(
+                broker=InMemorySubscriptionBroker(),
+                topics=frozenset(),
+                granted=SubscriptionFilter(),
+                request_id=message.id,
+                max_seconds=context.config.subscription_max_seconds,
+            )
+
+        cap: int | None = context.config.max_concurrent_subscriptions
+        if cap is not None and broker.active_subscriptions >= cap:
+            # ⚠ Refused rather than queued. Each subscription parks a worker for
+            # its lifetime, so accepting past the cap trades a clear error for a
+            # server that stops answering anything.
+            return _error_response(
+                code=JsonRpcErrorCode.INTERNAL_ERROR,
+                message=(
+                    f"This server is already serving its maximum of {cap} concurrent "
+                    "subscriptions. Retry shortly, or raise "
+                    "REST_FRAMEWORK_MCP['MAX_CONCURRENT_SUBSCRIPTIONS']."
+                ),
+                status=503,
+                request_id=message.id,
+            )
+
         params: dict[str, Any] | None = _params_dict(message.params)
         requested = SubscriptionFilter.from_params(
-            (params or {}).get("notifications") if isinstance(params, dict) else None
+            params.get("notifications") if params is not None else None
         )
         granted, topics = await acall(grant_subscription, requested, context)
-        if broker is None:
-            # No broker: acknowledge honestly with an empty grant rather than
-            # holding a stream open that can never carry anything. The client
-            # reads the acknowledgement and knows on the first frame.
-            granted, topics = SubscriptionFilter(), frozenset()
-            broker = InMemorySubscriptionBroker()
         return build_subscription_stream(
-            broker=broker, topics=topics, granted=granted, request_id=message.id
+            broker=broker,
+            topics=topics,
+            granted=granted,
+            request_id=message.id,
+            max_seconds=context.config.subscription_max_seconds,
         )
 
     async def _maybe_stream(self, message: Any, context: MCPCallContext) -> HttpResponseBase | None:

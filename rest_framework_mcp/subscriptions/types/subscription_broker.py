@@ -38,13 +38,31 @@ class SubscriptionBroker(Protocol):
     any of ``topics`` until :meth:`unsubscribe`. One queue per subscription, not
     per topic — a subscription watching five resources reads one stream, which
     is what the wire format wants.
+
+    ⚠ **``subscribe`` is awaitable, and that is load-bearing rather than
+    stylistic.** It must not return until the subscription is genuinely live.
+    A sync signature forced the Redis implementation to register its channels
+    in a background task, which opened a window: the stream emitted "you are
+    subscribed" while publishes were still going nowhere. The caller has to be
+    able to await readiness, so the contract says so.
     """
 
-    def subscribe(self, topics: frozenset[str]) -> asyncio.Queue[Any]: ...
+    async def subscribe(self, topics: frozenset[str]) -> asyncio.Queue[Any]: ...
 
     def unsubscribe(self, queue: asyncio.Queue[Any]) -> None: ...
 
     async def publish(self, topic: str, payload: Any) -> int: ...
+
+    @property
+    def active_subscriptions(self) -> int:
+        """How many subscriptions this broker is currently feeding.
+
+        ⚠ **Per process, not per cluster.** It is what bounds this worker's
+        occupancy — see ``MAX_CONCURRENT_SUBSCRIPTIONS`` — and a cluster-wide
+        count would cost a round trip on every subscribe to bound something
+        that is already a per-worker resource.
+        """
+        ...
 
 
 __all__ = ["SubscriptionBroker"]

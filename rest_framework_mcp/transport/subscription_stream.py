@@ -23,6 +23,7 @@ def build_subscription_stream(
     topics: frozenset[str],
     granted: SubscriptionFilter,
     request_id: Any,
+    max_seconds: float | None,
     keepalive: float | None = None,
 ) -> StreamingHttpResponse:
     """Answer ``subscriptions/listen`` with a stream that stays open.
@@ -49,10 +50,17 @@ def build_subscription_stream(
        ``listen`` request that opened the stream. That is what lets one client
        run several subscriptions and tell their notifications apart.
 
-    The closing ``SubscriptionsListenResult`` is sent **only** on a graceful
-    teardown. An abrupt client disconnect carries no response, which is the
-    spec's own rule and also the only thing that could happen — there is nobody
-    left to read it.
+    The closing ``SubscriptionsListenResult`` is sent on a graceful teardown —
+    which happens in two cases, both of them the server's decision:
+
+    - **Nothing was granted.** A subscription with no topics can never carry
+      anything, so holding it open would occupy a worker forever to deliver
+      silence. It is acknowledged honestly and closed.
+    - **``max_seconds`` elapsed.** See ``SUBSCRIPTION_MAX_SECONDS``.
+
+    An abrupt client disconnect carries no response, which is the spec's own
+    rule and also the only thing that could happen — there is nobody left to
+    read it.
     """
     return _sse(
         _stream(
@@ -60,6 +68,7 @@ def build_subscription_stream(
             topics=topics,
             granted=granted,
             request_id=request_id,
+            max_seconds=max_seconds,
             keepalive=keepalive if keepalive is not None else keepalive_interval_seconds(),
         )
     )
@@ -80,12 +89,32 @@ async def _stream(
     topics: frozenset[str],
     granted: SubscriptionFilter,
     request_id: Any,
+    max_seconds: float | None,
     keepalive: float,
 ) -> AsyncIterator[bytes]:
-    queue: asyncio.Queue[Any] = broker.subscribe(topics)
+    if not topics:
+        # ⚠ Nothing was granted, so nothing can ever arrive. Acknowledging and
+        # closing tells the client exactly that in one round trip; the
+        # alternative is an infinite keepalive stream occupying a worker to
+        # deliver silence, which is what this used to do.
+        yield format_event(_acknowledgement(granted, request_id))
+        yield format_event(subscription_closed_response(request_id))
+        return
+
+    queue: asyncio.Queue[Any] = await broker.subscribe(topics)
+    deadline: float | None = (
+        None if max_seconds is None else asyncio.get_running_loop().time() + max_seconds
+    )
     try:
         yield format_event(_acknowledgement(granted, request_id))
         while True:
+            if deadline is not None and asyncio.get_running_loop().time() >= deadline:
+                # ⚠ The permission check happened once, when the subscription
+                # opened. Ending it forces the client to re-subscribe, which
+                # re-runs that check — so a revoked principal stops receiving
+                # change signals within one window rather than indefinitely.
+                yield format_event(subscription_closed_response(request_id))
+                return
             try:
                 payload: Any = await asyncio.wait_for(queue.get(), timeout=keepalive)
             except asyncio.TimeoutError:  # noqa: UP041 — 3.10 keeps this distinct
@@ -145,9 +174,9 @@ def _with_subscription_id(payload: Any, request_id: Any) -> Any:
 def subscription_closed_response(request_id: Any) -> dict[str, Any]:
     """The result that ends a subscription the *server* tore down.
 
-    Separate from the stream because nothing in the stream can produce it: an
-    abrupt disconnect leaves nobody to read a response, so this is only ever
-    emitted by a deliberate shutdown path.
+    Emitted when nothing was granted, and when the lifetime cap elapses. Never
+    on a client disconnect — there would be nobody to read it, which is the
+    spec's own reasoning for making it optional.
     """
     return JsonRpcResponse(
         id=request_id,

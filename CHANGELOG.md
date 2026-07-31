@@ -41,8 +41,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
     something changes is often the more sensitive signal. A refused entry is
     dropped from the acknowledgement rather than erroring, which also stops the
     endpoint becoming an oracle for which resources exist.
-  - ⚠ **One occupied ASGI worker per open subscription.** Inherent to the wire
-    format — the method exists to replace the old GET endpoint — not tuneable.
+  - ⚠ **One occupied ASGI worker per open subscription**, inherent to the wire
+    format. Bounded by two new settings: `SUBSCRIPTION_MAX_SECONDS` (which is
+    also the re-authorization interval, since permissions are checked once when
+    a subscription opens) and `MAX_CONCURRENT_SUBSCRIPTIONS` (per worker;
+    without it an authenticated caller can exhaust the pool by opening streams
+    in a loop).
+  - **A subscription granted nothing is acknowledged and closed**, not held
+    open to deliver silence.
+  - ⛔ **`taskIds` is parsed but never granted.** Nothing publishes to a task
+    topic yet, and granting it would make the acknowledgement promise something
+    that can only ever be silent.
 
   `SubscriptionBroker` is a new collaborator rather than a widening of
   `SSEBroker`: that one keys on session with a single subscriber, and both

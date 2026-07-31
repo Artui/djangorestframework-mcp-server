@@ -50,7 +50,7 @@ async def test_a_publish_from_another_worker_reaches_the_subscriber() -> None:
     shared = FakeServer()
     listener, publisher_client = FakeAsyncRedis(server=shared), FakeAsyncRedis(server=shared)
     broker = RedisSubscriptionBroker(listener)
-    queue = broker.subscribe(frozenset({"resource:a"}))
+    queue = await broker.subscribe(frozenset({"resource:a"}))
     await _await_subscriber(listener, "drf-mcp:sub:resource:a")
 
     publisher = RedisSubscriptionBroker(publisher_client)
@@ -67,7 +67,7 @@ async def test_one_subscription_listens_to_all_of_its_topics_at_once() -> None:
     bounded by connections rather than by how many things each one watches."""
     client = _client()
     broker = RedisSubscriptionBroker(client)
-    queue = broker.subscribe(frozenset({"a", "b"}))
+    queue = await broker.subscribe(frozenset({"a", "b"}))
     await _await_subscriber(client, "drf-mcp:sub:a")
     await _await_subscriber(client, "drf-mcp:sub:b")
     assert len(broker._tasks) == 1
@@ -92,7 +92,7 @@ async def test_unsubscribing_cancels_the_listener() -> None:
     connection, for the life of the process."""
     client = _client()
     broker = RedisSubscriptionBroker(client)
-    queue = broker.subscribe(frozenset({"a"}))
+    queue = await broker.subscribe(frozenset({"a"}))
     await _await_subscriber(client, "drf-mcp:sub:a")
     broker.unsubscribe(queue)
     await asyncio.sleep(0.05)
@@ -103,7 +103,7 @@ async def test_unsubscribing_cancels_the_listener() -> None:
 async def test_unsubscribing_twice_is_a_no_op() -> None:
     client = _client()
     broker = RedisSubscriptionBroker(client)
-    queue = broker.subscribe(frozenset({"a"}))
+    queue = await broker.subscribe(frozenset({"a"}))
     broker.unsubscribe(queue)
     broker.unsubscribe(queue)
     await client.aclose()
@@ -114,7 +114,7 @@ async def test_a_subscription_naming_no_topics_starts_no_listener() -> None:
     learns it will hear nothing."""
     client = _client()
     broker = RedisSubscriptionBroker(client)
-    queue = broker.subscribe(frozenset())
+    queue = await broker.subscribe(frozenset())
     assert broker._tasks == {}
     assert isinstance(queue, asyncio.Queue)
     broker.unsubscribe(queue)
@@ -125,7 +125,7 @@ async def test_the_channel_prefix_is_configurable() -> None:
     """Two servers sharing one Redis must not share a topic space."""
     client = _client()
     broker = RedisSubscriptionBroker(client, channel_prefix="other")
-    queue = broker.subscribe(frozenset({"a"}))
+    queue = await broker.subscribe(frozenset({"a"}))
     await _await_subscriber(client, "other:a")
     broker.unsubscribe(queue)
     await client.aclose()
@@ -136,7 +136,7 @@ async def test_subscribe_acknowledgement_frames_are_not_delivered_as_payloads() 
     it would put a message on the wire the client never asked for."""
     client = _client()
     broker = RedisSubscriptionBroker(client)
-    queue = broker.subscribe(frozenset({"a"}))
+    queue = await broker.subscribe(frozenset({"a"}))
     await _await_subscriber(client, "drf-mcp:sub:a")
     await broker.publish("a", {"real": True})
     assert await _drain(queue) == {"real": True}
@@ -152,3 +152,56 @@ async def test_constructing_without_the_extra_is_a_clear_error(monkeypatch: Any)
     monkeypatch.setattr(module, "AsyncRedis", None)
     with pytest.raises(ImportError, match=r"\[redis\]"):
         module.RedisSubscriptionBroker(object())
+
+
+async def test_subscribe_returns_only_once_the_channels_are_live() -> None:
+    """⚠ The race this closes: ``subscribe`` used to register in a background
+    task, so the caller emitted "you are subscribed" while publishes were still
+    going nowhere — in exactly the multi-process deployment this class exists
+    for, where the publisher is another process and waits for nobody."""
+    shared = FakeServer()
+    listener, publisher = FakeAsyncRedis(server=shared), FakeAsyncRedis(server=shared)
+    broker = RedisSubscriptionBroker(listener)
+    queue = await broker.subscribe(frozenset({"a"}))
+
+    # No polling helper, no sleep: the await is the guarantee.
+    assert await RedisSubscriptionBroker(publisher).publish("a", {"n": 1}) >= 1
+    assert await _drain(queue) == {"n": 1}
+
+    broker.unsubscribe(queue)
+    await listener.aclose()
+    await publisher.aclose()
+
+
+async def test_the_channels_are_given_back_when_a_subscription_unwinds() -> None:
+    """Observable now that the release is a real coroutine rather than a
+    suppressed block in a cancelled task's ``finally`` — a wrong method name
+    would have leaked the channel silently."""
+    client = _client()
+    broker = RedisSubscriptionBroker(client)
+    queue = await broker.subscribe(frozenset({"a"}))
+    assert (await client.pubsub_numsub("drf-mcp:sub:a"))[0][1] == 1
+
+    broker.unsubscribe(queue)
+    for _ in range(50):
+        await asyncio.sleep(0.01)
+        if (await client.pubsub_numsub("drf-mcp:sub:a"))[0][1] == 0:
+            break
+    assert (await client.pubsub_numsub("drf-mcp:sub:a"))[0][1] == 0
+    await client.aclose()
+
+
+async def test_active_subscriptions_counts_this_workers_streams() -> None:
+    """What ``MAX_CONCURRENT_SUBSCRIPTIONS`` bounds. Per process by design — a
+    cluster-wide count would cost a round trip on every subscribe to bound
+    something that is already a per-worker resource."""
+    client = _client()
+    broker = RedisSubscriptionBroker(client)
+    assert broker.active_subscriptions == 0
+    one = await broker.subscribe(frozenset({"a"}))
+    two = await broker.subscribe(frozenset({"b"}))
+    assert broker.active_subscriptions == 2
+    broker.unsubscribe(one)
+    assert broker.active_subscriptions == 1
+    broker.unsubscribe(two)
+    await client.aclose()

@@ -95,13 +95,31 @@ def build_capabilities(context: MCPCallContext) -> ServerCapabilities:
         # believes it will wait for a result that never comes.
         extensions[TASKS_EXTENSION_ID] = {}
 
+    # ⚠ Subscription-related fields are advertised only with a broker behind
+    # them. Each is a promise that a particular notification will arrive, and
+    # without somewhere to fan out from none of them ever would — the same rule
+    # the registries follow. Without this the feature was undiscoverable: a
+    # client had to try ``subscriptions/listen`` and read the grant.
+    pushes: bool = context.subscriptions is not None
     return ServerCapabilities(
-        tools={} if len(context.tools) > 0 else None,
-        resources={} if len(context.resources) > 0 else None,
-        prompts={} if len(context.prompts) > 0 else None,
+        tools=_capability(len(context.tools) > 0, listChanged=pushes),
+        resources=_capability(len(context.resources) > 0, listChanged=pushes, subscribe=pushes),
+        prompts=_capability(len(context.prompts) > 0, listChanged=pushes),
         completions={} if _has_completers(context) else None,
         extensions=extensions or None,
     )
+
+
+def _capability(present: bool, **flags: bool) -> dict[str, Any] | None:
+    """A capability object, or ``None`` when there is nothing behind it.
+
+    ``{}`` still means "supported" — the flags are only added when true, since a
+    ``false`` and an omission mean the same thing to a client and emitting one
+    invites reading it as a considered decision.
+    """
+    if not present:
+        return None
+    return {name: True for name, value in flags.items() if value}
 
 
 def _has_completers(context: MCPCallContext) -> bool:

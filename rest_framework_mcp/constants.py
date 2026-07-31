@@ -484,6 +484,13 @@ _NOTIFICATION_FILTER_FIELDS: dict[NotificationKind, str] = {
     NotificationKind.RESOURCES_LIST_CHANGED: "resourcesListChanged",
 }
 
+SUBSCRIPTIONS_LISTEN_METHOD: str = "subscriptions/listen"
+"""The method that opens a notification stream.
+
+Named here rather than inline at the transport because it is the one method the
+viewset branches on before dispatch, and its siblings already live in this
+module."""
+
 RESOURCE_UPDATED_METHOD: str = "notifications/resources/updated"
 """Sent when a subscribed resource changed and may need re-reading."""
 
@@ -619,6 +626,7 @@ __all__ = [
     "NotificationKind",
     "RESOURCE_UPDATED_METHOD",
     "SUBSCRIPTIONS_ACKNOWLEDGED_METHOD",
+    "SUBSCRIPTIONS_LISTEN_METHOD",
     "SUBSCRIPTION_ID_META_KEY",
     "TASKS_EXTENSION_ID",
     "TASK_METHODS",

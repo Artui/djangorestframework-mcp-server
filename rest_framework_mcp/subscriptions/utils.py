@@ -1,8 +1,8 @@
 """Topic names, built in one place so publisher and subscriber cannot disagree.
 
-Every topic is a prefixed string. The prefix is what stops a resource whose URI
-happens to read like a task id from colliding with one — the namespaces are
-caller-supplied and this package does not own either.
+Every topic is a prefixed string. The prefix keeps one namespace from colliding
+with another as kinds are added — the values are caller-supplied and this package
+does not own them.
 """
 
 from __future__ import annotations
@@ -37,15 +37,4 @@ def topic_for_resource(uri: str) -> str:
     return f"resource:{uri}"
 
 
-def topic_for_task(task_id: str) -> str:
-    """The topic a task's status notifications go to.
-
-    Task ids carry enough entropy that the topic name is unguessable too — but
-    that is a property of the id, not a substitute for the ownership check the
-    subscription makes before attaching. A topic is not an authorization
-    boundary.
-    """
-    return f"task:{task_id}"
-
-
-__all__ = ["topic_for_kind", "topic_for_resource", "topic_for_task"]
+__all__ = ["topic_for_kind", "topic_for_resource"]

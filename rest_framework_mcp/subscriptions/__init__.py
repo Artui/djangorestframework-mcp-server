@@ -1,9 +1,15 @@
 """Server-pushed notifications: who is listening, and for what.
 
-Two transports over one core. A modern client opens ``subscriptions/listen`` —
-a POST whose response stream stays open — and names the notification types it
-wants; a legacy client calls ``resources/subscribe`` and reads the GET SSE
-stream. Both end up as topics in a :class:`SubscriptionBroker`.
+A modern client opens ``subscriptions/listen`` — a POST whose response stream
+stays open — and names the notification types it wants. What it is granted
+becomes a set of topics in a :class:`SubscriptionBroker`.
+
+⛔ The legacy-era ``resources/subscribe`` is **not implemented**. It is not the
+counterpart of this method but its predecessor: the ``2026-07-28`` schema folds
+resource subscriptions into the ``subscriptions/listen`` filter and says so.
+Serving it needs a cross-process session-to-URI registry, since a legacy
+subscription's notifications ride the session's GET stream rather than a stream
+of its own.
 
 ⚠ The in-memory broker is single-worker only, and fails silently past that: the
 write that triggers a notification lands on one worker and the subscriber's

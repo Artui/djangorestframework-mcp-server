@@ -67,23 +67,63 @@ class RedisSubscriptionBroker:
         self._client: Any = client
         self._prefix: str = channel_prefix
         self._tasks: dict[int, asyncio.Task[None]] = {}
+        self._pubsubs: dict[int, tuple[Any, list[str]]] = {}
 
     def _channel(self, topic: str) -> str:
         return f"{self._prefix}:{topic}"
 
-    def subscribe(self, topics: frozenset[str]) -> asyncio.Queue[Any]:
+    async def subscribe(self, topics: frozenset[str]) -> asyncio.Queue[Any]:
+        """Register the channels **before returning**, then pump them.
+
+        ⚠ **The await is the whole point.** Registering inside the background
+        task instead would return a queue that is not yet subscribed, and the
+        caller emits "you are subscribed" immediately afterwards — so every
+        notification published in that window went nowhere while the client had
+        been told otherwise. Exactly the deployment this class exists for is
+        where that race is most likely, since the publisher is a different
+        process and does not wait for anyone.
+        """
         queue: asyncio.Queue[Any] = asyncio.Queue()
-        if topics:
-            self._tasks[id(queue)] = asyncio.create_task(self._listen(topics, queue))
-        # A subscription that named nothing gets a queue and no listener rather
-        # than an error: an empty filter is a legal (if odd) request, and the
-        # acknowledgement is where the client learns it will hear nothing.
+        if not topics:
+            # An empty filter is legal if odd; the acknowledgement is where the
+            # client learns it will hear nothing. No channels, no pubsub, no task.
+            return queue
+        channels: list[str] = [self._channel(topic) for topic in sorted(topics)]
+        pubsub = self._client.pubsub()
+        await pubsub.subscribe(*channels)
+        self._pubsubs[id(queue)] = (pubsub, channels)
+        self._tasks[id(queue)] = asyncio.create_task(self._pump(pubsub, queue))
         return queue
 
     def unsubscribe(self, queue: asyncio.Queue[Any]) -> None:
         task: asyncio.Task[None] | None = self._tasks.pop(id(queue), None)
         if task is not None:
             task.cancel()
+        entry = self._pubsubs.pop(id(queue), None)
+        if entry is not None:
+            pubsub, channels = entry
+            # Scheduled rather than awaited: ``unsubscribe`` is called from a
+            # generator's ``finally``, which may be running during interpreter
+            # or loop shutdown where awaiting is not available. The task is
+            # fire-and-forget by necessity, and its failure mode — a channel
+            # released late — is bounded by the connection closing anyway.
+            asyncio.ensure_future(self._release(pubsub, channels))  # noqa: RUF006
+
+    @property
+    def active_subscriptions(self) -> int:
+        return len(self._tasks)
+
+    async def _release(self, pubsub: Any, channels: list[str]) -> None:
+        """Give the channels back. Best-effort by construction.
+
+        During ASGI lifespan shutdown the client may already be closed by the
+        time a subscription unwinds, and neither call failing is worth raising
+        into a request that has already finished.
+        """
+        with contextlib.suppress(Exception):
+            await pubsub.unsubscribe(*channels)
+        with contextlib.suppress(Exception):
+            await pubsub.aclose()
 
     async def publish(self, topic: str, payload: Any) -> int:
         """Publish to ``topic``'s channel; returns Redis's subscriber count.
@@ -97,30 +137,16 @@ class RedisSubscriptionBroker:
         receivers: int = await self._client.publish(self._channel(topic), message)
         return int(receivers)
 
-    async def _listen(self, topics: frozenset[str], queue: asyncio.Queue[Any]) -> None:
-        """Pump every subscribed channel into this subscription's single queue."""
-        channels: list[str] = [self._channel(topic) for topic in sorted(topics)]
-        pubsub = self._client.pubsub()
-        try:
-            await pubsub.subscribe(*channels)
-            async for message in pubsub.listen():  # pragma: no branch - exits via cancel
-                if message.get("type") != "message":
-                    # Subscribe acknowledgements and friends.
-                    continue
-                data: Any = message.get("data")
-                if isinstance(data, bytes | bytearray):  # pragma: no branch - always bytes
-                    data = data.decode()
-                await queue.put(json.loads(data))
-        except asyncio.CancelledError:
-            raise
-        finally:
-            # Best-effort: during ASGI lifespan shutdown the client may already
-            # be closed by the time this task is cancelled, and either call
-            # raising here would be noise.
-            with contextlib.suppress(Exception):  # pragma: no cover
-                await pubsub.unsubscribe(*channels)
-            with contextlib.suppress(Exception):  # pragma: no cover
-                await pubsub.aclose()
+    async def _pump(self, pubsub: Any, queue: asyncio.Queue[Any]) -> None:
+        """Feed already-subscribed channels into this subscription's one queue."""
+        async for message in pubsub.listen():  # pragma: no branch - exits via cancel
+            if message.get("type") != "message":
+                # Subscribe acknowledgements and friends.
+                continue
+            data: Any = message.get("data")
+            if isinstance(data, bytes | bytearray):  # pragma: no branch - always bytes
+                data = data.decode()
+            await queue.put(json.loads(data))
 
 
 __all__ = ["RedisSubscriptionBroker"]

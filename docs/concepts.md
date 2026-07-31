@@ -843,7 +843,8 @@ A client that wants to know when something changes opens `subscriptions/listen`
 
 ⚠ **Every type is opt-in, and that is a MUST**: the server must not send a
 notification type the client did not ask for. So an absent field is a refusal,
-not a default, and a filter of `{}` opens a subscription that stays silent.
+not a default — and a subscription that was granted *nothing* is acknowledged
+and then **closed**, rather than held open to deliver silence.
 
 The first frame is always `notifications/subscriptions/acknowledged`, carrying
 the subset the server **agreed to** honour. That is where a client learns it
@@ -880,9 +881,19 @@ second worker existed.
     deployable one.
 
 ⚠ **A subscription occupies a worker for as long as it is open.** One parked
-ASGI task per subscriber. That is inherent to the wire format — this method
-exists to replace the old GET endpoint — not something tuneable here. Size the
-worker pool for the number of concurrent subscribers you expect.
+ASGI task per subscriber — inherent to the wire format, since this method exists
+to replace the old GET endpoint. Two settings bound it:
+
+| | |
+|---|---|
+| `SUBSCRIPTION_MAX_SECONDS` (1 h) | The server closes the stream gracefully and the client re-subscribes. ⚠ Also the **re-authorization interval**: a subscription's permissions are checked once, when it opens, so this is what stops a principal whose access was revoked from receiving change signals indefinitely. |
+| `MAX_CONCURRENT_SUBSCRIPTIONS` (100) | Per worker. Without it an authenticated caller can exhaust the pool by opening streams in a loop. Past the cap a new subscription is refused with `503` / `-32603` rather than queued. |
+
+⛔ **`taskIds` in the filter is parsed but never granted.** The tasks extension
+defines `notifications/tasks` over this stream, but nothing publishes to a task
+topic yet — so granting it would make the acknowledgement promise something that
+can only ever be silent. It is refused visibly until there is something to
+deliver.
 
 ### Publishing a change
 

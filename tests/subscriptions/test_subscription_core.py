@@ -19,11 +19,7 @@ from rest_framework_mcp.subscriptions.grant_subscription import grant_subscripti
 from rest_framework_mcp.subscriptions.in_memory_subscription_broker import (
     InMemorySubscriptionBroker,
 )
-from rest_framework_mcp.subscriptions.utils import (
-    topic_for_kind,
-    topic_for_resource,
-    topic_for_task,
-)
+from rest_framework_mcp.subscriptions.utils import topic_for_kind, topic_for_resource
 from rest_framework_mcp.tasks.create_task import create_task
 from rest_framework_mcp.tasks.in_memory_task_store import InMemoryTaskStore
 from tests.tasks.conftest import RecordingExecutor, slow_service
@@ -92,8 +88,8 @@ def test_every_kind_has_a_distinct_filter_field_and_method() -> None:
 # ----- topics -----
 
 
-def test_topics_are_namespaced_so_a_uri_cannot_collide_with_a_task_id() -> None:
-    assert topic_for_resource("x") != topic_for_task("x")
+def test_topics_are_namespaced_so_one_kind_cannot_collide_with_another() -> None:
+    assert topic_for_resource("x") != topic_for_kind(NotificationKind.TOOLS_LIST_CHANGED)
     assert topic_for_kind(NotificationKind.TOOLS_LIST_CHANGED).startswith("kind:")
 
 
@@ -112,8 +108,8 @@ async def test_a_payload_reaches_every_subscriber_of_a_topic() -> None:
     or a second client watching the same resource silently disconnects the
     first."""
     broker = InMemorySubscriptionBroker()
-    a = broker.subscribe(frozenset({"t"}))
-    b = broker.subscribe(frozenset({"t"}))
+    a = await broker.subscribe(frozenset({"t"}))
+    b = await broker.subscribe(frozenset({"t"}))
     assert await broker.publish("t", {"n": 1}) == 2
     assert a.get_nowait() == {"n": 1}
     assert b.get_nowait() == {"n": 1}
@@ -121,7 +117,7 @@ async def test_a_payload_reaches_every_subscriber_of_a_topic() -> None:
 
 async def test_one_subscription_watching_several_topics_reads_one_stream() -> None:
     broker = InMemorySubscriptionBroker()
-    queue = broker.subscribe(frozenset({"a", "b"}))
+    queue = await broker.subscribe(frozenset({"a", "b"}))
     await broker.publish("a", 1)
     await broker.publish("b", 2)
     assert {queue.get_nowait(), queue.get_nowait()} == {1, 2}
@@ -135,7 +131,7 @@ async def test_unsubscribing_stops_delivery_and_frees_the_topic() -> None:
     """Topics are caller-named and unbounded, so an emptied one is removed —
     otherwise a long-lived server accumulates an entry per URI ever watched."""
     broker = InMemorySubscriptionBroker()
-    queue = broker.subscribe(frozenset({"t"}))
+    queue = await broker.subscribe(frozenset({"t"}))
     broker.unsubscribe(queue)
     assert await broker.publish("t", {}) == 0
     assert broker._by_topic == {}
@@ -143,8 +139,8 @@ async def test_unsubscribing_stops_delivery_and_frees_the_topic() -> None:
 
 async def test_unsubscribing_one_of_two_leaves_the_other() -> None:
     broker = InMemorySubscriptionBroker()
-    a = broker.subscribe(frozenset({"t"}))
-    b = broker.subscribe(frozenset({"t"}))
+    a = await broker.subscribe(frozenset({"t"}))
+    b = await broker.subscribe(frozenset({"t"}))
     broker.unsubscribe(a)
     assert await broker.publish("t", {}) == 1
     assert b.qsize() == 1
@@ -153,13 +149,13 @@ async def test_unsubscribing_one_of_two_leaves_the_other() -> None:
 async def test_unsubscribing_twice_is_a_no_op() -> None:
     """The stream's ``finally`` can run after an explicit teardown."""
     broker = InMemorySubscriptionBroker()
-    queue = broker.subscribe(frozenset({"t"}))
+    queue = await broker.subscribe(frozenset({"t"}))
     broker.unsubscribe(queue)
     broker.unsubscribe(queue)
 
 
 async def test_a_subscription_naming_no_topics_still_gets_a_queue() -> None:
-    assert isinstance(InMemorySubscriptionBroker().subscribe(frozenset()), asyncio.Queue)
+    assert isinstance(await InMemorySubscriptionBroker().subscribe(frozenset()), asyncio.Queue)
 
 
 # ----- grant_subscription: the authorization boundary -----
@@ -281,7 +277,11 @@ def test_tools_list_changed_is_granted_when_tools_exist() -> None:
     assert granted.kinds == frozenset({NotificationKind.TOOLS_LIST_CHANGED})
 
 
-def test_a_task_is_watchable_only_by_the_principal_that_created_it() -> None:
+def test_task_ids_are_never_granted_because_nothing_publishes_to_them() -> None:
+    """⚠ The acknowledgement must not promise what cannot arrive. Nothing in
+    the package publishes to a task topic yet, so granting ``taskIds`` would
+    tell a client the server agreed to honour a subscription that can only ever
+    be silent."""
     store = InMemoryTaskStore()
     server = _server(task_store=store, task_executor=RecordingExecutor(store))
     task = create_task(
@@ -293,29 +293,12 @@ def test_a_task_is_watchable_only_by_the_principal_that_created_it() -> None:
         ttl_ms=None,
         poll_interval_ms=None,
     )
-
-    class _Other:
-        pk = 99
-
-    mine, _ = grant_subscription(SubscriptionFilter(task_ids=(task.task_id,)), _context(server))
-    theirs, _ = grant_subscription(
-        SubscriptionFilter(task_ids=(task.task_id,)),
-        _context(server, token=TokenInfo(user=_Other())),
+    granted, topics = grant_subscription(
+        SubscriptionFilter(task_ids=(task.task_id,)), _context(server)
     )
-    assert mine.task_ids == (task.task_id,)
-    assert theirs.task_ids == ()
-
-
-def test_an_unknown_task_is_not_watchable() -> None:
-    store = InMemoryTaskStore()
-    server = _server(task_store=store, task_executor=RecordingExecutor(store))
-    granted, _ = grant_subscription(SubscriptionFilter(task_ids=("nope",)), _context(server))
     assert granted.task_ids == ()
-
-
-def test_a_server_running_no_tasks_grants_no_task_subscriptions() -> None:
-    granted, _ = grant_subscription(SubscriptionFilter(task_ids=("t",)), _context(_server()))
-    assert granted.task_ids == ()
+    assert topics == frozenset()
+    assert "taskIds" not in granted.to_dict()
 
 
 def test_granted_and_topics_cannot_disagree() -> None:
@@ -346,7 +329,7 @@ def test_granted_and_topics_cannot_disagree() -> None:
 async def test_notify_resource_updated_reaches_a_watcher() -> None:
     broker = InMemorySubscriptionBroker()
     server = _server(subscription_broker=broker)
-    queue = broker.subscribe(frozenset({topic_for_resource("open://thing")}))
+    queue = await broker.subscribe(frozenset({topic_for_resource("open://thing")}))
     assert await server.notify_resource_updated("open://thing") == 1
     frame = queue.get_nowait()
     assert frame["method"] == "notifications/resources/updated"
@@ -364,7 +347,9 @@ async def test_notifying_on_a_server_with_no_broker_is_a_no_op() -> None:
 async def test_notify_list_changed_publishes_the_kind_topic() -> None:
     broker = InMemorySubscriptionBroker()
     server = _server(subscription_broker=broker)
-    queue = broker.subscribe(frozenset({topic_for_kind(NotificationKind.RESOURCES_LIST_CHANGED)}))
+    queue = await broker.subscribe(
+        frozenset({topic_for_kind(NotificationKind.RESOURCES_LIST_CHANGED)})
+    )
     await server.notify_list_changed(NotificationKind.RESOURCES_LIST_CHANGED)
     assert queue.get_nowait()["method"] == "notifications/resources/list_changed"
 
