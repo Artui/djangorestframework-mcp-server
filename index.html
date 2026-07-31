@@ -1509,6 +1509,11 @@ not a view.</p>
   templated URIs.</li>
 <li><strong>Prompts</strong> — <code>prompts/list</code>, <code>prompts/get</code> against render callables
   returning strings, <code>PromptMessage</code>s, or async coroutines.</li>
+<li><strong>Discovery</strong> — <code>server/discover</code>, the 2026-07-28 revision's replacement
+  for the <code>initialize</code> handshake. Answered without a session, so a modern
+  client can lead with it.</li>
+<li><strong>Argument completion</strong> — <code>completion/complete</code> against per-argument
+  completers on prompts and resource templates.</li>
 <li><strong>Pluggable auth</strong> — <code>DjangoOAuthToolkitBackend</code> (default when
   <code>oauth2_provider</code> is installed) and <code>AllowAnyBackend</code> (dev only).
   Per-binding <code>MCPPermission</code> classes (<code>ScopeRequired</code>,

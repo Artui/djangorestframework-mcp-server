@@ -1630,7 +1630,10 @@ flag the optional module as unresolved on environments without the
 </span><span id="__span-0-5"><a id="__codelineno-0-5" name="__codelineno-0-5" href="#__codelineno-0-5"></a>    <span class="n">is_error</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">,</span>
 </span><span id="__span-0-6"><a id="__codelineno-0-6" name="__codelineno-0-6" href="#__codelineno-0-6"></a>    <span class="n">include_structured_content</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">True</span><span class="p">,</span>
 </span><span id="__span-0-7"><a id="__codelineno-0-7" name="__codelineno-0-7" href="#__codelineno-0-7"></a>    <span class="n">meta</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
-</span><span id="__span-0-8"><a id="__codelineno-0-8" name="__codelineno-0-8" href="#__codelineno-0-8"></a><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">ToolResult</span>
+</span><span id="__span-0-8"><a id="__codelineno-0-8" name="__codelineno-0-8" href="#__codelineno-0-8"></a>    <span class="n">content_kind</span><span class="p">:</span> <span class="n">ToolContentKind</span> <span class="o">=</span> <span class="n">ToolContentKind</span><span class="o">.</span><span class="n">TEXT</span><span class="p">,</span>
+</span><span id="__span-0-9"><a id="__codelineno-0-9" name="__codelineno-0-9" href="#__codelineno-0-9"></a>    <span class="n">content_mime_type</span><span class="p">:</span> <span class="nb">str</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+</span><span id="__span-0-10"><a id="__codelineno-0-10" name="__codelineno-0-10" href="#__codelineno-0-10"></a>    <span class="n">binding_name</span><span class="p">:</span> <span class="nb">str</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+</span><span id="__span-0-11"><a id="__codelineno-0-11" name="__codelineno-0-11" href="#__codelineno-0-11"></a><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">ToolResult</span>
 </span></code></pre></div>
 
     <div class="doc doc-contents first">
@@ -1650,6 +1653,12 @@ envelope</em> — genuinely per-call, so it is a parameter here rather than
 something sourced from the binding: a tool's static <code>_meta</code> is already
 advertised on its <code>tools/list</code> entry and repeating it on every result
 would be redundant. Omitted from the payload when empty.</p>
+<p><code>content_kind</code> selects the block type, per the binding's declaration.
+Anything other than <code>TEXT</code> bypasses <code>output_format</code> entirely — there is
+no TOON rendering of a PNG — and a payload that doesn't match the declared
+kind comes back as an <code>isError</code> result naming the binding, which is the
+same treatment an oversized result or a missed deadline gets.
+<code>binding_name</code> exists only to make that message actionable.</p>
 
 
     </div>

@@ -1631,6 +1631,23 @@
     </span>
   </a>
   
+    <nav class="md-nav" aria-label="AuthorizationServerMetadata">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#rest_framework_mcp.auth.types.authorization_server_metadata.AuthorizationServerMetadata.client_id_metadata_document_supported" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        client_id_metadata_document_supported
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
 </li>
       
         <li class="md-nav__item">
@@ -2137,6 +2154,23 @@
     </span>
   </a>
   
+    <nav class="md-nav" aria-label="AuthorizationServerMetadata">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#rest_framework_mcp.auth.types.authorization_server_metadata.AuthorizationServerMetadata.client_id_metadata_document_supported" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        client_id_metadata_document_supported
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
 </li>
       
         <li class="md-nav__item">
@@ -2588,6 +2622,8 @@ live at <code>/oauth/authorize/</code>, <code>/oauth/token/</code>, <code>/oauth
 <p>Missing values fall through as empty strings / lists so the wire
 shape is always valid JSON; consumers are expected to configure
 <code>authorization_servers</code> for production deployments.</p>
+<p><code>client_id_metadata_document_supported</code> is read from DOT rather than
+asserted here — see :func:<code>_cimd_enabled</code>.</p>
 
 
     </div>
@@ -2619,8 +2655,18 @@ shape is always valid JSON; consumers are expected to configure
 
 
         <p>Allow only requests whose token carries every listed OAuth scope.</p>
-<p>Constructor takes the scopes positionally so usage stays compact:
-<code>ScopeRequired(["invoices:write"])</code>.</p>
+<p>Takes a list, or a bare string for the single-scope case::</p>
+<div class="language-text highlight"><pre><span></span><code>ScopeRequired([&quot;invoices:read&quot;, &quot;invoices:write&quot;])
+ScopeRequired(&quot;invoices:write&quot;)
+</code></pre></div>
+<p>⚠ <strong>The bare string is not sugar — it closes a trap.</strong> This used to accept
+only a list and normalise with <code>list(scopes)</code>, which silently turns
+<code>ScopeRequired("mcp:admin")</code> into nine one-character scopes. Nothing
+failed at registration; the misconfiguration surfaced much later as a
+permission that could never be satisfied and a nonsense challenge
+(<code>scope="m c p : a d m i n"</code>). :class:<code>DjangoPermRequired</code> had always
+accepted a bare string, so the two siblings disagreed — and a developer who
+learned the permissive one naturally wrote the same thing here.</p>
 
 
 
@@ -2670,6 +2716,7 @@ shape is always valid JSON; consumers are expected to configure
 <p>Wraps <code>user.has_perm</code> from the standard Django auth backend. A token
 backed by <code>AnonymousUser</code> will always be rejected — that is the point
 of using this class instead of :class:<code>ScopeRequired</code>.</p>
+<p>Takes a list or a bare string, as :class:<code>ScopeRequired</code> now also does.</p>
 
 
 
@@ -3633,6 +3680,10 @@ the dataclass-derived auto-generated fields with shapes that
 actually validate the wire contract:</p>
 <ul>
 <li><code>redirect_uris</code> is required + non-empty + child is a URL.</li>
+<li><code>application_type</code> is validated against OIDC's two values and
+  echoed. Clients are required by the MCP spec to send it, so it is
+  accepted rather than dropped — but this server imposes none of the
+  redirect-URI constraints an OIDC provider would derive from it.</li>
 <li><code>token_endpoint_auth_method</code> / <code>grant_types</code> are the RFC 7591
   §2 spellings every interoperable client sends. They are the
   <em>primary</em> inputs: :meth:<code>validate</code> translates them into DOT's
@@ -3759,6 +3810,39 @@ to fill them).</p>
 
 
 
+<div class="doc doc-object doc-attribute">
+
+
+
+<h3 id="rest_framework_mcp.auth.types.authorization_server_metadata.AuthorizationServerMetadata.client_id_metadata_document_supported" class="doc doc-heading">
+            <span class="doc doc-object-name doc-attribute-name">client_id_metadata_document_supported</span>
+
+
+  <span class="doc doc-labels">
+      <small class="doc doc-label doc-label-class-attribute"><code>class-attribute</code></small>
+      <small class="doc doc-label doc-label-instance-attribute"><code>instance-attribute</code></small>
+  </span>
+
+<a href="#rest_framework_mcp.auth.types.authorization_server_metadata.AuthorizationServerMetadata.client_id_metadata_document_supported" class="headerlink" title="Permanent link">&para;</a></h3>
+<div class="language-python doc-signature highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="n">client_id_metadata_document_supported</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span>
+</span></code></pre></div>
+
+    <div class="doc doc-contents ">
+
+        <p>Whether the authorization server accepts an HTTPS URL as a <code>client_id</code>.</p>
+<p>The field MCP clients check to decide <em>how</em> to register, and the reason it
+matters here: the registration priority order is pre-registration → CIMD →
+Dynamic Client Registration, and DCR is deprecated. A server that supports
+CIMD but stays silent about it sends every client down the deprecated path
+for no reason.</p>
+<p>⚠ Never hardcode this to <code>True</code>. It describes the authorization server,
+not this package — a backend must source it from whatever the AS actually
+does, so the advertisement cannot drift from the behaviour.</p>
+
+    </div>
+
+</div>
+
 
 
 
@@ -3874,6 +3958,12 @@ viewset can resolve it, because whether an algorithm is <em>usable</em>
 depends on server configuration (an RSA key) and on the client type
 (HS256 signs with the client secret, which a public client does not
 have) — neither of which is visible from the payload alone.</p>
+<p><code>application_type</code> is the one field kept without a DOT counterpart. The
+MCP spec makes sending it a client <strong>MUST</strong>, because an OIDC authorization
+server derives redirect-URI constraints from it — so dropping it silently
+would leave a client that carefully declared <code>native</code> unable to tell
+whether it had been heard. It is validated and echoed back; see the
+serializer for why it is not enforced.</p>
 <p>RFC 7591 fields the server doesn't understand (<code>contacts</code>,
 <code>logo_uri</code>, <code>jwks</code>, …) are ignored, which §2 requires — DOT has
 nowhere to put them, and echoing metadata the authorization server

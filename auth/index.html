@@ -1815,9 +1815,14 @@ registrations outright.</p>
 </div>
 <p>Per-binding permissions are AND-combined. Two ship in v1:</p>
 <ul>
-<li><code>ScopeRequired(["a", "b"])</code> — token must carry every listed OAuth scope.</li>
+<li><code>ScopeRequired(["a", "b"])</code> — token must carry every listed OAuth scope. A
+  single scope may be passed bare: <code>ScopeRequired("invoices:write")</code>.</li>
 <li><code>DjangoPermRequired("app.codename")</code> — <code>user.has_perm(...)</code> must be true. Anonymous users are always rejected by this class.</li>
 </ul>
+<p>Both refuse an <strong>empty</strong> requirement. <code>all(...)</code> over nothing is <code>True</code>, so
+<code>ScopeRequired([])</code> would permit every request while reading as a guard at the
+registration site — and would satisfy the unguarded-tool check that would
+otherwise have warned.</p>
 <div class="language-python highlight"><pre><span></span><code><span id="__span-4-1"><a id="__codelineno-4-1" name="__codelineno-4-1" href="#__codelineno-4-1"></a><span class="kn">from</span><span class="w"> </span><span class="nn">rest_framework_mcp</span><span class="w"> </span><span class="kn">import</span> <span class="n">MCPServer</span><span class="p">,</span> <span class="n">ScopeRequired</span><span class="p">,</span> <span class="n">DjangoPermRequired</span>
 </span><span id="__span-4-2"><a id="__codelineno-4-2" name="__codelineno-4-2" href="#__codelineno-4-2"></a><span class="kn">from</span><span class="w"> </span><span class="nn">rest_framework_services.types.service_spec</span><span class="w"> </span><span class="kn">import</span> <span class="n">ServiceSpec</span>
 </span><span id="__span-4-3"><a id="__codelineno-4-3" name="__codelineno-4-3" href="#__codelineno-4-3"></a>
@@ -1846,7 +1851,17 @@ registrations outright.</p>
 </span><span id="__span-5-13"><a id="__codelineno-5-13" name="__codelineno-5-13" href="#__codelineno-5-13"></a>        <span class="k">return</span> <span class="p">[]</span>
 </span></code></pre></div>
 <p><code>required_scopes()</code> is what gets surfaced in the <code>WWW-Authenticate</code> header on
-denial — return <code>[]</code> if there's nothing scope-shaped to advertise.</p>
+denial — return <code>[]</code> if there's nothing scope-shaped to advertise, or omit the
+method entirely.</p>
+<div class="admonition warning">
+<p class="admonition-title"><code>permissions=</code> must contain permission objects</p>
+<p>Every entry needs a <code>has_permission(request, token)</code> method, and this is
+checked at registration. The reason is not tidiness: an entry that cannot
+answer it is skipped at dispatch, so a binding "guarded" by one is
+<strong>ungated</strong> — and because the list is non-empty, the unguarded-tool warning
+stays quiet. <code>permissions="ScopeRequired"</code> is the likely way in: a bare
+string spreads into one entry per character.</p>
+</div>
 <h3 id="reusing-drf-basepermission-classes">Reusing DRF <code>BasePermission</code> classes<a class="headerlink" href="#reusing-drf-basepermission-classes" title="Permanent link">&para;</a></h3>
 <p>If a permission class already exists as a DRF <code>BasePermission</code> (e.g. one
 shared with your HTTP transport), wrap it with <code>DRFPermissionAdapter</code>
@@ -2231,7 +2246,7 @@ indicators — so audience enforcement needs an <code>audience_getter</code>; se
 </tr>
 <tr>
 <td>403 with <code>error="insufficient_scope"</code> and <code>scope=</code> in the challenge</td>
-<td>Token authenticated, missing one of the per-binding scopes. The body also carries JSON-RPC <code>-32002</code> with <code>data.requiredScopes</code>.</td>
+<td>Token authenticated, missing one of the per-binding scopes. The body also carries JSON-RPC <code>-32006</code> with <code>data.requiredScopes</code>.</td>
 </tr>
 <tr>
 <td>403 with no <code>scope=</code></td>

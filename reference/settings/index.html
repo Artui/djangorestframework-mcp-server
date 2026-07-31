@@ -1536,6 +1536,25 @@ object. Three keys that once named a collaborator by dotted path were removed
 and now raise <code>ImproperlyConfigured</code> if still present: <code>AUTH_BACKEND</code>,
 <code>SESSION_STORE</code>, <code>AUTH_USER_ADAPTER</code>.</p>
 <h2 id="protocol">Protocol<a class="headerlink" href="#protocol" title="Permanent link">&para;</a></h2>
+<p>The companion <code>cacheScope</code> is <strong>derived, not configured</strong>: a listing filtered by
+<code>FILTER_LISTINGS_BY_PERMISSIONS</code> is <code>private</code>, an unfiltered one is <code>public</code>, and
+a resource body is always <code>private</code>. <code>public</code> licenses a shared proxy to serve
+one response across authorization contexts, which is not a preference — getting
+it wrong is a cross-tenant disclosure with a cache in front of it.</p>
+<div class="admonition note">
+<p class="admonition-title">What <code>public</code> on a catalog does and doesn't say</p>
+<p>The spec's criterion for <code>public</code> is that <em>"the response does not contain
+user-specific data"</em> — which an unfiltered catalog satisfies exactly: every
+caller gets byte-identical output, so the derivation is the spec's own test
+rather than a judgement call.</p>
+<p>It is worth being clear what follows, though. <code>public</code> is not a statement
+that the catalog is <em>non-confidential</em>. It permits a shared intermediary to
+serve a stored copy across authorization contexts, and a tool catalog does
+describe the server's capability surface. If that surface is something you
+would rather not have cached in front of an authenticated endpoint, turn on
+<code>FILTER_LISTINGS_BY_PERMISSIONS</code> — the result becomes per-caller and the
+derivation follows it to <code>private</code>.</p>
+</div>
 <table>
 <thead>
 <tr>
@@ -1547,8 +1566,8 @@ and now raise <code>ImproperlyConfigured</code> if still present: <code>AUTH_BAC
 <tbody>
 <tr>
 <td><code>PROTOCOL_VERSIONS</code></td>
-<td><code>["2025-11-25", "2025-06-18"]</code></td>
-<td>Accepted <code>MCP-Protocol-Version</code> values. The first entry is the fallback when the header is absent and not required.</td>
+<td><code>["2026-07-28", "2025-11-25", "2025-06-18"]</code></td>
+<td>Every revision this server speaks, most-preferred first, across <strong>both eras</strong> — <code>2026-07-28</code> is modern (per-request metadata, no session), the rest are legacy (<code>initialize</code> handshake). <code>server/discover</code> reports the whole list; each era validates against its own half. ⚠ <code>initialize</code> never offers a modern version whatever heads the list: the handshake does not exist there, so answering with it would hand the client a protocol the transport would refuse on its next request.</td>
 </tr>
 <tr>
 <td><code>REQUIRE_PROTOCOL_VERSION_HEADER</code></td>
@@ -1558,7 +1577,37 @@ and now raise <code>ImproperlyConfigured</code> if still present: <code>AUTH_BAC
 <tr>
 <td><code>SERVER_INFO</code></td>
 <td><code>{"name": "djangorestframework-mcp-server"}</code></td>
-<td>Default <code>serverInfo</code> for <code>initialize</code>. Prefer per-server identity: <code>MCPServer(name=…, version=…, title=…)</code>.</td>
+<td>Default <code>serverInfo</code> for <code>initialize</code>. Recognised keys: <code>name</code>, <code>version</code>, <code>title</code>, <code>description</code>, <code>websiteUrl</code>, <code>icons</code> (a list of <code>{src, mimeType, sizes, theme}</code> dicts). Prefer per-server identity: <code>MCPServer(name=…, version=…, title=…, website_url=…, icons=…)</code>. <code>description</code> is settings-only — the constructor's <code>description=</code> is the <code>initialize</code> <code>instructions</code> string, which is written for the model rather than for a connection list.</td>
+</tr>
+<tr>
+<td><code>CATALOG_CACHE_TTL_MS</code></td>
+<td><code>60000</code></td>
+<td>How long a client may cache a catalog result — <code>server/discover</code> plus the four list methods — emitted as <code>ttlMs</code>. <code>0</code> means "immediately stale". A catalog is fixed once the process boots, so the honest ceiling is "until the next deploy", which nothing here can know; a minute costs a client one stale minute after a release rather than a stale catalog for the life of its connection.</td>
+</tr>
+<tr>
+<td><code>RESOURCE_CACHE_TTL_MS</code></td>
+<td><code>0</code></td>
+<td>The same for <code>resources/read</code>. <code>0</code> by default because a resource body is whatever a selector just produced. A genuinely static resource — an interactive view, a rendered document — opts in per binding with <code>cache_ttl_ms=</code>.</td>
+</tr>
+<tr>
+<td><code>TASK_TTL_MS</code></td>
+<td><code>86400000</code> (24 h)</td>
+<td>How long a created task stays readable, reported to the client as <code>ttlMs</code>. Both a promise and a bound: after it elapses the record may be dropped, and a client still politely polling gets "unknown task" — which looks exactly like work that vanished, hence the generous default. <code>None</code> disables expiry, which is only sound for a store that evicts on its own (the cache-backed one falls back to a week so an un-polled task cannot pin memory).</td>
+</tr>
+<tr>
+<td><code>TASK_POLL_INTERVAL_MS</code></td>
+<td><code>5000</code></td>
+<td>Suggested <code>tasks/get</code> cadence, sent as <code>pollIntervalMs</code>. Advisory — clients <em>SHOULD</em> honour it, and a server <em>MAY</em> rate-limit one that polls faster. Worth tuning to how long the work actually takes: too low and every task costs a stream of no-op polls, too high and a finished task sits while its client waits. <code>None</code> omits the hint.</td>
+</tr>
+<tr>
+<td><code>INPUT_REQUEST_TTL_SECONDS</code></td>
+<td><code>600</code> (10 min)</td>
+<td>How long a <code>requestState</code> handed to a client stays redeemable. ⚠ Bounds the replay window on the one value in this protocol that leaves the server, passes through the client, and comes back trusted — the spec requires the expiry alongside the principal and originating-request checks, which are not configurable because there is no defensible value other than "enforced". Long enough to read a confirmation dialog and decide; short enough that a token captured from a log is dead before anyone replays it.</td>
+</tr>
+<tr>
+<td><code>MAX_INPUT_ROUNDS</code></td>
+<td><code>5</code></td>
+<td>How many times one call may ask the user for something before failing instead of asking again. The spec explicitly allows asking repeatedly, and a service that wants a confirmation <em>and</em> a reason legitimately needs two rounds. What this bounds is the service whose condition the answer never clears — otherwise client and server volley the same question at a user indefinitely. Past the cap the call returns the service's own message as an <code>isError</code> result.</td>
 </tr>
 </tbody>
 </table>
@@ -1578,9 +1627,24 @@ and now raise <code>ImproperlyConfigured</code> if still present: <code>AUTH_BAC
 <td>Origin allowlist, enforced on every request (mandatory per the MCP spec). <code>["*"]</code> allows any origin — local development only.</td>
 </tr>
 <tr>
+<td><code>MAX_PROGRESS_NOTIFICATIONS</code></td>
+<td><code>1000</code></td>
+<td>Ceiling on <code>notifications/progress</code> frames emitted for one request. The spec asks both parties to rate-limit progress, and the failure mode is the familiar one: a service reporting per row over a large table turns one call into a flood. Past the cap further reports are dropped — the dispatch is untouched and the final response still arrives.</td>
+</tr>
+<tr>
 <td><code>MAX_REQUEST_BYTES</code></td>
 <td><code>1048576</code> (1 MiB)</td>
 <td>Maximum accepted request body size.</td>
+</tr>
+<tr>
+<td><code>SUBSCRIPTION_MAX_SECONDS</code></td>
+<td><code>3600</code> (1 h)</td>
+<td>How long one <code>subscriptions/listen</code> stream may stay open before the server closes it gracefully and the client re-subscribes. ⚠ An authorization control as much as a resource one: a subscription's permissions are checked once, when it opens, so without a cap a principal whose access was revoked keeps receiving change signals for as long as it holds the connection. <code>None</code> disables the cap — and both bounds with it.</td>
+</tr>
+<tr>
+<td><code>MAX_CONCURRENT_SUBSCRIPTIONS</code></td>
+<td><code>100</code></td>
+<td>Ceiling on concurrent subscription streams <strong>per worker</strong>. Each parks an ASGI task for its lifetime, so without a bound an authenticated caller can exhaust the worker pool by opening streams in a loop. Past the cap a subscription is refused with <code>503</code> / <code>-32603</code> rather than queued. <code>None</code> disables.</td>
 </tr>
 <tr>
 <td><code>RESOURCE_URL</code></td>
