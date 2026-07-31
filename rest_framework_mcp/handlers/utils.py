@@ -14,7 +14,6 @@ from rest_framework_services.exceptions.service_validation_error import (
 )
 from rest_framework_services.types.service_spec import ServiceSpec
 
-from rest_framework_mcp.auth.permissions.types.mcp_permission import MCPPermission
 from rest_framework_mcp.auth.rate_limits.types.mcp_rate_limit import MCPRateLimit
 from rest_framework_mcp.auth.types.token_info import TokenInfo
 from rest_framework_mcp.constants import (
@@ -200,11 +199,20 @@ def check_permissions(
     required: list[str] = []
     allowed: bool = True
     for perm in permissions:
-        if not isinstance(perm, MCPPermission):  # defensive — caught at registration
-            continue  # pragma: no cover
+        # ⚠ **No ``isinstance`` gate here.** This used to skip anything that
+        # failed ``isinstance(perm, MCPPermission)`` — and because the Protocol
+        # is ``runtime_checkable``, that means *every* member, including
+        # ``required_scopes``, which the Protocol itself documents as having an
+        # implied ``[]`` default. A permission implementing only the gate was
+        # therefore honoured by ``is_binding_listable`` (which duck-types) and
+        # silently **skipped** here: the binding vanished from listings while
+        # the call went through. Registration now refuses anything without
+        # ``has_permission``, so there is nothing left to defend against.
         if not perm.has_permission(http_request, token):
             allowed = False
-            required.extend(perm.required_scopes())
+            scopes = getattr(perm, "required_scopes", None)
+            if callable(scopes):
+                required.extend(scopes())
     return allowed, required
 
 

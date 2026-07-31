@@ -226,12 +226,56 @@ def build_ui_tool_meta(
     return {UI_META_KEY: ui.to_dict()}
 
 
+def check_permissions_shape(label: str, permissions: Any) -> tuple[Any, ...]:
+    """Normalise a registration's ``permissions=`` and refuse a shape that lies.
+
+    ⚠ **Security-relevant, not tidiness.** ``permissions="Scope"`` normalises to
+    ``tuple("Scope")`` — five one-character entries. The tuple is non-empty, so
+    :func:`check_tool_permissions_declared` sees a guarded tool and stays quiet;
+    at dispatch, :func:`check_permissions` skips every entry that is not an
+    :class:`MCPPermission`, and the call is **allowed**. The end state is a
+    binding that reads as guarded at the registration site, satisfies the
+    unguarded-tool check, and gates nothing.
+
+    A bare string is the likely way in — it is what the two permission classes
+    themselves accept — so it gets its own message. Anything else that cannot
+    answer ``has_permission`` is refused with the offending entry named.
+
+    ⚠ Only ``has_permission`` is required, deliberately. ``MCPPermission``
+    documents ``required_scopes`` as having an implied ``[]`` default, so a
+    custom permission that implements the gate and nothing else is legitimate
+    — an ``isinstance`` check against the runtime-checkable Protocol would
+    reject it, because that checks for *every* member.
+
+    Returns the normalised tuple, so callers use this in place of
+    ``tuple(permissions or ())``.
+    """
+    if isinstance(permissions, str):
+        raise ImproperlyConfigured(
+            f"{label}: permissions= was given the string {permissions!r}, which "
+            "spreads into one entry per character — none of them a permission, "
+            "leaving the binding ungated while reading as guarded. Pass "
+            "permission objects: permissions=[ScopeRequired('...')]."
+        )
+    resolved: tuple[Any, ...] = tuple(permissions or ())
+    invalid: list[Any] = [p for p in resolved if not callable(getattr(p, "has_permission", None))]
+    if invalid:
+        raise ImproperlyConfigured(
+            f"{label}: permissions= contains {invalid!r}, which cannot answer "
+            "has_permission(request, token). Every entry must be an MCPPermission "
+            "— ScopeRequired / DjangoPermRequired, a DRFPermissionAdapter around a "
+            "DRF class, or your own."
+        )
+    return resolved
+
+
 __all__ = [
     "UnboundedListWarning",
     "UndescribedToolWarning",
     "UnguardedToolWarning",
     "build_ui_tool_meta",
     "check_list_pagination_declared",
+    "check_permissions_shape",
     "check_tool_description_present",
     "check_tool_permissions_declared",
 ]

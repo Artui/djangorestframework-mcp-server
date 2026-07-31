@@ -76,6 +76,13 @@ def _ctx(server: MCPServer) -> MCPCallContext:
     )
 
 
+class _AlwaysAllow:
+    """A minimal real permission — the sentinel it replaces gated nothing."""
+
+    def has_permission(self, request: Any, token: Any) -> bool:
+        return True
+
+
 class TestTheLink:
     def test_lands_under_the_extension_key(self) -> None:
         assert _link(_server()).meta == {UI_META_KEY: {"resourceUri": VIEW_URI}}
@@ -125,7 +132,7 @@ class TestEveryToolKind:
         binding = server.register_chain_tool(
             name="chained",
             steps=[ChainStep(alias="one", spec=_selector_spec())],
-            permissions=[object()],
+            permissions=[_AlwaysAllow()],
             ui=UIToolMeta(resource_uri=VIEW_URI),
         )
 
@@ -137,7 +144,7 @@ class TestEveryToolKind:
         @server.selector_tool(
             name="decorated",
             kind=SelectorKind.LIST,
-            permissions=[object()],
+            permissions=[_AlwaysAllow()],
             ui=UIToolMeta(resource_uri=VIEW_URI),
         )
         def decorated() -> None: ...

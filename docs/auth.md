@@ -105,8 +105,14 @@ The `SERVER_INFO` keys flow into both:
 
 Per-binding permissions are AND-combined. Two ship in v1:
 
-- `ScopeRequired(["a", "b"])` — token must carry every listed OAuth scope.
+- `ScopeRequired(["a", "b"])` — token must carry every listed OAuth scope. A
+  single scope may be passed bare: `ScopeRequired("invoices:write")`.
 - `DjangoPermRequired("app.codename")` — `user.has_perm(...)` must be true. Anonymous users are always rejected by this class.
+
+Both refuse an **empty** requirement. `all(...)` over nothing is `True`, so
+`ScopeRequired([])` would permit every request while reading as a guard at the
+registration site — and would satisfy the unguarded-tool check that would
+otherwise have warned.
 
 ```python
 from rest_framework_mcp import MCPServer, ScopeRequired, DjangoPermRequired
@@ -141,7 +147,17 @@ class TenantMatches:
 ```
 
 `required_scopes()` is what gets surfaced in the `WWW-Authenticate` header on
-denial — return `[]` if there's nothing scope-shaped to advertise.
+denial — return `[]` if there's nothing scope-shaped to advertise, or omit the
+method entirely.
+
+!!! warning "`permissions=` must contain permission objects"
+
+    Every entry needs a `has_permission(request, token)` method, and this is
+    checked at registration. The reason is not tidiness: an entry that cannot
+    answer it is skipped at dispatch, so a binding "guarded" by one is
+    **ungated** — and because the list is non-empty, the unguarded-tool warning
+    stays quiet. `permissions="ScopeRequired"` is the likely way in: a bare
+    string spreads into one entry per character.
 
 ### Reusing DRF `BasePermission` classes
 
