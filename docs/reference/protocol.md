@@ -54,6 +54,18 @@ JSON-RPC envelope, MCP message types, and error codes.
 
 ::: rest_framework_mcp.protocol.types.completion.Completion
 
+## Subscriptions
+
+See [Server-pushed notifications](../concepts.md#server-pushed-notifications-subscriptions)
+for how to wire one up.
+
+::: rest_framework_mcp.subscriptions.types.subscription_filter.SubscriptionFilter
+::: rest_framework_mcp.constants.NotificationKind
+::: rest_framework_mcp.subscriptions.types.subscription_broker.SubscriptionBroker
+::: rest_framework_mcp.subscriptions.in_memory_subscription_broker.InMemorySubscriptionBroker
+::: rest_framework_mcp.subscriptions.redis_subscription_broker.RedisSubscriptionBroker
+::: rest_framework_mcp.subscriptions.utils.topic_for_resource
+
 ## Tasks
 
 The `io.modelcontextprotocol/tasks` extension. See

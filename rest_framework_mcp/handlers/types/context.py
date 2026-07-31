@@ -13,6 +13,7 @@ from rest_framework_mcp.protocol.types.implementation import Implementation
 from rest_framework_mcp.registry.prompt_registry import PromptRegistry
 from rest_framework_mcp.registry.resource_registry import ResourceRegistry
 from rest_framework_mcp.registry.tool_registry import ToolRegistry
+from rest_framework_mcp.subscriptions.types.subscription_broker import SubscriptionBroker
 from rest_framework_mcp.tasks.types.task_executor import TaskExecutor
 from rest_framework_mcp.tasks.types.task_store import TaskStore
 
@@ -82,6 +83,15 @@ class MCPCallContext:
 
     Paired with :attr:`tasks` — one without the other cannot run a task, so the
     server treats the extension as unavailable unless it has both."""
+
+    subscriptions: SubscriptionBroker | None = None
+    """Where server-pushed notifications fan out, or ``None`` if this server
+    pushes none.
+
+    ``None`` is the ordinary case: without a broker the server does not
+    advertise subscription capabilities and answers ``subscriptions/listen``
+    with an empty grant, so a client learns immediately that nothing will
+    arrive rather than holding a silent stream open."""
 
     enforce_rate_limits: bool = True
     """Whether a tool's rate limiters are consumed on this dispatch.

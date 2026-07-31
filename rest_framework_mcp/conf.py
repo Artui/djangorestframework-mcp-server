@@ -69,6 +69,24 @@ DEFAULTS: dict[str, Any] = {
     # seconds to minutes, which is what a task is for — tune it to the job
     # rather than leaving it at a default that fits neither end.
     "TASK_POLL_INTERVAL_MS": 5_000,
+    # How long one ``subscriptions/listen`` stream may stay open before the
+    # server closes it gracefully and the client re-subscribes.
+    #
+    # ⚠ This is an authorization control as much as a resource one. A
+    # subscription's permissions are checked once, when it opens, so without a
+    # cap a principal whose access was revoked keeps receiving change signals
+    # for as long as it holds the connection. Re-subscription re-runs the check.
+    # It also bounds how long one client can occupy a worker. ``None`` disables
+    # the cap, which means both of those bounds go with it.
+    "SUBSCRIPTION_MAX_SECONDS": 3600,
+    # Ceiling on concurrent ``subscriptions/listen`` streams **per worker**.
+    #
+    # Each open subscription parks an ASGI task for its lifetime, so without a
+    # bound an authenticated caller can exhaust the worker pool just by opening
+    # streams in a loop — the outbound equivalent of ``MAX_REQUEST_BYTES``.
+    # Past the cap a new subscription is refused with ``-32603`` rather than
+    # queued. ``None`` disables the check.
+    "MAX_CONCURRENT_SUBSCRIPTIONS": 100,
     "ALLOWED_ORIGINS": [],
     "DEFAULT_OUTPUT_FORMAT": "json",
     # The server's wire identity. Recognised keys: ``name``, ``version``,

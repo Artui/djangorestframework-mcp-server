@@ -20,6 +20,7 @@ from rest_framework_mcp.config.types.mcp_config import MCPConfig
 from rest_framework_mcp.constants import (
     MODERN_PROTOCOL_VERSIONS,
     SESSIONLESS_METHODS,
+    SUBSCRIPTIONS_LISTEN_METHOD,
     JsonRpcErrorCode,
 )
 from rest_framework_mcp.handlers.async_dispatch import adispatch
@@ -33,6 +34,12 @@ from rest_framework_mcp.protocol.types.json_rpc_response import JsonRpcResponse
 from rest_framework_mcp.registry.prompt_registry import PromptRegistry
 from rest_framework_mcp.registry.resource_registry import ResourceRegistry
 from rest_framework_mcp.registry.tool_registry import ToolRegistry
+from rest_framework_mcp.subscriptions.grant_subscription import grant_subscription
+from rest_framework_mcp.subscriptions.in_memory_subscription_broker import (
+    InMemorySubscriptionBroker,
+)
+from rest_framework_mcp.subscriptions.types.subscription_broker import SubscriptionBroker
+from rest_framework_mcp.subscriptions.types.subscription_filter import SubscriptionFilter
 from rest_framework_mcp.tasks.types.task_executor import TaskExecutor
 from rest_framework_mcp.tasks.types.task_store import TaskStore
 from rest_framework_mcp.transport.negotiate_protocol_version import negotiate_protocol_version
@@ -44,6 +51,7 @@ from rest_framework_mcp.transport.progress_dispatch import (
     stream_with_progress,
 )
 from rest_framework_mcp.transport.sse_response import build_sse_response
+from rest_framework_mcp.transport.subscription_stream import build_subscription_stream
 from rest_framework_mcp.transport.types.request_metadata import RequestMetadata
 from rest_framework_mcp.transport.types.session_store import SessionStore
 from rest_framework_mcp.transport.types.sse_broker import SSEBroker
@@ -103,6 +111,9 @@ class AsyncStreamableHttpViewSet(ViewSet):
     # Supplied by ``MCPServer.as_view(...)``, like every other collaborator —
     # never looked up from module scope. ``None`` on both means this server
     # runs no tasks, which is the default and changes nothing.
+    # Async-only: a subscription is a stream that stays open, which a sync
+    # WSGI view cannot hold. The sync viewset is deliberately not given one.
+    subscription_broker: SubscriptionBroker | None = None
     task_store: TaskStore | None = None
     task_executor: TaskExecutor | None = None
     sse_broker: SSEBroker | None = None
@@ -315,6 +326,7 @@ class AsyncStreamableHttpViewSet(ViewSet):
             instructions=self.instructions,
             tasks=self.task_store,
             task_executor=self.task_executor,
+            subscriptions=self.subscription_broker,
             config=self._require_config(),
         )
 
@@ -404,6 +416,7 @@ class AsyncStreamableHttpViewSet(ViewSet):
             instructions=self.instructions,
             tasks=self.task_store,
             task_executor=self.task_executor,
+            subscriptions=self.subscription_broker,
             config=config,
         )
 
@@ -413,6 +426,10 @@ class AsyncStreamableHttpViewSet(ViewSet):
         # Necessarily a request by now. The era test reads ``params``, which a
         # JSON-RPC *response* does not carry, so a response body is always
         # routed to the legacy path — and rejected there.
+        subscribed: HttpResponseBase | None = await self._maybe_subscribe(message, context)
+        if subscribed is not None:
+            return subscribed
+
         streamed: HttpResponseBase | None = await self._maybe_stream(message, context)
         if streamed is not None:
             return streamed
@@ -526,6 +543,65 @@ class AsyncStreamableHttpViewSet(ViewSet):
                 await self.sse_replay_buffer.forget(session_id)
             await acall(store.destroy, session_id)
         return HttpResponse(status=204)
+
+    async def _maybe_subscribe(
+        self, message: Any, context: MCPCallContext
+    ) -> HttpResponseBase | None:
+        """Answer ``subscriptions/listen`` with a stream that stays open.
+
+        ``None`` for every other method. Separate from ``_maybe_stream``
+        because the two share only their framing: that one wraps a dispatch and
+        ends with its result, while this one has no dispatch and ends when the
+        client leaves.
+
+        ⚠ **Modern era only.** ``subscriptions/listen`` exists to replace the
+        legacy GET stream, so a legacy client reaching here is one that read the
+        wrong revision's docs — it gets the ordinary unknown-method answer from
+        dispatch rather than a stream it has no way to interpret.
+        """
+        if getattr(message, "method", None) != SUBSCRIPTIONS_LISTEN_METHOD:
+            return None
+        broker = context.subscriptions
+        if broker is None:
+            # Checked before granting: evaluating permissions and reading the
+            # task store to build a grant we are about to discard is work for
+            # nothing. An empty grant closes after the acknowledgement.
+            return build_subscription_stream(
+                broker=InMemorySubscriptionBroker(),
+                topics=frozenset(),
+                granted=SubscriptionFilter(),
+                request_id=message.id,
+                max_seconds=context.config.subscription_max_seconds,
+            )
+
+        cap: int | None = context.config.max_concurrent_subscriptions
+        if cap is not None and broker.active_subscriptions >= cap:
+            # ⚠ Refused rather than queued. Each subscription parks a worker for
+            # its lifetime, so accepting past the cap trades a clear error for a
+            # server that stops answering anything.
+            return _error_response(
+                code=JsonRpcErrorCode.INTERNAL_ERROR,
+                message=(
+                    f"This server is already serving its maximum of {cap} concurrent "
+                    "subscriptions. Retry shortly, or raise "
+                    "REST_FRAMEWORK_MCP['MAX_CONCURRENT_SUBSCRIPTIONS']."
+                ),
+                status=503,
+                request_id=message.id,
+            )
+
+        params: dict[str, Any] | None = _params_dict(message.params)
+        requested = SubscriptionFilter.from_params(
+            params.get("notifications") if params is not None else None
+        )
+        granted, topics = await acall(grant_subscription, requested, context)
+        return build_subscription_stream(
+            broker=broker,
+            topics=topics,
+            granted=granted,
+            request_id=message.id,
+            max_seconds=context.config.subscription_max_seconds,
+        )
 
     async def _maybe_stream(self, message: Any, context: MCPCallContext) -> HttpResponseBase | None:
         """Answer with an SSE stream when the client asked to hear about progress.

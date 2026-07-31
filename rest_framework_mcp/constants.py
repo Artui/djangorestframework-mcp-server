@@ -437,6 +437,71 @@ class UIVisibility(str, Enum):
     APP = "app"
 
 
+# ---------- Subscriptions ----------
+
+
+SUBSCRIPTION_ID_META_KEY: str = "io.modelcontextprotocol/subscriptionId"
+"""``_meta`` key correlating a notification with the subscription that wanted it.
+
+The value is the JSON-RPC id of the ``subscriptions/listen`` request that opened
+the stream. Carried on **every** notification the subscription delivers and on
+the result that closes it, which is what lets a client run several subscriptions
+over one connection and still tell them apart.
+"""
+
+
+class NotificationKind(str, Enum):
+    """The notification types a client can opt in to, other than by URI or id.
+
+    ⚠ **Opt-in is not a courtesy — it is a MUST.** The spec: *"the server MUST
+    NOT send notification types the client has not explicitly requested."* So
+    this enum is a closed set of things a subscriber can ask for, and anything
+    not in the request's filter is not sent, however interesting it might be.
+
+    The values are the notification methods with the ``notifications/`` prefix
+    stripped, and the filter field names are their camelCase forms — kept
+    mechanically related so a new kind cannot be added to one and forgotten in
+    the other.
+    """
+
+    TOOLS_LIST_CHANGED = "tools/list_changed"
+    PROMPTS_LIST_CHANGED = "prompts/list_changed"
+    RESOURCES_LIST_CHANGED = "resources/list_changed"
+
+    @property
+    def method(self) -> str:
+        return f"notifications/{self.value}"
+
+    @property
+    def filter_field(self) -> str:
+        """The ``SubscriptionFilter`` key that opts in to this kind."""
+        return _NOTIFICATION_FILTER_FIELDS[self]
+
+
+_NOTIFICATION_FILTER_FIELDS: dict[NotificationKind, str] = {
+    NotificationKind.TOOLS_LIST_CHANGED: "toolsListChanged",
+    NotificationKind.PROMPTS_LIST_CHANGED: "promptsListChanged",
+    NotificationKind.RESOURCES_LIST_CHANGED: "resourcesListChanged",
+}
+
+SUBSCRIPTIONS_LISTEN_METHOD: str = "subscriptions/listen"
+"""The method that opens a notification stream.
+
+Named here rather than inline at the transport because it is the one method the
+viewset branches on before dispatch, and its siblings already live in this
+module."""
+
+RESOURCE_UPDATED_METHOD: str = "notifications/resources/updated"
+"""Sent when a subscribed resource changed and may need re-reading."""
+
+SUBSCRIPTIONS_ACKNOWLEDGED_METHOD: str = "notifications/subscriptions/acknowledged"
+"""⚠ **MUST be the first message a subscription carries.** It reports the subset
+of the requested filter the server actually agreed to honour, so a client learns
+immediately that (say) ``promptsListChanged`` will never arrive because this
+server has no prompts — rather than waiting indefinitely for a notification that
+was never going to come."""
+
+
 # ---------- Tasks extension ----------
 
 
@@ -558,6 +623,11 @@ __all__ = [
     "ResultType",
     "SERVER_INFO_META_KEY",
     "SESSIONLESS_METHODS",
+    "NotificationKind",
+    "RESOURCE_UPDATED_METHOD",
+    "SUBSCRIPTIONS_ACKNOWLEDGED_METHOD",
+    "SUBSCRIPTIONS_LISTEN_METHOD",
+    "SUBSCRIPTION_ID_META_KEY",
     "TASKS_EXTENSION_ID",
     "TASK_METHODS",
     "TaskPolicy",

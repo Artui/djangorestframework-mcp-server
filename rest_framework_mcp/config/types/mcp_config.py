@@ -158,6 +158,20 @@ class MCPConfig:
     actually takes: too low and every task costs a stream of no-op polls, too
     high and a fast task sits finished while its client waits."""
 
+    subscription_max_seconds: float | None
+    """How long one subscription stream may stay open, or ``None`` for no cap.
+
+    ⚠ Doubles as the re-authorization interval: a subscription's permissions are
+    checked once, at open, so the cap is what bounds how long a revoked
+    principal keeps receiving change signals."""
+
+    max_concurrent_subscriptions: int | None
+    """Ceiling on concurrent subscription streams **per worker**, or ``None``.
+
+    Each one parks an ASGI task for its lifetime, so this is what stops an
+    authenticated caller exhausting the worker pool by opening streams in a
+    loop."""
+
     @property
     def modern_protocol_versions(self) -> tuple[str, ...]:
         """The configured versions that carry per-request metadata."""

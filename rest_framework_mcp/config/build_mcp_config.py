@@ -58,6 +58,8 @@ def build_mcp_config(
     resource_cache_ttl_ms: int | None = None,
     task_ttl_ms: int | None = None,
     task_poll_interval_ms: int | None = None,
+    subscription_max_seconds: float | None | UnsetType = UNSET,
+    max_concurrent_subscriptions: int | None | UnsetType = UNSET,
 ) -> MCPConfig:
     """Resolve a :class:`MCPConfig` from ``REST_FRAMEWORK_MCP``, applying overrides.
 
@@ -172,6 +174,12 @@ def build_mcp_config(
         # setting's own default, which ``_resolve_optional`` decides.
         task_ttl_ms=_resolve_optional(task_ttl_ms, "TASK_TTL_MS"),
         task_poll_interval_ms=_resolve_optional(task_poll_interval_ms, "TASK_POLL_INTERVAL_MS"),
+        subscription_max_seconds=_nullable_float(
+            _bound(subscription_max_seconds, "SUBSCRIPTION_MAX_SECONDS")
+        ),
+        max_concurrent_subscriptions=_nullable_int(
+            _bound(max_concurrent_subscriptions, "MAX_CONCURRENT_SUBSCRIPTIONS")
+        ),
     )
 
 

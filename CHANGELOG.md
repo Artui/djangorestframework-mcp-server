@@ -9,6 +9,58 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **Server-pushed notifications — `subscriptions/listen`.** A client opens a
+  long-lived POST stream and names what it wants to hear about: resource URIs,
+  and any of the three `list_changed` kinds.
+
+  ```python
+  server = MCPServer(
+      name="invoices",
+      subscription_broker=RedisSubscriptionBroker(Redis.from_url("redis://…")),
+  )
+  # …then, after the write commits:
+  await server.notify_resource_updated(f"invoices://{invoice.pk}")
+  ```
+
+  ⚠ **`resources/subscribe` is not the legacy twin of this method — it is
+  *replaced* by it.** The GA schema folds resource subscriptions into a
+  `resourceSubscriptions` field of the `subscriptions/listen` filter, alongside
+  the list-changed kinds. The legacy-era method is a separate, still-outstanding
+  piece of work; this release covers the modern era only.
+
+  What the shape buys, and what it costs:
+
+  - **Every notification type is opt-in**, which the spec makes a MUST. Opt-in
+    is enforced by what the stream attaches to rather than by filtering on the
+    way out, so a type nobody asked for has no path to the wire.
+  - **The first frame is always the acknowledgement**, reporting the subset the
+    server agreed to honour — so a client learns immediately that something it
+    asked for will never arrive, rather than waiting for it.
+  - **Subscribing to a resource needs the same permission as reading it.**
+    Otherwise a subscription is a side channel around `resources/read`: *when*
+    something changes is often the more sensitive signal. A refused entry is
+    dropped from the acknowledgement rather than erroring, which also stops the
+    endpoint becoming an oracle for which resources exist.
+  - ⚠ **One occupied ASGI worker per open subscription**, inherent to the wire
+    format. Bounded by two new settings: `SUBSCRIPTION_MAX_SECONDS` (which is
+    also the re-authorization interval, since permissions are checked once when
+    a subscription opens) and `MAX_CONCURRENT_SUBSCRIPTIONS` (per worker;
+    without it an authenticated caller can exhaust the pool by opening streams
+    in a loop).
+  - **A subscription granted nothing is acknowledged and closed**, not held
+    open to deliver silence.
+  - ⛔ **`taskIds` is parsed but never granted.** Nothing publishes to a task
+    topic yet, and granting it would make the acknowledgement promise something
+    that can only ever be silent.
+
+  `SubscriptionBroker` is a new collaborator rather than a widening of
+  `SSEBroker`: that one keys on session with a single subscriber, and both
+  assumptions fail here (a notification is addressed to a topic, and several
+  clients legitimately watch the same resource). ⚠ **There is no default
+  broker.** A server that quietly got the in-process one would advertise support
+  and then silently deliver nothing as soon as a second worker existed;
+  `RedisSubscriptionBroker` (in the `[redis]` extra) is the deployable one.
+
 - **Tasks — durable handles for work that outlives its request.** The
   `io.modelcontextprotocol/tasks` extension. A task-eligible tool answers
   `tools/call` with a handle instead of a result; the work runs in a queue

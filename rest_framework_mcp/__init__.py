@@ -24,6 +24,7 @@ from rest_framework_mcp.constants import (
     ArgumentBinding,
     IconTheme,
     JsonRpcErrorCode,
+    NotificationKind,
     OutputFormat,
     ResourceEncoding,
     TaskPolicy,
@@ -55,6 +56,11 @@ from rest_framework_mcp.registry.types.ui_resource_meta import UIResourceMeta
 from rest_framework_mcp.registry.types.ui_tool_meta import UIToolMeta
 from rest_framework_mcp.registry.types.url_kwarg import UrlKwarg
 from rest_framework_mcp.server.mcp_server import MCPServer
+from rest_framework_mcp.subscriptions.in_memory_subscription_broker import (
+    InMemorySubscriptionBroker,
+)
+from rest_framework_mcp.subscriptions.types.subscription_broker import SubscriptionBroker
+from rest_framework_mcp.subscriptions.types.subscription_filter import SubscriptionFilter
 from rest_framework_mcp.tasks.django_cache_task_store import DjangoCacheTaskStore
 from rest_framework_mcp.tasks.in_memory_task_store import InMemoryTaskStore
 from rest_framework_mcp.tasks.types.task_executor import TaskExecutor
@@ -116,6 +122,10 @@ __all__ = [
     "TaskRecord",
     "TaskStatus",
     "TaskStore",
+    "InMemorySubscriptionBroker",
+    "NotificationKind",
+    "SubscriptionBroker",
+    "SubscriptionFilter",
     "TokenInfo",
     "ToolContentBlock",
     "ToolContentKind",
