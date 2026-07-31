@@ -19,6 +19,7 @@ from rest_framework_mcp.handlers.utils import (
     consume_rate_limits,
     resolve_bound,
     resource_cache_hints,
+    resource_not_found_code,
 )
 from rest_framework_mcp.output.build_resource_contents import build_resource_contents
 from rest_framework_mcp.output.enforce_result_bytes import enforce_result_bytes
@@ -53,7 +54,7 @@ async def handle_resources_read_async(
     if resolved is None:
         # See the sync sibling: ``-32002`` + ``data.uri`` is the spec's shape.
         return JsonRpcError(
-            JsonRpcErrorCode.RESOURCE_NOT_FOUND,
+            resource_not_found_code(context.protocol_version),
             f"Unknown resource: {uri!r}",
             data={"uri": uri},
         )

@@ -170,6 +170,44 @@ never declared.
 """
 
 
+MODERN_PROTOCOL_VERSIONS: frozenset[str] = frozenset({"2026-07-28"})
+"""Protocol revisions that carry version, identity and capabilities per request.
+
+The spec's own split: **modern** revisions (``2026-07-28`` and later) declare
+everything on each request and hold no session; **legacy** ones (``2025-11-25``
+and earlier) negotiate once through ``initialize``. Everything this package
+branches on era for reads from this set, so adding a revision is one edit.
+
+A server may serve both concurrently on one endpoint, which is what this
+package does — legacy clients have no fall-forward mechanism, so dropping them
+would strand every client that has not migrated with nothing but an error
+string to go on.
+"""
+
+PROTOCOL_VERSION_META_KEY: str = "io.modelcontextprotocol/protocolVersion"
+"""Per-request ``_meta`` key naming the revision a modern request speaks.
+
+⭐ **This is the era discriminator.** Its presence is what tells a dual-era
+server it is talking to a modern client — not the ``MCP-Protocol-Version``
+header, which legacy clients have sent since ``2025-06-18``, and not the
+method, since most methods exist in both eras.
+"""
+
+CLIENT_INFO_META_KEY: str = "io.modelcontextprotocol/clientInfo"
+"""Per-request ``_meta`` key carrying the client's self-reported identity.
+
+Optional, and — like the server's own — unverified. Parsed for introspection
+and logging; nothing branches on it.
+"""
+
+CLIENT_CAPABILITIES_META_KEY: str = "io.modelcontextprotocol/clientCapabilities"
+"""Per-request ``_meta`` key declaring what the client supports.
+
+Required on a modern request, and empty (``{}``) is a valid declaration. What
+replaces the ``initialize`` handshake's one-time capability exchange: a server
+**MUST NOT** rely on a capability the client did not declare *on that request*.
+"""
+
 SESSIONLESS_METHODS: frozenset[str] = frozenset({"initialize", "server/discover"})
 """Methods answerable before a session exists.
 
@@ -386,26 +424,30 @@ gates on it (see :class:`UIVisibility`).
 
 
 __all__ = [
-    "JSONRPC_VERSION",
-    "MAX_COMPLETION_VALUES",
-    "RESERVED_POOL_SEEDS",
-    "SERVER_INFO_META_KEY",
-    "SESSIONLESS_METHODS",
-    "RESERVED_POST_FETCH_KEYS",
-    "UI_EXTENSION_ID",
-    "UI_META_KEY",
-    "UI_RESOURCE_MIME_TYPE",
     "ArgumentBinding",
+    "CLIENT_CAPABILITIES_META_KEY",
+    "CLIENT_INFO_META_KEY",
     "CacheScope",
     "IconTheme",
+    "JSONRPC_VERSION",
     "JsonRpcErrorCode",
     "JsonRpcId",
+    "MAX_COMPLETION_VALUES",
+    "MODERN_PROTOCOL_VERSIONS",
     "OutputFormat",
-    "ResultType",
+    "PROTOCOL_VERSION_META_KEY",
+    "RESERVED_POOL_SEEDS",
+    "RESERVED_POST_FETCH_KEYS",
     "ResourceEncoding",
+    "ResultType",
+    "SERVER_INFO_META_KEY",
+    "SESSIONLESS_METHODS",
     "ToolContentKind",
     "ToolKind",
     "UIPermission",
     "UIVisibility",
+    "UI_EXTENSION_ID",
+    "UI_META_KEY",
+    "UI_RESOURCE_MIME_TYPE",
     "UnknownArguments",
 ]

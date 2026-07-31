@@ -44,6 +44,43 @@ def insufficient_scope_challenge(result: JsonRpcError, backend: MCPAuthBackend) 
     )
 
 
+def modern_error_status(error: JsonRpcError) -> int:
+    """HTTP status for a JSON-RPC error on the modern transport.
+
+    The modern revision makes several statuses normative, and each one carries
+    information the JSON-RPC code alone does not:
+
+    - ``404`` for an unknown method. This is what lets a client tell a modern
+      MCP endpoint from a legacy HTTP+SSE server that does not host one — both
+      answer ``404``, but only ours carries a JSON-RPC ``-32601`` body, and the
+      spec's fallback algorithm reads exactly that.
+    - ``400`` for the three spec-reserved rejections (header mismatch,
+      unsupported version, missing client capability). A client that gets a
+      ``400`` inspects the body before falling back to ``initialize``: a
+      recognised modern error means "fix the request", anything else means
+      "this server is legacy".
+    - ``403`` for a permission denial, as in the legacy era.
+
+    Everything else rides inside a ``200``, which is ordinary JSON-RPC.
+    """
+    if error.code == JsonRpcErrorCode.METHOD_NOT_FOUND:
+        return 404
+    if error.code in _MODERN_BAD_REQUEST_CODES:
+        return 400
+    if error.code == JsonRpcErrorCode.FORBIDDEN:
+        return 403
+    return 200
+
+
+_MODERN_BAD_REQUEST_CODES: frozenset[int] = frozenset(
+    {
+        JsonRpcErrorCode.HEADER_MISMATCH,
+        JsonRpcErrorCode.UNSUPPORTED_PROTOCOL_VERSION,
+        JsonRpcErrorCode.MISSING_REQUIRED_CLIENT_CAPABILITY,
+    }
+)
+
+
 def principal_for_token(token: TokenInfo) -> str:
     """Derive the stable principal id a session is bound to.
 

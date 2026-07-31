@@ -18,6 +18,7 @@ from rest_framework_mcp.handlers.utils import (
     consume_rate_limits,
     resolve_bound,
     resource_cache_hints,
+    resource_not_found_code,
 )
 from rest_framework_mcp.output.build_resource_contents import build_resource_contents
 from rest_framework_mcp.output.enforce_result_bytes import enforce_result_bytes
@@ -53,7 +54,7 @@ def handle_resources_read(
         # example for this case, so a client that special-cases resource
         # not-found finds both halves where it expects them.
         return JsonRpcError(
-            JsonRpcErrorCode.RESOURCE_NOT_FOUND,
+            resource_not_found_code(context.protocol_version),
             f"Unknown resource: {uri!r}",
             data={"uri": uri},
         )

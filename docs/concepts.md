@@ -769,6 +769,52 @@ rather than shipped as an icon nobody will ever see. The server's own identity
 (`title`, `description`, `websiteUrl`, `icons`) can also come from the
 `SERVER_INFO` setting.
 
+## Protocol eras
+
+This server speaks two revisions of MCP at once, on one endpoint, and picks
+which by reading the request:
+
+| | Legacy (`2025-11-25`, `2025-06-18`) | Modern (`2026-07-28`) |
+|---|---|---|
+| Opens with | `initialize` | nothing — every request stands alone |
+| State | a session, in `Mcp-Session-Id` | none |
+| Version | negotiated once | declared per request |
+| Detected by | absence of the marker below | `_meta["io.modelcontextprotocol/protocolVersion"]` |
+
+A modern request carries its version, client identity and client capabilities
+in `params._meta`, and mirrors selected body fields into headers so gateways
+can route without parsing JSON:
+
+```http
+POST /mcp/ HTTP/1.1
+Mcp-Protocol-Version: 2026-07-28
+Mcp-Method: tools/call
+Mcp-Name: invoices.create
+```
+
+Those headers are **validated against the body**. A mismatch is `400` with
+JSON-RPC `-32020` — not pedantry: a load balancer that routes on the header
+while the server executes the body is a confused deputy, and the check is what
+closes it. `Mcp-Name` may arrive Base64-wrapped (`=?base64?…?=`) when the value
+would not survive as a plain ASCII header; it is decoded before comparison.
+
+Two more modern-only status codes matter, because clients use them to work out
+which era they are talking to: an unknown method is `404` with a `-32601` body
+(the body is what distinguishes this endpoint from a server that does not host
+one), and an unsupported version is `400` with `-32022` listing what *is*
+supported. `GET` and `DELETE` return `405` to a caller naming a modern
+revision — the SSE stream and session termination were both removed there.
+
+!!! note "Keeping legacy is a deliberate choice"
+
+    Legacy clients have no fall-forward mechanism: drop the era and every
+    client that has not migrated is stranded with nothing but an error string.
+    The cost of carrying both is one branch at the transport edge — everything
+    below it is era-agnostic, with one exception. `resources/read` answers a
+    missing URI with `-32002` for a legacy caller and `-32602` for a modern
+    one, because the revision that retired `-32002` also told clients to keep
+    recognising it, so neither value is safe to send to both.
+
 ## Interactive views (MCP Apps)
 
 A tool can declare an HTML view that an MCP **host** renders inline in the

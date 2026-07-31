@@ -9,6 +9,48 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **The `2026-07-28` transport, served alongside the existing one.** This
+  package is now **dual-era**: one endpoint, two protocol revisions, and the
+  request itself decides which. A request carrying
+  `params._meta["io.modelcontextprotocol/protocolVersion"]` is served
+  statelessly under the modern rules; its absence means legacy, which behaves
+  exactly as before.
+
+  ⭐ **The `_meta` marker is the discriminator, not the header and not the
+  method.** Legacy clients have sent `MCP-Protocol-Version` since `2025-06-18`,
+  and most methods exist in both eras — the per-request metadata is the only
+  thing that appears in one era and not the other.
+
+  On the modern path there is no session: none is looked up, none is minted,
+  and an `Mcp-Session-Id` a client sends anyway is ignored rather than
+  rejected. `GET` and `DELETE` answer `405` to a caller naming a modern
+  revision, since the standalone SSE stream and session termination were both
+  removed there.
+
+  **Keeping legacy is deliberate.** Legacy clients have no fall-forward
+  mechanism: dropping the era would strand every client that has not migrated
+  with nothing but an error string to act on. The cost is one branch at the
+  transport edge — everything below it stays era-agnostic, with the single
+  exception noted under *Changed*.
+
+- **Header validation on the modern path.** `Mcp-Method` and, for
+  `tools/call` / `resources/read` / `prompts/get`, `Mcp-Name` are required and
+  checked against the request body; so is `MCP-Protocol-Version` against the
+  `_meta` version. A mismatch is `400` with `-32020`.
+
+  Not pedantry: the transport mirrors body fields into headers so gateways can
+  route without parsing JSON, and that is only safe while the two agree — a
+  load balancer routing on the header while the server executes the body is a
+  confused deputy. `Mcp-Name` values arriving in the Base64 sentinel form
+  (`=?base64?…?=`, which clients must use for anything that would not survive
+  as a plain ASCII header) are decoded before comparison.
+
+  Two more status codes are now normative and implemented: an unknown method is
+  `404` with a `-32601` body, and an unsupported version is `400` with `-32022`
+  carrying `supported` and `requested`. Both are what a client reads to tell a
+  modern MCP endpoint from a legacy one, which is why the JSON-RPC body matters
+  as much as the status.
+
 - **`server/discover`.** The `2026-07-28` revision's replacement for the
   `initialize` handshake, and a **MUST** for servers on that revision: same
   three answers — supported versions, capabilities, identity — but as an
@@ -128,6 +170,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   parameter.
 
 ### Changed
+
+- ⚠ **`PROTOCOL_VERSIONS` now defaults to `["2026-07-28", "2025-11-25",
+  "2025-06-18"]`.** One list across both eras — a version belongs to exactly
+  one, and splitting the setting would let a project configure a
+  contradiction. `server/discover` reports the whole list; each era validates
+  against its own half.
+
+  ⚠ **`initialize` never offers a modern version**, whatever sits at the head
+  of the list. It is a legacy-era method — it does not exist in `2026-07-28` —
+  so answering a handshake with that revision would hand the client a protocol
+  whose very next request this transport would refuse.
+
+- ⚠ **`resources/read` answers a missing URI by era**: `-32002` for a legacy
+  caller, `-32602` for a modern one. The only place the two eras disagree on a
+  wire value, and it cannot be collapsed — the revision that retired `-32002`
+  also told clients to keep *recognising* it, so neither value is safe to send
+  to both.
 
 - ⚠ **Breaking: JSON-RPC error codes now match the MCP spec.**
 

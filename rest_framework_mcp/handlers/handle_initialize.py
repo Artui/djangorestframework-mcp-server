@@ -28,8 +28,13 @@ def handle_initialize(
             message="initialize params must be an object",
         )
 
+    # ⚠ **Legacy versions only.** ``initialize`` is a legacy-era method — it
+    # does not exist in ``2026-07-28`` — so offering the newest configured
+    # version here would answer a handshake with a revision in which handshakes
+    # were removed, and the client would then speak a protocol the transport
+    # would refuse on its next request.
     parsed: InitializeParams = InitializeParams.from_payload(params)
-    supported: tuple[str, ...] = context.config.protocol_versions
+    supported: tuple[str, ...] = context.config.legacy_protocol_versions
     chosen: str = parsed.protocol_version if parsed.protocol_version in supported else supported[0]
 
     # The owning server's identity wins: it is resolved once in

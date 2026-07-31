@@ -5,7 +5,11 @@ from typing import Any
 from django.conf import settings as django_settings
 
 DEFAULTS: dict[str, Any] = {
-    "PROTOCOL_VERSIONS": ["2025-11-25", "2025-06-18"],
+    # Every revision this server speaks, most-preferred first, across both
+    # eras. ``2026-07-28`` is *modern* (per-request metadata, no session);
+    # the rest are *legacy* (``initialize`` handshake). One list, because a
+    # version belongs to exactly one era — see ``MODERN_PROTOCOL_VERSIONS``.
+    "PROTOCOL_VERSIONS": ["2026-07-28", "2025-11-25", "2025-06-18"],
     # When True (the spec-compliant default), non-``initialize`` requests must
     # carry an ``MCP-Protocol-Version`` header naming a supported version, or
     # they are rejected with HTTP 400. Some real-world clients omit the header

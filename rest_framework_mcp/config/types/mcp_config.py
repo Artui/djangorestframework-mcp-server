@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from rest_framework_mcp.constants import OutputFormat
+from rest_framework_mcp.constants import MODERN_PROTOCOL_VERSIONS, OutputFormat
 
 
 @dataclass(frozen=True)
@@ -29,8 +29,12 @@ class MCPConfig:
     """
 
     protocol_versions: tuple[str, ...]
-    """Supported MCP protocol versions, most-preferred first. ``initialize``
-    echoes the client's version when supported, else offers ``[0]``."""
+    """Supported MCP protocol versions, most-preferred first, across both eras.
+
+    What ``server/discover`` reports as ``supportedVersions``. The two eras are
+    served from this one list rather than two, because a version belongs to
+    exactly one era and splitting the setting would let a project configure a
+    contradiction."""
 
     require_protocol_version_header: bool
     """Whether a non-``initialize`` request must carry a supported
@@ -123,6 +127,24 @@ class MCPConfig:
     whatever a selector just produced, and caching live data by default would
     serve yesterday's invoice. A genuinely static resource — an interactive
     view, a rendered document — sets ``cache_ttl_ms=`` at registration."""
+
+    @property
+    def modern_protocol_versions(self) -> tuple[str, ...]:
+        """The configured versions that carry per-request metadata."""
+        return tuple(v for v in self.protocol_versions if v in MODERN_PROTOCOL_VERSIONS)
+
+    @property
+    def legacy_protocol_versions(self) -> tuple[str, ...]:
+        """The configured versions that negotiate through ``initialize``.
+
+        ⚠ Not interchangeable with :attr:`protocol_versions`. ``initialize``
+        falls back to the first *supported* version when a client omits the
+        header, and once a modern revision sits at the head of the list that
+        fallback would answer a legacy handshake with a version in which the
+        handshake does not exist. Legacy negotiation reads this; modern
+        validation reads :attr:`modern_protocol_versions`.
+        """
+        return tuple(v for v in self.protocol_versions if v not in MODERN_PROTOCOL_VERSIONS)
 
 
 __all__ = ["MCPConfig"]

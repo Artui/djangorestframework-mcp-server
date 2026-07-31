@@ -17,10 +17,12 @@ from rest_framework_services.types.service_spec import ServiceSpec
 from rest_framework_mcp.auth.rate_limits.types.mcp_rate_limit import MCPRateLimit
 from rest_framework_mcp.auth.types.token_info import TokenInfo
 from rest_framework_mcp.constants import (
+    MODERN_PROTOCOL_VERSIONS,
     RESERVED_POOL_SEEDS,
     RESERVED_POST_FETCH_KEYS,
     ArgumentBinding,
     CacheScope,
+    JsonRpcErrorCode,
     UnknownArguments,
 )
 from rest_framework_mcp.output.enforce_result_bytes import enforce_result_bytes
@@ -401,6 +403,21 @@ def resolve_bound(override: Any, default: Any) -> Any:
     inexpressible.
     """
     return default if isinstance(override, UnsetType) else override
+
+
+def resource_not_found_code(protocol_version: str) -> JsonRpcErrorCode:
+    """Which code a missing ``resources/read`` target gets, by era.
+
+    The one place the two eras genuinely disagree on a wire value. ``-32002``
+    is what ``2025-11-25`` names for "Resource not found"; ``2026-07-28``
+    retired it in favour of ``-32602`` while telling clients to keep
+    *recognising* the old one — so a dual-era server has to answer each caller
+    in the vocabulary that caller reads, and neither value is safe to emit to
+    both.
+    """
+    if protocol_version in MODERN_PROTOCOL_VERSIONS:
+        return JsonRpcErrorCode.INVALID_PARAMS
+    return JsonRpcErrorCode.RESOURCE_NOT_FOUND
 
 
 def catalog_cache_hints(*, ttl_ms: int, filtered_by_permissions: bool) -> dict[str, Any]:

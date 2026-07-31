@@ -23,13 +23,19 @@ def negotiate_protocol_version(
     A *present-but-unsupported* header is always rejected, regardless of the
     flag — silently downgrading would mask a real version mismatch.
     """
-    resolved: str | None = resolve_protocol_version(header_value, config.protocol_versions)
+    # ⚠ **Legacy versions only.** This function serves the handshake era; the
+    # modern path validates its version out of the request's own ``_meta``
+    # (see ``validate_modern_request``). Accepting a modern version here would
+    # let a client claim ``2026-07-28`` in a header while sending a legacy
+    # body — a request neither era's rules describe.
+    supported: tuple[str, ...] = config.legacy_protocol_versions
+    resolved: str | None = resolve_protocol_version(header_value, supported)
     if resolved is not None:
         return resolved
     if is_sessionless:
-        return config.protocol_versions[0]
+        return supported[0]
     if not header_value and not config.require_protocol_version_header:
-        return config.protocol_versions[0]
+        return supported[0]
     return None
 
 
