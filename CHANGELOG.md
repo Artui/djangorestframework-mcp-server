@@ -7,21 +7,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-### Changed
+## [0.24.0] — 2026-07-31
 
-- **Requires `djangorestframework-services>=0.32,<0.33`.** The previous pin
-  (`<0.31`) excluded 0.31 outright, so a project on the current sister release
-  could not install this package at all.
+This release makes the package **dual-era**: one endpoint that serves both the
+`2026-07-28` stateless revision and the `2025-11-25` / `2025-06-18` handshake
+era, with the request itself deciding which. Everything the new revision put in
+place of the machinery it removed is here — `server/discover` for the retired
+handshake, `subscriptions/listen` for the retired standalone SSE stream, tasks
+for work that outlives a request, and elicitation for the retired
+server-initiated request.
 
-  Two releases are picked up. 0.31 adds a consumer-owned `metadata` mapping to
-  the specs, which the framework never reads and nothing here depends on yet.
-  0.32 adds `AdditionalInputRequired` — the exception a service raises to say
-  what input it still needs, which the MCP elicitation surface will build on —
-  and fixes an `AttributeError` that made **every OPTIONS request** to a
-  spec-backed viewset an unhandled 500. ⚠ That one is worth noting even though
-  this package does not mount those viewsets: a CORS preflight is an OPTIONS
-  request, so any project pairing this package with `ServiceViewSet` over HTTP
-  was exposed.
+It also closes the gaps the same audit found in the era already being served:
+non-text content, argument completion, icons, streaming progress, and four
+JSON-RPC error codes that did not match the spec.
+
+⚠ **Read *Changed* before upgrading.** The error-code corrections change wire
+values existing clients may be matching on — in particular a permission denial,
+which was being answered with the spec's "resource not found" code.
 
 ### Added
 
@@ -120,8 +122,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   ⚠ **`resources/subscribe` is not the legacy twin of this method — it is
   *replaced* by it.** The GA schema folds resource subscriptions into a
   `resourceSubscriptions` field of the `subscriptions/listen` filter, alongside
-  the list-changed kinds. The legacy-era method is a separate, still-outstanding
-  piece of work; this release covers the modern era only.
+  the list-changed kinds, and says so in as many words: *"replaces the former
+  `resources/subscribe` RPC"*. The legacy RPC is **not** implemented — see
+  *Fixed*, which is where that decision and the advertisement it corrected are
+  recorded.
 
   What the shape buys, and what it costs:
 
@@ -458,12 +462,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
-- ⚠ **The `djangorestframework-services` floor moves to `>=0.30.0,<0.31`.**
-  Progress needed a channel from a service back to the transport, and there was
-  none: `dispatch_spec` took a fixed argument list and the reserved pool-seed
-  set is owned upstream. 0.30 adds the `progress` seed. One consequence lands
-  here: **a `UrlKwarg` or `QueryParam` named `progress` is now refused at
+- ⚠ **The `djangorestframework-services` floor moves to `>=0.32,<0.33`,** from
+  `>=0.29.0,<0.30`. Two of the sister releases it crosses are load-bearing here.
+
+  **0.30** added the `progress` kwarg-pool seed, without which a service had no
+  channel back to the transport at all: `dispatch_spec` took a fixed argument
+  list and the reserved pool-seed set is owned upstream. One consequence lands
+  here — **a `UrlKwarg` or `QueryParam` named `progress` is now refused at
   registration**, since the name is reserved.
+
+  **0.32** added `AdditionalInputRequired`, the exception a service raises to
+  say what input it still needs, which the elicitation surface above is built
+  on. It also fixes an `AttributeError` that made **every OPTIONS request** to a
+  spec-backed viewset an unhandled 500 — worth knowing even though this package
+  mounts no viewsets, because a CORS preflight is an OPTIONS request, so any
+  project pairing this package with `ServiceViewSet` over HTTP was exposed.
+
+  (0.31, in between, adds only a consumer-owned `metadata` mapping on the specs,
+  which nothing here reads.)
 
 - ⚠ **`PROTOCOL_VERSIONS` now defaults to `["2026-07-28", "2025-11-25",
   "2025-06-18"]`.** One list across both eras — a version belongs to exactly
@@ -592,6 +608,30 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   That asymmetry *was* the bug — a developer who learned the permissive sibling
   naturally wrote the same thing here — so the fix removes the inconsistency
   rather than documenting it.
+
+- **A legacy client was promised push notifications it could never receive.**
+  `initialize` advertised `resources.subscribe` and all three `listChanged`
+  flags whenever a subscription broker was configured — but every one of those
+  notifications leaves through `subscriptions/listen`, which is a modern-only
+  method. A legacy client acting on `subscribe` sent `resources/subscribe` and
+  got `-32601`; one acting on a `listChanged` got something worse, because
+  nothing answered at all and it simply waited. The same handshake also
+  advertised `extensions`, which is not a field on the legacy
+  `ServerCapabilities` and names a tasks extension a legacy client cannot
+  declare per request and so can never reach.
+
+  The advertised capabilities now follow **the caller's era**. `initialize` is a
+  legacy method by definition, so it never offers either; `server/discover`,
+  which both eras may call, answers according to the version the caller
+  declared. Nothing changes for a modern client, and the registry-presence half
+  is untouched — a legacy client is still told it has resources to read.
+
+  ⛔ **`resources/subscribe` is deliberately not implemented**, which is why the
+  fix is the advertisement. It is optional in `2025-11-25` and gone from
+  `2026-07-28`, where the schema says `SubscriptionFilter.resourceSubscriptions`
+  *"replaces the former `resources/subscribe` RPC"* — and that is implemented.
+  Building the legacy RPC would mean a cross-process session→URI registry
+  serving only the era being carried for compatibility rather than grown.
 
 ## [0.23.0] — 2026-07-30
 
@@ -2789,7 +2829,8 @@ Pinned to `djangorestframework-services==0.6.0`.
 - 100% line + branch coverage enforced by pytest (**451 tests** at
   release).
 
-[Unreleased]: https://github.com/Artui/djangorestframework-mcp-server/compare/v0.23.0...HEAD
+[Unreleased]: https://github.com/Artui/djangorestframework-mcp-server/compare/v0.24.0...HEAD
+[0.24.0]: https://github.com/Artui/djangorestframework-mcp-server/compare/v0.23.0...v0.24.0
 [0.23.0]: https://github.com/Artui/djangorestframework-mcp-server/compare/v0.22.0...v0.23.0
 [0.22.0]: https://github.com/Artui/djangorestframework-mcp-server/compare/v0.21.0...v0.22.0
 [0.21.0]: https://github.com/Artui/djangorestframework-mcp-server/compare/v0.20.0...v0.21.0

@@ -200,7 +200,7 @@ def test_a_server_that_runs_no_tasks_advertises_nothing() -> None:
     bare.register_service_tool(
         name="x", description="x", spec=ServiceSpec(service=slow_service, atomic=False)
     )
-    assert build_capabilities(context(bare)).extensions is None
+    assert build_capabilities(context(bare), modern=True).extensions is None
 
 
 def test_a_store_without_an_executor_does_not_advertise() -> None:
@@ -212,7 +212,7 @@ def test_a_store_without_an_executor_does_not_advertise() -> None:
     half.register_service_tool(
         name="x", description="x", spec=ServiceSpec(service=slow_service, atomic=False)
     )
-    assert build_capabilities(context(half)).extensions is None
+    assert build_capabilities(context(half), modern=True).extensions is None
 
 
 def test_supplying_an_executor_is_enough_to_get_a_store() -> None:

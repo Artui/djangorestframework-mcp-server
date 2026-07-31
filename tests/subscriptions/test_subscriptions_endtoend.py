@@ -299,5 +299,5 @@ async def test_a_server_without_a_broker_advertises_no_subscription_support() ->
     from rest_framework_mcp.handlers.handle_initialize import build_capabilities
     from tests.subscriptions.test_subscription_core import _context, _server
 
-    caps = build_capabilities(_context(_server()))
+    caps = build_capabilities(_context(_server()), modern=True)
     assert caps.resources == {}

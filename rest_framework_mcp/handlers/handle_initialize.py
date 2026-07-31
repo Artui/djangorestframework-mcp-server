@@ -61,13 +61,17 @@ def handle_initialize(
         server_info = build_server_info()
     return InitializeResult(
         protocol_version=chosen,
-        capabilities=build_capabilities(context),
+        # ⚠ ``modern=False`` unconditionally, and not from
+        # ``context.protocol_version``: reaching this handler *is* the proof.
+        # ``initialize`` does not exist in ``2026-07-28``, so whoever sent it is
+        # a legacy client whatever any header says.
+        capabilities=build_capabilities(context, modern=False),
         server_info=server_info,
         instructions=context.instructions,
     )
 
 
-def build_capabilities(context: MCPCallContext) -> ServerCapabilities:
+def build_capabilities(context: MCPCallContext, *, modern: bool) -> ServerCapabilities:
     """What this server can answer, from its registries.
 
     One rule for all four: advertise a capability only when there is something
@@ -84,23 +88,42 @@ def build_capabilities(context: MCPCallContext) -> ServerCapabilities:
     Making them per-caller would tell an under-privileged client the method does
     not exist, rather than that it may not use it.
 
-    Shared with ``server/discover``, which reports the identical bundle — the
-    two methods differ in how they are reached, not in what this server can do.
+    Shared with ``server/discover``, which reports the same bundle for a caller
+    in the same era — hence ``modern``, which is **not** a stylistic branch. Two
+    of the things advertised here can only be *reached* by a modern client, and
+    telling a legacy one about them is a promise nothing on its path can keep:
+
+    - **Every push flag.** All three ``listChanged`` fields and ``subscribe``
+      describe notifications that leave through ``subscriptions/listen``, which
+      is a modern-only method. A legacy client acting on ``subscribe`` sends
+      ``resources/subscribe`` and gets ``-32601``; one acting on a
+      ``listChanged`` gets something worse, because nothing answers at all and
+      it simply waits. ⛔ ``resources/subscribe`` is deliberately not built: it
+      is optional in ``2025-11-25``, absent from ``2026-07-28`` (the schema says
+      ``SubscriptionFilter.resourceUris`` *"replaces the former
+      resources/subscribe RPC"*), and implementing it would mean a cross-process
+      session→URI registry serving only the era being carried for compatibility.
+    - **``extensions``.** Not a field on the legacy ``ServerCapabilities`` at
+      all — extension negotiation arrived with ``2026-07-28``. The tasks
+      extension is unreachable for a legacy client anyway, since it must be
+      declared per request and a legacy client declares nothing per request.
+
+    ⚠ The rule these follow is the same one the registries follow: advertise a
+    capability only when there is something behind it *for this caller*. The
+    era is part of "behind it".
     """
     extensions: dict[str, Any] = {}
-    if context.tasks is not None and context.task_executor is not None:
+    if modern and context.tasks is not None and context.task_executor is not None:
         # ⚠ Both, or neither. A store without an executor can create a task
         # nothing will ever run, and an executor without a store has nothing to
         # hand over — either way the promise is false, and a client that
         # believes it will wait for a result that never comes.
         extensions[TASKS_EXTENSION_ID] = {}
 
-    # ⚠ Subscription-related fields are advertised only with a broker behind
-    # them. Each is a promise that a particular notification will arrive, and
-    # without somewhere to fan out from none of them ever would — the same rule
-    # the registries follow. Without this the feature was undiscoverable: a
-    # client had to try ``subscriptions/listen`` and read the grant.
-    pushes: bool = context.subscriptions is not None
+    # A broker to fan out from, *and* a caller who can open a stream to it.
+    # Without the first nothing would ever be published; without the second
+    # there is no method to publish it down.
+    pushes: bool = modern and context.subscriptions is not None
     return ServerCapabilities(
         tools=_capability(len(context.tools) > 0, listChanged=pushes),
         resources=_capability(len(context.resources) > 0, listChanged=pushes, subscribe=pushes),
