@@ -53,3 +53,18 @@ JSON-RPC envelope, MCP message types, and error codes.
 ## Completion
 
 ::: rest_framework_mcp.protocol.types.completion.Completion
+
+## Tasks
+
+The `io.modelcontextprotocol/tasks` extension. See
+[Long-running work](../concepts.md#long-running-work-tasks) for how to wire it
+up; these are the types.
+
+::: rest_framework_mcp.protocol.types.task.Task
+::: rest_framework_mcp.constants.TaskStatus
+::: rest_framework_mcp.constants.TaskPolicy
+::: rest_framework_mcp.tasks.types.task_store.TaskStore
+::: rest_framework_mcp.tasks.types.task_executor.TaskExecutor
+::: rest_framework_mcp.tasks.types.task_record.TaskRecord
+::: rest_framework_mcp.tasks.django_cache_task_store.DjangoCacheTaskStore
+::: rest_framework_mcp.tasks.in_memory_task_store.InMemoryTaskStore

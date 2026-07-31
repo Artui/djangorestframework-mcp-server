@@ -9,6 +9,88 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **Tasks — durable handles for work that outlives its request.** The
+  `io.modelcontextprotocol/tasks` extension. A task-eligible tool answers
+  `tools/call` with a handle instead of a result; the work runs in a queue
+  worker and the client polls `tasks/get` until the status is terminal.
+  Modern-era only, since the client declares support on every request.
+
+  Two arguments to wire it up. The executor seam is one method taking one
+  string, so Celery, RQ, Dramatiq or a thread pool all satisfy it and none of
+  them is imported here:
+
+  ```python
+  @shared_task
+  def run_mcp_task(task_id: str) -> None:
+      server.run_task(task_id)
+
+  class CeleryExecutor:
+      def enqueue(self, task_id: str) -> None:
+          run_mcp_task.delay(task_id)
+
+  server = MCPServer(name="invoices", task_executor=CeleryExecutor())
+  ```
+
+  Passing `task_executor=` also builds a `DjangoCacheTaskStore` namespaced to
+  the server; `task_store=` overrides it. ⚠ `InMemoryTaskStore` is for tests and
+  `runserver` only — a task is created on a web worker and finished somewhere
+  else, so an in-process store writes the result where the poll cannot see it
+  and every poll answers "unknown task".
+
+  Which tools are eligible is declared at registration, because the extension
+  makes the **server** the sole decider and gives the client no way to ask:
+
+  | `task_policy` | Declaring client | Non-declaring client |
+  |---|---|---|
+  | `FORBIDDEN` (default) | inline | inline |
+  | `OPTIONAL` | task handle | inline |
+  | `REQUIRED` | task handle | `-32021` |
+
+  `FORBIDDEN` is the default, so **every tool registered before this behaves
+  exactly as it did**.
+
+  Also lands `tasks/get` / `tasks/update` / `tasks/cancel`, `Mcp-Name` mirroring
+  `params.taskId` on all three, and an `extensions` field on
+  `ServerCapabilities` — advertised only when the server has both a store and an
+  executor, since half the machinery hands out handles nothing will ever run.
+
+  ⚠ **The extension document's error code is not the one emitted.** It prints
+  `-32003` while annotating it `MISSING_REQUIRED_CLIENT_CAPABILITY` — the
+  constant the ratified core schema allocates as **`-32021`**. It is a carry-over
+  from when tasks were part of the core protocol, and `-32003` now sits inside
+  the `-32000`–`-32019` band the core spec reserves for implementations and
+  promises never to define codes in. It is also one of the two codes this
+  package burned, so a client from an older release would read it as "not
+  found". `-32021` is emitted.
+
+  A few behaviours worth knowing, each of which is a spec requirement or a race
+  that would otherwise bite:
+
+  - **Permissions run twice, rate limits once.** The permission stack runs
+    before the task is created, so a denied call never reaches the queue and
+    still gets its `403`; it runs again in the worker against a token rebuilt
+    from the stored scopes. Rate limits are charged only at creation — consuming
+    a quota is a side effect, and charging it again on replay would halve every
+    configured limit.
+  - **A tool error completes the task.** `failed` is for the task machinery
+    breaking. A `ServiceError` produces a well-formed result carrying
+    `isError: true`, which is a task that finished — the spec says so in as many
+    words, and getting it backwards would hide every tool error behind a status
+    the client reads as "the server broke".
+  - **There is no `tasks/list`.** Deliberate in the spec: without sessions there
+    is nothing to scope a listing by. Ids carry 32 bytes of entropy and
+    ownership is checked on top; an id belonging to another principal answers
+    identically to one that never existed, so no endpoint becomes an oracle for
+    which ids are real.
+  - **A queue that is down fails the task, not the request.** The record is
+    durable before `enqueue` is called, so a broker failure comes back as a
+    handle already in `failed` with the reason in `statusMessage`, rather than
+    an error that leaves the client with no handle and a record stuck in
+    `working`.
+  - **Redelivery runs the work once.** Tasks are claimed as the worker starts.
+    Best-effort rather than a lock — an idempotent service is still worth
+    writing.
+
 - **Streaming progress for long-running tools.** A service or selector declares
   `progress` and reports as it goes; the client sees it happen:
 

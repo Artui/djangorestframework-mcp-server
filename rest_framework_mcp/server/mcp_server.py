@@ -35,6 +35,7 @@ from rest_framework_mcp.constants import (
     ArgumentBinding,
     OutputFormat,
     ResourceEncoding,
+    TaskPolicy,
     ToolContentKind,
     UnknownArguments,
 )
@@ -69,6 +70,12 @@ from rest_framework_mcp.server.utils import (
     check_tool_description_present,
     check_tool_permissions_declared,
 )
+from rest_framework_mcp.tasks.build_worker_token import build_worker_token
+from rest_framework_mcp.tasks.django_cache_task_store import DjangoCacheTaskStore
+from rest_framework_mcp.tasks.run_task import run_task as _run_task
+from rest_framework_mcp.tasks.types.task_executor import TaskExecutor
+from rest_framework_mcp.tasks.types.task_record import TaskRecord
+from rest_framework_mcp.tasks.types.task_store import TaskStore
 from rest_framework_mcp.transport.async_streamable_http_viewset import (
     ASYNC_STREAMABLE_HTTP_ACTION_MAP,
     AsyncStreamableHttpViewSet,
@@ -135,6 +142,8 @@ class MCPServer:
         session_store: SessionStore | None = None,
         sse_broker: SSEBroker | None = None,
         sse_replay_buffer: SSEReplayBuffer | None = None,
+        task_store: TaskStore | None | UnsetType = UNSET,
+        task_executor: TaskExecutor | None = None,
         url_namespace: str = "mcp",
     ) -> None:
         check_removed_settings()
@@ -220,6 +229,25 @@ class MCPServer:
         # (existing wire shape, no ``id:`` lines, ``Last-Event-ID``
         # silently ignored). Set to enable per-session bounded replay.
         self._sse_replay_buffer: SSEReplayBuffer | None = sse_replay_buffer
+        # ⚠ Tasks are **off** unless both halves are present, and the store's
+        # default is deliberately not "always build one": a server with a store
+        # but nowhere to run the work would advertise the extension, hand out
+        # handles, and never finish any of them. So the executor is the switch
+        # — supply one and a cache-backed store appears (namespaced like the
+        # session store, for the same reason), supply neither and nothing about
+        # this server changes.
+        #
+        # ``task_store=None`` is distinguishable from "not passed", which is
+        # what ``UNSET`` buys: passing ``None`` alongside an executor is a way
+        # to say "I will wire the store later", not a request for the default.
+        self._task_executor: TaskExecutor | None = task_executor
+        self._task_store: TaskStore | None
+        if not isinstance(task_store, UnsetType):
+            self._task_store = task_store
+        elif task_executor is not None:
+            self._task_store = DjangoCacheTaskStore(namespace=self.name)
+        else:
+            self._task_store = None
 
     # ----- imperative registration -----
 
@@ -235,6 +263,7 @@ class MCPServer:
         display_description: str | None = None,
         output_format: OutputFormat | str = OutputFormat.JSON,
         content_kind: ToolContentKind = ToolContentKind.TEXT,
+        task_policy: TaskPolicy = TaskPolicy.FORBIDDEN,
         content_mime_type: str | None = None,
         permissions: list[Any] | None = None,
         rate_limits: list[Any] | None = None,
@@ -300,6 +329,7 @@ class MCPServer:
             display_description=display_description,
             output_format=OutputFormat.coerce(output_format),
             content_kind=content_kind,
+            task_policy=task_policy,
             content_mime_type=content_mime_type,
             permissions=check_permissions_shape(f"MCP binding {name!r}", permissions),
             rate_limits=tuple(rate_limits or ()),
@@ -338,6 +368,7 @@ class MCPServer:
         input_serializer: type | None = None,
         output_format: OutputFormat | str = OutputFormat.JSON,
         content_kind: ToolContentKind = ToolContentKind.TEXT,
+        task_policy: TaskPolicy = TaskPolicy.FORBIDDEN,
         content_mime_type: str | None = None,
         permissions: list[Any] | None = None,
         rate_limits: list[Any] | None = None,
@@ -419,6 +450,7 @@ class MCPServer:
             input_serializer=input_serializer,
             output_format=OutputFormat.coerce(output_format),
             content_kind=content_kind,
+            task_policy=task_policy,
             content_mime_type=content_mime_type,
             permissions=check_permissions_shape(f"MCP binding {name!r}", permissions),
             rate_limits=tuple(rate_limits or ()),
@@ -542,6 +574,7 @@ class MCPServer:
         output_all: bool = False,
         output_format: OutputFormat | str = OutputFormat.JSON,
         content_kind: ToolContentKind = ToolContentKind.TEXT,
+        task_policy: TaskPolicy = TaskPolicy.FORBIDDEN,
         content_mime_type: str | None = None,
         permissions: list[Any] | None = None,
         rate_limits: list[Any] | None = None,
@@ -610,6 +643,7 @@ class MCPServer:
             output_all=output_all,
             output_format=OutputFormat.coerce(output_format),
             content_kind=content_kind,
+            task_policy=task_policy,
             content_mime_type=content_mime_type,
             permissions=check_permissions_shape(f"MCP binding {name!r}", permissions),
             rate_limits=tuple(rate_limits or ()),
@@ -801,7 +835,83 @@ class MCPServer:
             server_info=self._server_info,
             instructions=self.description,
             config=self._config,
+            tasks=self._task_store,
+            task_executor=self._task_executor,
         )
+
+    def run_task(self, task_id: str) -> None:
+        """Execute a queued task. **This is what a worker calls.**
+
+        The other end of ``task_executor.enqueue``, and the whole public
+        surface of the worker side::
+
+            @shared_task
+            def run_mcp_task(task_id: str) -> None:
+                my_server.run_task(task_id)
+
+        Everything it needs comes out of the store: the tool, the arguments,
+        and the authorization context to re-check them under. Nothing is
+        returned — the client learns the outcome by polling ``tasks/get``.
+
+        Safe to call for an id that is unknown, already claimed or already
+        finished: each is a no-op. That matters because queues deliver at least
+        once, and a retried delivery must not run a mutation twice.
+
+        Raises if the server has no task store, because a worker calling this
+        on a server that cannot run tasks is a wiring mistake that would
+        otherwise fail as silence — the job would "succeed" and the client
+        would poll a handle forever.
+        """
+        store: TaskStore | None = self._task_store
+        if store is None:
+            raise ImproperlyConfigured(
+                f"MCPServer {self.name!r} has no task store, so run_task() has nothing "
+                "to read. Pass task_executor= (which builds a default store) or an "
+                "explicit task_store= when constructing the server."
+            )
+        _run_task(store, task_id, context_factory=self._worker_context)
+
+    def _worker_context(self, record: TaskRecord) -> MCPCallContext:
+        """The context a task runs under, off the request path.
+
+        Rebuilt rather than remembered — there is no request left to carry, and
+        a serialised one would be a stale copy of a live object. The identity
+        half comes back out of the record (see ``build_worker_token``); the
+        registries, config and stores come from this server, which is why the
+        factory lives here and not in the task module.
+
+        ``client_capabilities`` is deliberately empty: the worker is not
+        serving a client, and a task must never create another task. An empty
+        declaration makes that structural rather than a rule someone has to
+        remember — ``maybe_create_task`` refuses, so a ``REQUIRED`` binding
+        reached this way fails visibly instead of queueing itself forever.
+        """
+        http_request = HttpRequest()
+        http_request.method = "POST"
+        token: TokenInfo = build_worker_token(record)
+        http_request.user = token.user
+        return MCPCallContext(
+            http_request=http_request,
+            token=token,
+            tools=self._tools,
+            resources=self._resources,
+            prompts=self._prompts,
+            protocol_version=self._config.protocol_versions[0],
+            server_info=self._server_info,
+            instructions=self.description,
+            config=self._config,
+            tasks=self._task_store,
+            task_executor=self._task_executor,
+            enforce_rate_limits=False,
+        )
+
+    @property
+    def task_store(self) -> TaskStore | None:
+        return self._task_store
+
+    @property
+    def task_executor(self) -> TaskExecutor | None:
+        return self._task_executor
 
     def register_resource(
         self,
@@ -1015,6 +1125,7 @@ class MCPServer:
         icons: tuple[Icon, ...] = (),
         output_format: OutputFormat | str = OutputFormat.JSON,
         content_kind: ToolContentKind = ToolContentKind.TEXT,
+        task_policy: TaskPolicy = TaskPolicy.FORBIDDEN,
         content_mime_type: str | None = None,
         permissions: list[Any] | None = None,
         rate_limits: list[Any] | None = None,
@@ -1065,6 +1176,7 @@ class MCPServer:
                 icons=icons,
                 output_format=output_format,
                 content_kind=content_kind,
+                task_policy=task_policy,
                 content_mime_type=content_mime_type,
                 permissions=permissions,
                 rate_limits=rate_limits,
@@ -1097,6 +1209,7 @@ class MCPServer:
         icons: tuple[Icon, ...] = (),
         output_format: OutputFormat | str = OutputFormat.JSON,
         content_kind: ToolContentKind = ToolContentKind.TEXT,
+        task_policy: TaskPolicy = TaskPolicy.FORBIDDEN,
         content_mime_type: str | None = None,
         permissions: list[Any] | None = None,
         rate_limits: list[Any] | None = None,
@@ -1154,6 +1267,7 @@ class MCPServer:
                 input_serializer=input_serializer,
                 output_format=output_format,
                 content_kind=content_kind,
+                task_policy=task_policy,
                 content_mime_type=content_mime_type,
                 permissions=permissions,
                 rate_limits=rate_limits,
@@ -1374,6 +1488,8 @@ class MCPServer:
             prompts=self._prompts,
             auth_backend=self._auth_backend,
             session_store=self._session_store,
+            task_store=self._task_store,
+            task_executor=self._task_executor,
             server_info=self._server_info,
             instructions=self.description,
             config=self._config,
@@ -1398,6 +1514,8 @@ class MCPServer:
             prompts=self._prompts,
             auth_backend=self._auth_backend,
             session_store=self._session_store,
+            task_store=self._task_store,
+            task_executor=self._task_executor,
             sse_broker=self._sse_broker,
             sse_replay_buffer=self._sse_replay_buffer,
             server_info=self._server_info,

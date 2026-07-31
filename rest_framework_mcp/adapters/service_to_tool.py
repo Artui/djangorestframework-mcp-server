@@ -16,6 +16,7 @@ from rest_framework_mcp.auth.permissions.wrap_spec_permissions import wrap_spec_
 from rest_framework_mcp.constants import (
     ArgumentBinding,
     OutputFormat,
+    TaskPolicy,
     ToolContentKind,
     UnknownArguments,
 )
@@ -33,6 +34,7 @@ def service_spec_to_tool(
     title: str | None = None,
     icons: tuple[Icon, ...] = (),
     content_kind: ToolContentKind = ToolContentKind.TEXT,
+    task_policy: TaskPolicy = TaskPolicy.FORBIDDEN,
     content_mime_type: str | None = None,
     display_name: str | None = None,
     display_description: str | None = None,
@@ -95,6 +97,7 @@ def service_spec_to_tool(
         title=title,
         icons=icons,
         content_kind=content_kind,
+        task_policy=task_policy,
         content_mime_type=content_mime_type,
         display_name=display_name,
         display_description=display_description,

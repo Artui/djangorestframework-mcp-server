@@ -26,6 +26,8 @@ from rest_framework_mcp.constants import (
     JsonRpcErrorCode,
     OutputFormat,
     ResourceEncoding,
+    TaskPolicy,
+    TaskStatus,
     ToolContentKind,
     ToolKind,
     UIPermission,
@@ -53,6 +55,11 @@ from rest_framework_mcp.registry.types.ui_resource_meta import UIResourceMeta
 from rest_framework_mcp.registry.types.ui_tool_meta import UIToolMeta
 from rest_framework_mcp.registry.types.url_kwarg import UrlKwarg
 from rest_framework_mcp.server.mcp_server import MCPServer
+from rest_framework_mcp.tasks.django_cache_task_store import DjangoCacheTaskStore
+from rest_framework_mcp.tasks.in_memory_task_store import InMemoryTaskStore
+from rest_framework_mcp.tasks.types.task_executor import TaskExecutor
+from rest_framework_mcp.tasks.types.task_record import TaskRecord
+from rest_framework_mcp.tasks.types.task_store import TaskStore
 from rest_framework_mcp.transport.django_cache_session_store import DjangoCacheSessionStore
 from rest_framework_mcp.transport.in_memory_session_store import InMemorySessionStore
 from rest_framework_mcp.transport.in_memory_sse_broker import InMemorySSEBroker
@@ -102,6 +109,13 @@ __all__ = [
     "ServiceSpec",
     "ServiceView",
     "SessionStore",
+    "DjangoCacheTaskStore",
+    "InMemoryTaskStore",
+    "TaskExecutor",
+    "TaskPolicy",
+    "TaskRecord",
+    "TaskStatus",
+    "TaskStore",
     "TokenInfo",
     "ToolContentBlock",
     "ToolContentKind",

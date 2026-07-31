@@ -11,6 +11,7 @@ from rest_framework_services.types.service_spec import ServiceSpec
 from rest_framework_mcp.constants import (
     ArgumentBinding,
     OutputFormat,
+    TaskPolicy,
     ToolContentKind,
     UnknownArguments,
 )
@@ -155,6 +156,14 @@ class ToolBinding(Generic[InputT, ResultT, ExtraT]):
     """The media type for an ``IMAGE`` / ``AUDIO`` :attr:`content_kind`.
     Required for those and meaningless for the rest — a resource link
     carries its own ``mimeType`` per entry."""
+
+    task_policy: TaskPolicy = TaskPolicy.FORBIDDEN
+    """Whether calling this tool hands back a task handle instead of a result.
+
+    ``FORBIDDEN`` by default, so nothing changes for a tool registered before
+    tasks existed. See :class:`TaskPolicy` — and note that the choice lives
+    here, on the binding, because the extension makes the *server* the sole
+    decider and gives the client no way to ask."""
 
     def __post_init__(self) -> None:
         if self.include_output_schema is True and self.include_structured_content is False:

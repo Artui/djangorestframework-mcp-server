@@ -17,10 +17,12 @@ from rest_framework_mcp._compat.tracing import span
 from rest_framework_mcp.constants import JsonRpcErrorCode, OutputFormat
 from rest_framework_mcp.handlers.chain_tool_dispatch import dispatch_chain_tool
 from rest_framework_mcp.handlers.selector_tool_dispatch import dispatch_selector_tool
+from rest_framework_mcp.handlers.task_dispatch import maybe_create_task
 from rest_framework_mcp.handlers.types.context import MCPCallContext
 from rest_framework_mcp.handlers.utils import (
     check_permissions,
     consume_rate_limits,
+    effective_rate_limits,
     enforce_result_ceiling,
     resolve_bound,
     services_dispatch_policies,
@@ -70,6 +72,17 @@ def handle_tools_call(
     arguments_raw: Any = params.get("arguments") or {}
     if not isinstance(arguments_raw, dict):
         return JsonRpcError(JsonRpcErrorCode.INVALID_PARAMS, "'arguments' must be an object")
+
+    # Before dispatching anything: does this call get a task handle instead of
+    # a result? Placed after argument shape validation so a malformed call is
+    # still rejected outright rather than queued, and before dispatch because a
+    # task exists precisely so the dispatch does not happen here. ``None`` —
+    # the ordinary answer — falls through to the inline path unchanged.
+    as_task: dict[str, Any] | JsonRpcError | None = maybe_create_task(
+        binding, arguments_raw, context
+    )
+    if as_task is not None:
+        return as_task
 
     # The outbound size ceiling is applied once, here, rather than at each of
     # the three dispatch paths' several ``build_tool_result`` sites — one place
@@ -122,7 +135,7 @@ def _dispatch_tool_call(
             )
 
         retry_after: int | None = consume_rate_limits(
-            binding.rate_limits, context.http_request, context.token
+            effective_rate_limits(binding, context), context.http_request, context.token
         )
         if retry_after is not None:
             return JsonRpcError(

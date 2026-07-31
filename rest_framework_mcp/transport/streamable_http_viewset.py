@@ -9,6 +9,7 @@ from rest_framework.renderers import JSONRenderer
 from rest_framework.request import Request
 from rest_framework.viewsets import ViewSet
 
+from rest_framework_mcp.auth.principal_for_token import principal_for_token
 from rest_framework_mcp.auth.types.auth_backend import MCPAuthBackend
 from rest_framework_mcp.config.types.mcp_config import MCPConfig
 from rest_framework_mcp.constants import (
@@ -27,6 +28,8 @@ from rest_framework_mcp.protocol.types.json_rpc_response import JsonRpcResponse
 from rest_framework_mcp.registry.prompt_registry import PromptRegistry
 from rest_framework_mcp.registry.resource_registry import ResourceRegistry
 from rest_framework_mcp.registry.tool_registry import ToolRegistry
+from rest_framework_mcp.tasks.types.task_executor import TaskExecutor
+from rest_framework_mcp.tasks.types.task_store import TaskStore
 from rest_framework_mcp.transport.negotiate_protocol_version import negotiate_protocol_version
 from rest_framework_mcp.transport.origin_validation import is_origin_allowed
 from rest_framework_mcp.transport.types.request_metadata import RequestMetadata
@@ -35,7 +38,6 @@ from rest_framework_mcp.transport.utils import (
     insufficient_scope_challenge,
     is_permission_denial,
     modern_error_status,
-    principal_for_token,
 )
 from rest_framework_mcp.transport.validate_modern_request import validate_modern_request
 
@@ -91,6 +93,11 @@ class StreamableHttpViewSet(ViewSet):
     prompts: PromptRegistry | None = None
     auth_backend: MCPAuthBackend | None = None
     session_store: SessionStore | None = None
+    # Supplied by ``MCPServer.as_view(...)``, like every other collaborator —
+    # never looked up from module scope. ``None`` on both means this server
+    # runs no tasks, which is the default and changes nothing.
+    task_store: TaskStore | None = None
+    task_executor: TaskExecutor | None = None
     # Identity the owning server resolved at construction. Unlike the
     # collaborators above these stay optional at dispatch: a hand-wired viewset
     # with no server still answers ``initialize``, falling back to
@@ -194,6 +201,8 @@ class StreamableHttpViewSet(ViewSet):
             session_id=session_id,
             server_info=self.server_info,
             instructions=self.instructions,
+            tasks=self.task_store,
+            task_executor=self.task_executor,
             config=self._require_config(),
         )
 
@@ -279,8 +288,15 @@ class StreamableHttpViewSet(ViewSet):
             # No session exists to name. The field stays on the context because
             # the legacy path still populates it; modern spans simply omit it.
             session_id=None,
+            # ⚠ Modern path only. The legacy context leaves this empty, which is
+            # correct rather than a gap: a legacy client declared its
+            # capabilities once, at ``initialize``, and the spec forbids relying
+            # on a declaration that did not arrive *with the request*.
+            client_capabilities=metadata.client_capabilities,
             server_info=self.server_info,
             instructions=self.instructions,
+            tasks=self.task_store,
+            task_executor=self.task_executor,
             config=config,
         )
 

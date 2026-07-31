@@ -56,6 +56,8 @@ def build_mcp_config(
     require_list_pagination: bool | None = None,
     catalog_cache_ttl_ms: int | None = None,
     resource_cache_ttl_ms: int | None = None,
+    task_ttl_ms: int | None = None,
+    task_poll_interval_ms: int | None = None,
 ) -> MCPConfig:
     """Resolve a :class:`MCPConfig` from ``REST_FRAMEWORK_MCP``, applying overrides.
 
@@ -162,7 +164,29 @@ def build_mcp_config(
             if resource_cache_ttl_ms is not None
             else get_setting("RESOURCE_CACHE_TTL_MS")
         ),
+        # ⚠ ``None`` is meaningful for both — "no expiry" and "send no poll
+        # hint" — so neither can use the ``x if x is not None else setting``
+        # shape the scalars above use: passing ``None`` explicitly would be
+        # indistinguishable from not passing it, and would silently pick up the
+        # setting instead. The kwarg wins only when it differs from the
+        # setting's own default, which ``_resolve_optional`` decides.
+        task_ttl_ms=_resolve_optional(task_ttl_ms, "TASK_TTL_MS"),
+        task_poll_interval_ms=_resolve_optional(task_poll_interval_ms, "TASK_POLL_INTERVAL_MS"),
     )
+
+
+def _resolve_optional(value: int | None, setting: str) -> int | None:
+    """Resolve a scalar whose ``None`` means something rather than "unset".
+
+    The kwarg is taken when given; otherwise the setting is read, and a
+    ``None`` there is passed through as the configured answer. An explicit
+    ``0`` is kept as ``0`` — for a TTL that means "already expired", which is
+    a strange thing to configure but not ours to override.
+    """
+    if value is not None:
+        return int(value)
+    configured: Any = get_setting(setting)
+    return None if configured is None else int(configured)
 
 
 __all__ = ["build_mcp_config"]

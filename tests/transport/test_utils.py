@@ -4,8 +4,8 @@ from types import SimpleNamespace
 
 from django.contrib.auth.models import AnonymousUser
 
+from rest_framework_mcp.auth.principal_for_token import principal_for_token
 from rest_framework_mcp.auth.types.token_info import TokenInfo
-from rest_framework_mcp.transport.utils import principal_for_token
 
 
 def test_user_with_pk_maps_to_user_principal() -> None:

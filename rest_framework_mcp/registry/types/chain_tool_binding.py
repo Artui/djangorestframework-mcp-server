@@ -8,7 +8,12 @@ from rest_framework_services import UNSET, UnsetType
 from rest_framework_services.types.selector_spec import SelectorSpec
 from rest_framework_services.types.service_spec import ServiceSpec
 
-from rest_framework_mcp.constants import OutputFormat, ToolContentKind, UnknownArguments
+from rest_framework_mcp.constants import (
+    OutputFormat,
+    TaskPolicy,
+    ToolContentKind,
+    UnknownArguments,
+)
 from rest_framework_mcp.protocol.types.icon import Icon
 from rest_framework_mcp.registry.types.chain_step import ChainStep
 from rest_framework_mcp.registry.types.utils import validate_content_kind
@@ -95,6 +100,14 @@ class ChainToolBinding:
     """The media type for an ``IMAGE`` / ``AUDIO`` :attr:`content_kind`.
     Required for those and meaningless for the rest — a resource link
     carries its own ``mimeType`` per entry."""
+
+    task_policy: TaskPolicy = TaskPolicy.FORBIDDEN
+    """Whether calling this tool hands back a task handle instead of a result.
+
+    ``FORBIDDEN`` by default, so nothing changes for a tool registered before
+    tasks existed. See :class:`TaskPolicy` — and note that the choice lives
+    here, on the binding, because the extension makes the *server* the sole
+    decider and gives the client no way to ask."""
 
     def __post_init__(self) -> None:
         if not self.steps:

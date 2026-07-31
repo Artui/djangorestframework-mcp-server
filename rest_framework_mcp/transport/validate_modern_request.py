@@ -15,13 +15,21 @@ VERSION_HEADER: str = "Mcp-Protocol-Version"
 _SENTINEL_PREFIX: str = "=?base64?"
 _SENTINEL_SUFFIX: str = "?="
 
-# Methods whose ``Mcp-Name`` mirrors a body field, and which field it is. The
-# spec names exactly these three; a method absent from here sends no name
-# header and must not be asked for one.
+# Methods whose ``Mcp-Name`` mirrors a body field, and which field it is. A
+# method absent from here sends no name header and must not be asked for one.
 _NAME_SOURCES: dict[str, str] = {
     "tools/call": "name",
     "resources/read": "uri",
     "prompts/get": "name",
+    # ⚠ The tasks extension adds three, and mirrors ``taskId`` rather than a
+    # name — for a different reason than the core three. Those exist so a
+    # gateway can route on *what* is being called; these exist so it can route
+    # a follow-up to the instance holding that task's state, which the
+    # extension notes "is typically required for correctness". Omitting them
+    # would fail every conformant ``tasks/*`` request with a header mismatch.
+    "tasks/get": "taskId",
+    "tasks/update": "taskId",
+    "tasks/cancel": "taskId",
 }
 
 

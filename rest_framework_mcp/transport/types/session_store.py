@@ -16,7 +16,7 @@ class SessionStore(Protocol):
 
     ``principal_id`` is an opaque string the transport derives from the
     authenticated token (see
-    :func:`rest_framework_mcp.transport.utils.principal_for_token`);
+    :func:`rest_framework_mcp.auth.principal_for_token.principal_for_token`);
     stores persist and return it verbatim.
 
     .. versionchanged:: 0.7

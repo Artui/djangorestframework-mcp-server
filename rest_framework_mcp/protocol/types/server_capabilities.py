@@ -28,6 +28,19 @@ class ServerCapabilities:
     completions: dict[str, Any] | None = None
     experimental: dict[str, Any] | None = None
 
+    extensions: dict[str, Any] | None = None
+    """Extensions this server supports, keyed by identifier.
+
+    First-class in the ``2026-07-28`` schema and the counterpart to the
+    per-request ``clientCapabilities.extensions`` — the two sides of the only
+    negotiation the stateless revision still has. Values are per-extension
+    settings objects; ``{}`` means "supported, nothing to configure", which is
+    what every extension here uses.
+
+    Distinct from :attr:`experimental` despite the family resemblance:
+    ``experimental`` is a free-for-all with no naming rules, while extension
+    keys are namespaced identifiers a client matches exactly."""
+
     def to_dict(self) -> dict[str, Any]:
         out: dict[str, Any] = {}
         if self.tools is not None:
@@ -40,6 +53,8 @@ class ServerCapabilities:
             out["completions"] = self.completions
         if self.experimental is not None:
             out["experimental"] = self.experimental
+        if self.extensions is not None:
+            out["extensions"] = self.extensions
         return out
 
 
