@@ -25,6 +25,48 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **Elicitation — a tool can stop and ask the user something.** A service raises
+  `AdditionalInputRequired`, the client puts the question to the user, and the
+  answer comes back as an ordinary tool argument:
+
+  ```python
+  def delete_rows(*, data):
+      if len(rows_matching(data)) > 100 and not data["confirmed"]:
+          raise AdditionalInputRequired(
+              f"{len(doomed)} rows match. Confirm to proceed.",
+              schema={"confirmed": {"type": "boolean"}},
+          )
+  ```
+
+  The call answers with `resultType: "input_required"` instead of a result, and
+  the client **retries the original call** carrying the answers. ⚠ That is a
+  *success* with a second legal shape, inside a `200` — a client treating a
+  non-`complete` `resultType` as a failure will never retry.
+
+  ⭐ **Nothing is held between the two requests.** This is what `2026-07-28` put
+  in place of server-initiated requests, so the retry may land on a different
+  process entirely. The service is not resumed; it runs again from the top with
+  the answer present, which is a reason to raise early and keep `atomic=True`.
+
+  `requestState` travels through the client and comes back, so it is treated as
+  attacker-controlled: HMAC-signed and bound to the authenticated principal, to
+  a digest of the original call, and to a `INPUT_REQUEST_TTL_SECONDS` expiry.
+  Every failure — bad signature, wrong principal, wrong call, too late —
+  answers the same way, by ignoring the state and asking again.
+
+  A client that did not declare the `elicitation` capability is **not** given a
+  protocol error. It gets an ordinary `isError` result carrying the message and
+  the requested schema, which a model can act on by supplying the argument
+  itself. Same for a legacy-era client and for a task worker replaying a call
+  with nobody to ask.
+
+  ⛔ Service tools only. A chain tool degrades to an ordinary error rather than
+  asking, because re-running the call would re-run its earlier steps; a selector
+  is a read. `tools/call` only — the spec also permits this on `prompts/get`
+  and `resources/read`, which dispatch bare callables with no failure channel.
+  Form mode only; sampling and roots are Deprecated in this revision and are not
+  built.
+
 - **`invalidates=` — a mutation tool announcing its own changes.** Declared at
   registration, next to every other per-tool knob, because a spec running
   through this server *is* the moment a resource changed and the server is

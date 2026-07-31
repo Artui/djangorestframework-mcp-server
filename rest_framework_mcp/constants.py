@@ -600,6 +600,62 @@ class TaskPolicy(str, Enum):
     REQUIRED = "required"
 
 
+# ---------- Elicitation / multi round-trip requests ----------
+
+
+ELICITATION_CREATE_METHOD: str = "elicitation/create"
+"""The one server→client request this package ever issues.
+
+⚠ **It is not sent as a request.** From ``2026-07-28`` the server-initiated
+direction is gone: an ``ElicitRequest`` travels as a *value* inside an
+``InputRequiredResult``'s ``inputRequests`` map, and the client answers by
+retrying the original call. The method name survives only as the discriminator
+telling the client which kind of input is being asked for.
+
+The two siblings the spec allows there — ``sampling/createMessage`` and
+``roots/list`` — are both **Deprecated** as of this revision and are not built.
+"""
+
+ELICITATION_KEY: str = "additionalInput"
+"""The key this package files its one question under in ``inputRequests``.
+
+Keys are server-assigned and need only be unique within a single result; one
+``AdditionalInputRequired`` asks one question, so a fixed name is enough and is
+easier to read in a log than a generated id."""
+
+REQUEST_STATE_SALT: str = "rest_framework_mcp.elicitation.request_state"
+"""Namespace for the HMAC over ``requestState``.
+
+A salt rather than a bare ``SECRET_KEY`` signature so a token minted here can
+never verify against another of the project's signed values (password reset
+links, session cookies, ``django.core.signing`` callers elsewhere) and vice
+versa."""
+
+
+class ElicitAction(str, Enum):
+    """What the user did with the form, per ``ElicitResult.action``.
+
+    The three are not interchangeable and this package does not collapse them:
+    ``DECLINE`` is a decision, ``CANCEL`` is the absence of one. Both stop the
+    call, but a client — or a model reading the error — can tell "the user said
+    no" from "the user closed the dialog", and only the second is worth
+    retrying.
+    """
+
+    ACCEPT = "accept"
+    DECLINE = "decline"
+    CANCEL = "cancel"
+
+
+ELICITATION_SCALAR_TYPES: frozenset[str] = frozenset({"string", "number", "integer", "boolean"})
+"""The JSON-Schema ``type`` values a form field may declare.
+
+``requestedSchema`` is a **restricted** subset: *"Only top-level properties are
+allowed, without nesting."* ``object`` is therefore never valid, and ``array``
+only in the multi-select-enum shape — which is why that one is checked
+separately rather than being a fourth member here."""
+
+
 UI_EXTENSION_ID: str = "io.modelcontextprotocol/ui"
 """Identifier a client uses to advertise MCP Apps support.
 
@@ -615,6 +671,10 @@ __all__ = [
     "CLIENT_CAPABILITIES_META_KEY",
     "CLIENT_INFO_META_KEY",
     "CacheScope",
+    "ELICITATION_CREATE_METHOD",
+    "ELICITATION_KEY",
+    "ELICITATION_SCALAR_TYPES",
+    "ElicitAction",
     "IconTheme",
     "JSONRPC_VERSION",
     "JsonRpcErrorCode",
@@ -624,6 +684,7 @@ __all__ = [
     "OutputFormat",
     "PROGRESS_TOKEN_META_KEY",
     "PROTOCOL_VERSION_META_KEY",
+    "REQUEST_STATE_SALT",
     "RESERVED_POOL_SEEDS",
     "RESERVED_POST_FETCH_KEYS",
     "ResourceEncoding",

@@ -7,14 +7,21 @@ from asgiref.sync import sync_to_async
 from rest_framework import serializers as drf_serializers
 from rest_framework.exceptions import PermissionDenied
 from rest_framework_services import adispatch_spec, build_offline_context, enforce_permissions
+from rest_framework_services.exceptions.additional_input_required import AdditionalInputRequired
 from rest_framework_services.exceptions.service_error import ServiceError
 from rest_framework_services.exceptions.service_validation_error import ServiceValidationError
 
 from rest_framework_mcp._compat.acall import acall
 from rest_framework_mcp._compat.tracing import span
 from rest_framework_mcp.constants import JsonRpcErrorCode, OutputFormat
+from rest_framework_mcp.elicitation.types.resolved_input import ResolvedInput
 from rest_framework_mcp.handlers.chain_tool_dispatch import dispatch_chain_tool_async
 from rest_framework_mcp.handlers.handle_tools_call import _render, _span_attrs
+from rest_framework_mcp.handlers.input_dispatch import (
+    ask_for_input,
+    refusal_result,
+    resolve_prior_input,
+)
 from rest_framework_mcp.handlers.invalidation_dispatch import announce_invalidations_async
 from rest_framework_mcp.handlers.selector_tool_dispatch import dispatch_selector_tool_async
 from rest_framework_mcp.handlers.task_dispatch import maybe_create_task
@@ -164,6 +171,13 @@ async def _dispatch_tool_call_async(
                 data={"retryAfter": retry_after},
             )
 
+        # See the sync sibling: a retry's answers become ordinary arguments
+        # before anything else looks at them.
+        prior: ResolvedInput = resolve_prior_input(params, binding.name, arguments_raw, context)
+        if prior.refused_with is not None:
+            return refusal_result(prior.refused_with)
+        arguments_raw = prior.arguments
+
         # See the sync sibling: URL kwargs route through the view, not the params,
         # and the split runs inside the ``try`` so a missing ``required=True``
         # kwarg reaches the ``isError`` mapping instead of escaping.
@@ -215,6 +229,9 @@ async def _dispatch_tool_call_async(
                     exc.detail, arguments_raw, include_value=context.config.include_validation_value
                 ),
             ).to_dict()
+        except AdditionalInputRequired as exc:
+            # ⚠ Must precede the ``ServiceError`` arm — see the sync sibling.
+            return ask_for_input(exc, prior, context)
         except ServiceError as exc:
             if context.config.record_service_exceptions:
                 otel_span.record_exception(exc)
