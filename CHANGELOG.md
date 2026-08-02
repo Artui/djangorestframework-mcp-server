@@ -7,6 +7,29 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- **Requires `djangorestframework-services>=0.33`** (was `>=0.32`).
+
+  ⚠ **Take this one promptly — 0.33.0 closes an authorization bypass that this
+  package is the most exposed surface for.** In drf-services 0.32 and earlier a
+  spec's nested target resolution (`instance_selector_spec` /
+  `collection_selector_spec`) built its kwarg pool without stripping the reserved
+  dispatcher seeds, so a caller-supplied `user` key outranked the authenticated
+  one in the pool that decides **which row gets mutated** and **which set gets
+  bulk-deleted**. Over MCP those params are the tool call itself, which makes
+  this directly client-reachable here rather than config-dependent.
+
+  Exploitation needs a selector that declares a reserved seed name (`user` being
+  the realistic one). If any of your specs do, treat this as urgent.
+
+  The floor moves to `>=0.33` rather than merely widening the ceiling: a pairing
+  that resolves cleanly and leaves the bypass live is exactly what a resolver
+  cannot see.
+
+  No source changes here — the fix arrives through `dispatch_spec` unchanged, and
+  the full suite passes against 0.33.0 untouched.
+
 ## [0.24.0] — 2026-07-31
 
 This release makes the package **dual-era**: one endpoint that serves both the
