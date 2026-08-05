@@ -182,3 +182,54 @@ async def test_modern_era_is_sessionless_regardless_of_the_setting() -> None:
         )
         response = await _view(sessions=sessions, is_async=True)(request)
         assert response.status_code == 200, (sessions, response.content)
+
+
+# ---------- the MCP-Error header (diagnosability) ----------
+
+
+def test_a_missing_session_is_labelled_in_a_header() -> None:
+    """The body says why; the header says why to a client that only logs status.
+
+    HTTP/2 has no reason phrase, so ``${status} ${statusText}`` — what clients
+    commonly log — is empty. That is how a live incident spent two days unable
+    to tell a dead session from a load balancer 404.
+    """
+    response = _view(sessions=True)(_post_request("ping"))
+    assert response.status_code == 400
+    assert response["MCP-Error"] == "session-missing"
+
+
+def test_an_unknown_session_is_labelled_distinctly() -> None:
+    response = _view(sessions=True)(_post_request("ping", session_id="made-up"))
+    assert response.status_code == 404
+    assert response["MCP-Error"] == "session-unknown"
+
+
+def test_the_header_does_not_distinguish_unknown_from_wrong_principal() -> None:
+    """The no-ownership-oracle property survives the added diagnosability.
+
+    A caller must not be able to learn that an id it guessed is real but owned
+    by someone else, so both render the same status *and* the same slug.
+    """
+    view = _view(sessions=True)
+    minted = view(_post_request("initialize"))[_SESSION_HEADER]
+    payload = {"jsonrpc": "2.0", "id": 1, "method": "ping"}
+    request = factory.post(
+        "/mcp/",
+        data=json.dumps(payload),
+        content_type="application/json",
+        headers={
+            "Mcp-Protocol-Version": "2025-11-25",
+            "X-Principal": "mallory",
+            _SESSION_HEADER: minted,
+        },
+    )
+    response = view(request)
+    assert response.status_code == 404
+    assert response["MCP-Error"] == "session-unknown"
+
+
+def test_no_header_on_a_successful_response() -> None:
+    response = _view(sessions=False)(_post_request("ping"))
+    assert response.status_code == 200
+    assert "MCP-Error" not in response

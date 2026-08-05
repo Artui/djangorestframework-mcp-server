@@ -18,6 +18,7 @@ from rest_framework_mcp.auth.principal_for_token import principal_for_token
 from rest_framework_mcp.auth.types.auth_backend import MCPAuthBackend
 from rest_framework_mcp.config.types.mcp_config import MCPConfig
 from rest_framework_mcp.constants import (
+    MCP_ERROR_HEADER,
     MODERN_PROTOCOL_VERSIONS,
     SESSIONLESS_METHODS,
     SUBSCRIPTIONS_LISTEN_METHOD,
@@ -73,12 +74,23 @@ _VERSION_HEADER: str = "Mcp-Protocol-Version"
 
 
 def _error_response(
-    *, code: int, message: str, data: Any = None, status: int = 400, request_id: Any = None
+    *,
+    code: int,
+    message: str,
+    data: Any = None,
+    status: int = 400,
+    request_id: Any = None,
+    error_hint: str | None = None,
 ) -> JsonResponse:
     body: dict[str, Any] = JsonRpcResponse(
         id=request_id, error=JsonRpcError(code=code, message=message, data=data)
     ).to_dict()
-    return JsonResponse(body, status=status)
+    response = JsonResponse(body, status=status)
+    if error_hint is not None:
+        # Summarises the body for the many clients that surface only the status
+        # line — see ``MCP_ERROR_HEADER``.
+        response[MCP_ERROR_HEADER] = error_hint
+    return response
 
 
 class AsyncStreamableHttpViewSet(ViewSet):
@@ -313,12 +325,13 @@ class AsyncStreamableHttpViewSet(ViewSet):
             owner_matches = bool(session_id) and await acall(store.owner, session_id) == principal
             failure = session_gate_failure(session_id, owner_matches=owner_matches)
             if failure is not None:
-                message_text, status = failure
+                message_text, status, hint = failure
                 return _error_response(
                     code=JsonRpcErrorCode.INVALID_REQUEST,
                     message=message_text,
                     status=status,
                     request_id=getattr(message, "id", None),
+                    error_hint=hint,
                 )
 
         context = MCPCallContext(

@@ -44,6 +44,26 @@ DEFAULTS: dict[str, Any] = {
     # ``GET`` stream has no address and answers ``405``. Request/response tool
     # calling is untouched.
     "SESSIONS_ENABLED": True,
+    # How long a session may sit **idle** before it expires, in seconds.
+    #
+    # The window restarts on every successful read, so a session in continuous
+    # use never lapses. Previously this was a module-private constant and the
+    # window was fixed from mint time, which meant an actively-used connector
+    # still died on the 24-hour mark.
+    "SESSION_TTL_SECONDS": 60 * 60 * 24,
+    # Ceiling on a session's **total** lifetime regardless of activity.
+    #
+    # ⚠ Not optional in spirit, even though ``None`` disables it. A session's
+    # principal binding is checked once, at ``initialize``; without an absolute
+    # cap a sliding idle window keeps a *revoked* principal alive for as long as
+    # it keeps talking. Same argument as ``SUBSCRIPTION_MAX_SECONDS``.
+    #
+    # ⚠ Neither of these can promise more than the cache underneath them. A
+    # Redis ``maxmemory-policy`` of ``allkeys-lru`` evicts session keys long
+    # before any TTL, and that is indistinguishable from expiry from the
+    # client's side — if sessions vanish early, check the eviction policy before
+    # this setting.
+    "SESSION_MAX_AGE_SECONDS": 60 * 60 * 24 * 7,
     # When True (default), successful ``tools/call`` results include a
     # ``structuredContent`` field carrying the typed JSON payload alongside
     # the human-readable ``content[0]`` text. Set to False to omit

@@ -5,7 +5,11 @@ from __future__ import annotations
 from typing import Any
 
 from rest_framework_mcp.auth.types.auth_backend import MCPAuthBackend
-from rest_framework_mcp.constants import JsonRpcErrorCode
+from rest_framework_mcp.constants import (
+    SESSION_MISSING_HINT,
+    SESSION_UNKNOWN_HINT,
+    JsonRpcErrorCode,
+)
 from rest_framework_mcp.protocol.types.json_rpc_error import JsonRpcError
 
 
@@ -80,11 +84,15 @@ _MODERN_BAD_REQUEST_CODES: frozenset[int] = frozenset(
 )
 
 
-def session_gate_failure(session_id: str | None, *, owner_matches: bool) -> tuple[str, int] | None:
+def session_gate_failure(
+    session_id: str | None, *, owner_matches: bool
+) -> tuple[str, int, str] | None:
     """Decide the legacy session gate's outcome. ``None`` means the request passes.
 
-    Returns ``(message, status)`` — shared by the sync and async viewsets so the
-    two cannot drift, which is a failure this package has shipped before.
+    Returns ``(message, status, hint)`` — shared by the sync and async viewsets
+    so the two cannot drift, which is a failure this package has shipped before.
+    ``hint`` is the ``MCP-Error`` slug; see :data:`MCP_ERROR_HEADER` for why a
+    header carries it in addition to the body.
 
     **The two statuses are not interchangeable, and we used to conflate them.**
     The spec separates them: a request *without* an ``Mcp-Session-Id`` header
@@ -101,9 +109,9 @@ def session_gate_failure(session_id: str | None, *, owner_matches: bool) -> tupl
     one message so the gate is not an ownership oracle.
     """
     if not session_id:
-        return ("Missing MCP-Session-Id", 400)
+        return ("Missing MCP-Session-Id", 400, SESSION_MISSING_HINT)
     if not owner_matches:
-        return ("Unknown or invalid MCP-Session-Id", 404)
+        return ("Unknown or invalid MCP-Session-Id", 404, SESSION_UNKNOWN_HINT)
     return None
 
 
