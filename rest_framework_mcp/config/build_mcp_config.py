@@ -38,6 +38,7 @@ def build_mcp_config(
     *,
     protocol_versions: tuple[str, ...] | list[str] | None = None,
     require_protocol_version_header: bool | None = None,
+    sessions_enabled: bool | None = None,
     include_structured_content: bool | None = None,
     include_output_schema: bool | None = None,
     allowed_origins: tuple[str, ...] | list[str] | None = None,
@@ -97,6 +98,9 @@ def build_mcp_config(
             require_protocol_version_header
             if require_protocol_version_header is not None
             else get_setting("REQUIRE_PROTOCOL_VERSION_HEADER")
+        ),
+        sessions_enabled=bool(
+            sessions_enabled if sessions_enabled is not None else get_setting("SESSIONS_ENABLED")
         ),
         include_structured_content=bool(
             include_structured_content

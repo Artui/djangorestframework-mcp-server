@@ -107,11 +107,32 @@ def test_server_discover_needs_no_session_or_version_header(client) -> None:
 
 @pytest.mark.django_db(transaction=True)
 def test_a_non_sessionless_method_still_requires_a_session(client) -> None:
-    """Widening the gate for discovery must not have widened it for everything."""
+    """Widening the gate for discovery must not have widened it for everything.
+
+    ⚠ **400, not 404.** The spec reserves ``404`` for a request *"containing
+    that session ID"* after the server dropped it; a request carrying **no**
+    header "SHOULD" get ``400 Bad Request``. This asserted 404 until the
+    2026-08-05 spec read caught the conflation.
+    """
     response = client.post(
         "/mcp/",
         data=json.dumps({"jsonrpc": "2.0", "id": 1, "method": "tools/list"}),
         content_type="application/json",
         headers={"Mcp-Protocol-Version": "2025-11-25"},
+    )
+    assert response.status_code == 400, response.content
+
+
+def test_an_unknown_session_id_is_404_not_400(client) -> None:
+    """The other half of the split: an id we don't honour *is* a 404.
+
+    That is what tells a conforming client to re-``initialize``, so collapsing
+    it into the 400 would break the documented recovery path.
+    """
+    response = client.post(
+        "/mcp/",
+        data=json.dumps({"jsonrpc": "2.0", "id": 1, "method": "tools/list"}),
+        content_type="application/json",
+        headers={"Mcp-Protocol-Version": "2025-11-25", "Mcp-Session-Id": "no-such-session"},
     )
     assert response.status_code == 404, response.content

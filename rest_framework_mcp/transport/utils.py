@@ -80,4 +80,36 @@ _MODERN_BAD_REQUEST_CODES: frozenset[int] = frozenset(
 )
 
 
-__all__ = ["insufficient_scope_challenge", "is_permission_denial", "modern_error_status"]
+def session_gate_failure(session_id: str | None, *, owner_matches: bool) -> tuple[str, int] | None:
+    """Decide the legacy session gate's outcome. ``None`` means the request passes.
+
+    Returns ``(message, status)`` — shared by the sync and async viewsets so the
+    two cannot drift, which is a failure this package has shipped before.
+
+    **The two statuses are not interchangeable, and we used to conflate them.**
+    The spec separates them: a request *without* an ``Mcp-Session-Id`` header
+    "SHOULD" get ``400 Bad Request``, while ``404 Not Found`` is specified for a
+    request *"containing that session ID"* after the server has dropped it. We
+    answered ``404`` to both, which is the wrong code for the first — and since
+    ``2025-11-25`` lists ``400`` among the statuses that send a client down the
+    legacy-fallback path, the wrong code also lands it in the wrong branch.
+
+    ⭐ **Splitting them leaks nothing.** The caller already knows whether it sent
+    a header, so this distinction tells it only what it told us. The pair that
+    must stay merged is *unknown id* versus *id owned by another principal* —
+    those are facts about someone else's session, and both render ``404`` with
+    one message so the gate is not an ownership oracle.
+    """
+    if not session_id:
+        return ("Missing MCP-Session-Id", 400)
+    if not owner_matches:
+        return ("Unknown or invalid MCP-Session-Id", 404)
+    return None
+
+
+__all__ = [
+    "insufficient_scope_challenge",
+    "is_permission_denial",
+    "modern_error_status",
+    "session_gate_failure",
+]

@@ -18,6 +18,32 @@ DEFAULTS: dict[str, Any] = {
     # header is still rejected either way — silently downgrading there would
     # mask a genuine version mismatch.
     "REQUIRE_PROTOCOL_VERSION_HEADER": True,
+    # When False, the legacy (``initialize``-handshake) era runs **without
+    # sessions**: no ``Mcp-Session-Id`` is minted at ``initialize``, none is
+    # required on subsequent requests, and the SSE ``GET`` / session ``DELETE``
+    # answer ``405`` (the status the spec defines for "this endpoint offers no
+    # SSE stream" and "this server does not let clients terminate sessions").
+    #
+    # ⚠ This is a **conformant mode, not a relaxation.** Both legacy revisions
+    # make assignment optional — "A server using the Streamable HTTP transport
+    # MAY assign a session ID at initialization time" — and make the client's
+    # obligation conditional on the server having assigned one. A server that
+    # never assigns is never sent one.
+    #
+    # Why you would: a session is state, and state expires, gets evicted, and
+    # dies with a deploy. Every such failure reaches the client as a ``404``
+    # whose documented remedy is to re-``initialize`` — which not every client
+    # does, turning a recoverable condition into an outage that needs a human.
+    # Turning sessions off removes the failure class outright, for every client,
+    # without waiting on one to implement the remedy. The **modern**
+    # (``2026-07-28``) era is already sessionless and is unaffected by this
+    # setting; this exists for deployments still serving legacy clients.
+    #
+    # What you give up: server-initiated messaging on the legacy era. The
+    # session id is what addresses a client's SSE channel, so with it gone the
+    # ``GET`` stream has no address and answers ``405``. Request/response tool
+    # calling is untouched.
+    "SESSIONS_ENABLED": True,
     # When True (default), successful ``tools/call`` results include a
     # ``structuredContent`` field carrying the typed JSON payload alongside
     # the human-readable ``content[0]`` text. Set to False to omit

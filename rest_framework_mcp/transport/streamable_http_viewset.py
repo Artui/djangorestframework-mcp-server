@@ -38,6 +38,7 @@ from rest_framework_mcp.transport.utils import (
     insufficient_scope_challenge,
     is_permission_denial,
     modern_error_status,
+    session_gate_failure,
 )
 from rest_framework_mcp.transport.validate_modern_request import validate_modern_request
 
@@ -183,13 +184,17 @@ class StreamableHttpViewSet(ViewSet):
         store = self._require_session_store()
         session_id: str | None = http_request.headers.get(_SESSION_HEADER)
         principal: str = principal_for_token(token)
-        if not is_sessionless and (not session_id or store.owner(session_id) != principal):
-            return _error_response(
-                code=JsonRpcErrorCode.INVALID_REQUEST,
-                message="Unknown or missing MCP-Session-Id",
-                status=404,
-                request_id=getattr(message, "id", None),
-            )
+        if self._sessions_enabled() and not is_sessionless:
+            owner_matches = bool(session_id) and store.owner(session_id) == principal
+            failure = session_gate_failure(session_id, owner_matches=owner_matches)
+            if failure is not None:
+                message_text, status = failure
+                return _error_response(
+                    code=JsonRpcErrorCode.INVALID_REQUEST,
+                    message=message_text,
+                    status=status,
+                    request_id=getattr(message, "id", None),
+                )
 
         context = MCPCallContext(
             http_request=http_request,
@@ -233,7 +238,10 @@ class StreamableHttpViewSet(ViewSet):
                 result, self._require_auth_backend()
             )
 
-        if is_initialize and not isinstance(result, JsonRpcError):
+        if is_initialize and self._sessions_enabled() and not isinstance(result, JsonRpcError):
+            # Assignment is the server's choice ("MAY assign a session ID"), and
+            # the client's duty to echo one is conditional on it arriving. Not
+            # minting is therefore the whole of sessionless mode on this path.
             new_session: str = store.create(principal_id=principal)
             http_response[_SESSION_HEADER] = new_session
         return http_response
@@ -344,7 +352,10 @@ class StreamableHttpViewSet(ViewSet):
         guard: HttpResponse | None = self._check_origin(http_request)
         if guard is not None:
             return guard
-        if self._modern_era_requested(http_request):
+        if self._modern_era_requested(http_request) or not self._sessions_enabled():
+            # "The server MAY respond to this request with HTTP 405 Method Not
+            # Allowed, indicating that the server does not allow clients to
+            # terminate sessions" — which is exactly true when there are none.
             return HttpResponse(status=405)
         token = self._authenticate(http_request)
         if token is None:
@@ -424,6 +435,10 @@ class StreamableHttpViewSet(ViewSet):
         if self.config is None:  # pragma: no cover - guarded by MCPServer
             raise RuntimeError("StreamableHttpViewSet is missing an MCPConfig")
         return self.config
+
+    def _sessions_enabled(self) -> bool:
+        """Whether the legacy era mints and requires an ``Mcp-Session-Id``."""
+        return self._require_config().sessions_enabled
 
     def _require_session_store(self) -> SessionStore:
         if self.session_store is None:  # pragma: no cover - guarded by MCPServer

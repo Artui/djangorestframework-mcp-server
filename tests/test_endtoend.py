@@ -97,9 +97,10 @@ def test_unknown_tool_returns_invalid_params(jsonrpc, initialized_session: str) 
     assert body["error"]["code"] == -32602
 
 
-def test_call_without_session_id_returns_404(jsonrpc) -> None:
+def test_call_without_session_id_returns_400(jsonrpc) -> None:
+    """A *missing* header is a malformed request, not a dead session."""
     response = jsonrpc("tools/list", {})
-    assert response.status_code == 404
+    assert response.status_code == 400
     assert response.json()["error"]["code"] == -32600
 
 
