@@ -14,6 +14,7 @@ from rest_framework_mcp.contrib.oauth.dynamic_client_registration_viewset import
 from rest_framework_mcp.contrib.oauth.openid_discovery_viewset import OpenIDDiscoveryViewSet
 
 __all__ = [
+    "check_oauth_url_shadowing",
     "AuthUserAdapter",
     "AuthorizationServerMetadataViewSet",
     "DynamicClientRegistrationSerializer",

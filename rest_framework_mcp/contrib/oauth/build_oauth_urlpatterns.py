@@ -18,7 +18,18 @@ contiguous set of endpoints:
     urlpatterns = [
         path("mcp/", server.urls),
         *build_oauth_urlpatterns(server=server, include_dcr=True),
+        # ⚠ AFTER ours, not before — see below.
+        path("oauth/", include("oauth2_provider.urls", namespace="oauth2_provider")),
     ]
+
+⚠ **Order matters against ``oauth2_provider``, and getting it wrong is
+silent.** django-oauth-toolkit 3.4.0 serves its own ``register/`` (RFC 7591)
+and ``.well-known/oauth-authorization-server`` (RFC 8414). Django resolves
+first-match, so mounting DOT's urls first means DOT answers those paths — with
+an issuer of ``<host>/oauth`` rather than the site root, which is separately the
+value that produces ``/oauth/oauth/authorize/`` in the discovery document.
+Nothing raises; clients simply read the wrong metadata.
+:func:`~rest_framework_mcp.contrib.oauth.check_oauth_url_shadowing` detects it.
 """
 
 from __future__ import annotations

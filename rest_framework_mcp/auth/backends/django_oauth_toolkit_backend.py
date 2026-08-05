@@ -1,7 +1,9 @@
 from __future__ import annotations
 
+import warnings
 from collections.abc import Callable
 from typing import Any
+from urllib.parse import urlparse
 
 from django.core.exceptions import ImproperlyConfigured
 from django.http import HttpRequest
@@ -91,6 +93,9 @@ class DjangoOAuthToolkitBackend:
         resource_metadata_url: str | None = None,
         enforce_audience: bool | None = None,
         audience_getter: Callable[[Any], str | None] | None = None,
+        authorize_path: str = "/oauth/authorize/",
+        token_path: str = "/oauth/token/",
+        registration_path: str = "/oauth/register/",
     ) -> None:
         server_info: dict[str, Any] = get_setting("SERVER_INFO")
         # RESOURCE_URL is preferred over SERVER_INFO["resource"] — the former is
@@ -120,6 +125,12 @@ class DjangoOAuthToolkitBackend:
             authorization_servers
             if authorization_servers is not None
             else server_info.get("authorization_servers", [])
+        )
+        self._authorize_path: str = authorize_path
+        self._token_path: str = token_path
+        self._registration_path: str = registration_path
+        _warn_if_authorization_server_looks_mounted(
+            self._authorization_servers, authorize_path=authorize_path
         )
         self._scopes_supported: list[str] = list(
             scopes_supported
@@ -253,8 +264,17 @@ class DjangoOAuthToolkitBackend:
 
         Pulls the issuer, endpoint URLs, supported grant / response types,
         and scopes from this backend's ``authorization_servers`` (first
-        entry) plus the ``contrib.oauth`` mount convention that endpoints
-        live at ``/oauth/authorize/``, ``/oauth/token/``, ``/oauth/register/``.
+        entry) plus the endpoint paths, which default to the ``contrib.oauth``
+        mount convention (``/oauth/authorize/``, ``/oauth/token/``,
+        ``/oauth/register/``) and are constructor arguments for a project that
+        mounts DOT somewhere else.
+
+        ⚠ The issuer is treated as a **site root**, and the paths are appended
+        to it. Passing the value DOT advertises as *its* issuer
+        (``<host>/oauth``) therefore publishes ``<host>/oauth/oauth/authorize/``
+        — three 404s in a document clients read to find the login flow. That
+        mistake now warns at construction; see
+        :class:`MountedAuthorizationServerWarning`.
 
         Missing values fall through as empty strings / lists so the wire
         shape is always valid JSON; consumers are expected to configure
@@ -270,9 +290,9 @@ class DjangoOAuthToolkitBackend:
         base: str = issuer.rstrip("/")
         return AuthorizationServerMetadata(
             issuer=issuer,
-            authorization_endpoint=f"{base}/oauth/authorize/" if base else "",
-            token_endpoint=f"{base}/oauth/token/" if base else "",
-            registration_endpoint=f"{base}/oauth/register/" if base else "",
+            authorization_endpoint=f"{base}{self._authorize_path}" if base else "",
+            token_endpoint=f"{base}{self._token_path}" if base else "",
+            registration_endpoint=f"{base}{self._registration_path}" if base else "",
             scopes_supported=list(self._scopes_supported),
             client_id_metadata_document_supported=_cimd_enabled(),
         )
@@ -328,3 +348,49 @@ def _derive_metadata_url(resource_url: str | None) -> str | None:
 
 
 __all__ = ["DjangoOAuthToolkitBackend"]
+
+
+class MountedAuthorizationServerWarning(UserWarning):
+    """The configured authorization server looks like a mount, not a site root.
+
+    Dedicated category so a project that genuinely serves its authorization
+    server from a nested ``/oauth`` prefix can silence exactly this via
+    ``warnings.filterwarnings`` without hiding anything else.
+    """
+
+
+def _warn_if_authorization_server_looks_mounted(
+    authorization_servers: list[str], *, authorize_path: str
+) -> None:
+    """Catch the ``/oauth/oauth/authorize/`` misconfiguration at construction.
+
+    RFC 8414 metadata is built by appending the endpoint paths to the issuer, so
+    the issuer must be the **site root**. django-oauth-toolkit advertises its
+    own issuer as ``<host>/oauth`` — the obvious value to copy, and the one that
+    produces a discovery document whose three endpoints are all 404s.
+
+    Warns rather than raises: a project may legitimately mount its
+    authorization server under a nested prefix and pass matching
+    ``authorize_path``/``token_path``/``registration_path``. The check only
+    fires when the issuer *already ends with* the first segment the default
+    paths are about to add, which is the exact shape of the mistake.
+    """
+    if not authorization_servers:
+        return
+    first_segment: str = authorize_path.strip("/").split("/")[0]
+    if not first_segment:
+        return
+    issuer: str = authorization_servers[0]
+    path: str = urlparse(issuer).path.rstrip("/")
+    if not path.endswith(f"/{first_segment}"):
+        return
+    warnings.warn(
+        f"Authorization server {issuer!r} ends with '/{first_segment}', but it is "
+        "used as a site root: the endpoint paths are appended to it, so the "
+        f"published metadata would name {issuer.rstrip('/')}{authorize_path} and "
+        "two siblings like it. Pass the site root instead (typically this value "
+        f"with '/{first_segment}' removed), or set authorize_path=/token_path=/"
+        "registration_path= to match where you actually mounted them.",
+        MountedAuthorizationServerWarning,
+        stacklevel=3,
+    )

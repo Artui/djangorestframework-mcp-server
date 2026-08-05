@@ -2,7 +2,10 @@ from __future__ import annotations
 
 from typing import Any
 
+from rest_framework_mcp.observability import get_logger
 from rest_framework_mcp.output.encode_json import encode_json
+
+logger = get_logger(__name__)
 
 
 def enforce_result_bytes(payload: Any, max_bytes: int | None, *, label: str) -> str | None:
@@ -33,6 +36,14 @@ def enforce_result_bytes(payload: Any, max_bytes: int | None, *, label: str) -> 
     size: int = len(encode_json(payload).encode("utf-8"))
     if size <= max_bytes:
         return None
+    # The caller is told; the operator was not, until now. A bound that fires
+    # invisibly reads to everyone else as "the tool is broken".
+    logger.warning(
+        "Result bound exceeded: %s produced %d bytes over a %d byte ceiling",
+        label,
+        size,
+        max_bytes,
+    )
     return (
         f"{label} produced a {size} byte result, over this server's "
         f"{max_bytes} byte ceiling. Narrow the request — add or tighten a "

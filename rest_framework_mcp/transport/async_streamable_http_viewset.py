@@ -30,6 +30,7 @@ from rest_framework_mcp.handlers.tasks_utils import (
     missing_capability_error,
 )
 from rest_framework_mcp.handlers.types.context import MCPCallContext
+from rest_framework_mcp.observability import get_logger, session_fingerprint
 from rest_framework_mcp.protocol.parse_message import parse_message
 from rest_framework_mcp.protocol.types.implementation import Implementation
 from rest_framework_mcp.protocol.types.json_rpc_error import JsonRpcError
@@ -71,6 +72,9 @@ from rest_framework_mcp.transport.validate_modern_request import validate_modern
 
 _SESSION_HEADER: str = "Mcp-Session-Id"
 _VERSION_HEADER: str = "Mcp-Protocol-Version"
+
+
+logger = get_logger(__name__)
 
 
 def _error_response(
@@ -313,6 +317,7 @@ class AsyncStreamableHttpViewSet(ViewSet):
         # protocol-version checks above are not principal-revealing.
         token = await self._authenticate(http_request)
         if token is None:
+            logger.warning("Authentication failed for %s", http_request.path)
             return self._unauthenticated_response()
 
         # A session is bound to the principal it was minted for at
@@ -326,6 +331,19 @@ class AsyncStreamableHttpViewSet(ViewSet):
             failure = session_gate_failure(session_id, owner_matches=owner_matches)
             if failure is not None:
                 message_text, status, hint = failure
+                # ⭐ Server-side we name the *exact* condition. The response
+                # merges unknown-id with wrong-principal so the gate is not an
+                # ownership oracle, but the operator is not that adversary and
+                # a log line is not the wire. This is the line that ends the
+                # "is it the session or the load balancer?" incident.
+                logger.warning(
+                    "Session rejected: %s (session=%s, principal=%s, method=%s) -> HTTP %s",
+                    hint,
+                    session_fingerprint(session_id),
+                    principal,
+                    getattr(message, "method", "?"),
+                    status,
+                )
                 return _error_response(
                     code=JsonRpcErrorCode.INVALID_REQUEST,
                     message=message_text,
