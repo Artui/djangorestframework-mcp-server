@@ -650,7 +650,10 @@ def test_selector_tool_translates_service_error() -> None:
 
 def test_selector_tool_records_service_error_when_setting_enabled(settings) -> None:
     """``RECORD_SERVICE_EXCEPTIONS=True`` exercises the otel ``record_exception`` branch."""
-    settings.REST_FRAMEWORK_MCP = {"RECORD_SERVICE_EXCEPTIONS": True}
+    settings.REST_FRAMEWORK_MCP = {
+        "REQUIRE_TOOL_PERMISSIONS": False,
+        "RECORD_SERVICE_EXCEPTIONS": True,
+    }
     server = _server()
 
     def selector() -> None:

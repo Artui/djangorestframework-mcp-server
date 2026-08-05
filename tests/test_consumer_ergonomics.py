@@ -25,6 +25,7 @@ from rest_framework_mcp.contrib.oauth.check_oauth_url_shadowing import (
 )
 from rest_framework_mcp.observability import get_logger, session_fingerprint
 from rest_framework_mcp.server.mcp_server import MCPServer
+from rest_framework_mcp.server.utils import UnguardedToolWarning
 
 
 class _AlwaysAllow:
@@ -152,6 +153,54 @@ class TestOAuthUrlShadowing:
         with caplog.at_level(logging.WARNING, logger="rest_framework_mcp"):
             check_oauth_url_shadowing()
         assert any("first-match" in record.getMessage() for record in caplog.records)
+
+
+class TestUnguardedToolsAreRefusedByDefault:
+    """NICE-3 — the strict default, and the escape hatch that makes it shippable."""
+
+    def test_the_shipped_default_is_strict(self) -> None:
+        """Pinned against the settings file, because the suite opts *out*.
+
+        ``tests/conftest_settings.py`` sets this False so ~260 fixtures whose
+        subject is not permissions keep working. That override could otherwise
+        mask a regression back to permissive, so assert the shipped value here.
+        """
+        from rest_framework_mcp.conf import DEFAULTS
+
+        assert DEFAULTS["REQUIRE_TOOL_PERMISSIONS"] is True
+
+    def test_an_unguarded_tool_is_refused(self) -> None:
+        server = MCPServer(name="t", config=build_mcp_config(require_tool_permissions=True))
+        with pytest.raises(ImproperlyConfigured, match="no permissions"):
+            server.register_service_tool(name="t.open", spec=_spec(), description="d")
+
+    def test_the_error_names_the_way_out_not_the_way_in(self) -> None:
+        """⚠ The raise and the warning need *opposite* remedies.
+
+        The warning says "set the flag to make this an error". Reusing that text
+        on the raise tells you to enable the setting that just fired, which
+        reads as a bug in the framework rather than a problem with your code.
+        """
+        server = MCPServer(name="t", config=build_mcp_config(require_tool_permissions=True))
+        with pytest.raises(ImproperlyConfigured) as excinfo:
+            server.register_service_tool(name="t.open", spec=_spec(), description="d")
+        assert "= False" in str(excinfo.value)
+
+    def test_spec_permission_classes_satisfy_it(self) -> None:
+        """The idiomatic fix: declare on the spec, so every transport sees it."""
+        from rest_framework.permissions import AllowAny
+
+        server = MCPServer(name="t", config=build_mcp_config(require_tool_permissions=True))
+        server.register_service_tool(
+            name="t.guarded",
+            spec=ServiceSpec(service=lambda: {"ok": True}, permission_classes=[AllowAny]),
+            description="d",
+        )
+
+    def test_the_opt_out_downgrades_it_to_a_warning(self) -> None:
+        server = MCPServer(name="t", config=build_mcp_config(require_tool_permissions=False))
+        with pytest.warns(UnguardedToolWarning, match="0.25.0"):
+            server.register_service_tool(name="t.open", spec=_spec(), description="d")
 
 
 class TestObservability:

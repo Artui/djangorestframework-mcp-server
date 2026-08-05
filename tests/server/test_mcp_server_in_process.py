@@ -80,7 +80,7 @@ def test_list_tools_returns_the_merged_input_schema() -> None:
 
 
 def test_list_tools_paginates_with_an_opaque_cursor(settings) -> None:
-    settings.REST_FRAMEWORK_MCP = {"PAGE_SIZE": 1}
+    settings.REST_FRAMEWORK_MCP = {"REQUIRE_TOOL_PERMISSIONS": False, "PAGE_SIZE": 1}
     server = _server()
     for name in ("a", "b"):
         server.register_service_tool(name=name, spec=ServiceSpec(service=lambda: None))
@@ -105,7 +105,10 @@ def test_list_tools_bad_cursor_is_a_jsonrpc_error() -> None:
 
 
 def test_list_tools_filters_by_listing_permissions(settings) -> None:
-    settings.REST_FRAMEWORK_MCP = {"FILTER_LISTINGS_BY_PERMISSIONS": True}
+    settings.REST_FRAMEWORK_MCP = {
+        "REQUIRE_TOOL_PERMISSIONS": False,
+        "FILTER_LISTINGS_BY_PERMISSIONS": True,
+    }
     server = _server()
     server.register_service_tool(
         name="hidden", spec=ServiceSpec(service=lambda: None), permissions=[_Deny()]
@@ -275,7 +278,10 @@ def test_call_context_carries_scopes() -> None:
 
 
 def test_list_tools_scopes_reveal_a_scope_gated_tool(settings) -> None:
-    settings.REST_FRAMEWORK_MCP = {"FILTER_LISTINGS_BY_PERMISSIONS": True}
+    settings.REST_FRAMEWORK_MCP = {
+        "REQUIRE_TOOL_PERMISSIONS": False,
+        "FILTER_LISTINGS_BY_PERMISSIONS": True,
+    }
     server = _server()
     server.register_service_tool(
         name="gated",
@@ -315,7 +321,10 @@ async def test_alist_tools_mirrors_list_tools() -> None:
 
 
 async def test_alist_tools_honors_scopes(settings) -> None:
-    settings.REST_FRAMEWORK_MCP = {"FILTER_LISTINGS_BY_PERMISSIONS": True}
+    settings.REST_FRAMEWORK_MCP = {
+        "REQUIRE_TOOL_PERMISSIONS": False,
+        "FILTER_LISTINGS_BY_PERMISSIONS": True,
+    }
     server = _server()
     server.register_service_tool(
         name="gated",
@@ -337,7 +346,10 @@ async def test_alist_tools_runs_db_backed_listing_filter_off_the_loop(settings) 
     from django.contrib.auth import get_user_model
     from django.core.exceptions import SynchronousOnlyOperation
 
-    settings.REST_FRAMEWORK_MCP = {"FILTER_LISTINGS_BY_PERMISSIONS": True}
+    settings.REST_FRAMEWORK_MCP = {
+        "REQUIRE_TOOL_PERMISSIONS": False,
+        "FILTER_LISTINGS_BY_PERMISSIONS": True,
+    }
     user = await sync_to_async(get_user_model().objects.create_user)(username="u")
     server = _server()
     server.register_service_tool(

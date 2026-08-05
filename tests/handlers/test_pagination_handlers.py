@@ -57,7 +57,7 @@ def _ctx(server: MCPServer) -> MCPCallContext:
 
 
 def test_tools_list_paginates(settings) -> None:
-    settings.REST_FRAMEWORK_MCP = {"PAGE_SIZE": 2}
+    settings.REST_FRAMEWORK_MCP = {"REQUIRE_TOOL_PERMISSIONS": False, "PAGE_SIZE": 2}
     server = _build_server()
     out1 = handle_tools_list(None, _ctx(server))
     assert isinstance(out1, dict)
@@ -74,7 +74,7 @@ def test_tools_list_paginates(settings) -> None:
 
 
 def test_resources_list_paginates(settings) -> None:
-    settings.REST_FRAMEWORK_MCP = {"PAGE_SIZE": 2}
+    settings.REST_FRAMEWORK_MCP = {"REQUIRE_TOOL_PERMISSIONS": False, "PAGE_SIZE": 2}
     server = _build_server()
     out = handle_resources_list(None, _ctx(server))
     assert isinstance(out, dict)
@@ -83,7 +83,7 @@ def test_resources_list_paginates(settings) -> None:
 
 
 def test_resources_templates_list_paginates(settings) -> None:
-    settings.REST_FRAMEWORK_MCP = {"PAGE_SIZE": 2}
+    settings.REST_FRAMEWORK_MCP = {"REQUIRE_TOOL_PERMISSIONS": False, "PAGE_SIZE": 2}
     server = _build_server()
     out = handle_resources_templates_list(None, _ctx(server))
     assert isinstance(out, dict)

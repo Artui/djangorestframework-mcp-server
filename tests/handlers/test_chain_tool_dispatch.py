@@ -392,7 +392,10 @@ def test_step_service_validation_error_maps_to_invalid_params() -> None:
 
 @pytest.mark.django_db
 def test_records_service_error_when_setting_enabled(settings: Any) -> None:
-    settings.REST_FRAMEWORK_MCP = {"RECORD_SERVICE_EXCEPTIONS": True}
+    settings.REST_FRAMEWORK_MCP = {
+        "REQUIRE_TOOL_PERMISSIONS": False,
+        "RECORD_SERVICE_EXCEPTIONS": True,
+    }
     server = _server()
 
     def _boom(**_: Any) -> None:

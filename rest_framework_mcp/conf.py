@@ -303,7 +303,7 @@ DEFAULTS: dict[str, Any] = {
     # ``REST_FRAMEWORK`` default permission classes) — has no effect over
     # MCP: this package deliberately bypasses DRF's view-layer pipeline,
     # so a spec that looks guarded over HTTP ships as an unguarded tool.
-    "REQUIRE_TOOL_PERMISSIONS": False,
+    "REQUIRE_TOOL_PERMISSIONS": True,
     # When True, registering a tool with no description raises
     # ``ImproperlyConfigured`` instead of emitting the default
     # ``UndescribedToolWarning``. A description is not decoration: it is the

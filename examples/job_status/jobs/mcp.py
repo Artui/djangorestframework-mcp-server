@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import django_filters
+from rest_framework.permissions import AllowAny
 from rest_framework_services.types.selector_kind import SelectorKind
 from rest_framework_services.types.selector_spec import SelectorSpec
 from rest_framework_services.types.service_spec import ServiceSpec
@@ -39,6 +40,7 @@ def build_server() -> MCPServer:
     server.register_service_tool(
         name="jobs.start",
         spec=ServiceSpec(
+            permission_classes=[AllowAny],
             service=start_job,
             input_serializer=StartJobInputSerializer,
             output_selector_spec=SelectorSpec(
@@ -69,6 +71,7 @@ def build_server() -> MCPServer:
     server.register_selector_tool(
         name="jobs.list",
         spec=SelectorSpec(
+            permission_classes=[AllowAny],
             kind=SelectorKind.LIST,
             selector=list_jobs,
             output_serializer=JobOutputSerializer,
