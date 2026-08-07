@@ -28,9 +28,7 @@ from invoices.models import Invoice
 
 def create_invoice(*, data: dict) -> Invoice:
     """Create a new invoice from validated input data."""
-    return Invoice.objects.create(
-        number=data["number"], amount_cents=data["amount_cents"]
-    )
+    return Invoice.objects.create(number=data["number"], amount_cents=data["amount_cents"])
 ```
 
 ## 3. Add input/output serializers
@@ -98,9 +96,7 @@ You can also use the decorator form — both register the same `ToolBinding`:
 )
 def create_invoice(*, data):
     """Create a new invoice from validated input data."""
-    return Invoice.objects.create(
-        number=data["number"], amount_cents=data["amount_cents"]
-    )
+    return Invoice.objects.create(number=data["number"], amount_cents=data["amount_cents"])
 ```
 
 ## 5. Mount the URLs

@@ -75,7 +75,12 @@ def _wrap_request(http_request: HttpRequest, *, user: Any) -> Request:
     ``.user`` explicitly so MCP-supplied auth state flows through without
     DRF re-running its own ``authenticators`` chain.
     """
-    raw: Any = Request(http_request)  # ty: ignore[too-many-positional-arguments]
+    # Constructed via ``Any`` and cast back to keep the static type. This
+    # carried a ``ty: ignore[too-many-positional-arguments]`` for a django-stubs
+    # overload that bled into ``Request``; ty 0.0.69 resolves it and now reports
+    # the directive as unused. Same removal as the sister repo's
+    # ``build_offline_context``.
+    raw: Any = Request(http_request)
     drf_request: Request = cast(Request, raw)
     drf_request.user = user
     return drf_request

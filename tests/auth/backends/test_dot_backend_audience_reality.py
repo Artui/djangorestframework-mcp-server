@@ -1,10 +1,20 @@
 """Audience enforcement against DOT's *real* token model, not a fake.
 
-The existing backend suite drives `authenticate` through a `_FakeToken` that
-carries a `resource` attribute. DOT's actual `AccessToken` does not — DOT
-implements no RFC 8707 resource indicators — so the audience path looked
-thoroughly tested while being unsatisfiable in every real deployment. These
-tests use a genuine `AccessToken` row so that divergence cannot recur.
+The backend suite drives `authenticate` through a `_FakeToken` carrying a
+`resource` attribute. Whether DOT's actual `AccessToken` has one decides
+whether that path is real or fiction, so these tests use a genuine
+`AccessToken` row.
+
+⭐ **DOT 3.4.0 added `resource`**, and this file is how we found out: the
+tripwire below was written predicting exactly that, and it fired on the bump.
+Before 3.4.0 the audience path was unsatisfiable in every stock deployment —
+enforcement could only work against a swapped `ACCESS_TOKEN_MODEL` or a custom
+`audience_getter`. From 3.4.0 the default getter is meaningful out of the box.
+
+⚠ The package supports `django-oauth-toolkit>=2.3`, so both realities are live
+and these tests are version-gated rather than rewritten. Whether
+`ENFORCE_AUDIENCE` should now *default on* is a separate decision — it would be
+breaking for anyone on older DOT.
 """
 
 from __future__ import annotations
@@ -24,19 +34,33 @@ from rest_framework_mcp.auth.backends.django_oauth_toolkit_backend import (
 RESOURCE_URL = "https://example.test/mcp/"
 
 
-def test_dot_access_token_has_no_resource_field() -> None:
-    """The premise of the whole fix, pinned.
+def _dot_has_resource_indicators() -> bool:
+    """Whether the installed DOT implements RFC 8707 resource indicators.
 
-    If DOT ever adds resource indicators this fails, and the default
-    audience getter becomes meaningful — at which point enforcement could
-    reasonably default on. Until then, any test that exercises the
-    audience path through an object with a `resource` attribute is testing
-    a fiction.
+    Feature-detected on the model rather than version-gated on a string: the
+    field is the thing the audience getter actually reads, and a project running
+    a swapped ``ACCESS_TOKEN_MODEL`` can have it at any DOT version.
     """
     from oauth2_provider.models import get_access_token_model
 
-    fields = {f.name for f in get_access_token_model()._meta.get_fields()}
-    assert "resource" not in fields
+    return "resource" in {f.name for f in get_access_token_model()._meta.get_fields()}
+
+
+def test_the_resource_field_premise_is_pinned_to_reality() -> None:
+    """The tripwire that caught DOT 3.4.0, kept pointing at the live fact.
+
+    Its predecessor asserted ``"resource" not in fields`` and said in its own
+    docstring that failing would mean DOT had added resource indicators. That is
+    exactly what happened, so the assertion now tracks the installed version
+    instead of a moment in time.
+    """
+    from importlib.metadata import version
+
+    installed = tuple(int(part) for part in version("django-oauth-toolkit").split(".")[:2])
+    assert _dot_has_resource_indicators() == (installed >= (3, 4)), (
+        "DOT's resource-indicator support diverged from the version that "
+        "introduced it — re-check what the default audience getter reads."
+    )
 
 
 def _issue_token(scope: str = "read write") -> str:
@@ -103,6 +127,12 @@ def test_enforcement_without_a_usable_audience_source_refuses_to_start(settings)
     only useful place to say so is where the configuration is read.
     """
     settings.REST_FRAMEWORK_MCP = {"RESOURCE_URL": RESOURCE_URL, "ENFORCE_AUDIENCE": True}
+    if _dot_has_resource_indicators():
+        # DOT >= 3.4: the default getter reads a real field, so enforcement is
+        # satisfiable and starting up is the correct behaviour. The guard has
+        # not weakened — it still refuses when there is genuinely no source.
+        DjangoOAuthToolkitBackend()
+        return
     with pytest.raises(ImproperlyConfigured, match="no 'resource' field"):
         DjangoOAuthToolkitBackend()
 
@@ -178,3 +208,31 @@ def test_unconfigured_metadata_says_why_resource_is_empty(settings) -> None:
     body = DjangoOAuthToolkitBackend().protected_resource_metadata().to_dict()
     assert body["resource"] == ""
     assert "RESOURCE_URL" in body["_warning"]
+
+
+def test_enforcement_refuses_a_swapped_model_without_a_resource(monkeypatch, settings) -> None:
+    """The guard still fires — it just needs a model that lacks the field.
+
+    Stock DOT >= 3.4 ships ``resource``, so this path is no longer reachable
+    through the default model. It remains reachable, and worth keeping, for an
+    older DOT or a project that swapped ``OAUTH2_PROVIDER['ACCESS_TOKEN_MODEL']``
+    for one without it — which is exactly when an operator most needs to be told
+    at startup rather than by a 401 on every request.
+    """
+
+    class _Field:
+        name = "expires"
+
+    class _Meta:
+        @staticmethod
+        def get_fields() -> list[_Field]:
+            return [_Field()]
+
+    class _NoResourceToken:
+        __name__ = "_NoResourceToken"
+        _meta = _Meta()
+
+    monkeypatch.setattr("oauth2_provider.models.get_access_token_model", lambda: _NoResourceToken)
+    settings.REST_FRAMEWORK_MCP = {"RESOURCE_URL": RESOURCE_URL, "ENFORCE_AUDIENCE": True}
+    with pytest.raises(ImproperlyConfigured, match="no 'resource' field"):
+        DjangoOAuthToolkitBackend()

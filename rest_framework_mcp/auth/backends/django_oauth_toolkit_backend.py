@@ -230,9 +230,11 @@ class DjangoOAuthToolkitBackend:
             return
         raise ImproperlyConfigured(
             "DjangoOAuthToolkitBackend: audience enforcement is on, but "
-            f"{token_model.__name__} has no {_RESOURCE_FIELD!r} field — django-oauth-toolkit "
-            "implements no RFC 8707 resource indicators, so no token it issues records the "
-            "resource it was issued for and every request would be rejected. Either supply "
+            f"{token_model.__name__} has no {_RESOURCE_FIELD!r} field, so no token it issues "
+            "records the resource it was issued for and every request would be rejected. "
+            "django-oauth-toolkit added RFC 8707 resource indicators in 3.4.0, so this now "
+            "means either an older DOT or a swapped ACCESS_TOKEN_MODEL without the field. "
+            "Upgrade DOT, or supply "
             "audience_getter= to read the audience from wherever it actually lives (a JWT "
             "claim, a gateway header), swap OAUTH2_PROVIDER['ACCESS_TOKEN_MODEL'] for one "
             f"carrying a {_RESOURCE_FIELD!r} field, or turn off "

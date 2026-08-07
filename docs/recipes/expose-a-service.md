@@ -15,9 +15,7 @@ def calculate_total(*, data: dict) -> dict:
 
 
 class CalculateTotalInput(serializers.Serializer):
-    items = serializers.ListField(
-        child=serializers.DictField(child=serializers.IntegerField())
-    )
+    items = serializers.ListField(child=serializers.DictField(child=serializers.IntegerField()))
 
 
 server = MCPServer(name="cart")

@@ -32,7 +32,7 @@ from rest_framework_mcp import ChainStep, MCPServer, SelectorKind, SelectorSpec,
 
 server.register_chain_tool(
     name="onboard_account",
-    input_serializer=OnboardInput,          # or omit → first step's schema
+    input_serializer=OnboardInput,  # or omit → first step's schema
     steps=[
         ChainStep(
             "acct",
@@ -51,7 +51,7 @@ server.register_chain_tool(
             inputs=lambda ctx: {"account": ctx["acct"], "subscription": ctx["sub"]},
         ),
     ],
-    output_alias="welcome",   # default: the last step
+    output_alias="welcome",  # default: the last step
 )
 ```
 

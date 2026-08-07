@@ -25,7 +25,7 @@ from rest_framework_mcp import MCPServer
 
 # The same spec you'd hand a viewset's `action_specs` on the HTTP side.
 moderate = PolymorphicServiceSpec(
-    discriminator=lambda *, data: data["op"],       # HTTP-only; unused here
+    discriminator=lambda *, data: data["op"],  # HTTP-only; unused here
     specs={
         "approve": ServiceSpec(service=approve_document, output_selector_spec=DOC_OUT),
         "reject": ServiceSpec(service=reject_document, output_selector_spec=DOC_OUT),
@@ -35,7 +35,7 @@ moderate = PolymorphicServiceSpec(
 server = MCPServer(name="docs")
 for variant_key, variant in moderate.specs.items():
     server.register_service_tool(
-        name=f"moderate_document_{variant_key}",   # → moderate_document_approve, …
+        name=f"moderate_document_{variant_key}",  # → moderate_document_approve, …
         spec=variant,
         description=f"Moderate a document ({variant_key}).",
     )
