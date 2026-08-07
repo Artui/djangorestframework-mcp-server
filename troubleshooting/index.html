@@ -10,13 +10,13 @@
       
       
       
-        <link rel="canonical" href="https://artui.github.io/djangorestframework-mcp-server/observability/">
+        <link rel="canonical" href="https://artui.github.io/djangorestframework-mcp-server/troubleshooting/">
       
       
-        <link rel="prev" href="../prompts/">
+        <link rel="prev" href="../observability/">
       
       
-        <link rel="next" href="../troubleshooting/">
+        <link rel="next" href="../performance/">
       
       
         
@@ -27,7 +27,7 @@
     
     
       
-        <title>Observability - djangorestframework-mcp-server</title>
+        <title>Troubleshooting - djangorestframework-mcp-server</title>
       
     
     
@@ -80,7 +80,7 @@
     <div data-md-component="skip">
       
         
-        <a href="#observability" class="md-skip">
+        <a href="#troubleshooting" class="md-skip">
           Skip to content
         </a>
       
@@ -116,7 +116,7 @@
         <div class="md-header__topic" data-md-component="header-topic">
           <span class="md-ellipsis">
             
-              Observability
+              Troubleshooting
             
           </span>
         </div>
@@ -428,6 +428,33 @@
       
   
   
+  
+  
+    <li class="md-nav__item">
+      <a href="../observability/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Observability
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
     
   
   
@@ -447,7 +474,7 @@
   <span class="md-ellipsis">
     
   
-    Observability
+    Troubleshooting
   
 
     
@@ -465,7 +492,7 @@
   <span class="md-ellipsis">
     
   
-    Observability
+    Troubleshooting
   
 
     
@@ -491,22 +518,22 @@
     <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
       
         <li class="md-nav__item">
-  <a href="#logging" class="md-nav__link">
+  <a href="#every-tool-call-returns-404" class="md-nav__link">
     <span class="md-ellipsis">
       
-        Logging
+        Every tool call returns 404
       
     </span>
   </a>
   
-    <nav class="md-nav" aria-label="Logging">
+    <nav class="md-nav" aria-label="Every tool call returns 404">
       <ul class="md-nav__list">
         
           <li class="md-nav__item">
-  <a href="#what-lands-where" class="md-nav__link">
+  <a href="#1-read-the-mcp-error-header" class="md-nav__link">
     <span class="md-ellipsis">
       
-        What lands where
+        1. Read the MCP-Error header
       
     </span>
   </a>
@@ -514,10 +541,10 @@
 </li>
         
           <li class="md-nav__item">
-  <a href="#the-session-line-is-the-one-that-matters" class="md-nav__link">
+  <a href="#2-check-whether-the-session-simply-expired" class="md-nav__link">
     <span class="md-ellipsis">
       
-        The session line is the one that matters
+        2. Check whether the session simply expired
       
     </span>
   </a>
@@ -525,10 +552,21 @@
 </li>
         
           <li class="md-nav__item">
-  <a href="#what-is-never-logged" class="md-nav__link">
+  <a href="#3-rule-out-cache-eviction" class="md-nav__link">
     <span class="md-ellipsis">
       
-        What is never logged
+        3. Rule out cache eviction
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#4-check-the-client-re-initializes" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        4. Check the client re-initializes
       
     </span>
   </a>
@@ -541,10 +579,10 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#tracing" class="md-nav__link">
+  <a href="#sessions-keep-breaking-and-you-dont-control-the-client" class="md-nav__link">
     <span class="md-ellipsis">
       
-        Tracing
+        Sessions keep breaking and you don't control the client
       
     </span>
   </a>
@@ -552,44 +590,33 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#install" class="md-nav__link">
+  <a href="#improperlyconfigured-on-startup" class="md-nav__link">
     <span class="md-ellipsis">
       
-        Install
+        ImproperlyConfigured on startup
       
     </span>
   </a>
   
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#wire-it-up" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Wire it up
-      
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#span-shape" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Span shape
-      
-    </span>
-  </a>
-  
-    <nav class="md-nav" aria-label="Span shape">
+    <nav class="md-nav" aria-label="ImproperlyConfigured on startup">
       <ul class="md-nav__list">
         
           <li class="md-nav__item">
-  <a href="#common-attributes" class="md-nav__link">
+  <a href="#registered-with-no-permissions" class="md-nav__link">
     <span class="md-ellipsis">
       
-        Common attributes
+        "registered with no permissions"
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#outputschema-would-be-advertised-but-structuredcontent-is-disabled" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        "outputSchema would be advertised but structuredContent is disabled"
       
     </span>
   </a>
@@ -602,32 +629,49 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#whats-not-in-a-span" class="md-nav__link">
+  <a href="#oauth-discovery-returns-404s" class="md-nav__link">
     <span class="md-ellipsis">
       
-        What's not in a span
+        OAuth discovery returns 404s
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="OAuth discovery returns 404s">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#the-authorization-server-must-be-a-site-root" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        The authorization server must be a site root
       
     </span>
   </a>
   
 </li>
-      
-        <li class="md-nav__item">
-  <a href="#without-otel-installed" class="md-nav__link">
+        
+          <li class="md-nav__item">
+  <a href="#mount-order-against-oauth2_provider" class="md-nav__link">
     <span class="md-ellipsis">
       
-        Without [otel] installed
+        Mount order against oauth2_provider
       
     </span>
   </a>
   
 </li>
+        
+      </ul>
+    </nav>
+  
+</li>
       
         <li class="md-nav__item">
-  <a href="#sampling" class="md-nav__link">
+  <a href="#a-tool-result-is-too-large-for-the-client" class="md-nav__link">
     <span class="md-ellipsis">
       
-        Sampling
+        A tool result is too large for the client
       
     </span>
   </a>
@@ -638,33 +682,6 @@
   
 </nav>
       
-    </li>
-  
-
-    
-      
-      
-  
-  
-  
-  
-    <li class="md-nav__item">
-      <a href="../troubleshooting/" class="md-nav__link">
-        
-  
-  
-  <span class="md-ellipsis">
-    
-  
-    Troubleshooting
-  
-
-    
-  </span>
-  
-  
-
-      </a>
     </li>
   
 
@@ -1505,22 +1522,22 @@
     <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
       
         <li class="md-nav__item">
-  <a href="#logging" class="md-nav__link">
+  <a href="#every-tool-call-returns-404" class="md-nav__link">
     <span class="md-ellipsis">
       
-        Logging
+        Every tool call returns 404
       
     </span>
   </a>
   
-    <nav class="md-nav" aria-label="Logging">
+    <nav class="md-nav" aria-label="Every tool call returns 404">
       <ul class="md-nav__list">
         
           <li class="md-nav__item">
-  <a href="#what-lands-where" class="md-nav__link">
+  <a href="#1-read-the-mcp-error-header" class="md-nav__link">
     <span class="md-ellipsis">
       
-        What lands where
+        1. Read the MCP-Error header
       
     </span>
   </a>
@@ -1528,10 +1545,10 @@
 </li>
         
           <li class="md-nav__item">
-  <a href="#the-session-line-is-the-one-that-matters" class="md-nav__link">
+  <a href="#2-check-whether-the-session-simply-expired" class="md-nav__link">
     <span class="md-ellipsis">
       
-        The session line is the one that matters
+        2. Check whether the session simply expired
       
     </span>
   </a>
@@ -1539,10 +1556,21 @@
 </li>
         
           <li class="md-nav__item">
-  <a href="#what-is-never-logged" class="md-nav__link">
+  <a href="#3-rule-out-cache-eviction" class="md-nav__link">
     <span class="md-ellipsis">
       
-        What is never logged
+        3. Rule out cache eviction
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#4-check-the-client-re-initializes" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        4. Check the client re-initializes
       
     </span>
   </a>
@@ -1555,10 +1583,10 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#tracing" class="md-nav__link">
+  <a href="#sessions-keep-breaking-and-you-dont-control-the-client" class="md-nav__link">
     <span class="md-ellipsis">
       
-        Tracing
+        Sessions keep breaking and you don't control the client
       
     </span>
   </a>
@@ -1566,44 +1594,33 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#install" class="md-nav__link">
+  <a href="#improperlyconfigured-on-startup" class="md-nav__link">
     <span class="md-ellipsis">
       
-        Install
+        ImproperlyConfigured on startup
       
     </span>
   </a>
   
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#wire-it-up" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Wire it up
-      
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#span-shape" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Span shape
-      
-    </span>
-  </a>
-  
-    <nav class="md-nav" aria-label="Span shape">
+    <nav class="md-nav" aria-label="ImproperlyConfigured on startup">
       <ul class="md-nav__list">
         
           <li class="md-nav__item">
-  <a href="#common-attributes" class="md-nav__link">
+  <a href="#registered-with-no-permissions" class="md-nav__link">
     <span class="md-ellipsis">
       
-        Common attributes
+        "registered with no permissions"
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#outputschema-would-be-advertised-but-structuredcontent-is-disabled" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        "outputSchema would be advertised but structuredContent is disabled"
       
     </span>
   </a>
@@ -1616,32 +1633,49 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#whats-not-in-a-span" class="md-nav__link">
+  <a href="#oauth-discovery-returns-404s" class="md-nav__link">
     <span class="md-ellipsis">
       
-        What's not in a span
+        OAuth discovery returns 404s
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="OAuth discovery returns 404s">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#the-authorization-server-must-be-a-site-root" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        The authorization server must be a site root
       
     </span>
   </a>
   
 </li>
-      
-        <li class="md-nav__item">
-  <a href="#without-otel-installed" class="md-nav__link">
+        
+          <li class="md-nav__item">
+  <a href="#mount-order-against-oauth2_provider" class="md-nav__link">
     <span class="md-ellipsis">
       
-        Without [otel] installed
+        Mount order against oauth2_provider
       
     </span>
   </a>
   
 </li>
+        
+      </ul>
+    </nav>
+  
+</li>
       
         <li class="md-nav__item">
-  <a href="#sampling" class="md-nav__link">
+  <a href="#a-tool-result-is-too-large-for-the-client" class="md-nav__link">
     <span class="md-ellipsis">
       
-        Sampling
+        A tool result is too large for the client
       
     </span>
   </a>
@@ -1665,7 +1699,7 @@
 
 
   
-    <a href="https://github.com/Artui/djangorestframework-mcp-server/edit/main/docs/observability.md" title="Edit this page" class="md-content__button md-icon" rel="edit">
+    <a href="https://github.com/Artui/djangorestframework-mcp-server/edit/main/docs/troubleshooting.md" title="Edit this page" class="md-content__button md-icon" rel="edit">
       
       <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M10 20H6V4h7v5h5v3.1l2-2V8l-6-6H6c-1.1 0-2 .9-2 2v16c0 1.1.9 2 2 2h4zm10.2-7c.1 0 .3.1.4.2l1.3 1.3c.2.2.2.6 0 .8l-1 1-2.1-2.1 1-1c.1-.1.2-.2.4-.2m0 3.9L14.1 23H12v-2.1l6.1-6.1z"/></svg>
     </a>
@@ -1673,162 +1707,149 @@
   
 
 
-<h1 id="observability">Observability<a class="headerlink" href="#observability" title="Permanent link">&para;</a></h1>
-<div class="admonition note">
-<p class="admonition-title">Two independent surfaces</p>
-<p><strong>Logging</strong> (below) is always on and needs no extra dependency — it is how
-you find out <em>why</em> a request was rejected. <strong>Tracing</strong> needs the <code>[otel]</code>
-extra and tells you where time went. Reach for logging first when something
-returns an error you cannot explain.</p>
+<h1 id="troubleshooting">Troubleshooting<a class="headerlink" href="#troubleshooting" title="Permanent link">&para;</a></h1>
+<h2 id="every-tool-call-returns-404">Every tool call returns 404<a class="headerlink" href="#every-tool-call-returns-404" title="Permanent link">&para;</a></h2>
+<p>This is the most confusing failure the transport can produce, because four
+unrelated causes look identical from the client. Work down the list.</p>
+<h3 id="1-read-the-mcp-error-header">1. Read the <code>MCP-Error</code> header<a class="headerlink" href="#1-read-the-mcp-error-header" title="Permanent link">&para;</a></h3>
+<p>Since 0.25.0 every session rejection carries one:</p>
+<table>
+<thead>
+<tr>
+<th>Header</th>
+<th>HTTP</th>
+<th>Meaning</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>MCP-Error: session-missing</code></td>
+<td><code>400</code></td>
+<td>No <code>Mcp-Session-Id</code> arrived at all</td>
+</tr>
+<tr>
+<td><code>MCP-Error: session-unknown</code></td>
+<td><code>404</code></td>
+<td>An id arrived that this server will not honour</td>
+</tr>
+<tr>
+<td><em>(no header)</em></td>
+<td><code>404</code></td>
+<td><strong>Not us.</strong> Something in front of the application answered</td>
+</tr>
+</tbody>
+</table>
+<p>That last row is the important one. A load balancer with no matching rule
+returns a bodiless 404 that is indistinguishable from a dead session — and the
+JSON-RPC body that would tell them apart often never reaches a human, because
+clients commonly log <code>${status} ${statusText}</code> and <strong>HTTP/2 has no reason
+phrase</strong>. If there is no <code>MCP-Error</code> header, look at your routing layer, not at
+this package.</p>
+<div class="admonition warning">
+<p class="admonition-title">Application logs may be silent either way</p>
+<p>If your logging does not include <code>rest_framework_mcp</code> (see
+<a href="../observability/">Observability</a>), the absence of log lines tells you
+<em>nothing</em> about whether the request arrived. Configure the logger before
+concluding anything from silence.</p>
 </div>
-<h2 id="logging">Logging<a class="headerlink" href="#logging" title="Permanent link">&para;</a></h2>
-<p>Before 0.25.0 this package emitted <strong>nothing</strong> — no logger anywhere, in a
-library that terminates a wire protocol, authenticates every request and
-rejects requests for four distinct reasons. It now logs under the
-<code>rest_framework_mcp</code> namespace, one logger per module, configured like any
-other library:</p>
-<div class="language-python highlight"><span class="filename">settings.py</span><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="n">LOGGING</span> <span class="o">=</span> <span class="p">{</span>
-</span><span id="__span-0-2"><a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a>    <span class="s2">&quot;version&quot;</span><span class="p">:</span> <span class="mi">1</span><span class="p">,</span>
-</span><span id="__span-0-3"><a id="__codelineno-0-3" name="__codelineno-0-3" href="#__codelineno-0-3"></a>    <span class="s2">&quot;disable_existing_loggers&quot;</span><span class="p">:</span> <span class="kc">False</span><span class="p">,</span>
-</span><span id="__span-0-4"><a id="__codelineno-0-4" name="__codelineno-0-4" href="#__codelineno-0-4"></a>    <span class="s2">&quot;handlers&quot;</span><span class="p">:</span> <span class="p">{</span><span class="s2">&quot;console&quot;</span><span class="p">:</span> <span class="p">{</span><span class="s2">&quot;class&quot;</span><span class="p">:</span> <span class="s2">&quot;logging.StreamHandler&quot;</span><span class="p">}},</span>
-</span><span id="__span-0-5"><a id="__codelineno-0-5" name="__codelineno-0-5" href="#__codelineno-0-5"></a>    <span class="s2">&quot;loggers&quot;</span><span class="p">:</span> <span class="p">{</span>
-</span><span id="__span-0-6"><a id="__codelineno-0-6" name="__codelineno-0-6" href="#__codelineno-0-6"></a>        <span class="s2">&quot;rest_framework_mcp&quot;</span><span class="p">:</span> <span class="p">{</span><span class="s2">&quot;level&quot;</span><span class="p">:</span> <span class="s2">&quot;INFO&quot;</span><span class="p">,</span> <span class="s2">&quot;handlers&quot;</span><span class="p">:</span> <span class="p">[</span><span class="s2">&quot;console&quot;</span><span class="p">]},</span>
-</span><span id="__span-0-7"><a id="__codelineno-0-7" name="__codelineno-0-7" href="#__codelineno-0-7"></a>    <span class="p">},</span>
-</span><span id="__span-0-8"><a id="__codelineno-0-8" name="__codelineno-0-8" href="#__codelineno-0-8"></a><span class="p">}</span>
-</span></code></pre></div>
-<h3 id="what-lands-where">What lands where<a class="headerlink" href="#what-lands-where" title="Permanent link">&para;</a></h3>
-<table>
-<thead>
-<tr>
-<th>Level</th>
-<th>Events</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td><code>WARNING</code></td>
-<td>Session rejections, authentication failures, and every outbound bound that fires (result size, dispatch deadline, page clamp)</td>
-</tr>
-<tr>
-<td><code>INFO</code></td>
-<td><code>initialize</code>, and the protocol era each request selected</td>
-</tr>
-<tr>
-<td><code>DEBUG</code></td>
-<td>Per-call dispatch timing and result size</td>
-</tr>
-</tbody>
-</table>
-<h3 id="the-session-line-is-the-one-that-matters">The session line is the one that matters<a class="headerlink" href="#the-session-line-is-the-one-that-matters" title="Permanent link">&para;</a></h3>
-<p>A rejected session logs <strong>which</strong> of its causes fired, even though the HTTP
-response deliberately does not:</p>
-<div class="language-text highlight"><pre><span></span><code><span id="__span-1-1"><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a>WARNING Session rejected: session-unknown (session=a1b2c3d4…, principal=42, method=tools/call) -&gt; HTTP 404
-</span></code></pre></div>
-<p>The wire merges "unknown id" with "id owned by another principal" so a caller
-cannot probe session ids. An operator reading logs is not the adversary that
-protects against, and a log line is not the wire — so server-side you get the
-exact condition.</p>
-<h3 id="what-is-never-logged">What is never logged<a class="headerlink" href="#what-is-never-logged" title="Permanent link">&para;</a></h3>
-<p>Bearer tokens, tool arguments, and tool results — the last two are your domain
-data and may be anything at all. Session ids appear as a short prefix
-(<code>a1b2c3d4…</code>), enough to follow one client across requests and not enough to
-replay.</p>
-<h2 id="tracing">Tracing<a class="headerlink" href="#tracing" title="Permanent link">&para;</a></h2>
-<p>The MCP server emits OpenTelemetry spans around every dispatch — <code>tools/call</code>,
-<code>resources/read</code>, <code>prompts/get</code>. Spans are scoped to the dispatch portion
-(after binding resolution) so cheap validation rejections don't generate
-trace noise.</p>
-<h2 id="install">Install<a class="headerlink" href="#install" title="Permanent link">&para;</a></h2>
-<div class="language-bash highlight"><pre><span></span><code><span id="__span-2-1"><a id="__codelineno-2-1" name="__codelineno-2-1" href="#__codelineno-2-1"></a>pip<span class="w"> </span>install<span class="w"> </span><span class="s2">&quot;djangorestframework-mcp-server[otel]&quot;</span>
-</span></code></pre></div>
-<p><code>opentelemetry-api</code> is the only declared dep. You bring your own SDK and
-exporter — typically <code>opentelemetry-sdk</code> plus an exporter for whatever
-backend you're using (OTLP, Jaeger, Tempo, …).</p>
-<h2 id="wire-it-up">Wire it up<a class="headerlink" href="#wire-it-up" title="Permanent link">&para;</a></h2>
-<p>OTel auto-discovers the global <code>TracerProvider</code> you configure in your app
-startup. The MCP package doesn't install one — it just calls
-<code>opentelemetry.trace.get_tracer("rest_framework_mcp")</code> at span time.</p>
-<div class="language-python highlight"><span class="filename">myproject/asgi.py</span><pre><span></span><code><span id="__span-3-1"><a id="__codelineno-3-1" name="__codelineno-3-1" href="#__codelineno-3-1"></a><span class="kn">from</span><span class="w"> </span><span class="nn">opentelemetry</span><span class="w"> </span><span class="kn">import</span> <span class="n">trace</span>
-</span><span id="__span-3-2"><a id="__codelineno-3-2" name="__codelineno-3-2" href="#__codelineno-3-2"></a><span class="kn">from</span><span class="w"> </span><span class="nn">opentelemetry.sdk.resources</span><span class="w"> </span><span class="kn">import</span> <span class="n">Resource</span>
-</span><span id="__span-3-3"><a id="__codelineno-3-3" name="__codelineno-3-3" href="#__codelineno-3-3"></a><span class="kn">from</span><span class="w"> </span><span class="nn">opentelemetry.sdk.trace</span><span class="w"> </span><span class="kn">import</span> <span class="n">TracerProvider</span>
-</span><span id="__span-3-4"><a id="__codelineno-3-4" name="__codelineno-3-4" href="#__codelineno-3-4"></a><span class="kn">from</span><span class="w"> </span><span class="nn">opentelemetry.sdk.trace.export</span><span class="w"> </span><span class="kn">import</span> <span class="n">BatchSpanProcessor</span>
-</span><span id="__span-3-5"><a id="__codelineno-3-5" name="__codelineno-3-5" href="#__codelineno-3-5"></a><span class="kn">from</span><span class="w"> </span><span class="nn">opentelemetry.exporter.otlp.proto.grpc.trace_exporter</span><span class="w"> </span><span class="kn">import</span> <span class="n">OTLPSpanExporter</span>
-</span><span id="__span-3-6"><a id="__codelineno-3-6" name="__codelineno-3-6" href="#__codelineno-3-6"></a>
-</span><span id="__span-3-7"><a id="__codelineno-3-7" name="__codelineno-3-7" href="#__codelineno-3-7"></a><span class="n">provider</span> <span class="o">=</span> <span class="n">TracerProvider</span><span class="p">(</span>
-</span><span id="__span-3-8"><a id="__codelineno-3-8" name="__codelineno-3-8" href="#__codelineno-3-8"></a>    <span class="n">resource</span><span class="o">=</span><span class="n">Resource</span><span class="o">.</span><span class="n">create</span><span class="p">({</span><span class="s2">&quot;service.name&quot;</span><span class="p">:</span> <span class="s2">&quot;my-mcp-server&quot;</span><span class="p">})</span>
-</span><span id="__span-3-9"><a id="__codelineno-3-9" name="__codelineno-3-9" href="#__codelineno-3-9"></a><span class="p">)</span>
-</span><span id="__span-3-10"><a id="__codelineno-3-10" name="__codelineno-3-10" href="#__codelineno-3-10"></a><span class="n">provider</span><span class="o">.</span><span class="n">add_span_processor</span><span class="p">(</span><span class="n">BatchSpanProcessor</span><span class="p">(</span><span class="n">OTLPSpanExporter</span><span class="p">()))</span>
-</span><span id="__span-3-11"><a id="__codelineno-3-11" name="__codelineno-3-11" href="#__codelineno-3-11"></a><span class="n">trace</span><span class="o">.</span><span class="n">set_tracer_provider</span><span class="p">(</span><span class="n">provider</span><span class="p">)</span>
-</span></code></pre></div>
-<p>That's it — <code>MCPServer.urls</code> (or <code>async_urls</code>) starts emitting spans on the
-next request.</p>
-<h2 id="span-shape">Span shape<a class="headerlink" href="#span-shape" title="Permanent link">&para;</a></h2>
-<table>
-<thead>
-<tr>
-<th>Span name</th>
-<th>When</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td><code>mcp.tools.call</code></td>
-<td>Wraps tool dispatch (permission check, rate limit, validation, service invocation, output rendering).</td>
-</tr>
-<tr>
-<td><code>mcp.resources.read</code></td>
-<td>Wraps resource dispatch (permission check, rate limit, selector invocation, output serialization).</td>
-</tr>
-<tr>
-<td><code>mcp.prompts.get</code></td>
-<td>Wraps prompt dispatch (required-args check, permission check, rate limit, render normalisation).</td>
-</tr>
-</tbody>
-</table>
-<h3 id="common-attributes">Common attributes<a class="headerlink" href="#common-attributes" title="Permanent link">&para;</a></h3>
-<p>Every dispatch span carries:</p>
+<h3 id="2-check-whether-the-session-simply-expired">2. Check whether the session simply expired<a class="headerlink" href="#2-check-whether-the-session-simply-expired" title="Permanent link">&para;</a></h3>
+<p><code>session-unknown</code> covers expired, evicted, terminated, and minted-for-another-
+principal. Sessions have two windows:</p>
 <ul>
-<li><code>mcp.binding.name</code> — the registered tool / resource / prompt name.</li>
-<li><code>mcp.protocol.version</code> — <code>"2025-11-25"</code> etc.</li>
-<li><code>mcp.session.id</code> — when present (every call after <code>initialize</code>).</li>
+<li><code>SESSION_TTL_SECONDS</code> — <strong>idle</strong> timeout, default 24h, restarted on every
+  request. A connector used continuously never hits it.</li>
+<li><code>SESSION_MAX_AGE_SECONDS</code> — <strong>absolute</strong> ceiling, default 7 days, regardless
+  of activity.</li>
 </ul>
-<p><code>resources/read</code> adds <code>mcp.resource.uri</code> (the URI the client sent, with
-template variables resolved).</p>
-<h2 id="whats-not-in-a-span">What's <em>not</em> in a span<a class="headerlink" href="#whats-not-in-a-span" title="Permanent link">&para;</a></h2>
-<p>The MCP package keeps the surface minimal in v1:</p>
-<ul>
-<li>Validation failures <strong>before</strong> binding resolution (unknown tool, malformed
-  params) don't open a span. They're cheap to detect and clutter trace
-  pipelines if every parse error becomes a span. If you want them, log them
-  via Django's standard logging — the JSON-RPC error envelope carries the
-  same info.</li>
-<li>
-<p>Exception recording is <em>not</em> automatic by default. Service exceptions get
-  caught and mapped to JSON-RPC errors before exiting the span; the OTel
-  SDK never sees them. If you want <code>ServiceError</code> raised from a tool service
-  attached to the span, opt in:</p>
-<div class="language-python highlight"><pre><span></span><code><span id="__span-4-1"><a id="__codelineno-4-1" name="__codelineno-4-1" href="#__codelineno-4-1"></a><span class="n">REST_FRAMEWORK_MCP</span> <span class="o">=</span> <span class="p">{</span>
-</span><span id="__span-4-2"><a id="__codelineno-4-2" name="__codelineno-4-2" href="#__codelineno-4-2"></a>    <span class="s2">&quot;RECORD_SERVICE_EXCEPTIONS&quot;</span><span class="p">:</span> <span class="kc">True</span><span class="p">,</span>
-</span><span id="__span-4-3"><a id="__codelineno-4-3" name="__codelineno-4-3" href="#__codelineno-4-3"></a><span class="p">}</span>
+<p>A connector idle over a long weekend hits the first with nothing wrong anywhere.</p>
+<h3 id="3-rule-out-cache-eviction">3. Rule out cache eviction<a class="headerlink" href="#3-rule-out-cache-eviction" title="Permanent link">&para;</a></h3>
+<p>Neither window can promise more than the cache underneath it. A Redis
+<code>maxmemory-policy</code> of <code>allkeys-lru</code> (or <code>allkeys-random</code>) evicts session keys
+long before their timeout, and that is <strong>indistinguishable from expiry</strong> from
+every angle a client can observe.</p>
+<div class="language-bash highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a>redis-cli<span class="w"> </span>CONFIG<span class="w"> </span>GET<span class="w"> </span>maxmemory-policy
 </span></code></pre></div>
-<p>The handler then calls <code>span.record_exception(exc)</code> before mapping the
-error. <code>ServiceValidationError</code> is deliberately <em>not</em> recorded — it
-represents client-side input failure and would clutter alerting
-pipelines. Resource and prompt errors stay un-recorded too; they're
-tool-call-specific.</p>
-</li>
-</ul>
-<h2 id="without-otel-installed">Without <code>[otel]</code> installed<a class="headerlink" href="#without-otel-installed" title="Permanent link">&para;</a></h2>
-<p>The package's <code>_compat/tracing.span(...)</code> helper falls back to a no-op span
-when <code>opentelemetry.trace</code> is not importable. Handlers can call it
-unconditionally — there's no branch in dispatch code, no runtime cost, and
-no import-time failure. The smoke job in CI runs the package without any
-optional extras to confirm this stays true.</p>
-<h2 id="sampling">Sampling<a class="headerlink" href="#sampling" title="Permanent link">&para;</a></h2>
-<p>The MCP package doesn't sample. Whatever sampler you configure on the
-<code>TracerProvider</code> applies to every span — typical setups use a parent-based
-sampler so spans are recorded if their parent (an upstream HTTP request,
-say) was sampled.</p>
+<p>Anything other than <code>noeviction</code> or a <code>volatile-*</code> policy that respects TTLs
+means raising the TTL will not help.</p>
+<h3 id="4-check-the-client-re-initializes">4. Check the client re-initializes<a class="headerlink" href="#4-check-the-client-re-initializes" title="Permanent link">&para;</a></h3>
+<p>The spec is explicit: a client that receives 404 for a request carrying a
+session id <strong>MUST</strong> start a new session by sending a fresh <code>InitializeRequest</code>.
+A client that instead surfaces the 404 as a tool failure turns a recoverable
+condition into an outage that needs a human. If yours does that, see below.</p>
+<h2 id="sessions-keep-breaking-and-you-dont-control-the-client">Sessions keep breaking and you don't control the client<a class="headerlink" href="#sessions-keep-breaking-and-you-dont-control-the-client" title="Permanent link">&para;</a></h2>
+<p>Turn them off:</p>
+<div class="language-python highlight"><span class="filename">settings.py</span><pre><span></span><code><span id="__span-1-1"><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a><span class="n">REST_FRAMEWORK_MCP</span> <span class="o">=</span> <span class="p">{</span><span class="s2">&quot;SESSIONS_ENABLED&quot;</span><span class="p">:</span> <span class="kc">False</span><span class="p">}</span>
+</span></code></pre></div>
+<p>This is a <strong>conformant mode, not a relaxation.</strong> Both legacy revisions say a
+server <em>"MAY assign a session ID at initialization time"</em>, and make the client's
+duty to echo one back conditional on it having arrived. A server that never
+assigns is never sent one.</p>
+<p>With it off, the <code>initialize</code>-handshake era runs statelessly: no id is minted,
+none is required, and a client still echoing a stale id is ignored rather than
+rejected — so flipping the setting does not itself cause the outage it prevents.</p>
+<p><strong>What you give up:</strong> server-initiated messaging on the legacy era. The session
+id is what addresses a client's SSE channel, so the <code>GET</code> stream has no address
+and answers <code>405</code>; the session <code>DELETE</code> does likewise. Request/response tool
+calling is untouched.</p>
+<p><strong>What it does not affect:</strong> the modern (<code>2026-07-28</code>) era, which is stateless
+already and ignores this setting entirely. If your client speaks it, none of
+this section applies to you.</p>
+<h2 id="improperlyconfigured-on-startup"><code>ImproperlyConfigured</code> on startup<a class="headerlink" href="#improperlyconfigured-on-startup" title="Permanent link">&para;</a></h2>
+<h3 id="registered-with-no-permissions">"registered with no permissions"<a class="headerlink" href="#registered-with-no-permissions" title="Permanent link">&para;</a></h3>
+<p>Since 0.25.0 a tool must declare permissions. DRF viewset-level and
+<code>REST_FRAMEWORK</code> default permission classes <strong>do not reach MCP</strong> — this package
+deliberately bypasses DRF's view pipeline — so a spec that looks guarded over
+HTTP ships as an open tool.</p>
+<div class="language-python highlight"><pre><span></span><code><span id="__span-2-1"><a id="__codelineno-2-1" name="__codelineno-2-1" href="#__codelineno-2-1"></a><span class="n">ServiceSpec</span><span class="p">(</span><span class="n">service</span><span class="o">=</span><span class="n">create_invoice</span><span class="p">,</span> <span class="n">permission_classes</span><span class="o">=</span><span class="p">[</span><span class="n">IsAuthenticated</span><span class="p">])</span>
+</span></code></pre></div>
+<p>To migrate a large surface gradually, downgrade it to a warning:</p>
+<div class="language-python highlight"><pre><span></span><code><span id="__span-3-1"><a id="__codelineno-3-1" name="__codelineno-3-1" href="#__codelineno-3-1"></a><span class="n">REST_FRAMEWORK_MCP</span> <span class="o">=</span> <span class="p">{</span><span class="s2">&quot;REQUIRE_TOOL_PERMISSIONS&quot;</span><span class="p">:</span> <span class="kc">False</span><span class="p">}</span>
+</span></code></pre></div>
+<div class="admonition tip">
+<p class="admonition-title">If your tests assign the settings dict</p>
+<p><code>settings.REST_FRAMEWORK_MCP = {...}</code> <strong>replaces</strong> the dict rather than
+merging, so a project-level opt-out disappears inside any test that does
+that. Add the key to those literals too.</p>
+</div>
+<h3 id="outputschema-would-be-advertised-but-structuredcontent-is-disabled">"outputSchema would be advertised but structuredContent is disabled"<a class="headerlink" href="#outputschema-would-be-advertised-but-structuredcontent-is-disabled" title="Permanent link">&para;</a></h3>
+<p>The spec requires a tool declaring an <code>outputSchema</code> to return conforming
+<code>structuredContent</code>. Since 0.25.0 this is caught when the tool is registered
+rather than on the first call.</p>
+<p>Note that server-wide <code>INCLUDE_OUTPUT_SCHEMA=True</code> with
+<code>INCLUDE_STRUCTURED_CONTENT=False</code> is <strong>legal</strong> — it just requires every binding
+to override the content back on. The error names the binding that did not.</p>
+<h2 id="oauth-discovery-returns-404s">OAuth discovery returns 404s<a class="headerlink" href="#oauth-discovery-returns-404s" title="Permanent link">&para;</a></h2>
+<h3 id="the-authorization-server-must-be-a-site-root">The authorization server must be a site root<a class="headerlink" href="#the-authorization-server-must-be-a-site-root" title="Permanent link">&para;</a></h3>
+<p>Endpoint paths are appended to it, so passing the value django-oauth-toolkit
+advertises as <em>its</em> issuer (<code>https://host/oauth</code>) publishes
+<code>https://host/oauth/oauth/authorize/</code> and two siblings like it. Pass the site
+root. Since 0.25.0 this warns at construction; if you genuinely mount elsewhere,
+set the paths instead:</p>
+<div class="language-python highlight"><pre><span></span><code><span id="__span-4-1"><a id="__codelineno-4-1" name="__codelineno-4-1" href="#__codelineno-4-1"></a><span class="n">DjangoOAuthToolkitBackend</span><span class="p">(</span>
+</span><span id="__span-4-2"><a id="__codelineno-4-2" name="__codelineno-4-2" href="#__codelineno-4-2"></a>    <span class="n">authorization_servers</span><span class="o">=</span><span class="p">[</span><span class="s2">&quot;https://host&quot;</span><span class="p">],</span>
+</span><span id="__span-4-3"><a id="__codelineno-4-3" name="__codelineno-4-3" href="#__codelineno-4-3"></a>    <span class="n">authorize_path</span><span class="o">=</span><span class="s2">&quot;/custom/authorize/&quot;</span><span class="p">,</span>
+</span><span id="__span-4-4"><a id="__codelineno-4-4" name="__codelineno-4-4" href="#__codelineno-4-4"></a><span class="p">)</span>
+</span></code></pre></div>
+<h3 id="mount-order-against-oauth2_provider">Mount order against <code>oauth2_provider</code><a class="headerlink" href="#mount-order-against-oauth2_provider" title="Permanent link">&para;</a></h3>
+<p>django-oauth-toolkit 3.4.0 serves its own <code>register/</code> and
+<code>.well-known/oauth-authorization-server</code>. Django resolves first-match, so
+mounting DOT's urls <strong>before</strong> <code>build_oauth_urlpatterns(...)</code> means DOT answers
+those paths — silently, with different content.</p>
+<div class="language-python highlight"><pre><span></span><code><span id="__span-5-1"><a id="__codelineno-5-1" name="__codelineno-5-1" href="#__codelineno-5-1"></a><span class="k">def</span><span class="w"> </span><span class="nf">test_our_oauth_routes_are_not_shadowed</span><span class="p">():</span>
+</span><span id="__span-5-2"><a id="__codelineno-5-2" name="__codelineno-5-2" href="#__codelineno-5-2"></a>    <span class="kn">from</span><span class="w"> </span><span class="nn">rest_framework_mcp.contrib.oauth</span><span class="w"> </span><span class="kn">import</span> <span class="n">check_oauth_url_shadowing</span>
+</span><span id="__span-5-3"><a id="__codelineno-5-3" name="__codelineno-5-3" href="#__codelineno-5-3"></a>
+</span><span id="__span-5-4"><a id="__codelineno-5-4" name="__codelineno-5-4" href="#__codelineno-5-4"></a>    <span class="k">assert</span> <span class="n">check_oauth_url_shadowing</span><span class="p">()</span> <span class="o">==</span> <span class="p">[]</span>
+</span></code></pre></div>
+<p>It is a function you call rather than a Django system check because this package
+is a library with no <code>AppConfig</code> — there is nowhere to register one.</p>
+<h2 id="a-tool-result-is-too-large-for-the-client">A tool result is too large for the client<a class="headerlink" href="#a-tool-result-is-too-large-for-the-client" title="Permanent link">&para;</a></h2>
+<p><code>MAX_RESULT_BYTES</code> (default 5 MiB) bounds the wire payload, but a client's
+context window is far smaller — a result well under the ceiling can still be
+undeliverable. The bound now logs at <code>WARNING</code> when it fires.</p>
+<p>If a paginated tool still returns too much, the row count is not the problem:
+check how wide each row is. A nested serializer that expands related objects can
+make ten rows larger than a thousand lean ones, and <code>limit</code> cannot express a
+byte budget.</p>
 
 
 

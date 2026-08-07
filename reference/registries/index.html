@@ -458,6 +458,33 @@
   
   
     <li class="md-nav__item">
+      <a href="../../troubleshooting/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Troubleshooting
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
       <a href="../../performance/" class="md-nav__link">
         
   
@@ -536,7 +563,7 @@
         
           
         
-        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_9" >
+        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_10" >
         
           
           <div class="md-nav__link md-nav__container">
@@ -558,14 +585,14 @@
             </a>
             
               
-              <label class="md-nav__link " for="__nav_9" id="__nav_9_label" tabindex="">
+              <label class="md-nav__link " for="__nav_10" id="__nav_10_label" tabindex="">
                 <span class="md-nav__icon md-icon"></span>
               </label>
             
           </div>
         
-        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_9_label" aria-expanded="false">
-          <label class="md-nav__title" for="__nav_9">
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_10_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_10">
             <span class="md-nav__icon md-icon"></span>
             
   
@@ -1044,7 +1071,7 @@
       
         
         
-        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_10" checked>
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_11" checked>
         
           
           <div class="md-nav__link md-nav__container">
@@ -1066,14 +1093,14 @@
             </a>
             
               
-              <label class="md-nav__link " for="__nav_10" id="__nav_10_label" tabindex="">
+              <label class="md-nav__link " for="__nav_11" id="__nav_11_label" tabindex="">
                 <span class="md-nav__icon md-icon"></span>
               </label>
             
           </div>
         
-        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_10_label" aria-expanded="true">
-          <label class="md-nav__title" for="__nav_10">
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_11_label" aria-expanded="true">
+          <label class="md-nav__title" for="__nav_11">
             <span class="md-nav__icon md-icon"></span>
             
   
@@ -2415,6 +2442,34 @@
       
     </span>
   </a>
+  
+    <nav class="md-nav" aria-label="DjangoCacheSessionStore">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#rest_framework_mcp.transport.django_cache_session_store.DjangoCacheSessionStore.exists" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        exists
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#rest_framework_mcp.transport.django_cache_session_store.DjangoCacheSessionStore.owner" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        owner
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
   
 </li>
       
@@ -3952,6 +4007,34 @@
       
     </span>
   </a>
+  
+    <nav class="md-nav" aria-label="DjangoCacheSessionStore">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#rest_framework_mcp.transport.django_cache_session_store.DjangoCacheSessionStore.exists" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        exists
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#rest_framework_mcp.transport.django_cache_session_store.DjangoCacheSessionStore.owner" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        owner
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
   
 </li>
       
@@ -7994,13 +8077,24 @@ class will not see sessions created in another process.</p>
 
 
         <p>Session store backed by <code>django.core.cache</code>.</p>
-<p>Works across processes — the production-suitable default. TTL is fixed
-at 24 hours; for stricter pinning, projects can subclass and override
-:meth:<code>create</code>.</p>
-<p>The cached value is the owning principal id, so :meth:<code>owner</code> is a
-single cache read. Sessions written by pre-0.7 versions stored <code>True</code>
-instead of a principal — those fail the ownership comparison and the
-client transparently re-initializes.</p>
+<p>Works across processes — the production-suitable default.</p>
+<p><strong>Two windows, both configurable</strong> (<code>SESSION_TTL_SECONDS</code> /
+<code>SESSION_MAX_AGE_SECONDS</code>, or the constructor arguments here). The TTL is
+an <strong>idle</strong> window that restarts on every successful :meth:<code>owner</code> read, so
+a session in continuous use never lapses; the max age is the <strong>absolute</strong>
+ceiling that stops a sliding window outliving a revoked principal. Both were
+once a single fixed 24-hour constant, which meant an actively-used connector
+still died on the mark.</p>
+<p>⚠ <strong>Neither window can promise more than the cache underneath.</strong> An
+eviction policy like Redis's <code>allkeys-lru</code> drops session keys well before
+any timeout, and the client cannot tell that apart from expiry. If sessions
+vanish early, check the eviction policy before these settings.</p>
+<p>The cached value carries the owning principal and the mint time, so
+:meth:<code>owner</code> is a single read. Sessions written by pre-0.7 versions stored
+<code>True</code> instead of a principal — those fail the ownership comparison and
+the client transparently re-initializes. A bare principal string, the shape
+written up to 0.24, is honoured and rewritten in the current shape so an
+upgrade doesn't log every current holder out.</p>
 <p><strong>Namespacing.</strong> Every instance built by :class:<code>MCPServer</code> keys its cache
 entries under the server's <code>name</code> — the spec's programmatic identifier —
 so two servers in one project cannot see each other's sessions. Without it
@@ -8037,6 +8131,59 @@ and control characters and cap length at 250. Keys are therefore
 
 
 
+
+<div class="doc doc-object doc-function">
+
+
+<h3 id="rest_framework_mcp.transport.django_cache_session_store.DjangoCacheSessionStore.exists" class="doc doc-heading">
+            <span class="doc doc-object-name doc-function-name">exists</span>
+
+
+<a href="#rest_framework_mcp.transport.django_cache_session_store.DjangoCacheSessionStore.exists" class="headerlink" title="Permanent link">&para;</a></h3>
+<div class="language-python doc-signature highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="nf">exists</span><span class="p">(</span><span class="n">session_id</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">bool</span>
+</span></code></pre></div>
+
+    <div class="doc doc-contents ">
+
+        <p>Whether a key is present — deliberately <em>not</em> <code>owner() is not None</code>.</p>
+<p>A value this store cannot read (a pre-0.7 <code>True</code>) is present but
+ownerless, and the gate keys on :meth:<code>owner</code>, so the distinction is the
+documented one. Reading through <code>owner</code> here would also refresh the
+idle window, making a liveness probe extend the thing it probes.</p>
+
+
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-function">
+
+
+<h3 id="rest_framework_mcp.transport.django_cache_session_store.DjangoCacheSessionStore.owner" class="doc doc-heading">
+            <span class="doc doc-object-name doc-function-name">owner</span>
+
+
+<a href="#rest_framework_mcp.transport.django_cache_session_store.DjangoCacheSessionStore.owner" class="headerlink" title="Permanent link">&para;</a></h3>
+<div class="language-python doc-signature highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="nf">owner</span><span class="p">(</span><span class="n">session_id</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">str</span> <span class="o">|</span> <span class="kc">None</span>
+</span></code></pre></div>
+
+    <div class="doc doc-contents ">
+
+        <p>Resolve the owning principal, refreshing the idle window on the way.</p>
+<p><strong>Idle, not fixed.</strong> The window restarts on every successful read, so a
+session in continuous use never lapses and only a genuinely idle one
+does. Before this, a connector talking every minute still died at the
+24-hour mark — the failure that produced this setting.</p>
+<p>⚠ <strong>Bounded by an absolute maximum age</strong>, which is not optional. The
+principal binding is checked once, at <code>initialize</code>; an unbounded
+sliding window would therefore keep a <em>revoked</em> principal alive for as
+long as it kept talking. This is the same argument
+<code>SUBSCRIPTION_MAX_SECONDS</code> already makes for subscriptions.</p>
+
+
+    </div>
+
+</div>
 
 
 

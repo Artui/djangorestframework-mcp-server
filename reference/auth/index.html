@@ -458,6 +458,33 @@
   
   
     <li class="md-nav__item">
+      <a href="../../troubleshooting/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Troubleshooting
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
       <a href="../../performance/" class="md-nav__link">
         
   
@@ -536,7 +563,7 @@
         
           
         
-        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_9" >
+        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_10" >
         
           
           <div class="md-nav__link md-nav__container">
@@ -558,14 +585,14 @@
             </a>
             
               
-              <label class="md-nav__link " for="__nav_9" id="__nav_9_label" tabindex="">
+              <label class="md-nav__link " for="__nav_10" id="__nav_10_label" tabindex="">
                 <span class="md-nav__icon md-icon"></span>
               </label>
             
           </div>
         
-        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_9_label" aria-expanded="false">
-          <label class="md-nav__title" for="__nav_9">
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_10_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_10">
             <span class="md-nav__icon md-icon"></span>
             
   
@@ -1044,7 +1071,7 @@
       
         
         
-        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_10" checked>
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_11" checked>
         
           
           <div class="md-nav__link md-nav__container">
@@ -1066,14 +1093,14 @@
             </a>
             
               
-              <label class="md-nav__link " for="__nav_10" id="__nav_10_label" tabindex="">
+              <label class="md-nav__link " for="__nav_11" id="__nav_11_label" tabindex="">
                 <span class="md-nav__icon md-icon"></span>
               </label>
             
           </div>
         
-        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_10_label" aria-expanded="true">
-          <label class="md-nav__title" for="__nav_10">
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_11_label" aria-expanded="true">
+          <label class="md-nav__title" for="__nav_11">
             <span class="md-nav__icon md-icon"></span>
             
   
@@ -2617,8 +2644,16 @@ genuinely differ.</p>
         <p>Return the RFC 8414 metadata payload for the DOT-hosted authorization server.</p>
 <p>Pulls the issuer, endpoint URLs, supported grant / response types,
 and scopes from this backend's <code>authorization_servers</code> (first
-entry) plus the <code>contrib.oauth</code> mount convention that endpoints
-live at <code>/oauth/authorize/</code>, <code>/oauth/token/</code>, <code>/oauth/register/</code>.</p>
+entry) plus the endpoint paths, which default to the <code>contrib.oauth</code>
+mount convention (<code>/oauth/authorize/</code>, <code>/oauth/token/</code>,
+<code>/oauth/register/</code>) and are constructor arguments for a project that
+mounts DOT somewhere else.</p>
+<p>⚠ The issuer is treated as a <strong>site root</strong>, and the paths are appended
+to it. Passing the value DOT advertises as <em>its</em> issuer
+(<code>&lt;host&gt;/oauth</code>) therefore publishes <code>&lt;host&gt;/oauth/oauth/authorize/</code>
+— three 404s in a document clients read to find the login flow. That
+mistake now warns at construction; see
+:class:<code>MountedAuthorizationServerWarning</code>.</p>
 <p>Missing values fall through as empty strings / lists so the wire
 shape is always valid JSON; consumers are expected to configure
 <code>authorization_servers</code> for production deployments.</p>
