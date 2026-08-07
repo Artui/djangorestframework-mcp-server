@@ -23,7 +23,7 @@ server.register_service_tool(
             output_serializer=InvoiceOutputSerializer,
         ),
     ),
-    output_format=OutputFormat.AUTO,   # picks TOON when the payload is uniform
+    output_format=OutputFormat.AUTO,  # picks TOON when the payload is uniform
 )
 ```
 

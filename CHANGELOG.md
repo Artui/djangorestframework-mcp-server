@@ -320,9 +320,11 @@ which was being answered with the spec's "resource not found" code.
   def run_mcp_task(task_id: str) -> None:
       server.run_task(task_id)
 
+
   class CeleryExecutor:
       def enqueue(self, task_id: str) -> None:
           run_mcp_task.delay(task_id)
+
 
   server = MCPServer(name="invoices", task_executor=CeleryExecutor())
   ```
@@ -1660,11 +1662,13 @@ for the two-server recipe.
   REST_FRAMEWORK_MCP = {"AUTH_USER_ADAPTER": "myproject.oauth.MyAdapter"}
 
   # after — urls.py
-  *build_oauth_urlpatterns(
-      server=server,
-      include_authorize=True,
-      auth_user_adapter=MyAdapter(),
-  ),
+  (
+      *build_oauth_urlpatterns(
+          server=server,
+          include_authorize=True,
+          auth_user_adapter=MyAdapter(),
+      ),
+  )
   ```
 
   This also **lifts a constraint**: adapters no longer have to be constructible

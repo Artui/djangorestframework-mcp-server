@@ -31,9 +31,7 @@ class IntrospectingAuthBackend:
         if not token:
             return None
 
-        response = await self._client.post(
-            self._url, data={"token": token}, auth=self._auth
-        )
+        response = await self._client.post(self._url, data={"token": token}, auth=self._auth)
         if response.status_code != 200:
             return None
         claims = response.json()

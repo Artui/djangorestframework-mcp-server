@@ -69,8 +69,7 @@ REST_FRAMEWORK_MCP = {
         "resource": "https://example.com/mcp/",
         "authorization_servers": ["https://example.com/oauth/"],
         "scopes_supported": ["invoices:read", "invoices:write"],
-        "resource_metadata_url":
-            "https://example.com/mcp/.well-known/oauth-protected-resource",
+        "resource_metadata_url": "https://example.com/mcp/.well-known/oauth-protected-resource",
         "documentation": "https://example.com/docs/mcp/",
     },
 }
@@ -247,8 +246,7 @@ REST_FRAMEWORK_MCP = {
     "SERVER_INFO": {
         "authorization_servers": ["https://example.com/oauth/"],
         "scopes_supported": ["invoices:read", "invoices:write"],
-        "resource_metadata_url":
-            "https://example.com/mcp/.well-known/oauth-protected-resource",
+        "resource_metadata_url": "https://example.com/mcp/.well-known/oauth-protected-resource",
     },
 }
 ```
@@ -329,12 +327,14 @@ DCR is gated by two knobs — defaults are deliberately conservative so an
 accidental mount doesn't auto-register clients:
 
 ```python
-*build_oauth_urlpatterns(
-    server=server,
-    include_dcr=True,
-    dcr_enabled=True,
-    dcr_initial_access_token="share-this-with-trusted-clients",  # optional
-),
+(
+    *build_oauth_urlpatterns(
+        server=server,
+        include_dcr=True,
+        dcr_enabled=True,
+        dcr_initial_access_token="share-this-with-trusted-clients",  # optional
+    ),
+)
 ```
 
 When `dcr_enabled` is `False` the DCR endpoint refuses every request. When
@@ -469,7 +469,7 @@ OAUTH2_PROVIDER = {
     # NB: DOT implements no RFC 8707 resource indicators, so there is nothing to
     # set here to bind tokens to a resource — see "Audience binding" above.
     "SCOPES": {
-        "invoices:read":  "Read invoices",
+        "invoices:read": "Read invoices",
         "invoices:write": "Mutate invoices",
     },
     # Token lifetimes appropriate for an MCP session — short access tokens,
@@ -484,8 +484,7 @@ REST_FRAMEWORK_MCP = {
     "SERVER_INFO": {
         "authorization_servers": ["https://example.com/oauth/"],
         "scopes_supported": ["invoices:read", "invoices:write"],
-        "resource_metadata_url":
-            "https://example.com/mcp/.well-known/oauth-protected-resource",
+        "resource_metadata_url": "https://example.com/mcp/.well-known/oauth-protected-resource",
     },
 }
 ```

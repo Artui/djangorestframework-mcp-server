@@ -17,14 +17,14 @@ from rest_framework_mcp import SelectorKind, SelectorSpec, ServiceSpec  # re-exp
 spec = ServiceSpec(
     service=create_invoice,
     input_serializer=InvoiceInputSerializer,
-    output_selector_spec=SelectorSpec(   # nested spec for the post-call
-        kind=SelectorKind.RETRIEVE,      # render pipeline (RETRIEVE → many=False,
+    output_selector_spec=SelectorSpec(  # nested spec for the post-call
+        kind=SelectorKind.RETRIEVE,  # render pipeline (RETRIEVE → many=False,
         output_serializer=InvoiceOutputSerializer,  # LIST → many=True)
-        selector=None,                   # optional post-call re-fetch callable
+        selector=None,  # optional post-call re-fetch callable
     ),
-    atomic=True,            # wrap dispatch in transaction.atomic()
-    success_status=None,    # ignored by MCP — used by HTTP
-    kwargs=None,            # optional per-spec kwargs provider; see below
+    atomic=True,  # wrap dispatch in transaction.atomic()
+    success_status=None,  # ignored by MCP — used by HTTP
+    kwargs=None,  # optional per-spec kwargs provider; see below
 )
 ```
 
@@ -223,12 +223,11 @@ from rest_framework_mcp import QueryParam
 
 server.register_selector_tool(
     name="invoices.list",
-    spec=SelectorSpec(kind=SelectorKind.LIST, selector=list_invoices,
-                      output_serializer=InvoiceSerializer),
-    paginate=True,
-    query_params=(
-        QueryParam("query", description="django-restql fieldset, e.g. {id,number}"),
+    spec=SelectorSpec(
+        kind=SelectorKind.LIST, selector=list_invoices, output_serializer=InvoiceSerializer
     ),
+    paginate=True,
+    query_params=(QueryParam("query", description="django-restql fieldset, e.g. {id,number}"),),
 )
 ```
 
@@ -497,13 +496,14 @@ transport — exactly what a remote MCP client sees — `MCPServer` exposes two
 async-friendly siblings that route through the same wire handlers:
 
 ```python
-page = server.list_tools(user=request.user, request=request)   # one tools/list page
-page["tools"]        # merged inputSchema per tool
-page["nextCursor"]   # pass back to list_tools(cursor, ...) to paginate
+page = server.list_tools(user=request.user, request=request)  # one tools/list page
+page["tools"]  # merged inputSchema per tool
+page["nextCursor"]  # pass back to list_tools(cursor, ...) to paginate
 
-result = await server.acall_tool("invoices.list", {"ordering": "-amount", "page": 1},
-                                 user=request.user, request=request)
-result["structuredContent"]   # the wire's result payload (dict, not ToolResult)
+result = await server.acall_tool(
+    "invoices.list", {"ordering": "-amount", "page": 1}, user=request.user, request=request
+)
+result["structuredContent"]  # the wire's result payload (dict, not ToolResult)
 ```
 
 - `list_tools(cursor=None, *, user, request=None)` returns one page of the tool
@@ -554,6 +554,7 @@ class ArchiveWidgetInput(serializers.Serializer):
     widget_id = serializers.IntegerField(
         help_text="Primary key of the widget. Not the public slug.",
     )
+
 
 # 2. URL kwargs — `UrlKwarg` takes a description of its own.
 server.register_selector_tool(
@@ -607,7 +608,7 @@ server.register_resource(
     uri_template="invoices://{pk}",
     selector=SelectorSpec(
         kind=SelectorKind.RETRIEVE,
-        selector=get_invoice,             # def get_invoice(*, pk): ...
+        selector=get_invoice,  # def get_invoice(*, pk): ...
         output_serializer=InvoiceOutputSerializer,
     ),
 )
@@ -665,7 +666,7 @@ base64 string and a text body are indistinguishable by inspection:
 ```python
 server.register_service_tool(
     name="charts.render",
-    spec=ServiceSpec(service=render_chart, atomic=False),   # returns bytes
+    spec=ServiceSpec(service=render_chart, atomic=False),  # returns bytes
     content_kind=ToolContentKind.IMAGE,
     content_mime_type="image/png",
 )
@@ -707,9 +708,11 @@ server.register_prompt(
     name="code_review",
     render=review_prompt,
     arguments=[PromptArgument(name="language")],
-    completions={"language": lambda value: Language.objects.filter(
-        name__startswith=value
-    ).values_list("name", flat=True)},
+    completions={
+        "language": lambda value: Language.objects.filter(name__startswith=value).values_list(
+            "name", flat=True
+        )
+    },
 )
 ```
 
@@ -779,8 +782,9 @@ def export_invoices(*, data, progress):
     rows = list(build_rows(data))
     for index, row in enumerate(rows):
         write(row)
-        progress(index + 1, total=len(rows), message="writing rows",
-                 meta={"com.example/file": data.path})
+        progress(
+            index + 1, total=len(rows), message="writing rows", meta={"com.example/file": data.path}
+        )
 ```
 
 Nothing about the registration changes — `progress` is a kwarg-pool seed from
@@ -994,13 +998,16 @@ live between the request that created one and the worker that finishes it:
 ```python
 from celery import shared_task
 
+
 @shared_task
 def run_mcp_task(task_id: str) -> None:
     server.run_task(task_id)
 
+
 class CeleryExecutor:
     def enqueue(self, task_id: str) -> None:
         run_mcp_task.delay(task_id)
+
 
 server = MCPServer(name="invoices", task_executor=CeleryExecutor())
 ```
@@ -1080,6 +1087,7 @@ A service says so by raising, and that is the whole of its involvement:
 
 ```python
 from rest_framework_services import AdditionalInputRequired
+
 
 def delete_rows(*, data):
     doomed = rows_matching(data)
@@ -1460,7 +1468,7 @@ server.register_service_tool(
             output_serializer=InvoiceOutputSerializer,
         ),
     ),
-    output_format=OutputFormat.AUTO,   # JSON, TOON, or AUTO
+    output_format=OutputFormat.AUTO,  # JSON, TOON, or AUTO
 )
 ```
 

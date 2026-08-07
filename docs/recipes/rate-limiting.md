@@ -66,9 +66,7 @@ def per_org_key(request, token) -> str:
 server.register_service_tool(
     ...,
     rate_limits=[
-        FixedWindowRateLimit(
-            max_calls=10_000, per_seconds=60, key=per_org_key
-        ),
+        FixedWindowRateLimit(max_calls=10_000, per_seconds=60, key=per_org_key),
     ],
 )
 ```
@@ -128,14 +126,15 @@ class LeakyBucketRateLimit:
         self._capacity = capacity
         self._leak = leak_per_second
 
-    def consume(self, request: HttpRequest, token: TokenInfo) -> int | None:
-        ...
+    def consume(self, request: HttpRequest, token: TokenInfo) -> int | None: ...
 ```
 
 Pass it to a binding the same way:
 
 ```python
-server.register_service_tool(..., rate_limits=[LeakyBucketRateLimit(capacity=60, leak_per_second=1)])
+server.register_service_tool(
+    ..., rate_limits=[LeakyBucketRateLimit(capacity=60, leak_per_second=1)]
+)
 ```
 
 ## Tips

@@ -83,6 +83,7 @@ class HttpxAuthBackend:
     def www_authenticate_challenge(self, *, scopes=None, error=None):
         return 'Bearer realm="mcp"'
 
+
 server = MCPServer(name="my-app", auth_backend=HttpxAuthBackend())
 ```
 
@@ -115,11 +116,14 @@ message. Idle periods produce SSE keep-alive comments (`: keepalive`) every
 ```python
 # from app code (a service, a Django signal, a background task — anything
 # running in the same process as the MCP server):
-await server.notify(session_id, {
-    "jsonrpc": "2.0",
-    "method": "notifications/progress",
-    "params": {"progressToken": "task-7", "value": 0.42},
-})
+await server.notify(
+    session_id,
+    {
+        "jsonrpc": "2.0",
+        "method": "notifications/progress",
+        "params": {"progressToken": "task-7", "value": 0.42},
+    },
+)
 ```
 
 `notify` returns `True` if a subscriber was attached, `False` otherwise. A

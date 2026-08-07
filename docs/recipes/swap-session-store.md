@@ -41,6 +41,7 @@ class RedisSessionStore:
 
     def create(self, *, principal_id: str) -> str:
         import secrets
+
         token = secrets.token_urlsafe(24)
         self._redis.set(f"mcp:session:{token}", principal_id, ex=self._ttl)
         return token

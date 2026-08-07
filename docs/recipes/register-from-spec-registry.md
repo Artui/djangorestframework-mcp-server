@@ -107,8 +107,8 @@ its own projection with no shared state:
 internal = MCPServer(name="orders-internal")
 public = MCPServer(name="orders-public")
 
-internal.register_specs(registry)                    # everything
-public.register_specs(registry.by_tag("public"))     # reads only
+internal.register_specs(registry)  # everything
+public.register_specs(registry.by_tag("public"))  # reads only
 ```
 
 Independent registries work too, when the surfaces have nothing in common:

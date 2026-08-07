@@ -85,9 +85,7 @@ from opentelemetry.sdk.trace import TracerProvider
 from opentelemetry.sdk.trace.export import BatchSpanProcessor
 from opentelemetry.exporter.otlp.proto.grpc.trace_exporter import OTLPSpanExporter
 
-provider = TracerProvider(
-    resource=Resource.create({"service.name": "my-mcp-server"})
-)
+provider = TracerProvider(resource=Resource.create({"service.name": "my-mcp-server"}))
 provider.add_span_processor(BatchSpanProcessor(OTLPSpanExporter()))
 trace.set_tracer_provider(provider)
 ```

@@ -19,26 +19,44 @@ class MCPView(View):
     def post(self, request):
         msg = json.loads(request.body)
         if msg["method"] == "tools/list":
-            return JsonResponse({"jsonrpc": "2.0", "id": msg["id"],
-                                 "result": {"tools": [
-                                     {"name": "create_invoice",
-                                      "inputSchema": {...},
-                                      "description": "..."},
-                                 ]}})
+            return JsonResponse(
+                {
+                    "jsonrpc": "2.0",
+                    "id": msg["id"],
+                    "result": {
+                        "tools": [
+                            {"name": "create_invoice", "inputSchema": {...}, "description": "..."},
+                        ]
+                    },
+                }
+            )
         if msg["method"] == "tools/call":
             args = msg["params"]["arguments"]
             invoice = Invoice.objects.create(
-                number=args["number"], amount_cents=args["amount_cents"],
+                number=args["number"],
+                amount_cents=args["amount_cents"],
             )
-            return JsonResponse({"jsonrpc": "2.0", "id": msg["id"],
-                                 "result": {"structuredContent": {
-                                     "id": invoice.id,
-                                     "number": invoice.number,
-                                     "amount_cents": invoice.amount_cents,
-                                 }}})
-        return JsonResponse({"jsonrpc": "2.0", "id": msg["id"],
-                             "error": {"code": -32601, "message": "method not found"}},
-                            status=400)
+            return JsonResponse(
+                {
+                    "jsonrpc": "2.0",
+                    "id": msg["id"],
+                    "result": {
+                        "structuredContent": {
+                            "id": invoice.id,
+                            "number": invoice.number,
+                            "amount_cents": invoice.amount_cents,
+                        }
+                    },
+                }
+            )
+        return JsonResponse(
+            {
+                "jsonrpc": "2.0",
+                "id": msg["id"],
+                "error": {"code": -32601, "message": "method not found"},
+            },
+            status=400,
+        )
 ```
 
 Common gaps in DIY servers — each of which the package handles for you:
@@ -72,7 +90,8 @@ from rest_framework_services.exceptions.service_error import ServiceError
 
 def create_invoice(*, data: dict) -> Invoice:
     return Invoice.objects.create(
-        number=data["number"], amount_cents=data["amount_cents"],
+        number=data["number"],
+        amount_cents=data["amount_cents"],
     )
 
 
@@ -179,7 +198,8 @@ mechanical because both packages think in terms of "callable + schema":
 @mcp.tool
 async def create_invoice(data: InvoiceInputModel) -> InvoiceOutputModel:
     invoice = await Invoice.objects.acreate(
-        number=data.number, amount_cents=data.amount_cents,
+        number=data.number,
+        amount_cents=data.amount_cents,
     )
     return InvoiceOutputModel.from_orm(invoice)
 ```
@@ -188,7 +208,8 @@ async def create_invoice(data: InvoiceInputModel) -> InvoiceOutputModel:
 # djangorestframework-mcp-server
 async def create_invoice(*, data: dict) -> Invoice:
     return await Invoice.objects.acreate(
-        number=data["number"], amount_cents=data["amount_cents"],
+        number=data["number"],
+        amount_cents=data["amount_cents"],
     )
 
 
