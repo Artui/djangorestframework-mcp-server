@@ -118,7 +118,10 @@ async def test_async_translates_service_error_with_recording(settings) -> None:
     """``RECORD_SERVICE_EXCEPTIONS=True`` on the async path."""
     from rest_framework_services.exceptions.service_error import ServiceError
 
-    settings.REST_FRAMEWORK_MCP = {"RECORD_SERVICE_EXCEPTIONS": True}
+    settings.REST_FRAMEWORK_MCP = {
+        "REQUIRE_TOOL_PERMISSIONS": False,
+        "RECORD_SERVICE_EXCEPTIONS": True,
+    }
     server = _server()
 
     def selector() -> None:

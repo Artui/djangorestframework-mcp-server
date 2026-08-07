@@ -7,6 +7,120 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.25.0] — 2026-08-05
+
+### ⚠ Upgrade notes
+
+Two behaviour changes need a decision before you deploy.
+
+1. **`REQUIRE_TOOL_PERMISSIONS` now defaults to `True`.** A tool registered with
+   neither `spec.permission_classes` nor a per-binding `permissions=[...]`
+   **raises** at registration — which is import time, so it fails the deploy
+   rather than a request. Declare permissions, or set
+   `REST_FRAMEWORK_MCP['REQUIRE_TOOL_PERMISSIONS'] = False` to migrate
+   gradually. ⚠ If your tests assign `settings.REST_FRAMEWORK_MCP = {...}`, that
+   **replaces** the dict rather than merging, so a project-level opt-out
+   disappears inside them — add the key to those literals too.
+2. **A request with no `Mcp-Session-Id` now returns `400`, not `404`.** Anything
+   asserting `404` for a *missing* header needs updating. `404` still means what
+   the spec says it means: an id arrived that the server will not honour.
+
+### Added
+
+- **`SESSIONS_ENABLED` — serve the legacy era without session state.** With it
+  off, the `initialize`-handshake era mints no `Mcp-Session-Id`, requires none,
+  ignores a stale one a client is still echoing, and answers `405` to the SSE
+  `GET` and the session `DELETE`.
+
+  ⚠ **A conformant mode, not a relaxation.** Both legacy revisions say a server
+  *"MAY assign a session ID at initialization time"* and make the client's duty
+  to echo one conditional on it having arrived, so a server that never assigns
+  is never sent one.
+
+  It exists because a session is state, and state expires, gets evicted, and
+  dies with a deploy — each reaching the client as a `404` whose documented
+  remedy is to re-`initialize`, which not every client does. **Every other fix
+  for that failure class belongs to the client vendor**; this one does not. The
+  modern (`2026-07-28`) era is stateless already and ignores the setting.
+
+  What you give up: server-initiated messaging on the legacy era, since the
+  session id is what addresses a client's SSE channel.
+
+- **`SESSION_TTL_SECONDS` / `SESSION_MAX_AGE_SECONDS`**, replacing a
+  module-private 24-hour constant that could only be changed by subclassing the
+  store. The TTL is now an **idle** window that restarts on every successful
+  read, so a session in continuous use never lapses — previously a connector
+  talking every minute still died on the 24-hour mark. The absolute cap is not
+  decorative: the principal binding is checked once, at `initialize`, so an
+  unbounded sliding window keeps a *revoked* principal alive for as long as it
+  keeps talking (the argument `SUBSCRIPTION_MAX_SECONDS` already makes).
+
+  ⚠ Neither window can promise more than the cache underneath. A Redis
+  `allkeys-lru` policy evicts session keys before any TTL, indistinguishably
+  from expiry.
+
+- **`MCP-Error` response header** on transport-level rejections
+  (`session-missing` / `session-unknown`). Ours, not the spec's. The statuses
+  the spec mandates are undiagnosable in production: a `404` from a dead session
+  and a `404` from a load balancer are identical to a client, and the JSON-RPC
+  body that would separate them often never reaches a human — clients commonly
+  log `${status} ${statusText}`, and **HTTP/2 has no reason phrase**. The header
+  carries strictly less than the body, so it leaks nothing: unknown-id and
+  wrong-principal share one slug, preserving the no-ownership-oracle property.
+
+- **Logging, under the `rest_framework_mcp` namespace.** The package previously
+  emitted **nothing** — no `getLogger`, no `logger` call anywhere. Session
+  rejections, auth failures and every outbound bound now log at `WARNING`;
+  `initialize` and era selection at `INFO`; dispatch timing at `DEBUG`.
+
+  ⭐ Session rejections name **which** condition fired, even though the response
+  merges them: the no-oracle rule constrains the wire, and an operator reading
+  logs is not the adversary it protects against. Tokens and tool payloads are
+  never logged; session ids appear as a short prefix.
+
+- **`check_oauth_url_shadowing()`** — django-oauth-toolkit 3.4.0 serves its own
+  `register/` and `.well-known/oauth-authorization-server`, and Django resolves
+  first-match, so mounting DOT's urls before `build_oauth_urlpatterns(...)`
+  means DOT answers them silently. A function you call rather than a Django
+  system check, because this package is a library with no `AppConfig`.
+
+- **`authorize_path` / `token_path` / `registration_path`** on
+  `DjangoOAuthToolkitBackend`, for a project that mounts DOT somewhere other
+  than `/oauth/`.
+
+### Changed
+
+- **Unguarded tools are refused by default** — see the upgrade notes. The
+  asymmetry that justifies it was already in the warning's own text: DRF
+  viewset-level and `REST_FRAMEWORK` default permission classes do **not** apply
+  over MCP, so the habit the framework trains produces an open tool. The raise
+  now names the way *out*; reusing the warning's "set the flag to make this an
+  error" told you to enable the setting that had just fired.
+
+- **The structured-output coupling is checked at registration**, not on the
+  first `tools/call`. ⚠ Deliberately *not* checked on the global settings pair:
+  server-wide `INCLUDE_OUTPUT_SCHEMA=True` with `INCLUDE_STRUCTURED_CONTENT=False`
+  is legal precisely when every binding overrides the content back on.
+
+- **The bundled examples now declare permissions explicitly** (`AllowAny`, which
+  says "deliberately open" out loud in a demo). They were registering unguarded
+  tools — the pattern the new default exists to stop, in the code consumers copy.
+
+- **Floor raised to `djangorestframework-services>=0.34`** for `preconditions`.
+
+### Fixed
+
+- **A request with no `Mcp-Session-Id` returned `404` instead of `400`.** The
+  spec reserves `404` for a request *"containing that session ID"* after the
+  server dropped it, and says a server requiring a session "SHOULD" answer a
+  header-less request with `400 Bad Request`. Both rendered `404`.
+
+  ⚠ The wrong code also routed clients into the wrong compatibility branch:
+  `2025-11-25` lists `400` among the statuses that send a client down the
+  legacy-fallback path. Splitting the two leaks nothing — a caller already knows
+  whether it sent a header — and unknown-id versus wrong-principal stay merged,
+  which is the pair that would otherwise be an ownership oracle.
+
 ## [0.24.1] — 2026-08-02
 
 ### Changed
@@ -2854,7 +2968,8 @@ Pinned to `djangorestframework-services==0.6.0`.
 - 100% line + branch coverage enforced by pytest (**451 tests** at
   release).
 
-[Unreleased]: https://github.com/Artui/djangorestframework-mcp-server/compare/v0.24.1...HEAD
+[Unreleased]: https://github.com/Artui/djangorestframework-mcp-server/compare/v0.25.0...HEAD
+[0.25.0]: https://github.com/Artui/djangorestframework-mcp-server/compare/v0.24.1...v0.25.0
 [0.24.1]: https://github.com/Artui/djangorestframework-mcp-server/compare/v0.24.0...v0.24.1
 [0.24.0]: https://github.com/Artui/djangorestframework-mcp-server/compare/v0.23.0...v0.24.0
 [0.23.0]: https://github.com/Artui/djangorestframework-mcp-server/compare/v0.22.0...v0.23.0

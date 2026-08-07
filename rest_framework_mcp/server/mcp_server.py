@@ -46,6 +46,7 @@ from rest_framework_mcp.handlers.call_spec_tool import call_spec_tool
 from rest_framework_mcp.handlers.handle_tools_call_async import handle_tools_call_async
 from rest_framework_mcp.handlers.handle_tools_list import handle_tools_list
 from rest_framework_mcp.handlers.types.context import MCPCallContext
+from rest_framework_mcp.output.resolve_structured_output import resolve_structured_output
 from rest_framework_mcp.protocol.build_server_info import build_server_info
 from rest_framework_mcp.protocol.types.icon import Icon
 from rest_framework_mcp.protocol.types.implementation import Implementation
@@ -370,6 +371,19 @@ class MCPServer:
         check_tool_description_present(
             binding.name, binding.description, require=self._config.require_tool_descriptions
         )
+        # Resolve the structured-output pair eagerly. The combination is fully
+        # known once the binding's overrides meet the server defaults, so the
+        # spec-violating pairing should fail at registration — which is import
+        # time — rather than on the first ``tools/call`` to reach it. Checking
+        # the *globals* alone would be wrong: a server-wide "schema on, content
+        # off" is legal precisely when every binding overrides it back on.
+        resolve_structured_output(
+            include_output_schema_override=binding.include_output_schema,
+            include_structured_content_override=binding.include_structured_content,
+            binding_name=binding.name,
+            default_output_schema=self._config.include_output_schema,
+            default_structured_content=self._config.include_structured_content,
+        )
         self._tools.register(binding)
         return binding
 
@@ -493,6 +507,19 @@ class MCPServer:
         )
         check_tool_description_present(
             binding.name, binding.description, require=self._config.require_tool_descriptions
+        )
+        # Resolve the structured-output pair eagerly. The combination is fully
+        # known once the binding's overrides meet the server defaults, so the
+        # spec-violating pairing should fail at registration — which is import
+        # time — rather than on the first ``tools/call`` to reach it. Checking
+        # the *globals* alone would be wrong: a server-wide "schema on, content
+        # off" is legal precisely when every binding overrides it back on.
+        resolve_structured_output(
+            include_output_schema_override=binding.include_output_schema,
+            include_structured_content_override=binding.include_structured_content,
+            binding_name=binding.name,
+            default_output_schema=self._config.include_output_schema,
+            default_structured_content=self._config.include_structured_content,
         )
         # LIST only: a RETRIEVE selector returns one instance, which is bounded
         # by construction and has no ``limit`` to advertise.
@@ -681,6 +708,19 @@ class MCPServer:
         )
         check_tool_description_present(
             binding.name, binding.description, require=self._config.require_tool_descriptions
+        )
+        # Resolve the structured-output pair eagerly. The combination is fully
+        # known once the binding's overrides meet the server defaults, so the
+        # spec-violating pairing should fail at registration — which is import
+        # time — rather than on the first ``tools/call`` to reach it. Checking
+        # the *globals* alone would be wrong: a server-wide "schema on, content
+        # off" is legal precisely when every binding overrides it back on.
+        resolve_structured_output(
+            include_output_schema_override=binding.include_output_schema,
+            include_structured_content_override=binding.include_structured_content,
+            binding_name=binding.name,
+            default_output_schema=self._config.include_output_schema,
+            default_structured_content=self._config.include_structured_content,
         )
         self._tools.register(binding)
         return binding

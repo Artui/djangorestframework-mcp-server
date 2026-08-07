@@ -18,6 +18,7 @@ from rest_framework_mcp.auth.principal_for_token import principal_for_token
 from rest_framework_mcp.auth.types.auth_backend import MCPAuthBackend
 from rest_framework_mcp.config.types.mcp_config import MCPConfig
 from rest_framework_mcp.constants import (
+    MCP_ERROR_HEADER,
     MODERN_PROTOCOL_VERSIONS,
     SESSIONLESS_METHODS,
     SUBSCRIPTIONS_LISTEN_METHOD,
@@ -29,6 +30,7 @@ from rest_framework_mcp.handlers.tasks_utils import (
     missing_capability_error,
 )
 from rest_framework_mcp.handlers.types.context import MCPCallContext
+from rest_framework_mcp.observability import get_logger, session_fingerprint
 from rest_framework_mcp.protocol.parse_message import parse_message
 from rest_framework_mcp.protocol.types.implementation import Implementation
 from rest_framework_mcp.protocol.types.json_rpc_error import JsonRpcError
@@ -64,6 +66,7 @@ from rest_framework_mcp.transport.utils import (
     insufficient_scope_challenge,
     is_permission_denial,
     modern_error_status,
+    session_gate_failure,
 )
 from rest_framework_mcp.transport.validate_modern_request import validate_modern_request
 
@@ -71,13 +74,27 @@ _SESSION_HEADER: str = "Mcp-Session-Id"
 _VERSION_HEADER: str = "Mcp-Protocol-Version"
 
 
+logger = get_logger(__name__)
+
+
 def _error_response(
-    *, code: int, message: str, data: Any = None, status: int = 400, request_id: Any = None
+    *,
+    code: int,
+    message: str,
+    data: Any = None,
+    status: int = 400,
+    request_id: Any = None,
+    error_hint: str | None = None,
 ) -> JsonResponse:
     body: dict[str, Any] = JsonRpcResponse(
         id=request_id, error=JsonRpcError(code=code, message=message, data=data)
     ).to_dict()
-    return JsonResponse(body, status=status)
+    response = JsonResponse(body, status=status)
+    if error_hint is not None:
+        # Summarises the body for the many clients that surface only the status
+        # line — see ``MCP_ERROR_HEADER``.
+        response[MCP_ERROR_HEADER] = error_hint
+    return response
 
 
 class AsyncStreamableHttpViewSet(ViewSet):
@@ -300,6 +317,7 @@ class AsyncStreamableHttpViewSet(ViewSet):
         # protocol-version checks above are not principal-revealing.
         token = await self._authenticate(http_request)
         if token is None:
+            logger.warning("Authentication failed for %s", http_request.path)
             return self._unauthenticated_response()
 
         # A session is bound to the principal it was minted for at
@@ -308,15 +326,31 @@ class AsyncStreamableHttpViewSet(ViewSet):
         store = self._require_session_store()
         session_id: str | None = http_request.headers.get(_SESSION_HEADER)
         principal: str = principal_for_token(token)
-        if not is_sessionless and (
-            not session_id or await acall(store.owner, session_id) != principal
-        ):
-            return _error_response(
-                code=JsonRpcErrorCode.INVALID_REQUEST,
-                message="Unknown or missing MCP-Session-Id",
-                status=404,
-                request_id=getattr(message, "id", None),
-            )
+        if self._sessions_enabled() and not is_sessionless:
+            owner_matches = bool(session_id) and await acall(store.owner, session_id) == principal
+            failure = session_gate_failure(session_id, owner_matches=owner_matches)
+            if failure is not None:
+                message_text, status, hint = failure
+                # ⭐ Server-side we name the *exact* condition. The response
+                # merges unknown-id with wrong-principal so the gate is not an
+                # ownership oracle, but the operator is not that adversary and
+                # a log line is not the wire. This is the line that ends the
+                # "is it the session or the load balancer?" incident.
+                logger.warning(
+                    "Session rejected: %s (session=%s, principal=%s, method=%s) -> HTTP %s",
+                    hint,
+                    session_fingerprint(session_id),
+                    principal,
+                    getattr(message, "method", "?"),
+                    status,
+                )
+                return _error_response(
+                    code=JsonRpcErrorCode.INVALID_REQUEST,
+                    message=message_text,
+                    status=status,
+                    request_id=getattr(message, "id", None),
+                    error_hint=hint,
+                )
 
         context = MCPCallContext(
             http_request=http_request,
@@ -365,7 +399,9 @@ class AsyncStreamableHttpViewSet(ViewSet):
                 result, self._require_auth_backend()
             )
 
-        if is_initialize and not isinstance(result, JsonRpcError):
+        if is_initialize and self._sessions_enabled() and not isinstance(result, JsonRpcError):
+            # Assignment is the server's choice; the client's duty to echo one
+            # is conditional on it arriving. Not minting is sessionless mode.
             new_session: str = await acall(store.create, principal_id=principal)
             http_response[_SESSION_HEADER] = new_session
         return http_response
@@ -478,7 +514,10 @@ class AsyncStreamableHttpViewSet(ViewSet):
         if token is None:
             return self._unauthenticated_response()
 
-        if self.sse_broker is None:
+        if self.sse_broker is None or not self._sessions_enabled():
+            # Sessionless: the session id *is* the channel address, so there is
+            # nothing to open a per-client stream against. 405 is the status the
+            # spec defines for "this endpoint does not offer an SSE stream".
             return HttpResponse(status=405)
 
         version_header: str | None = http_request.headers.get(_VERSION_HEADER)
@@ -527,7 +566,9 @@ class AsyncStreamableHttpViewSet(ViewSet):
         guard: HttpResponse | None = self._check_origin(http_request)
         if guard is not None:
             return guard
-        if self._modern_era_requested(http_request):
+        if self._modern_era_requested(http_request) or not self._sessions_enabled():
+            # No sessions to terminate — the spec's blessed answer for a server
+            # that does not let clients terminate sessions.
             return HttpResponse(status=405)
         token = await self._authenticate(http_request)
         if token is None:
@@ -734,6 +775,10 @@ class AsyncStreamableHttpViewSet(ViewSet):
         if self.config is None:  # pragma: no cover - guarded by MCPServer
             raise RuntimeError("AsyncStreamableHttpViewSet is missing an MCPConfig")
         return self.config
+
+    def _sessions_enabled(self) -> bool:
+        """Whether the legacy era mints and requires an ``Mcp-Session-Id``."""
+        return self._require_config().sessions_enabled
 
     def _require_session_store(self) -> SessionStore:
         if self.session_store is None:  # pragma: no cover - guarded by MCPServer

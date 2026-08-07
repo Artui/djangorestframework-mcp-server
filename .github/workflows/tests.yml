@@ -147,10 +147,17 @@ jobs:
           from rest_framework_mcp.transport.django_cache_session_store import (
               DjangoCacheSessionStore,
           )
+          from rest_framework.permissions import AllowAny
           from rest_framework_services.types.service_spec import ServiceSpec
 
           server = MCPServer(name="smoke")
-          server.register_service_tool(name="noop", spec=ServiceSpec(service=lambda: None))
+          # Permissions are required since 0.25.0. Declaring AllowAny here keeps
+          # the smoke test about *imports without optional extras*, which is its
+          # subject, rather than about the permission default.
+          server.register_service_tool(
+              name="noop",
+              spec=ServiceSpec(service=lambda: None, permission_classes=[AllowAny]),
+          )
           assert server.tools.get("noop") is not None
 
           # A bare server constructs its own defaults — neither may reach for an

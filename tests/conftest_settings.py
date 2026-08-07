@@ -48,5 +48,22 @@ DEFAULT_AUTO_FIELD = "django.db.models.AutoField"
 # path. What remains are scalars.
 REST_FRAMEWORK_MCP = {
     "ALLOWED_ORIGINS": ["*"],
+    # ⚠ The suite opts *out* of the strict default this package now ships.
+    #
+    # 0.25.0 flipped REQUIRE_TOOL_PERMISSIONS to True, so registering a tool
+    # with no permissions raises. Roughly 260 fixtures across ~50 files here
+    # register tools whose subject is something else entirely — output
+    # encoding, pagination, task lifecycle — and guarding every one of them
+    # would add noise to 260 call sites to test nothing.
+    #
+    # The flip's own behaviour is covered directly in
+    # tests/test_consumer_ergonomics.py, including an assertion that the
+    # *shipped* default is True, so this override cannot mask a regression
+    # back to permissive.
+    #
+    # It is also an honest measure of the upgrade cost: if this package's own
+    # suite needs the opt-out, a consumer's may too — which is exactly why the
+    # setting exists rather than the check being unconditional.
+    "REQUIRE_TOOL_PERMISSIONS": False,
     "SERVER_INFO": {"name": "djangorestframework-mcp-server-tests", "version": "0.0.0-test"},
 }

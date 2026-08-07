@@ -184,6 +184,37 @@ would strand every client that has not migrated with nothing but an error
 string to go on.
 """
 
+MCP_ERROR_HEADER: str = "MCP-Error"
+"""Response header naming the *class* of a transport-level rejection.
+
+Ours, not the spec's — the spec fixes the status code and says nothing about
+diagnosis. It exists because the statuses this package must return are, by
+themselves, undiagnosable in production:
+
+- A ``404`` from an unknown session and a ``404`` from a load balancer with no
+  matching rule are indistinguishable to a client.
+- The JSON-RPC body that *would* distinguish them frequently never reaches a
+  human: clients commonly log ``${status} ${statusText}``, and **HTTP/2 has no
+  reason phrase**, so the useful half is empty on any HTTP/2 connection — which
+  is every deployment behind a modern load balancer or CDN.
+
+A header survives both. It carries strictly less than the body it summarises, so
+it leaks nothing new: in particular the session slugs deliberately do **not**
+separate "unknown id" from "id owned by another principal", preserving the
+no-ownership-oracle property that merges those two into one ``404``.
+
+Costs one header on failure responses only. Never set on success.
+"""
+
+SESSION_MISSING_HINT: str = "session-missing"
+"""No ``Mcp-Session-Id`` header arrived (paired with ``400``)."""
+
+SESSION_UNKNOWN_HINT: str = "session-unknown"
+"""A session id arrived that this server will not honour — expired, evicted,
+terminated, or minted for a different principal. Deliberately one slug for all
+four (paired with ``404``); the client's remedy is the same in every case:
+re-``initialize``."""
+
 PROTOCOL_VERSION_META_KEY: str = "io.modelcontextprotocol/protocolVersion"
 """Per-request ``_meta`` key naming the revision a modern request speaks.
 
@@ -680,6 +711,7 @@ __all__ = [
     "JsonRpcErrorCode",
     "JsonRpcId",
     "MAX_COMPLETION_VALUES",
+    "MCP_ERROR_HEADER",
     "MODERN_PROTOCOL_VERSIONS",
     "OutputFormat",
     "PROGRESS_TOKEN_META_KEY",
@@ -691,6 +723,8 @@ __all__ = [
     "ResultType",
     "SERVER_INFO_META_KEY",
     "SESSIONLESS_METHODS",
+    "SESSION_MISSING_HINT",
+    "SESSION_UNKNOWN_HINT",
     "NotificationKind",
     "RESOURCE_UPDATED_METHOD",
     "SUBSCRIPTIONS_ACKNOWLEDGED_METHOD",

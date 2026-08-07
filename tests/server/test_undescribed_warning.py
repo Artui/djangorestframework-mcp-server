@@ -98,7 +98,10 @@ def test_a_docstring_on_the_service_does_not_count() -> None:
 
 
 def test_require_tool_descriptions_refuses_registration(settings: Any) -> None:
-    settings.REST_FRAMEWORK_MCP = {"REQUIRE_TOOL_DESCRIPTIONS": True}
+    settings.REST_FRAMEWORK_MCP = {
+        "REQUIRE_TOOL_PERMISSIONS": False,
+        "REQUIRE_TOOL_DESCRIPTIONS": True,
+    }
     server = _server()
     with pytest.raises(ImproperlyConfigured, match="no description"):
         server.register_service_tool(name="x", spec=ServiceSpec(service=_service, atomic=False))

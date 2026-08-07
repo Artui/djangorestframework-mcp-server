@@ -79,6 +79,7 @@ nav:
   - Async deployment: async.md
   - Prompts: prompts.md
   - Observability: observability.md
+  - Troubleshooting: troubleshooting.md
   - Performance: performance.md
   - Recipes:
       - recipes/index.md

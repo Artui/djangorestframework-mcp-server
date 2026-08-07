@@ -7,6 +7,7 @@ modules (one per app) and combine them into a single ``MCPServer``.
 
 from __future__ import annotations
 
+from rest_framework.permissions import AllowAny
 from rest_framework_services.types.selector_kind import SelectorKind
 from rest_framework_services.types.selector_spec import SelectorSpec
 from rest_framework_services.types.service_spec import ServiceSpec
@@ -39,11 +40,19 @@ def build_server() -> MCPServer:
         session_store=InMemorySessionStore(),
     )
 
+    # ⚠ Permissions are **required** since 0.25.0: registering a tool without
+    # them raises. DRF viewset-level and REST_FRAMEWORK defaults do not reach
+    # MCP, so an omission here is an open tool rather than an inherited policy.
+    # ``AllowAny`` is the honest choice for a demo — it says "deliberately
+    # open" out loud, which is the whole point of the strict default. Swap it
+    # for ``IsAuthenticated`` (or your own) in anything real.
+
     # ----- Service tools (mutations) -----
 
     server.register_service_tool(
         name="invoices.create",
         spec=ServiceSpec(
+            permission_classes=[AllowAny],
             service=create_invoice,
             input_serializer=InvoiceInputSerializer,
             output_selector_spec=SelectorSpec(
@@ -57,6 +66,7 @@ def build_server() -> MCPServer:
     server.register_service_tool(
         name="invoices.mark_sent",
         spec=ServiceSpec(
+            permission_classes=[AllowAny],
             service=mark_invoice_sent,
             input_serializer=MarkSentInputSerializer,
             output_selector_spec=SelectorSpec(
@@ -72,6 +82,7 @@ def build_server() -> MCPServer:
     server.register_selector_tool(
         name="invoices.list",
         spec=SelectorSpec(
+            permission_classes=[AllowAny],
             kind=SelectorKind.LIST,
             selector=list_invoices,
             output_serializer=InvoiceOutputSerializer,

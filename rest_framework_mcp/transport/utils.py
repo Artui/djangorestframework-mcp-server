@@ -5,7 +5,11 @@ from __future__ import annotations
 from typing import Any
 
 from rest_framework_mcp.auth.types.auth_backend import MCPAuthBackend
-from rest_framework_mcp.constants import JsonRpcErrorCode
+from rest_framework_mcp.constants import (
+    SESSION_MISSING_HINT,
+    SESSION_UNKNOWN_HINT,
+    JsonRpcErrorCode,
+)
 from rest_framework_mcp.protocol.types.json_rpc_error import JsonRpcError
 
 
@@ -80,4 +84,40 @@ _MODERN_BAD_REQUEST_CODES: frozenset[int] = frozenset(
 )
 
 
-__all__ = ["insufficient_scope_challenge", "is_permission_denial", "modern_error_status"]
+def session_gate_failure(
+    session_id: str | None, *, owner_matches: bool
+) -> tuple[str, int, str] | None:
+    """Decide the legacy session gate's outcome. ``None`` means the request passes.
+
+    Returns ``(message, status, hint)`` — shared by the sync and async viewsets
+    so the two cannot drift, which is a failure this package has shipped before.
+    ``hint`` is the ``MCP-Error`` slug; see :data:`MCP_ERROR_HEADER` for why a
+    header carries it in addition to the body.
+
+    **The two statuses are not interchangeable, and we used to conflate them.**
+    The spec separates them: a request *without* an ``Mcp-Session-Id`` header
+    "SHOULD" get ``400 Bad Request``, while ``404 Not Found`` is specified for a
+    request *"containing that session ID"* after the server has dropped it. We
+    answered ``404`` to both, which is the wrong code for the first — and since
+    ``2025-11-25`` lists ``400`` among the statuses that send a client down the
+    legacy-fallback path, the wrong code also lands it in the wrong branch.
+
+    ⭐ **Splitting them leaks nothing.** The caller already knows whether it sent
+    a header, so this distinction tells it only what it told us. The pair that
+    must stay merged is *unknown id* versus *id owned by another principal* —
+    those are facts about someone else's session, and both render ``404`` with
+    one message so the gate is not an ownership oracle.
+    """
+    if not session_id:
+        return ("Missing MCP-Session-Id", 400, SESSION_MISSING_HINT)
+    if not owner_matches:
+        return ("Unknown or invalid MCP-Session-Id", 404, SESSION_UNKNOWN_HINT)
+    return None
+
+
+__all__ = [
+    "insufficient_scope_challenge",
+    "is_permission_denial",
+    "modern_error_status",
+    "session_gate_failure",
+]

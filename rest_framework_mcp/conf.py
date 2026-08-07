@@ -18,6 +18,52 @@ DEFAULTS: dict[str, Any] = {
     # header is still rejected either way — silently downgrading there would
     # mask a genuine version mismatch.
     "REQUIRE_PROTOCOL_VERSION_HEADER": True,
+    # When False, the legacy (``initialize``-handshake) era runs **without
+    # sessions**: no ``Mcp-Session-Id`` is minted at ``initialize``, none is
+    # required on subsequent requests, and the SSE ``GET`` / session ``DELETE``
+    # answer ``405`` (the status the spec defines for "this endpoint offers no
+    # SSE stream" and "this server does not let clients terminate sessions").
+    #
+    # ⚠ This is a **conformant mode, not a relaxation.** Both legacy revisions
+    # make assignment optional — "A server using the Streamable HTTP transport
+    # MAY assign a session ID at initialization time" — and make the client's
+    # obligation conditional on the server having assigned one. A server that
+    # never assigns is never sent one.
+    #
+    # Why you would: a session is state, and state expires, gets evicted, and
+    # dies with a deploy. Every such failure reaches the client as a ``404``
+    # whose documented remedy is to re-``initialize`` — which not every client
+    # does, turning a recoverable condition into an outage that needs a human.
+    # Turning sessions off removes the failure class outright, for every client,
+    # without waiting on one to implement the remedy. The **modern**
+    # (``2026-07-28``) era is already sessionless and is unaffected by this
+    # setting; this exists for deployments still serving legacy clients.
+    #
+    # What you give up: server-initiated messaging on the legacy era. The
+    # session id is what addresses a client's SSE channel, so with it gone the
+    # ``GET`` stream has no address and answers ``405``. Request/response tool
+    # calling is untouched.
+    "SESSIONS_ENABLED": True,
+    # How long a session may sit **idle** before it expires, in seconds.
+    #
+    # The window restarts on every successful read, so a session in continuous
+    # use never lapses. Previously this was a module-private constant and the
+    # window was fixed from mint time, which meant an actively-used connector
+    # still died on the 24-hour mark.
+    "SESSION_TTL_SECONDS": 60 * 60 * 24,
+    # Ceiling on a session's **total** lifetime regardless of activity.
+    #
+    # ⚠ Not optional in spirit, even though ``None`` disables it. A session's
+    # principal binding is checked once, at ``initialize``; without an absolute
+    # cap a sliding idle window keeps a *revoked* principal alive for as long as
+    # it keeps talking. Same argument as ``SUBSCRIPTION_MAX_SECONDS``.
+    #
+    # ⚠ Neither of these can promise more than the cache underneath them. A
+    # Redis ``maxmemory-policy`` of ``allkeys-lru`` evicts session keys long
+    # before any TTL, and that is indistinguishable from expiry from the
+    # client's side — if sessions vanish early, check the eviction policy before
+    # this setting.
+    "SESSION_MAX_AGE_SECONDS": 60 * 60 * 24 * 7,
     # When True (default), successful ``tools/call`` results include a
     # ``structuredContent`` field carrying the typed JSON payload alongside
     # the human-readable ``content[0]`` text. Set to False to omit
@@ -257,7 +303,7 @@ DEFAULTS: dict[str, Any] = {
     # ``REST_FRAMEWORK`` default permission classes) — has no effect over
     # MCP: this package deliberately bypasses DRF's view-layer pipeline,
     # so a spec that looks guarded over HTTP ships as an unguarded tool.
-    "REQUIRE_TOOL_PERMISSIONS": False,
+    "REQUIRE_TOOL_PERMISSIONS": True,
     # When True, registering a tool with no description raises
     # ``ImproperlyConfigured`` instead of emitting the default
     # ``UndescribedToolWarning``. A description is not decoration: it is the

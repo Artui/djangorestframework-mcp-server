@@ -38,6 +38,7 @@ def build_mcp_config(
     *,
     protocol_versions: tuple[str, ...] | list[str] | None = None,
     require_protocol_version_header: bool | None = None,
+    sessions_enabled: bool | None = None,
     include_structured_content: bool | None = None,
     include_output_schema: bool | None = None,
     allowed_origins: tuple[str, ...] | list[str] | None = None,
@@ -91,6 +92,16 @@ def build_mcp_config(
             "no MCP revision and cannot answer any request. List at least one."
         )
 
+    structured_content_resolved: bool = bool(
+        include_structured_content
+        if include_structured_content is not None
+        else get_setting("INCLUDE_STRUCTURED_CONTENT")
+    )
+    output_schema_resolved: bool = bool(
+        include_output_schema
+        if include_output_schema is not None
+        else get_setting("INCLUDE_OUTPUT_SCHEMA")
+    )
     return MCPConfig(
         protocol_versions=resolved_versions,
         require_protocol_version_header=bool(
@@ -98,16 +109,11 @@ def build_mcp_config(
             if require_protocol_version_header is not None
             else get_setting("REQUIRE_PROTOCOL_VERSION_HEADER")
         ),
-        include_structured_content=bool(
-            include_structured_content
-            if include_structured_content is not None
-            else get_setting("INCLUDE_STRUCTURED_CONTENT")
+        sessions_enabled=bool(
+            sessions_enabled if sessions_enabled is not None else get_setting("SESSIONS_ENABLED")
         ),
-        include_output_schema=bool(
-            include_output_schema
-            if include_output_schema is not None
-            else get_setting("INCLUDE_OUTPUT_SCHEMA")
-        ),
+        include_structured_content=structured_content_resolved,
+        include_output_schema=output_schema_resolved,
         allowed_origins=tuple(
             allowed_origins if allowed_origins is not None else get_setting("ALLOWED_ORIGINS")
         ),

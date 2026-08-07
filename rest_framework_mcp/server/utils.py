@@ -48,19 +48,30 @@ def check_tool_permissions_declared(
     """
     if permissions:
         return
-    message = (
+    problem = (
         f"MCP tool {name!r} is registered with no permissions: neither "
         "spec.permission_classes nor a per-binding permissions=[...] is set. "
         "DRF viewset-level and REST_FRAMEWORK default permission classes do "
         "NOT apply over MCP, so this tool is callable by any principal the "
-        "transport authenticates. Set spec.permission_classes, pass "
-        "permissions=[...] at registration, or set "
-        "REST_FRAMEWORK_MCP['REQUIRE_TOOL_PERMISSIONS'] = True to make this "
-        "an error."
+        "transport authenticates. Set spec.permission_classes, or pass "
+        "permissions=[...] at registration."
     )
     if require:
-        raise ImproperlyConfigured(message)
-    warnings.warn(message, UnguardedToolWarning, stacklevel=3)
+        # The remedy on this branch is the opposite of the warning's: the check
+        # is already strict, so what a caller needs is the way *out*. Telling
+        # them to enable the setting that just raised is the kind of message
+        # that reads as a bug in the framework.
+        raise ImproperlyConfigured(
+            f"{problem} To downgrade this to a warning while you migrate, set "
+            "REST_FRAMEWORK_MCP['REQUIRE_TOOL_PERMISSIONS'] = False."
+        )
+    warnings.warn(
+        f"{problem} This is a warning because "
+        "REST_FRAMEWORK_MCP['REQUIRE_TOOL_PERMISSIONS'] is False; it is an "
+        "error by default since 0.25.0.",
+        UnguardedToolWarning,
+        stacklevel=3,
+    )
 
 
 class UndescribedToolWarning(UserWarning):

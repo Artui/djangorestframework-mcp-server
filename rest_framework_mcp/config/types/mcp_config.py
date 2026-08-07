@@ -41,6 +41,15 @@ class MCPConfig:
     ``MCP-Protocol-Version``. A *present-but-unsupported* header is rejected
     either way — silently downgrading would mask a genuine mismatch."""
 
+    sessions_enabled: bool
+    """Whether the legacy era mints and requires an ``Mcp-Session-Id``.
+
+    ``False`` runs the handshake era statelessly: no id at ``initialize``, none
+    required afterwards, ``405`` for the SSE ``GET`` and the session ``DELETE``.
+    A conformant mode — both legacy revisions say a server **MAY** assign a
+    session ID, and bind the client's obligation to it having done so. The
+    modern era is sessionless regardless and ignores this."""
+
     include_structured_content: bool
     """Whether successful ``tools/call`` results carry ``structuredContent``
     alongside the human-readable text. Per-binding overrides win."""

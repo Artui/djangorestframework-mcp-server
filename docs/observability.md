@@ -1,5 +1,62 @@
 # Observability
 
+!!! note "Two independent surfaces"
+
+    **Logging** (below) is always on and needs no extra dependency — it is how
+    you find out *why* a request was rejected. **Tracing** needs the `[otel]`
+    extra and tells you where time went. Reach for logging first when something
+    returns an error you cannot explain.
+
+## Logging
+
+Before 0.25.0 this package emitted **nothing** — no logger anywhere, in a
+library that terminates a wire protocol, authenticates every request and
+rejects requests for four distinct reasons. It now logs under the
+`rest_framework_mcp` namespace, one logger per module, configured like any
+other library:
+
+```python title="settings.py"
+LOGGING = {
+    "version": 1,
+    "disable_existing_loggers": False,
+    "handlers": {"console": {"class": "logging.StreamHandler"}},
+    "loggers": {
+        "rest_framework_mcp": {"level": "INFO", "handlers": ["console"]},
+    },
+}
+```
+
+### What lands where
+
+| Level | Events |
+|---|---|
+| `WARNING` | Session rejections, authentication failures, and every outbound bound that fires (result size, dispatch deadline, page clamp) |
+| `INFO` | `initialize`, and the protocol era each request selected |
+| `DEBUG` | Per-call dispatch timing and result size |
+
+### The session line is the one that matters
+
+A rejected session logs **which** of its causes fired, even though the HTTP
+response deliberately does not:
+
+```
+WARNING Session rejected: session-unknown (session=a1b2c3d4…, principal=42, method=tools/call) -> HTTP 404
+```
+
+The wire merges "unknown id" with "id owned by another principal" so a caller
+cannot probe session ids. An operator reading logs is not the adversary that
+protects against, and a log line is not the wire — so server-side you get the
+exact condition.
+
+### What is never logged
+
+Bearer tokens, tool arguments, and tool results — the last two are your domain
+data and may be anything at all. Session ids appear as a short prefix
+(`a1b2c3d4…`), enough to follow one client across requests and not enough to
+replay.
+
+## Tracing
+
 The MCP server emits OpenTelemetry spans around every dispatch — `tools/call`,
 `resources/read`, `prompts/get`. Spans are scoped to the dispatch portion
 (after binding resolution) so cheap validation rejections don't generate
