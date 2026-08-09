@@ -7,6 +7,35 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Security
+
+- **An async auth backend on the sync transport authenticated every caller.**
+  `docs/recipes/async-auth-backend.md` documented an `async def authenticate`
+  and claimed the sync view bridged it via `async_to_sync`. No such bridge
+  exists: the sync transport called the backend and got back an un-awaited
+  coroutine, which is *truthy*, so the `token is None` check that produces the
+  `401` passed and every request — credentials or not — was served as
+  authenticated (as the shared `"anonymous"` principal, since a coroutine has
+  no `pk`). Anyone who followed that recipe and mounted `server.urls` was
+  running an open endpoint that reported nothing wrong.
+
+  The sync transport now inspects what `authenticate` returned and raises
+  `ImproperlyConfigured` when it is awaitable, naming both remedies: mount the
+  server under `server.async_urls`, or make the backend a plain `def`. Existing
+  installs are covered by the raise, not by the doc fix — an already-deployed
+  copy of the recipe keeps working exactly as before until it is upgraded, at
+  which point it fails loudly instead of silently open.
+
+### Fixed
+
+- **Docs: `async-auth-backend` recipe corrected.** It now directs async
+  backends to `async_urls` only and drops the bridge claim. Two further defects
+  in the same example are fixed: `protected_resource_metadata` returned a plain
+  `dict`, which raises `AttributeError` in the PRM ViewSet (it calls
+  `.to_dict()`), and `TokenInfo(user=<sub string>)` gave every caller the shared
+  `"anonymous"` principal, so session and task ownership isolation collapsed.
+  The same `dict` return is corrected in `docs/async.md`.
+
 ## [0.25.0] — 2026-08-05
 
 ### ⚠ Upgrade notes
