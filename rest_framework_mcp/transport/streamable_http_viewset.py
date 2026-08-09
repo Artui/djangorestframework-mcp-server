@@ -1,8 +1,10 @@
 from __future__ import annotations
 
+import inspect
 import json
 from typing import Any
 
+from django.core.exceptions import ImproperlyConfigured
 from django.http import HttpResponse, JsonResponse
 from rest_framework.permissions import AllowAny
 from rest_framework.renderers import JSONRenderer
@@ -69,6 +71,37 @@ def _error_response(
         # line — see ``MCP_ERROR_HEADER``.
         response[MCP_ERROR_HEADER] = error_hint
     return response
+
+
+def _reject_awaitable_token(result: Any, *, backend: Any) -> Any:
+    """Return the token, or refuse an ``authenticate`` that must be awaited.
+
+    ⚠ **This is a security gate, not a type check.** The sync transport cannot
+    await anything, so an ``async def authenticate`` mounted under
+    ``server.urls`` hands back an un-awaited coroutine — and a coroutine object
+    is *truthy*, so every ``token is None`` check downstream passes and every
+    caller is authenticated. ``principal_for_token`` then reads no ``pk`` off
+    it and files the request under the shared ``"anonymous"`` principal. The
+    endpoint is wide open and nothing in the response says so.
+
+    Failing the request loudly is the only safe reading: the caller presented
+    credentials nobody verified. The backend is fine — its *mounting* is wrong,
+    so the message names both ways out.
+    """
+    if not inspect.isawaitable(result):
+        return result
+    if inspect.iscoroutine(result):
+        # Closing the never-started coroutine keeps CPython from tacking a
+        # "coroutine ... was never awaited" RuntimeWarning onto the traceback
+        # at collection time, which would bury the actionable error below.
+        result.close()
+    raise ImproperlyConfigured(
+        f"{type(backend).__name__}.authenticate() returned an awaitable, but this request "
+        "was served by the sync MCP transport (server.urls), which cannot await it. "
+        "Mount the server under server.async_urls (ASGI) so the backend is awaited, or "
+        "make authenticate a plain 'def'. Refusing the request: an un-awaited coroutine "
+        "is truthy, so serving it would authenticate every caller."
+    )
 
 
 class StreamableHttpViewSet(ViewSet):
@@ -419,7 +452,8 @@ class StreamableHttpViewSet(ViewSet):
     # ----- collaborator accessors -----
 
     def _authenticate(self, http_request: Any) -> Any:
-        return self._require_auth_backend().authenticate(http_request)
+        backend: MCPAuthBackend = self._require_auth_backend()
+        return _reject_awaitable_token(backend.authenticate(http_request), backend=backend)
 
     def _unauthenticated_response(self) -> JsonResponse:
         challenge: str = self._require_auth_backend().www_authenticate_challenge(

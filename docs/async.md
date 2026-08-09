@@ -78,7 +78,7 @@ class HttpxAuthBackend:
         return TokenInfo(user=response.json()["sub"], scopes=())
 
     def protected_resource_metadata(self):
-        return {"resource": "https://example.com/mcp/"}
+        return ProtectedResourceMetadata(resource="https://example.com/mcp/")
 
     def www_authenticate_challenge(self, *, scopes=None, error=None):
         return 'Bearer realm="mcp"'
@@ -90,6 +90,15 @@ server = MCPServer(name="my-app", auth_backend=HttpxAuthBackend())
 The `acall` helper detects coroutine-functions at runtime via
 `inspect.iscoroutinefunction` and routes accordingly — no marker interface
 required.
+
+!!! danger "The bridging runs one way only"
+    Sync collaborators work under `async_urls`. An **async** collaborator does
+    *not* work under the sync `server.urls`: that view has no event loop to
+    await on, and an un-awaited coroutine is truthy, so an async
+    `authenticate` mounted there would authenticate every caller. The sync
+    transport refuses such a request with `ImproperlyConfigured` instead of
+    serving it. Mount an async backend under `async_urls` only — see
+    [Write an async-native auth backend](recipes/async-auth-backend.md).
 
 ## Sync vs async services
 

@@ -1,7 +1,12 @@
 from __future__ import annotations
 
+import inspect
 import json
+from collections.abc import Generator
+from typing import Any
 
+import pytest
+from django.core.exceptions import ImproperlyConfigured
 from django.http import HttpRequest
 from django.test import Client, RequestFactory
 
@@ -13,6 +18,7 @@ from rest_framework_mcp.transport.in_memory_session_store import InMemorySession
 from rest_framework_mcp.transport.streamable_http_viewset import (
     STREAMABLE_HTTP_ACTION_MAP,
     StreamableHttpViewSet,
+    _reject_awaitable_token,
 )
 
 
@@ -74,6 +80,88 @@ def test_request_with_no_params_field(client: Client, initialized_session: str) 
     )
     body = response.json()
     assert body["result"] == {"resultType": "complete"}
+
+
+class _AsyncAuthBackend(_DenyAllBackend):
+    """Backend written async-native — correct only when mounted on ``async_urls``."""
+
+    async def authenticate(self, request: HttpRequest) -> TokenInfo | None:
+        del request
+        return TokenInfo(user=None, scopes=())
+
+
+def _initialize_request() -> HttpRequest:
+    return RequestFactory().post(
+        "/mcp/",
+        data=json.dumps(
+            {
+                "jsonrpc": "2.0",
+                "id": 1,
+                "method": "initialize",
+                "params": {
+                    "protocolVersion": "2025-11-25",
+                    "capabilities": {},
+                    "clientInfo": {"name": "x", "version": "1"},
+                },
+            }
+        ),
+        content_type="application/json",
+    )
+
+
+def test_async_auth_backend_on_sync_transport_is_refused() -> None:
+    """An ``async def authenticate`` under ``server.urls`` fails loudly, not open.
+
+    Regression test for a documented configuration that authenticated every
+    caller: the sync view cannot await, so the coroutine sailed through the
+    ``token is None`` gate on its truthiness alone.
+    """
+    view = StreamableHttpViewSet.as_view(
+        STREAMABLE_HTTP_ACTION_MAP,
+        tools=ToolRegistry(),
+        resources=ResourceRegistry(),
+        auth_backend=_AsyncAuthBackend(),
+        session_store=InMemorySessionStore(),
+        config=build_mcp_config(),
+    )
+
+    with pytest.raises(ImproperlyConfigured) as excinfo:
+        view(_initialize_request())
+
+    message = str(excinfo.value)
+    assert "_AsyncAuthBackend.authenticate()" in message
+    assert "server.async_urls" in message
+
+
+def test_awaitable_token_is_closed_before_raising() -> None:
+    """The coroutine is closed, so no "never awaited" warning buries the error."""
+
+    async def _authenticate() -> None: ...
+
+    coroutine = _authenticate()
+    with pytest.raises(ImproperlyConfigured):
+        _reject_awaitable_token(coroutine, backend=_AsyncAuthBackend())
+
+    assert inspect.getcoroutinestate(coroutine) == inspect.CORO_CLOSED
+
+
+def test_non_coroutine_awaitable_token_is_refused() -> None:
+    """A future-like return is refused too — there is nothing here that can await it."""
+
+    class _Awaitable:
+        def __await__(self) -> Generator[Any, None, None]:
+            # Never driven: the transport refuses the object rather than
+            # awaiting it. The method exists only to satisfy ``isawaitable``.
+            yield
+
+    with pytest.raises(ImproperlyConfigured):
+        _reject_awaitable_token(_Awaitable(), backend=_AsyncAuthBackend())
+
+
+def test_sync_token_passes_through_unchanged() -> None:
+    """The ordinary sync return value is handed back untouched."""
+    token = TokenInfo(user=None, scopes=())
+    assert _reject_awaitable_token(token, backend=_DenyAllBackend()) is token
 
 
 def test_response_shaped_input_is_rejected(client: Client, initialized_session: str) -> None:
