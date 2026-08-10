@@ -23,7 +23,7 @@
       
       
       <link rel="icon" href="../../assets/images/favicon.png">
-      <meta name="generator" content="mkdocs-1.6.1, mkdocs-material-9.7.6">
+      <meta name="generator" content="mkdocs-1.6.1, mkdocs-material-9.7.7">
     
     
       
@@ -31,7 +31,7 @@
       
     
     
-      <link rel="stylesheet" href="../../assets/stylesheets/main.484c7ddc.min.css">
+      <link rel="stylesheet" href="../../assets/stylesheets/main.ec1eaa64.min.css">
       
         
         <link rel="stylesheet" href="../../assets/stylesheets/palette.ab4e12ef.min.css">
@@ -2107,6 +2107,28 @@
       <ul class="md-nav__list">
         
           <li class="md-nav__item">
+  <a href="#rest_framework_mcp.tasks.types.task_record.TaskRecord.progress" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        progress
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#rest_framework_mcp.tasks.types.task_record.TaskRecord.total" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        total
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
   <a href="#rest_framework_mcp.tasks.types.task_record.TaskRecord.input_responses" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -3208,6 +3230,28 @@
   
     <nav class="md-nav" aria-label="TaskRecord">
       <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#rest_framework_mcp.tasks.types.task_record.TaskRecord.progress" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        progress
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#rest_framework_mcp.tasks.types.task_record.TaskRecord.total" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        total
+      
+    </span>
+  </a>
+  
+</li>
         
           <li class="md-nav__item">
   <a href="#rest_framework_mcp.tasks.types.task_record.TaskRecord.input_responses" class="md-nav__link">
@@ -6236,7 +6280,8 @@ except this record.</p>
   produces for sessions), :attr:<code>user_pk</code> to rehydrate the user, and
   :attr:<code>scopes</code> / :attr:<code>audience</code> to rebuild the <code>TokenInfo</code>.</li>
 <li><strong>Bookkeeping.</strong> :attr:<code>enqueued</code>, so a worker cannot be tricked into
-  running the same task twice.</li>
+  running the same task twice, and :attr:<code>progress</code> / :attr:<code>total</code>, which
+  are where a running task's <code>progress(...)</code> calls land.</li>
 </ul>
 <p>⚠ <strong>The scopes are stored, and that is the point.</strong> Without them the worker
 would rebuild a token that proves nothing, and every <code>ScopeRequired</code>
@@ -6272,6 +6317,68 @@ the wrong dataclass.</p>
 
 
 
+
+<div class="doc doc-object doc-attribute">
+
+
+
+<h3 id="rest_framework_mcp.tasks.types.task_record.TaskRecord.progress" class="doc doc-heading">
+            <span class="doc doc-object-name doc-attribute-name">progress</span>
+
+
+  <span class="doc doc-labels">
+      <small class="doc doc-label doc-label-class-attribute"><code>class-attribute</code></small>
+      <small class="doc doc-label doc-label-instance-attribute"><code>instance-attribute</code></small>
+  </span>
+
+<a href="#rest_framework_mcp.tasks.types.task_record.TaskRecord.progress" class="headerlink" title="Permanent link">&para;</a></h3>
+<div class="language-python doc-signature highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="n">progress</span><span class="p">:</span> <span class="nb">float</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span>
+</span></code></pre></div>
+
+    <div class="doc doc-contents ">
+
+        <p>How far along the running task said it was, or <code>None</code> if it never said.</p>
+<p>Written by
+:func:<code>~rest_framework_mcp.tasks.report_task_progress.report_task_progress</code>,
+which is what a task's <code>progress</code> kwarg-pool seed resolves to. Paired with
+:attr:<code>total</code> when the service supplied one.</p>
+<p>⚠ <strong>Server-side only, by protocol.</strong> The wire <code>Task</code> carries
+<code>statusMessage</code> and no numeric field, so a polling client only ever sees
+the <em>rendered</em> string these two produce. Keeping the numbers is still worth
+it: they are what makes the value legible in logs and the admin, and they
+are the input a future adaptive <code>pollIntervalMs</code> would need. Rendering is
+lossy and rendering back is not a thing.</p>
+
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-attribute">
+
+
+
+<h3 id="rest_framework_mcp.tasks.types.task_record.TaskRecord.total" class="doc doc-heading">
+            <span class="doc doc-object-name doc-attribute-name">total</span>
+
+
+  <span class="doc doc-labels">
+      <small class="doc doc-label doc-label-class-attribute"><code>class-attribute</code></small>
+      <small class="doc doc-label doc-label-instance-attribute"><code>instance-attribute</code></small>
+  </span>
+
+<a href="#rest_framework_mcp.tasks.types.task_record.TaskRecord.total" class="headerlink" title="Permanent link">&para;</a></h3>
+<div class="language-python doc-signature highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="n">total</span><span class="p">:</span> <span class="nb">float</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span>
+</span></code></pre></div>
+
+    <div class="doc doc-contents ">
+
+        <p>What :attr:<code>progress</code> counts toward, or <code>None</code> for an open-ended count.</p>
+<p><code>None</code> is the ordinary case for work that cannot say how much there is —
+the reporter renders a bare count rather than inventing a denominator.</p>
+
+    </div>
+
+</div>
 
 <div class="doc doc-object doc-attribute">
 
@@ -6518,7 +6625,7 @@ use this store is its own garbage collection.</p>
       <script id="__config" type="application/json">{"annotate": null, "base": "../..", "features": ["navigation.instant", "navigation.tracking", "navigation.sections", "navigation.expand", "navigation.indexes", "navigation.top", "search.highlight", "search.share", "search.suggest", "content.code.copy", "content.code.annotate", "content.action.edit", "toc.follow"], "search": "../../assets/javascripts/workers/search.2c215733.min.js", "tags": null, "translations": {"clipboard.copied": "Copied to clipboard", "clipboard.copy": "Copy to clipboard", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.placeholder": "Type to start searching", "search.result.term.missing": "Missing", "select.version": "Select version"}, "version": null}</script>
     
     
-      <script src="../../assets/javascripts/bundle.79ae519e.min.js"></script>
+      <script src="../../assets/javascripts/bundle.d7400e89.min.js"></script>
       
     
   </body>
