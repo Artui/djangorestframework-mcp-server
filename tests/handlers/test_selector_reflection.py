@@ -36,7 +36,7 @@ from rest_framework_mcp.registry.types.selector_tool_binding import SelectorTool
 def _ctx(*, tools: ToolRegistry) -> MCPCallContext:
     return MCPCallContext(
         http_request=HttpRequest(),
-        token=TokenInfo(user="alice"),
+        token=TokenInfo(user=_ALICE),
         tools=tools,
         resources=ResourceRegistry(),
         prompts=PromptRegistry(),
@@ -95,3 +95,19 @@ def test_reflected_extra_accepted_under_reject_with_serializer() -> None:
     )
     assert isinstance(out, dict)
     assert out["structuredContent"] == [1, 5]
+
+
+class _IdentifiedUser(str):
+    """A user that is both a value and an identity.
+
+    These tests assert on the user *value* (``== "alice"``, and it is rendered
+    into tool output), while ``principal_for_token`` needs a ``pk`` — an
+    authenticated caller without one is refused, because every such caller would
+    share the ``"anonymous"`` principal and therefore each other's sessions.
+    A ``str`` subclass satisfies both without changing a single assertion.
+    """
+
+    pk = "alice"
+
+
+_ALICE = _IdentifiedUser("alice")
