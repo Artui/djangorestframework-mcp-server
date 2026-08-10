@@ -90,6 +90,12 @@ dev = [
     "fakeredis>=2.20",
     "opentelemetry-api>=1.27",
     "opentelemetry-sdk>=1.27",
+    # The OTLP exporter the observability docs demonstrate. A dev dependency
+    # purely so `make docs-check` can verify that import: the exporter is a
+    # separate distribution from the api/sdk, so its root package resolves
+    # while the submodule does not, and the checker cannot tell that from a
+    # dependency that moved out from under the docs.
+    "opentelemetry-exporter-otlp-proto-grpc>=1.27",
     "drf-spectacular>=0.27",
     "django-filter>=23",
     "djangorestframework-simplejwt>=5.3",
@@ -152,7 +158,7 @@ root = ["./rest_framework_mcp"]
 # block under a new dated heading. Run via `uvx bump-my-version` (no
 # permanent dependency added to the project).
 [tool.bumpversion]
-current_version = "0.28.0"
+current_version = "0.28.1"
 allow_dirty = false
 commit = false
 tag = false

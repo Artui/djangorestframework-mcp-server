@@ -7,6 +7,9 @@ from rest_framework_mcp.contrib.oauth.build_authorize_passthrough_view import (
     build_authorize_passthrough_view,
 )
 from rest_framework_mcp.contrib.oauth.build_oauth_urlpatterns import build_oauth_urlpatterns
+from rest_framework_mcp.contrib.oauth.check_oauth_url_shadowing import (
+    check_oauth_url_shadowing,
+)
 from rest_framework_mcp.contrib.oauth.dcr_serializer import DynamicClientRegistrationSerializer
 from rest_framework_mcp.contrib.oauth.dynamic_client_registration_viewset import (
     DynamicClientRegistrationViewSet,

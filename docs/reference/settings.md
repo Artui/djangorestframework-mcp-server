@@ -14,6 +14,18 @@ REST_FRAMEWORK_MCP = {
 Reading an unknown key raises `KeyError`, so a typo surfaces immediately rather
 than silently taking a default.
 
+!!! warning "Assigning the dict replaces it; it does not merge"
+    Absent **keys** fall back to the defaults above, so a partial
+    `REST_FRAMEWORK_MCP` is fine. But assigning the dict — including
+    `settings.REST_FRAMEWORK_MCP = {...}` in a test, or `@override_settings` —
+    replaces whatever was there, so a project-level opt-out silently disappears
+    inside that scope. Repeat the keys you rely on in those literals.
+
+    The same holds one level down: a **dict-valued** setting such as
+    `SERVER_INFO` is taken whole, not deep-merged. Supplying
+    `{"version": "1.0"}` drops any `name` you had configured alongside it (the
+    package name is used as the fallback), so give the dict every key you want.
+
 **These settings are per-project defaults.** Every scalar below can be
 overridden per server, which is what you want as soon as you mount more than
 one:
@@ -72,6 +84,9 @@ it wrong is a cross-tenant disclosure with a cache in front of it.
 | `ALLOWED_ORIGINS` | `[]` | Origin allowlist, enforced on every request (mandatory per the MCP spec). `["*"]` allows any origin — local development only. |
 | `MAX_PROGRESS_NOTIFICATIONS` | `1000` | Ceiling on `notifications/progress` frames emitted for one request. The spec asks both parties to rate-limit progress, and the failure mode is the familiar one: a service reporting per row over a large table turns one call into a flood. Past the cap further reports are dropped — the dispatch is untouched and the final response still arrives. |
 | `MAX_REQUEST_BYTES` | `1048576` (1 MiB) | Maximum accepted request body size. |
+| `SESSIONS_ENABLED` | `True` | Whether the server mints and requires an `Mcp-Session-Id`. `False` runs the sessionless legacy mode, which is conformant rather than a fallback — but the session id is what addresses a client's SSE channel, so with it gone the `GET` stream has no address and answers `405`. Request/response tool calling is untouched. |
+| `SESSION_TTL_SECONDS` | `86400` (24 h) | How long a session may sit **idle** before it expires. The window restarts on every successful read, so a session in continuous use never lapses. |
+| `SESSION_MAX_AGE_SECONDS` | `604800` (7 days) | Ceiling on a session's **total** lifetime regardless of activity. ⚠ Not optional in spirit, though `None` disables it: a session's principal binding is checked once, at `initialize`, so without an absolute cap a sliding idle window keeps a *revoked* principal alive for as long as it keeps talking. A cache-backed store may also evict earlier under memory pressure, which is indistinguishable from expiry on the client side — if sessions vanish early, check the eviction policy before this setting. |
 | `SUBSCRIPTION_MAX_SECONDS` | `3600` (1 h) | How long one `subscriptions/listen` stream may stay open before the server closes it gracefully and the client re-subscribes. ⚠ An authorization control as much as a resource one: a subscription's permissions are checked once, when it opens, so without a cap a principal whose access was revoked keeps receiving change signals for as long as it holds the connection. `None` disables the cap — and both bounds with it. |
 | `MAX_CONCURRENT_SUBSCRIPTIONS` | `100` | Ceiling on concurrent subscription streams **per worker**. Each parks an ASGI task for its lifetime, so without a bound an authenticated caller can exhaust the worker pool by opening streams in a loop. Past the cap a subscription is refused with `503` / `-32603` rather than queued. `None` disables. |
 | `RESOURCE_URL` | `None` | Canonical resource URL this server **publishes** — RFC 9728 requires it in protected-resource metadata, and it is what audience enforcement compares against when enabled. Setting it rejects nothing on its own; see `ENFORCE_AUDIENCE`. Only the **default** for `MCPServer(resource_url=…)` — RFC 8707 binds a token to *a* resource, so each server needs its own URL. Two servers sharing one URL means a token minted for one passes the audience check at the other, which is the exact replay the mechanism prevents. Leaving it unset publishes an empty `resource` plus a `_warning`. |
@@ -114,7 +129,7 @@ See [What the package bounds](../performance.md#what-the-package-bounds).
 
 | Key | Default | What it does |
 |---|---|---|
-| `REQUIRE_TOOL_PERMISSIONS` | `False` | Registering a tool with no permissions at all (neither `spec.permission_classes` nor `permissions=[…]`) raises `ImproperlyConfigured` instead of emitting `UnguardedToolWarning`. The warning exists because guarding the *viewset* — or relying on `REST_FRAMEWORK`'s default permission classes — has **no effect over MCP**: this package bypasses DRF's view-layer pipeline, so a spec that looks guarded over HTTP ships as an unguarded tool. See [Authentication](../auth.md). |
+| `REQUIRE_TOOL_PERMISSIONS` | `True` | Registering a tool with no permissions at all (neither `spec.permission_classes` nor `permissions=[…]`) raises `ImproperlyConfigured`. Set it to `False` to downgrade that to an `UnguardedToolWarning` while migrating a large surface. The warning exists because guarding the *viewset* — or relying on `REST_FRAMEWORK`'s default permission classes — has **no effect over MCP**: this package bypasses DRF's view-layer pipeline, so a spec that looks guarded over HTTP ships as an unguarded tool. See [Authentication](../auth.md). |
 | `REQUIRE_TOOL_DESCRIPTIONS` | `False` | Registering a tool with no `description` raises `ImproperlyConfigured` instead of emitting `UndescribedToolWarning`. The description is the only thing a model reads to decide whether and how to call a tool, so an empty one ships a tool that cannot be used correctly — and `tools/list` renders it indistinguishably from a documented one. There is deliberately **no docstring fallback**: a docstring is written for the next developer, not for a model choosing between tools. See [Documenting tools](../concepts.md#documenting-tools). |
 | `FILTER_LISTINGS_BY_PERMISSIONS` | `False` | Drop bindings whose `permissions` deny the caller from `tools/list`, `resources/list`, `resources/templates/list` and `prompts/list`. Per-binding `always_listed=True` opts one back in as a discovery aid. |
 

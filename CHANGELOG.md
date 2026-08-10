@@ -7,6 +7,63 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.28.1] — 2026-08-10
+
+### Fixed
+
+- **`from rest_framework_mcp.contrib.oauth import check_oauth_url_shadowing`
+  now works.** The name was in the package's `__all__` with no import beside
+  it, so that import failed and `import *` failed outright — for a symbol
+  sitting one file away.
+
+- **The documented default of `REQUIRE_TOOL_PERMISSIONS` was the opposite of
+  the shipped one.** The settings table said `False`; it has been `True` since
+  0.25.0. Two more places still described the old behaviour ("emits
+  `UnguardedToolWarning`; set `True` to refuse") when registration is now
+  refused by default and `False` is the migration escape hatch.
+
+  ⚠ **The direction of this one matters.** A reader following the old text
+  believed unguarded tools shipped with a warning, when they are refused — so
+  the docs described a *laxer* server than the one they had.
+
+- **The three session settings had no rows at all** — `SESSIONS_ENABLED`,
+  `SESSION_TTL_SECONDS`, `SESSION_MAX_AGE_SECONDS`. Documented now, including
+  why the absolute cap is not really optional: a session's principal binding is
+  checked once, at `initialize`, so a sliding idle window alone keeps a revoked
+  principal alive for as long as it keeps talking.
+
+- **`build_oauth_urlpatterns` was documented as taking `server` positionally.**
+  It is keyword-only, so the copy-paste example raised `TypeError` for the first
+  person to run it. Corrected in all three places.
+
+- **Assigning the settings dict replaces it rather than merging**, which was
+  only ever said in a troubleshooting tip about tests. It is now stated where
+  the dict is configured, along with the same rule one level down: a
+  dict-valued setting such as `SERVER_INFO` is taken whole, not deep-merged.
+
+### Added
+
+- **`make docs-check`, wired into CI** — every `python` fence in the docs has
+  its imports resolved against the *installed* packages and its calls bound
+  against the real signatures.
+
+  ⭐ **The two checks it now performs are the two ways these docs actually
+  rot.** Resolving imports catches a symbol that moved or vanished, including
+  in a dependency; binding calls catches an argument the callee cannot accept —
+  including one passed **positionally to a keyword-only parameter**, which
+  reads perfectly and which a keyword-name check cannot see, because the
+  keyword was never written down. That is the `build_oauth_urlpatterns` defect
+  above, and it now fails the build.
+
+- **A test asserting every `__all__` name is actually bound**, checked against
+  the source rather than the imported module.
+
+  ⚠ **The runtime version of this check does not work, and quietly.** Importing
+  `pkg.thing` binds `thing` as an attribute of `pkg`, so once anything has
+  imported the submodule, `hasattr(pkg, "thing")` is `True` while
+  `from pkg import thing` hands back a *module* that is not callable. The first
+  draft passed with the OAuth defect reintroduced; the static check fails on it.
+
 ## [0.28.0] — 2026-08-10
 
 ### Security
@@ -3112,7 +3169,8 @@ Pinned to `djangorestframework-services==0.6.0`.
 - 100% line + branch coverage enforced by pytest (**451 tests** at
   release).
 
-[Unreleased]: https://github.com/Artui/djangorestframework-mcp-server/compare/v0.28.0...HEAD
+[Unreleased]: https://github.com/Artui/djangorestframework-mcp-server/compare/v0.28.1...HEAD
+[0.28.1]: https://github.com/Artui/djangorestframework-mcp-server/compare/v0.28.0...v0.28.1
 [0.28.0]: https://github.com/Artui/djangorestframework-mcp-server/compare/v0.27.0...v0.28.0
 [0.27.0]: https://github.com/Artui/djangorestframework-mcp-server/compare/v0.26.0...v0.27.0
 [0.26.0]: https://github.com/Artui/djangorestframework-mcp-server/compare/v0.25.0...v0.26.0
