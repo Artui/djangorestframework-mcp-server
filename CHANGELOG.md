@@ -7,6 +7,37 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Security
+
+- **An authenticated caller with no `pk` is refused instead of sharing the
+  `"anonymous"` principal.**
+
+  Sessions and tasks are owned by a principal id derived from the resolved
+  user's primary key. A backend that resolves a *real* caller to something
+  without one — a service-account object, a JWT-claim wrapper, a custom
+  principal class — fell through to `"anonymous"` alongside every other such
+  caller. ⛔ **Two distinct authenticated callers on one principal can each
+  present the other's session id and be served**, and tasks use the identical
+  ownership comparison, so the same merge hands over another caller's task
+  results.
+
+  ⚠ **It failed silently and looked like it was working**: every request
+  succeeded, every session resolved, and the only symptom was that isolation
+  was not there. Hence a raise rather than a degrade — a backend hitting this
+  is one line from correct. Give the resolved user a `pk`, or return
+  `AnonymousUser` and mean it.
+
+  **Deliberate anonymity is unaffected.** `AnonymousUser` (from a permissive
+  backend such as `AllowAnyBackend`) and a token with no user at all still map
+  to the shared `"anonymous"` principal — nobody was identified, so sharing is
+  the honest answer. What is refused is the *ambiguous* middle: a user object
+  declaring neither a primary key nor `is_authenticated is False`.
+
+  ⭐ **Related to the 0.26.0 auth fix by mechanism, not coincidence.** The
+  un-awaited coroutine that authenticated every caller also had no `pk` — so
+  the same misconfiguration that let everyone in *also* collapsed them onto one
+  session namespace. Two findings, one incident.
+
 ## [0.27.0] — 2026-08-10
 
 ### Fixed

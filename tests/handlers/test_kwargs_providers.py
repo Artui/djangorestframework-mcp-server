@@ -33,7 +33,7 @@ from rest_framework_mcp.server.mcp_server import MCPServer
 def _ctx(*, tools=None, resources=None) -> MCPCallContext:
     return MCPCallContext(
         http_request=HttpRequest(),
-        token=TokenInfo(user="alice"),
+        token=TokenInfo(user=_ALICE),
         tools=tools or ToolRegistry(),
         resources=resources or ResourceRegistry(),
         prompts=PromptRegistry(),
@@ -422,3 +422,19 @@ async def test_async_resource_kwargs_provider_may_query() -> None:
     out = await handle_resources_read_async({"uri": "r://7"}, _ctx(resources=resources))
     assert isinstance(out, dict)
     assert '"seen": 1' in out["contents"][0]["text"]
+
+
+class _IdentifiedUser(str):
+    """A user that is both a value and an identity.
+
+    These tests assert on the user *value* (``== "alice"``, and it is rendered
+    into tool output), while ``principal_for_token`` needs a ``pk`` — an
+    authenticated caller without one is refused, because every such caller would
+    share the ``"anonymous"`` principal and therefore each other's sessions.
+    A ``str`` subclass satisfies both without changing a single assertion.
+    """
+
+    pk = "alice"
+
+
+_ALICE = _IdentifiedUser("alice")

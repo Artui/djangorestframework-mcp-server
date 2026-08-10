@@ -39,7 +39,7 @@ from rest_framework_mcp.schema.service_tool_schema import build_service_tool_inp
 def _ctx(*, tools: ToolRegistry) -> MCPCallContext:
     return MCPCallContext(
         http_request=HttpRequest(),
-        token=TokenInfo(user="alice"),
+        token=TokenInfo(user=_ALICE),
         tools=tools,
         resources=ResourceRegistry(),
         prompts=PromptRegistry(),
@@ -552,3 +552,19 @@ def test_url_kwarg_is_a_superset_of_a_reflected_extras_key() -> None:
     # Declared: it routes through ``view.kwargs`` *and* still reaches the selector.
     call((UrlKwarg("project_pk", type="integer"),))
     assert seen == {"selector_project_pk": 7, "scope": 7}
+
+
+class _IdentifiedUser(str):
+    """A user that is both a value and an identity.
+
+    These tests assert on the user *value* (``== "alice"``, and it is rendered
+    into tool output), while ``principal_for_token`` needs a ``pk`` — an
+    authenticated caller without one is refused, because every such caller would
+    share the ``"anonymous"`` principal and therefore each other's sessions.
+    A ``str`` subclass satisfies both without changing a single assertion.
+    """
+
+    pk = "alice"
+
+
+_ALICE = _IdentifiedUser("alice")
