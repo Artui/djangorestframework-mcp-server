@@ -98,9 +98,9 @@ The `SERVER_INFO` keys flow into both:
     permission classes have **no effect** on MCP tool calls. Only
     `spec.permission_classes` (wrapped via `DRFPermissionAdapter`) and the
     per-binding `permissions=[...]` below gate a tool. Registering a tool
-    with neither emits an `UnguardedToolWarning`; set
-    `REST_FRAMEWORK_MCP["REQUIRE_TOOL_PERMISSIONS"] = True` to refuse such
-    registrations outright.
+    with neither is **refused** — `ImproperlyConfigured` at registration.
+    Set `REST_FRAMEWORK_MCP["REQUIRE_TOOL_PERMISSIONS"] = False` to downgrade
+    that to an `UnguardedToolWarning` while migrating a large surface.
 
 Per-binding permissions are AND-combined. Two ship in v1:
 
@@ -295,7 +295,7 @@ RFC 9728 marks REQUIRED, so the metadata carries a `_warning` saying why.
 
 ## OAuth contrib mount
 
-`rest_framework_mcp.contrib.oauth.build_oauth_urlpatterns(server, *,
+`rest_framework_mcp.contrib.oauth.build_oauth_urlpatterns(*, server,
 include_dcr=False, include_aliases=True, include_openid_discovery=True)`
 returns URL patterns ready to mount alongside your server. It exposes the
 full set of discovery endpoints LLM hosts probe so MCP clients (Claude
@@ -318,7 +318,7 @@ from invoices.mcp import server
 from rest_framework_mcp.contrib.oauth import build_oauth_urlpatterns
 
 urlpatterns = [
-    *build_oauth_urlpatterns(server, include_dcr=True),
+    *build_oauth_urlpatterns(server=server, include_dcr=True),
     path("mcp/", server.urls),
 ]
 ```

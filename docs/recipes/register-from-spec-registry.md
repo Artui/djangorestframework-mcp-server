@@ -118,9 +118,10 @@ names are unique *within* a registry, so two registries may reuse one.
 
 `register_specs` calls the same per-tool methods you would have called, so the
 permission-declaration guard still applies to every entry. A spec with no
-`permission_classes` and no `permissions` override still raises
-`UnguardedToolWarning` — or `ImproperlyConfigured` under
-`REST_FRAMEWORK_MCP["REQUIRE_TOOL_PERMISSIONS"] = True`.
+`permission_classes` and no `permissions` override is **refused** with
+`ImproperlyConfigured` — or, under
+`REST_FRAMEWORK_MCP["REQUIRE_TOOL_PERMISSIONS"] = False`, downgraded to an
+`UnguardedToolWarning`.
 
 Bulk registration is a convenience, not a way to register a surface you
 haven't secured. If a spec can't declare its own `permission_classes`, guard it

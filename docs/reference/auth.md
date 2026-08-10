@@ -39,7 +39,7 @@ Backends, permissions, response builders, rate limits, and OAuth-related views
 
 ## OAuth contrib (opt-in)
 
-`build_oauth_urlpatterns(server, *, include_dcr=False, include_aliases=True,
+`build_oauth_urlpatterns(*, server, include_dcr=False, include_aliases=True,
 include_openid_discovery=True)` returns a list of URL patterns ready to mount
 alongside your `MCPServer.urls`. Exposes RFC 8414 / OIDC discovery /
 RFC 7591 Dynamic Client Registration + the alias paths different LLM hosts
