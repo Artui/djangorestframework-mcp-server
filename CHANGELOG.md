@@ -7,6 +7,28 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.27.0] — 2026-08-10
+
+### Fixed
+
+- **Requires `djangorestframework-services>=0.35,<0.36`** (was
+  `>=0.34.0,<0.35`), which makes this package co-installable with
+  `djangorestframework-pydantic-ai` again.
+
+  ⛔ **The two ranges had gone disjoint.** PAI 0.13.0 moved to
+  `drf-services>=0.35` for the `unguarded_specs` predicate while this package
+  stayed on `<0.35`, so **every project depending on both was unsatisfiable** —
+  `django-pydantic-agent[drf-mcp,spec-tools]` and
+  `django-ag-ui[drf-mcp,spec-tools]` could not resolve at all. Nothing was
+  wrong with either package; the pair was.
+
+  ⚠ **A pure floor move, with no adaptation.** drf-services 0.35 is additive
+  (`unguarded_specs`, `combine_progress`, a `progress_reporter` spec field and
+  the matching view hooks) and this package uses none of it — the full suite is
+  green against 0.35 untouched. The window moves rather than widening to
+  `>=0.34,<0.36` so the ecosystem sits on exactly one drf-services minor, which
+  is what keeps a pairing that resolves cleanly from behaving differently.
+
 ## [0.26.0] — 2026-08-10
 
 ### Security
@@ -3057,7 +3079,8 @@ Pinned to `djangorestframework-services==0.6.0`.
 - 100% line + branch coverage enforced by pytest (**451 tests** at
   release).
 
-[Unreleased]: https://github.com/Artui/djangorestframework-mcp-server/compare/v0.26.0...HEAD
+[Unreleased]: https://github.com/Artui/djangorestframework-mcp-server/compare/v0.27.0...HEAD
+[0.27.0]: https://github.com/Artui/djangorestframework-mcp-server/compare/v0.26.0...v0.27.0
 [0.26.0]: https://github.com/Artui/djangorestframework-mcp-server/compare/v0.25.0...v0.26.0
 [0.25.0]: https://github.com/Artui/djangorestframework-mcp-server/compare/v0.24.1...v0.25.0
 [0.24.1]: https://github.com/Artui/djangorestframework-mcp-server/compare/v0.24.0...v0.24.1
