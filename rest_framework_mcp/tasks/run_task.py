@@ -8,6 +8,7 @@ from rest_framework_mcp.constants import TaskStatus
 from rest_framework_mcp.handlers.handle_tools_call import handle_tools_call
 from rest_framework_mcp.handlers.types.context import MCPCallContext
 from rest_framework_mcp.protocol.types.json_rpc_error import JsonRpcError
+from rest_framework_mcp.tasks.report_task_progress import report_task_progress
 from rest_framework_mcp.tasks.transition_task import transition_task
 from rest_framework_mcp.tasks.types.task_record import TaskRecord
 from rest_framework_mcp.tasks.types.task_store import TaskStore
@@ -60,6 +61,12 @@ def run_task(
     # the second, which keeps this module free of any import from ``server/``
     # (the one-way dependency the package holds everywhere else).
     context: MCPCallContext = context_factory(record)
+    # ``progress`` is seeded here rather than by ``context_factory`` because the
+    # task id is what makes it addressable, and only this function knows it.
+    # Without it a service's ``progress(...)`` calls resolve to the no-op — so
+    # the operations long enough to be promoted to tasks would be the only ones
+    # progress never worked for.
+    context = replace(context, progress=report_task_progress(store, task_id))
     # The broker travels on the context so the worker publishes to the same
     # server's subscribers — there is no request here to carry it.
     broker = context.subscriptions

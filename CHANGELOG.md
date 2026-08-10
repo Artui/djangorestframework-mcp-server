@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.26.0] — 2026-08-10
+
 ### Security
 
 - **An async auth backend on the sync transport authenticated every caller.**
@@ -25,6 +27,60 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   installs are covered by the raise, not by the doc fix — an already-deployed
   copy of the recipe keeps working exactly as before until it is upgraded, at
   which point it fails loudly instead of silently open.
+
+- **The same defect, swept as a class: every consumer-supplied hook a sync path
+  consults now refuses an awaitable.** The auth backend was one instance of a
+  general shape — *a coroutine is truthy and is never `None`, so any hook
+  written `async def` has its return value silently read as a yes*. Four more
+  sites had it:
+
+  | Hook | What an `async def` did before |
+  | --- | --- |
+  | `MCPPermission.has_permission` | `not result` was `False` → **every caller granted**, on `tools/call`, `prompts/get`, selector and chain dispatch |
+  | `is_listable` / `has_permission` at list time | → **every binding listed**, regardless of the caller |
+  | `MCPRateLimit.consume` | `retry_after is not None` was `True` → every call denied, with the coroutine object as `retryAfter` |
+  | `SessionStore.create` / `owner` / `destroy` on the **sync** transport | A coroutine's `repr` handed out as a session id; ownership matching nothing; a `destroy` discarded |
+
+  ⚠ **The permission sites failed open on ASGI too.** Permissions are reached
+  through the aggregate `check_permissions`, which the async transport bridges
+  with `acall` — bridging *that* function, not the hooks it calls. So an
+  `async def has_permission` was as un-awaited under ASGI as under WSGI. The
+  `acall` docstring listing "custom permissions" among its bridged
+  collaborators was wrong, and is corrected.
+
+  **Permissions and rate limiters are now synchronous by contract on both
+  transports** (their Protocols always declared them so) and raise
+  `ImproperlyConfigured` naming the offending class, the remedy, and what
+  continuing would have cost. Use `asgiref.sync.async_to_sync` inside the
+  method if it needs to await. **Session stores keep async support** — that is
+  the deliberate async seam — but only under `server.async_urls`; the sync
+  transport now names the mounting instead of misbehaving quietly.
+
+  No supported configuration changes behaviour: every one of these was already
+  broken, three of them invisibly and in the direction of "allow".
+
+### Added
+
+- **Progress works inside a task.** `run_task` never seeded a reporter, so a
+  service executed as a task got the no-op and every `progress(...)` call was
+  discarded — silently, and specifically for the long-running work that tasks
+  exist to carry. The inline path was fine, but its reporter needs a live
+  connection and a worker has none.
+
+  Reports now land on the task record: `TaskRecord` gains `progress` / `total`,
+  and the wire `Task`'s `statusMessage` carries the rendered form
+  (`"Exporting (142/500)"`) that a polling client reads through `tasks/get`.
+  Push becomes poll; the service body is byte-identical either way, which is
+  the point.
+
+  The numbers stay server-side — the protocol `Task` has no numeric field — and
+  `meta` is dropped on this path, since a task has no notification to put it
+  in. A finished task is never rewritten, no `notifications/tasks` is published
+  per tick, and a store that is down does not take the operation with it.
+
+  ⚠ The **sync** dispatch path now forwards `context.progress`, which it
+  previously skipped on the grounds that there was "no stream to report on" —
+  true of the connection, false of the worker that runs it.
 
 ### Fixed
 
@@ -3001,7 +3057,8 @@ Pinned to `djangorestframework-services==0.6.0`.
 - 100% line + branch coverage enforced by pytest (**451 tests** at
   release).
 
-[Unreleased]: https://github.com/Artui/djangorestframework-mcp-server/compare/v0.25.0...HEAD
+[Unreleased]: https://github.com/Artui/djangorestframework-mcp-server/compare/v0.26.0...HEAD
+[0.26.0]: https://github.com/Artui/djangorestframework-mcp-server/compare/v0.25.0...v0.26.0
 [0.25.0]: https://github.com/Artui/djangorestframework-mcp-server/compare/v0.24.1...v0.25.0
 [0.24.1]: https://github.com/Artui/djangorestframework-mcp-server/compare/v0.24.0...v0.24.1
 [0.24.0]: https://github.com/Artui/djangorestframework-mcp-server/compare/v0.23.0...v0.24.0

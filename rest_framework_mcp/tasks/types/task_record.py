@@ -25,7 +25,8 @@ class TaskRecord:
       produces for sessions), :attr:`user_pk` to rehydrate the user, and
       :attr:`scopes` / :attr:`audience` to rebuild the ``TokenInfo``.
     - **Bookkeeping.** :attr:`enqueued`, so a worker cannot be tricked into
-      running the same task twice.
+      running the same task twice, and :attr:`progress` / :attr:`total`, which
+      are where a running task's ``progress(...)`` calls land.
 
     ⚠ **The scopes are stored, and that is the point.** Without them the worker
     would rebuild a token that proves nothing, and every ``ScopeRequired``
@@ -55,6 +56,27 @@ class TaskRecord:
     scopes: tuple[str, ...] = field(default_factory=tuple)
     audience: str | None = None
     enqueued: bool = False
+
+    progress: float | None = None
+    """How far along the running task said it was, or ``None`` if it never said.
+
+    Written by
+    :func:`~rest_framework_mcp.tasks.report_task_progress.report_task_progress`,
+    which is what a task's ``progress`` kwarg-pool seed resolves to. Paired with
+    :attr:`total` when the service supplied one.
+
+    ⚠ **Server-side only, by protocol.** The wire ``Task`` carries
+    ``statusMessage`` and no numeric field, so a polling client only ever sees
+    the *rendered* string these two produce. Keeping the numbers is still worth
+    it: they are what makes the value legible in logs and the admin, and they
+    are the input a future adaptive ``pollIntervalMs`` would need. Rendering is
+    lossy and rendering back is not a thing."""
+
+    total: float | None = None
+    """What :attr:`progress` counts toward, or ``None`` for an open-ended count.
+
+    ``None`` is the ordinary case for work that cannot say how much there is —
+    the reporter renders a bare count rather than inventing a denominator."""
 
     input_responses: dict[str, Any] = field(default_factory=dict)
     """Answers the client has supplied via ``tasks/update``, keyed as the

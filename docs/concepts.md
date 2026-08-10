@@ -808,10 +808,14 @@ is the final response costs a connection and buys nothing.
 `2025-11-25` and `2026-07-28`, so a legacy client gets streamed progress on
 exactly the same terms as a modern one.
 
-⚠ **ASGI only.** A sync WSGI view cannot yield while its dispatch is still
-running, so `server.urls` keeps answering `application/json`. That stays
-spec-legal — a single JSON object is always permitted. Use `server.async_urls`
-if you want progress.
+⚠ **ASGI only, for *streamed* progress.** A sync WSGI view cannot yield while
+its dispatch is still running, so `server.urls` keeps answering
+`application/json`. That stays spec-legal — a single JSON object is always
+permitted. Use `server.async_urls` if you want progress on the wire mid-call.
+
+The same service reports fine under WSGI when it runs as a
+[task](#progress-from-inside-a-task): there the reports go to the task record
+rather than to a stream, and the client polls for them.
 
 ### What the server does with your reports
 
@@ -1065,6 +1069,38 @@ a task that is parked on `input_required`.
 ⚠ **`Mcp-Name` must carry the `taskId`** on all three methods — the extension
 requires it so a gateway can route a follow-up to the instance holding the
 task's state. A mismatch is `-32020`, exactly as for `tools/call`.
+
+### Progress from inside a task
+
+The same `progress` seed works, and the service body is unchanged:
+
+```python
+def export_invoices(*, data, progress):
+    for n, row in enumerate(rows, 1):
+        progress(n, total=len(rows), message="Exporting")
+```
+
+Run inline, that streams `notifications/progress`. Run as a task, there is no
+connection to stream on — so the reports land on the task record instead, and
+the client reads them from the `statusMessage` it was already polling:
+
+```json
+{"taskId": "…", "status": "working", "statusMessage": "Exporting (142/500)"}
+```
+
+⭐ **This is what makes `progress` worth declaring at all under the task
+model.** Without it the seed is live-connection-only, and the operations most
+in need of progress — the ones promoted to tasks *because* they run long — are
+exactly the ones it would silently do nothing for. Nothing about the service,
+the spec, or the registration distinguishes the two paths.
+
+| | |
+|---|---|
+| `statusMessage` is the whole channel | The protocol `Task` has no numeric field. `progress` / `total` are kept on the record for logs and admin visibility, but a polling client only ever receives the rendered string. |
+| `meta` is dropped | On the inline path it rides in the notification's `_meta`. A task has no notification and no free-form slot, so the argument is accepted and discarded rather than given a home no client could read. |
+| No `notifications/tasks` per tick | That notification means *the status changed*; progress is movement inside `working`. Subscribers would get a firehose describing a task that has not moved. Poll at `pollIntervalMs`. |
+| A finished task is never rewritten | A late report from a worker still unwinding cannot move `lastUpdatedAt` on a completed task or make a cancel look like it did not take. |
+| A store that is down does not fail the work | The report describes the operation; it is not the operation. Write failures are swallowed. |
 
 ### Things worth knowing
 

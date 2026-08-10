@@ -8,6 +8,7 @@ serialisation, namespacing) get their own tests.
 
 from __future__ import annotations
 
+import dataclasses
 import time
 from typing import Any
 
@@ -225,3 +226,102 @@ def _key(task_id: str) -> str:
 
 def _envelope(task_id: str) -> Any:
     return cache.get(_key(task_id))
+
+
+# --- codec exhaustiveness -------------------------------------------------
+
+
+def _distinct_record() -> TaskRecord:
+    """A record whose every field differs from its default.
+
+    Kept beside the assertion below rather than reusing ``_record``: this one
+    exists to be *exhaustive*, and a shared fixture would drift toward whatever
+    the nearest test happened to need.
+    """
+    return TaskRecord(
+        task=Task(
+            task_id="codec-1",
+            status=TaskStatus.WORKING,
+            created_at="2026-08-10T00:00:00Z",
+            last_updated_at="2026-08-10T00:00:01Z",
+            ttl_ms=1234,
+            poll_interval_ms=567,
+            status_message="halfway",
+            result={"r": 1},
+            error={"e": 2},
+            input_requests={"i": 3},
+        ),
+        tool_name="tool",
+        arguments={"a": 1},
+        principal_id="user:7",
+        user_pk=7,
+        scopes=("read", "write"),
+        audience="aud",
+        enqueued=True,
+        input_responses={"q": "a"},
+        progress=42.0,
+        total=100.0,
+    )
+
+
+_REQUIRED = object()
+"""Stands in for "this field has no default", so nothing can equal it."""
+
+
+def _default_of(f: Any) -> Any:
+    if f.default is not dataclasses.MISSING:
+        return f.default
+    if f.default_factory is not dataclasses.MISSING:
+        return f.default_factory()
+    return _REQUIRED
+
+
+def test_every_field_of_the_fixture_is_non_default() -> None:
+    """The fixture must exercise every field, or the round trip proves nothing.
+
+    ⚠ **This is the half that catches a *new* field.** A field added to
+    ``TaskRecord`` or ``Task`` and not added here would keep its default,
+    round-trip vacuously, and leave the codec untested for it — so this asserts
+    exhaustiveness directly off ``dataclasses.fields`` rather than trusting the
+    fixture to be maintained.
+
+    ⚠ **A missing default is not the same as a default of ``None``, and
+    conflating them put a hole in this check.** An earlier version mapped
+    ``MISSING`` onto ``None`` and then skipped every field whose default was
+    ``None`` — which is most of ``Task`` and both fields ``progress`` /
+    ``total`` were added as. The guard would have waved through exactly the
+    change it was built for. ``_REQUIRED`` keeps the two apart: a field with no
+    default can never match it, and a ``None``-defaulted field left at ``None``
+    is flagged like any other.
+    """
+    record = _distinct_record()
+    stale: list[str] = []
+    for obj, label in ((record, "TaskRecord"), (record.task, "Task")):
+        for f in dataclasses.fields(obj):
+            if getattr(obj, f.name) == _default_of(f):
+                stale.append(f"{label}.{f.name}")
+    assert stale == [], f"fixture leaves these at their default: {stale}"
+
+
+@pytest.mark.django_db
+def test_the_cache_codec_preserves_every_field() -> None:
+    """Save → load must return a record equal field by field.
+
+    ⚠ **This is the half that catches a *forgotten* field.** ``DjangoCacheTaskStore``
+    hand-writes both directions (``{"enqueued": record.enqueued}`` out,
+    ``enqueued=bool(raw.get("enqueued"))`` back), so a field added to the record
+    and missed in either direction is **silently dropped** — and it is dropped
+    exactly at the worker-to-polling-reader hand-off, the one place nobody is
+    watching. 100% branch coverage cannot catch it: a codec that drops a field
+    still executes every line of itself. Completeness is not reachability.
+    """
+    store = DjangoCacheTaskStore(namespace="codec")
+    original = _distinct_record()
+    store.create(original)
+    loaded = store.get(original.task.task_id)
+
+    assert loaded is not None
+    for f in dataclasses.fields(original):
+        assert getattr(loaded, f.name) == getattr(original, f.name), f"lost TaskRecord.{f.name}"
+    for f in dataclasses.fields(original.task):
+        assert getattr(loaded.task, f.name) == getattr(original.task, f.name), f"lost Task.{f.name}"

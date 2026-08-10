@@ -201,6 +201,12 @@ def _dispatch_tool_call(
                 argument_binding=argument_binding,
                 unknown_arguments=unknown_arguments,
                 on_target_resolved=enforce_permissions,
+                # ⚠ Not dead on the sync path, despite there being no stream to
+                # report on: a task worker runs *this* function, and its
+                # reporter writes to the task record rather than to a
+                # connection. ``None`` for an ordinary sync request, which
+                # drf-services turns into its no-op.
+                progress=context.progress,
             )
         except drf_serializers.ValidationError as exc:
             # A malformed input *shape* is a protocol fault (-32602).

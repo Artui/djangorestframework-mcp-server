@@ -12,6 +12,7 @@ from django.test import Client, RequestFactory
 
 from rest_framework_mcp.auth.types.token_info import TokenInfo
 from rest_framework_mcp.config.build_mcp_config import build_mcp_config
+from rest_framework_mcp.registry.prompt_registry import PromptRegistry
 from rest_framework_mcp.registry.resource_registry import ResourceRegistry
 from rest_framework_mcp.registry.tool_registry import ToolRegistry
 from rest_framework_mcp.transport.in_memory_session_store import InMemorySessionStore
@@ -162,6 +163,101 @@ def test_sync_token_passes_through_unchanged() -> None:
     """The ordinary sync return value is handed back untouched."""
     token = TokenInfo(user=None, scopes=())
     assert _reject_awaitable_token(token, backend=_DenyAllBackend()) is token
+
+
+class _AllowAnyBackend(_DenyAllBackend):
+    """Authenticates every caller — so the store, not auth, is under test."""
+
+    def authenticate(self, request: HttpRequest) -> TokenInfo | None:
+        del request
+        return TokenInfo(user=None, scopes=())
+
+
+class _AsyncSessionStore(InMemorySessionStore):
+    """A store written async-native — correct *only* under ``server.async_urls``.
+
+    The likeliest instance of the awaitable-in-a-decision family, because
+    unlike an async permission this one is a supported implementation: the
+    async transport ``acall``s these methods. Mounting the same store on WSGI
+    is the mistake, and nothing about the store itself is wrong.
+    """
+
+    async def create(self, *, principal_id: str) -> str:
+        del principal_id
+        return "s-1"  # pragma: no cover — never awaited, which is the defect
+
+    async def owner(self, session_id: str) -> str | None:
+        del session_id
+        return None  # pragma: no cover — never awaited, which is the defect
+
+    async def destroy(self, session_id: str) -> None:
+        del session_id  # pragma: no cover — never awaited, which is the defect
+
+
+def _view_with_store(store: Any) -> Any:
+    return StreamableHttpViewSet.as_view(
+        STREAMABLE_HTTP_ACTION_MAP,
+        tools=ToolRegistry(),
+        resources=ResourceRegistry(),
+        prompts=PromptRegistry(),
+        auth_backend=_AllowAnyBackend(),
+        session_store=store,
+        config=build_mcp_config(),
+    )
+
+
+def test_async_session_store_create_on_sync_transport_is_refused() -> None:
+    """``initialize`` refuses rather than minting a coroutine's repr as a session id."""
+    with pytest.raises(ImproperlyConfigured) as excinfo:
+        _view_with_store(_AsyncSessionStore())(_initialize_request())
+
+    message = str(excinfo.value)
+    assert "_AsyncSessionStore.create()" in message
+    assert "server.async_urls" in message
+
+
+def test_async_session_store_owner_on_sync_transport_is_refused() -> None:
+    """The ownership gate refuses instead of answering "re-initialize" forever.
+
+    This one fails *closed* without the guard — a coroutine matches no
+    principal — but it fails closed with no legible cause, which is its own
+    kind of outage.
+    """
+    request = RequestFactory().post(
+        "/mcp/",
+        data=json.dumps({"jsonrpc": "2.0", "id": 1, "method": "ping"}),
+        content_type="application/json",
+        HTTP_MCP_PROTOCOL_VERSION="2025-11-25",
+        HTTP_MCP_SESSION_ID="s-1",
+    )
+
+    with pytest.raises(ImproperlyConfigured) as excinfo:
+        _view_with_store(_AsyncSessionStore())(request)
+
+    assert "_AsyncSessionStore.owner()" in str(excinfo.value)
+
+
+def test_async_session_store_destroy_on_sync_transport_is_refused() -> None:
+    """DELETE is guarded too — ``destroy`` returns ``None``, so nothing else would notice.
+
+    The only site in the family whose return value is *never* inspected: an
+    un-awaited ``destroy`` coroutine would be discarded and the session would
+    quietly survive its own termination. Guarding the call is the only thing
+    that can see it.
+    """
+
+    class _AsyncDestroyOnly(InMemorySessionStore):
+        async def destroy(self, session_id: str) -> None:
+            del session_id  # pragma: no cover — never awaited, which is the defect
+
+    store = _AsyncDestroyOnly()
+    session_id = store.create(principal_id="anonymous")
+    request = RequestFactory().delete("/mcp/", HTTP_MCP_SESSION_ID=session_id)
+
+    with pytest.raises(ImproperlyConfigured) as excinfo:
+        _view_with_store(store)(request)
+
+    assert "_AsyncDestroyOnly.destroy()" in str(excinfo.value)
 
 
 def test_response_shaped_input_is_rejected(client: Client, initialized_session: str) -> None:

@@ -51,11 +51,19 @@ class MCPCallContext:
     progress: ProgressReporter | None = None
     """Where this request's progress reports go, or ``None`` for nowhere.
 
-    Populated by the transport only when the client asked — a ``progressToken``
-    in the request's ``_meta`` — and only on the async path, which is the one
-    that can stream while the dispatch is still running. Handlers forward it to
-    ``adispatch_spec`` and it lands in the dispatched callable's kwarg pool as
-    the ``progress`` seed.
+    Two things populate it, and they answer the same question differently:
+
+    - **The async transport**, when the client asked — a ``progressToken`` in
+      the request's ``_meta`` — with a reporter that emits
+      ``notifications/progress`` down the open stream.
+    - **A task worker**, always, with
+      :func:`~rest_framework_mcp.tasks.report_task_progress.report_task_progress`,
+      which writes onto the task record. There is no connection to stream on,
+      so the client reads the same information by polling ``tasks/get``.
+
+    Either way it lands in the dispatched callable's kwarg pool as the
+    ``progress`` seed, and the service body cannot tell which it got — which is
+    the point.
 
     ``None`` is the ordinary case and costs nothing: drf-services substitutes
     its no-op reporter, so a service that declares ``progress`` runs unchanged
