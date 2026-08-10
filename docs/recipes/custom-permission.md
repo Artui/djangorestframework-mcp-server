@@ -45,6 +45,39 @@ server.register_service_tool(
 )
 ```
 
+## Permissions are synchronous, on both transports
+
+`has_permission` — and the optional `is_listable` — must be a plain `def`.
+Writing either `async def` raises `ImproperlyConfigured` at evaluation time,
+under ASGI just as much as under WSGI.
+
+That is not an oversight of the async transport. Permissions are reached
+through an aggregate helper that the async path bridges to a thread, so an
+`async def has_permission` inside it is never awaited on *either* transport —
+and an un-awaited coroutine is truthy, which means `not result` is `False` and
+**every caller is granted**. The refusal converts a silent, total bypass into a
+misconfiguration you can see.
+
+If a permission genuinely needs to await something, do it inside the
+synchronous method:
+
+```python
+from asgiref.sync import async_to_sync
+
+
+class TenantMatches:
+    def has_permission(self, request: HttpRequest, token: TokenInfo) -> bool:
+        return async_to_sync(self._check)(token)
+
+    async def _check(self, token: TokenInfo) -> bool: ...
+```
+
+The same rule holds for [rate limiters](rate-limiting.md) (`consume`). Session
+stores are the deliberate exception — see
+[Swap the session store](swap-session-store.md) — and may be `async def`, but
+only when mounted under `server.async_urls`; the sync transport refuses those
+too rather than treating the coroutine as an answer.
+
 ## Tips
 
 - **Cheap to construct, side-effect-free at evaluation.** Permissions get

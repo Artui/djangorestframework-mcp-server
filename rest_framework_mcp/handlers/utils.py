@@ -14,6 +14,7 @@ from rest_framework_services.exceptions.service_validation_error import (
 )
 from rest_framework_services.types.service_spec import ServiceSpec
 
+from rest_framework_mcp._compat.reject_awaitable import reject_awaitable
 from rest_framework_mcp.auth.rate_limits.types.mcp_rate_limit import MCPRateLimit
 from rest_framework_mcp.auth.types.token_info import TokenInfo
 from rest_framework_mcp.constants import (
@@ -189,6 +190,41 @@ def services_dispatch_policies(binding: Any) -> tuple[ArgumentBinding, UnknownAr
     return argument_binding, unknown
 
 
+def permission_verdict(perm: Any, result: Any, *, method: str, effect: str) -> Any:
+    """A permission hook's answer, refusing one that must be awaited.
+
+    Shared by :func:`check_permissions` and
+    :func:`rest_framework_mcp.handlers.is_binding_listable.is_binding_listable`
+    so the two places a consumer-supplied permission is consulted cannot drift
+    on whether ``async def`` is allowed. It is not.
+
+    ⚠ **This fails open without the guard, on *both* transports.**
+    :class:`~rest_framework_mcp.auth.permissions.types.mcp_permission.MCPPermission`
+    declares ``has_permission`` as a plain ``def`` returning ``bool``, and
+    nothing awaits it anywhere: the async path reaches these hooks through
+    ``acall(check_permissions, …)``, which bridges *this* function — a sync
+    one — and takes the thread hop, leaving an ``async def has_permission``
+    inside it exactly as un-awaited as on WSGI. A coroutine is truthy, so
+    ``not result`` is ``False`` and the caller is granted.
+
+    ⭐ **Refusing costs nothing, which is what makes it the easy call.** The
+    behaviour it replaces is a silent, total bypass — so refusing is strictly
+    better whether or not async permissions are ever supported, and it does not
+    foreclose supporting them later. A permission that genuinely needs to await
+    can wrap the work in :func:`asgiref.sync.async_to_sync` today.
+    """
+    return reject_awaitable(
+        result,
+        call=f"{type(perm).__name__}.{method}()",
+        remedy=(
+            f"MCP permissions are synchronous by contract on both transports: {method} "
+            "must be a plain 'def'. Wrap any awaiting it needs in "
+            "asgiref.sync.async_to_sync inside the method body."
+        ),
+        hazard=f"an un-awaited coroutine is truthy, so {effect}",
+    )
+
+
 def check_permissions(
     permissions: tuple[Any, ...],
     http_request: HttpRequest,
@@ -212,7 +248,13 @@ def check_permissions(
         # silently **skipped** here: the binding vanished from listings while
         # the call went through. Registration now refuses anything without
         # ``has_permission``, so there is nothing left to defend against.
-        if not perm.has_permission(http_request, token):
+        verdict = permission_verdict(
+            perm,
+            perm.has_permission(http_request, token),
+            method="has_permission",
+            effect="every caller would be granted access.",
+        )
+        if not verdict:
             allowed = False
             scopes = getattr(perm, "required_scopes", None)
             if callable(scopes):
@@ -232,11 +274,30 @@ def consume_rate_limits(
     the first denial (no point further consuming quota when the call is
     already going to fail), so listing several limits per binding works as
     "deny if any of these is exhausted".
+
+    ⚠ **The one member of the awaitable-in-a-decision family that fails
+    closed** — and it is guarded anyway. A coroutine is not ``None``, so an
+    ``async def consume`` denies every call rather than allowing it, but it
+    denies with the coroutine object standing in for the retry-after seconds:
+    an unserialisable ``retryAfter`` in the error payload and a permanent
+    outage with no legible cause. Refusing at the source names the limiter.
     """
     for limiter in rate_limits:
         if not isinstance(limiter, MCPRateLimit):  # defensive — caught at registration
             continue  # pragma: no cover
-        retry_after: int | None = limiter.consume(http_request, token)
+        retry_after: int | None = reject_awaitable(
+            limiter.consume(http_request, token),
+            call=f"{type(limiter).__name__}.consume()",
+            remedy=(
+                "MCP rate limiters are synchronous by contract: consume must be a plain "
+                "'def'. Wrap any awaiting it needs in asgiref.sync.async_to_sync inside "
+                "the method body."
+            ),
+            hazard=(
+                "an un-awaited coroutine is not None, so every call would be denied with "
+                "the coroutine object as its retryAfter."
+            ),
+        )
         if retry_after is not None:
             return retry_after
     return None
@@ -514,6 +575,7 @@ __all__ = [
     "consume_rate_limits",
     "effective_rate_limits",
     "enforce_result_ceiling",
+    "permission_verdict",
     "resolve_bound",
     "run_with_deadline",
     "services_dispatch_policies",

@@ -1,0 +1,68 @@
+from __future__ import annotations
+
+import inspect
+from typing import Any
+
+from django.core.exceptions import ImproperlyConfigured
+
+
+def reject_awaitable(result: Any, *, call: str, remedy: str, hazard: str) -> Any:
+    """Return ``result``, or refuse it when nothing on this path will await it.
+
+    The inverse of :func:`rest_framework_mcp._compat.acall.acall`, and the
+    guard for a defect class rather than a single bug. Wherever a
+    consumer-supplied callable is invoked from a synchronous path, writing it
+    ``async def`` hands back an un-awaited coroutine — and **a coroutine object
+    is truthy and is never ``None``**, so every downstream test of the return
+    value silently reads it as a yes:
+
+    ================================  =========================================
+    Site                              What the un-awaited coroutine does
+    ================================  =========================================
+    ``backend.authenticate()``        ``token is None`` is False → every caller
+                                      is authenticated, under the shared
+                                      ``"anonymous"`` principal.
+    ``perm.has_permission()``         ``not result`` is False → every caller is
+                                      granted.
+    ``perm.is_listable()``            ``not result`` is False → every binding
+                                      is listed.
+    ``limiter.consume()``             ``retry_after is not None`` is True →
+                                      every call is denied, with the coroutine
+                                      object as the ``retryAfter``.
+    ``store.owner()`` / ``create()``  Compares unequal to any principal, or
+                                      becomes the session id itself.
+    ================================  =========================================
+
+    ⚠ **This is a security gate, not a type check.** The first three rows fail
+    *open*: the misconfiguration is invisible in the response, and the endpoint
+    serves everyone. Refusing converts a silent, total bypass into a loud
+    misconfiguration — strictly better than the current fallback whether or not
+    async support for these hooks ever lands.
+
+    ⚠ **Detection is on the returned value, not the function.**
+    :func:`inspect.iscoroutinefunction` would miss a plain ``def`` that hands
+    back a coroutine, a future, or any other awaitable — a decorator, a
+    ``functools.partial`` over an async callable, an object with
+    ``__await__``. :func:`inspect.isawaitable` catches what actually arrived,
+    which is the only thing that matters here.
+
+    ``call`` names the offending callable (``"MyBackend.authenticate()"``),
+    ``remedy`` says how to fix it, and ``hazard`` says what continuing would
+    cost. All three are site-specific and all three are the useful half of the
+    message — a caller who reads "returned an awaitable" and nothing else has
+    to guess whether their code or their mounting is wrong.
+    """
+    if not inspect.isawaitable(result):
+        return result
+    if inspect.iscoroutine(result):
+        # Closing the never-started coroutine keeps CPython from tacking a
+        # "coroutine ... was never awaited" RuntimeWarning onto the traceback
+        # at collection time, which would bury the actionable error below.
+        result.close()
+    raise ImproperlyConfigured(
+        f"{call} returned an awaitable, but nothing on this path awaits it. "
+        f"{remedy} Refusing the request: {hazard}"
+    )
+
+
+__all__ = ["reject_awaitable"]

@@ -22,6 +22,7 @@ from typing import Any
 from django.http import HttpRequest
 
 from rest_framework_mcp.auth.types.token_info import TokenInfo
+from rest_framework_mcp.handlers.utils import permission_verdict
 
 
 def is_binding_listable(binding: Any, http_request: HttpRequest, token: TokenInfo) -> bool:
@@ -39,14 +40,26 @@ def is_binding_listable(binding: Any, http_request: HttpRequest, token: TokenInf
     for perm in binding.permissions:
         listable: Any = getattr(perm, "is_listable", None)
         if listable is not None:
-            if not listable(token):
+            verdict = permission_verdict(
+                perm,
+                listable(token),
+                method="is_listable",
+                effect="every binding would be listed regardless of the caller.",
+            )
+            if not verdict:
                 return False
             continue
         # Default: list-time visibility equals call-time permission,
         # evaluated against a data-less request. Pool seeds (request,
         # user, data) are still meaningful — only the caller-supplied
         # ``arguments`` payload is absent.
-        if not perm.has_permission(http_request, token):
+        allowed = permission_verdict(
+            perm,
+            perm.has_permission(http_request, token),
+            method="has_permission",
+            effect="every binding would be listed regardless of the caller.",
+        )
+        if not allowed:
             return False
     return True
 

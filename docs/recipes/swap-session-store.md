@@ -63,6 +63,19 @@ Pass the instance when you build the server:
 server = MCPServer(name="my-app", session_store=RedisSessionStore(redis_client))
 ```
 
+!!! warning "An `async def` store belongs to `server.async_urls` only"
+    The session store is the one collaborator the async transport genuinely
+    awaits, so writing `create` / `owner` / `destroy` as `async def` is correct
+    — **under ASGI**. Mount that same store under `server.urls` and the sync
+    transport raises `ImproperlyConfigured`, naming the store and the method.
+
+    It refuses rather than proceeding because an un-awaited coroutine matches
+    no principal and is not a usable session id: every request would answer
+    "re-initialize", `create` would hand the client the `repr` of a coroutine
+    as its `Mcp-Session-Id`, and `destroy` — whose return value nobody
+    inspects — would silently leave the session alive. Pick one transport per
+    store, or write it `def` and use it under both.
+
 !!! note "Namespace it if you mount more than one server"
     The default `DjangoCacheSessionStore` keys its entries under the server's
     `url_namespace`, so two mounts can't see each other's sessions. A store you

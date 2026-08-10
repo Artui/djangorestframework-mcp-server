@@ -26,6 +26,37 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   copy of the recipe keeps working exactly as before until it is upgraded, at
   which point it fails loudly instead of silently open.
 
+- **The same defect, swept as a class: every consumer-supplied hook a sync path
+  consults now refuses an awaitable.** The auth backend was one instance of a
+  general shape — *a coroutine is truthy and is never `None`, so any hook
+  written `async def` has its return value silently read as a yes*. Four more
+  sites had it:
+
+  | Hook | What an `async def` did before |
+  | --- | --- |
+  | `MCPPermission.has_permission` | `not result` was `False` → **every caller granted**, on `tools/call`, `prompts/get`, selector and chain dispatch |
+  | `is_listable` / `has_permission` at list time | → **every binding listed**, regardless of the caller |
+  | `MCPRateLimit.consume` | `retry_after is not None` was `True` → every call denied, with the coroutine object as `retryAfter` |
+  | `SessionStore.create` / `owner` / `destroy` on the **sync** transport | A coroutine's `repr` handed out as a session id; ownership matching nothing; a `destroy` discarded |
+
+  ⚠ **The permission sites failed open on ASGI too.** Permissions are reached
+  through the aggregate `check_permissions`, which the async transport bridges
+  with `acall` — bridging *that* function, not the hooks it calls. So an
+  `async def has_permission` was as un-awaited under ASGI as under WSGI. The
+  `acall` docstring listing "custom permissions" among its bridged
+  collaborators was wrong, and is corrected.
+
+  **Permissions and rate limiters are now synchronous by contract on both
+  transports** (their Protocols always declared them so) and raise
+  `ImproperlyConfigured` naming the offending class, the remedy, and what
+  continuing would have cost. Use `asgiref.sync.async_to_sync` inside the
+  method if it needs to await. **Session stores keep async support** — that is
+  the deliberate async seam — but only under `server.async_urls`; the sync
+  transport now names the mounting instead of misbehaving quietly.
+
+  No supported configuration changes behaviour: every one of these was already
+  broken, three of them invisibly and in the direction of "allow".
+
 ### Fixed
 
 - **Docs: `async-auth-backend` recipe corrected.** It now directs async

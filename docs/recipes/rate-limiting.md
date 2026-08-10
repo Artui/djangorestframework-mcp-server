@@ -147,3 +147,9 @@ server.register_service_tool(
   processes.
 - The default Django `locmem` cache is process-local. In production, use
   Memcached or Redis so all workers see the same counter.
+- **`consume` must be a plain `def`**, on both transports — see
+  [Add a custom permission](custom-permission.md#permissions-are-synchronous-on-both-transports).
+  An `async def consume` raises `ImproperlyConfigured`: nothing awaits it, and
+  a coroutine is not `None`, so every call would be denied with the coroutine
+  object standing in for `retryAfter`. Wrap any awaiting in
+  `asgiref.sync.async_to_sync` inside the method.

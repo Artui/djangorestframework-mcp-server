@@ -1,16 +1,15 @@
 from __future__ import annotations
 
-import inspect
 import json
 from typing import Any
 
-from django.core.exceptions import ImproperlyConfigured
 from django.http import HttpResponse, JsonResponse
 from rest_framework.permissions import AllowAny
 from rest_framework.renderers import JSONRenderer
 from rest_framework.request import Request
 from rest_framework.viewsets import ViewSet
 
+from rest_framework_mcp._compat.reject_awaitable import reject_awaitable
 from rest_framework_mcp.auth.principal_for_token import principal_for_token
 from rest_framework_mcp.auth.types.auth_backend import MCPAuthBackend
 from rest_framework_mcp.config.types.mcp_config import MCPConfig
@@ -88,19 +87,46 @@ def _reject_awaitable_token(result: Any, *, backend: Any) -> Any:
     credentials nobody verified. The backend is fine — its *mounting* is wrong,
     so the message names both ways out.
     """
-    if not inspect.isawaitable(result):
-        return result
-    if inspect.iscoroutine(result):
-        # Closing the never-started coroutine keeps CPython from tacking a
-        # "coroutine ... was never awaited" RuntimeWarning onto the traceback
-        # at collection time, which would bury the actionable error below.
-        result.close()
-    raise ImproperlyConfigured(
-        f"{type(backend).__name__}.authenticate() returned an awaitable, but this request "
-        "was served by the sync MCP transport (server.urls), which cannot await it. "
-        "Mount the server under server.async_urls (ASGI) so the backend is awaited, or "
-        "make authenticate a plain 'def'. Refusing the request: an un-awaited coroutine "
-        "is truthy, so serving it would authenticate every caller."
+    return reject_awaitable(
+        result,
+        call=f"{type(backend).__name__}.authenticate()",
+        remedy=(
+            "This request was served by the sync MCP transport (server.urls), which "
+            "cannot await it. Mount the server under server.async_urls (ASGI) so the "
+            "backend is awaited, or make authenticate a plain 'def'."
+        ),
+        hazard=(
+            "an un-awaited coroutine is truthy, so serving it would authenticate every caller."
+        ),
+    )
+
+
+def _reject_awaitable_session(result: Any, *, store: Any, method: str) -> Any:
+    """Return a session-store answer, or refuse one that must be awaited.
+
+    ⚠ **The likeliest instance of this defect class, precisely because async
+    stores are supported.** The *async* transport ``acall``s these methods, so
+    an ``async def owner`` is a correct, documented implementation there — and
+    the same store mounted under ``server.urls`` silently stops working. Unlike
+    the auth and permission sites this one fails *closed* (a coroutine equals
+    no principal, so ownership never matches), but it fails closed
+    incomprehensibly: every request answers "re-initialize", and a session id
+    minted from :meth:`create` is the ``repr`` of a coroutine.
+
+    Naming the mounting is the whole value here — the store is not the bug.
+    """
+    return reject_awaitable(
+        result,
+        call=f"{type(store).__name__}.{method}()",
+        remedy=(
+            "Session stores may be async only under the async transport, which awaits "
+            "them; this request was served by the sync transport (server.urls). Mount "
+            f"the server under server.async_urls (ASGI), or make {method} a plain 'def'."
+        ),
+        hazard=(
+            "an un-awaited coroutine matches no principal and is not a usable session "
+            "id, so every subsequent request would be rejected as un-initialized."
+        ),
     )
 
 
@@ -235,7 +261,11 @@ class StreamableHttpViewSet(ViewSet):
         session_id: str | None = http_request.headers.get(_SESSION_HEADER)
         principal: str = principal_for_token(token)
         if self._sessions_enabled() and not is_sessionless:
-            owner_matches = bool(session_id) and store.owner(session_id) == principal
+            owner_matches = (
+                bool(session_id)
+                and _reject_awaitable_session(store.owner(session_id), store=store, method="owner")
+                == principal
+            )
             failure = session_gate_failure(session_id, owner_matches=owner_matches)
             if failure is not None:
                 message_text, status, hint = failure
@@ -306,7 +336,9 @@ class StreamableHttpViewSet(ViewSet):
             # Assignment is the server's choice ("MAY assign a session ID"), and
             # the client's duty to echo one is conditional on it arriving. Not
             # minting is therefore the whole of sessionless mode on this path.
-            new_session: str = store.create(principal_id=principal)
+            new_session: str = _reject_awaitable_session(
+                store.create(principal_id=principal), store=store, method="create"
+            )
             http_response[_SESSION_HEADER] = new_session
         return http_response
 
@@ -427,13 +459,14 @@ class StreamableHttpViewSet(ViewSet):
         session_id: str | None = http_request.headers.get(_SESSION_HEADER)
         if session_id:
             store = self._require_session_store()
-            if store.owner(session_id) != principal_for_token(token):
+            owner = _reject_awaitable_session(store.owner(session_id), store=store, method="owner")
+            if owner != principal_for_token(token):
                 return _error_response(
                     code=JsonRpcErrorCode.INVALID_REQUEST,
                     message="Unknown or missing MCP-Session-Id",
                     status=404,
                 )
-            store.destroy(session_id)
+            _reject_awaitable_session(store.destroy(session_id), store=store, method="destroy")
         return HttpResponse(status=204)
 
     def _modern_era_requested(self, http_request: Any) -> bool:
