@@ -1550,6 +1550,18 @@ All of them are optional — the defaults below apply when a key is absent.</p>
 </span></code></pre></div>
 <p>Reading an unknown key raises <code>KeyError</code>, so a typo surfaces immediately rather
 than silently taking a default.</p>
+<div class="admonition warning">
+<p class="admonition-title">Assigning the dict replaces it; it does not merge</p>
+<p>Absent <strong>keys</strong> fall back to the defaults above, so a partial
+<code>REST_FRAMEWORK_MCP</code> is fine. But assigning the dict — including
+<code>settings.REST_FRAMEWORK_MCP = {...}</code> in a test, or <code>@override_settings</code> —
+replaces whatever was there, so a project-level opt-out silently disappears
+inside that scope. Repeat the keys you rely on in those literals.</p>
+<p>The same holds one level down: a <strong>dict-valued</strong> setting such as
+<code>SERVER_INFO</code> is taken whole, not deep-merged. Supplying
+<code>{"version": "1.0"}</code> drops any <code>name</code> you had configured alongside it (the
+package name is used as the fallback), so give the dict every key you want.</p>
+</div>
 <p><strong>These settings are per-project defaults.</strong> Every scalar below can be
 overridden per server, which is what you want as soon as you mount more than
 one:</p>
@@ -1662,6 +1674,21 @@ derivation follows it to <code>private</code>.</p>
 <td><code>MAX_REQUEST_BYTES</code></td>
 <td><code>1048576</code> (1 MiB)</td>
 <td>Maximum accepted request body size.</td>
+</tr>
+<tr>
+<td><code>SESSIONS_ENABLED</code></td>
+<td><code>True</code></td>
+<td>Whether the server mints and requires an <code>Mcp-Session-Id</code>. <code>False</code> runs the sessionless legacy mode, which is conformant rather than a fallback — but the session id is what addresses a client's SSE channel, so with it gone the <code>GET</code> stream has no address and answers <code>405</code>. Request/response tool calling is untouched.</td>
+</tr>
+<tr>
+<td><code>SESSION_TTL_SECONDS</code></td>
+<td><code>86400</code> (24 h)</td>
+<td>How long a session may sit <strong>idle</strong> before it expires. The window restarts on every successful read, so a session in continuous use never lapses.</td>
+</tr>
+<tr>
+<td><code>SESSION_MAX_AGE_SECONDS</code></td>
+<td><code>604800</code> (7 days)</td>
+<td>Ceiling on a session's <strong>total</strong> lifetime regardless of activity. ⚠ Not optional in spirit, though <code>None</code> disables it: a session's principal binding is checked once, at <code>initialize</code>, so without an absolute cap a sliding idle window keeps a <em>revoked</em> principal alive for as long as it keeps talking. A cache-backed store may also evict earlier under memory pressure, which is indistinguishable from expiry on the client side — if sessions vanish early, check the eviction policy before this setting.</td>
 </tr>
 <tr>
 <td><code>SUBSCRIPTION_MAX_SECONDS</code></td>
@@ -1780,8 +1807,8 @@ See <a href="../../performance/#what-the-package-bounds">What the package bounds
 <tbody>
 <tr>
 <td><code>REQUIRE_TOOL_PERMISSIONS</code></td>
-<td><code>False</code></td>
-<td>Registering a tool with no permissions at all (neither <code>spec.permission_classes</code> nor <code>permissions=[…]</code>) raises <code>ImproperlyConfigured</code> instead of emitting <code>UnguardedToolWarning</code>. The warning exists because guarding the <em>viewset</em> — or relying on <code>REST_FRAMEWORK</code>'s default permission classes — has <strong>no effect over MCP</strong>: this package bypasses DRF's view-layer pipeline, so a spec that looks guarded over HTTP ships as an unguarded tool. See <a href="../../auth/">Authentication</a>.</td>
+<td><code>True</code></td>
+<td>Registering a tool with no permissions at all (neither <code>spec.permission_classes</code> nor <code>permissions=[…]</code>) raises <code>ImproperlyConfigured</code>. Set it to <code>False</code> to downgrade that to an <code>UnguardedToolWarning</code> while migrating a large surface. The warning exists because guarding the <em>viewset</em> — or relying on <code>REST_FRAMEWORK</code>'s default permission classes — has <strong>no effect over MCP</strong>: this package bypasses DRF's view-layer pipeline, so a spec that looks guarded over HTTP ships as an unguarded tool. See <a href="../../auth/">Authentication</a>.</td>
 </tr>
 <tr>
 <td><code>REQUIRE_TOOL_DESCRIPTIONS</code></td>

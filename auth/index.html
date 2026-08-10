@@ -1835,9 +1835,9 @@ viewset-level <code>permission_classes</code> and the <code>REST_FRAMEWORK</code
 permission classes have <strong>no effect</strong> on MCP tool calls. Only
 <code>spec.permission_classes</code> (wrapped via <code>DRFPermissionAdapter</code>) and the
 per-binding <code>permissions=[...]</code> below gate a tool. Registering a tool
-with neither emits an <code>UnguardedToolWarning</code>; set
-<code>REST_FRAMEWORK_MCP["REQUIRE_TOOL_PERMISSIONS"] = True</code> to refuse such
-registrations outright.</p>
+with neither is <strong>refused</strong> — <code>ImproperlyConfigured</code> at registration.
+Set <code>REST_FRAMEWORK_MCP["REQUIRE_TOOL_PERMISSIONS"] = False</code> to downgrade
+that to an <code>UnguardedToolWarning</code> while migrating a large surface.</p>
 </div>
 <p>Per-binding permissions are AND-combined. Two ship in v1:</p>
 <ul>
@@ -2002,7 +2002,7 @@ matches are unsafe (a token bound to <code>…/mcp</code> would otherwise satisf
 server expecting <code>…/mcp-admin</code>). The implementation enforces equality only.</p>
 </div>
 <h2 id="oauth-contrib-mount">OAuth contrib mount<a class="headerlink" href="#oauth-contrib-mount" title="Permanent link">&para;</a></h2>
-<p><code>rest_framework_mcp.contrib.oauth.build_oauth_urlpatterns(server, *,
+<p><code>rest_framework_mcp.contrib.oauth.build_oauth_urlpatterns(*, server,
 include_dcr=False, include_aliases=True, include_openid_discovery=True)</code>
 returns URL patterns ready to mount alongside your server. It exposes the
 full set of discovery endpoints LLM hosts probe so MCP clients (Claude
@@ -2041,7 +2041,7 @@ flow without you running a separate AS-facing service:</p>
 </span><span id="__span-10-4"><a id="__codelineno-10-4" name="__codelineno-10-4" href="#__codelineno-10-4"></a><span class="kn">from</span><span class="w"> </span><span class="nn">rest_framework_mcp.contrib.oauth</span><span class="w"> </span><span class="kn">import</span> <span class="n">build_oauth_urlpatterns</span>
 </span><span id="__span-10-5"><a id="__codelineno-10-5" name="__codelineno-10-5" href="#__codelineno-10-5"></a>
 </span><span id="__span-10-6"><a id="__codelineno-10-6" name="__codelineno-10-6" href="#__codelineno-10-6"></a><span class="n">urlpatterns</span> <span class="o">=</span> <span class="p">[</span>
-</span><span id="__span-10-7"><a id="__codelineno-10-7" name="__codelineno-10-7" href="#__codelineno-10-7"></a>    <span class="o">*</span><span class="n">build_oauth_urlpatterns</span><span class="p">(</span><span class="n">server</span><span class="p">,</span> <span class="n">include_dcr</span><span class="o">=</span><span class="kc">True</span><span class="p">),</span>
+</span><span id="__span-10-7"><a id="__codelineno-10-7" name="__codelineno-10-7" href="#__codelineno-10-7"></a>    <span class="o">*</span><span class="n">build_oauth_urlpatterns</span><span class="p">(</span><span class="n">server</span><span class="o">=</span><span class="n">server</span><span class="p">,</span> <span class="n">include_dcr</span><span class="o">=</span><span class="kc">True</span><span class="p">),</span>
 </span><span id="__span-10-8"><a id="__codelineno-10-8" name="__codelineno-10-8" href="#__codelineno-10-8"></a>    <span class="n">path</span><span class="p">(</span><span class="s2">&quot;mcp/&quot;</span><span class="p">,</span> <span class="n">server</span><span class="o">.</span><span class="n">urls</span><span class="p">),</span>
 </span><span id="__span-10-9"><a id="__codelineno-10-9" name="__codelineno-10-9" href="#__codelineno-10-9"></a><span class="p">]</span>
 </span></code></pre></div>

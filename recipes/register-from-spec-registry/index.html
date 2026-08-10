@@ -1591,9 +1591,10 @@ names are unique <em>within</em> a registry, so two registries may reuse one.</p
 <h2 id="permissions-are-not-bypassed">Permissions are not bypassed<a class="headerlink" href="#permissions-are-not-bypassed" title="Permanent link">&para;</a></h2>
 <p><code>register_specs</code> calls the same per-tool methods you would have called, so the
 permission-declaration guard still applies to every entry. A spec with no
-<code>permission_classes</code> and no <code>permissions</code> override still raises
-<code>UnguardedToolWarning</code> — or <code>ImproperlyConfigured</code> under
-<code>REST_FRAMEWORK_MCP["REQUIRE_TOOL_PERMISSIONS"] = True</code>.</p>
+<code>permission_classes</code> and no <code>permissions</code> override is <strong>refused</strong> with
+<code>ImproperlyConfigured</code> — or, under
+<code>REST_FRAMEWORK_MCP["REQUIRE_TOOL_PERMISSIONS"] = False</code>, downgraded to an
+<code>UnguardedToolWarning</code>.</p>
 <p>Bulk registration is a convenience, not a way to register a surface you
 haven't secured. If a spec can't declare its own <code>permission_classes</code>, guard it
 at the binding:</p>
