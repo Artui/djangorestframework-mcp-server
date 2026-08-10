@@ -57,6 +57,29 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   No supported configuration changes behaviour: every one of these was already
   broken, three of them invisibly and in the direction of "allow".
 
+### Added
+
+- **Progress works inside a task.** `run_task` never seeded a reporter, so a
+  service executed as a task got the no-op and every `progress(...)` call was
+  discarded — silently, and specifically for the long-running work that tasks
+  exist to carry. The inline path was fine, but its reporter needs a live
+  connection and a worker has none.
+
+  Reports now land on the task record: `TaskRecord` gains `progress` / `total`,
+  and the wire `Task`'s `statusMessage` carries the rendered form
+  (`"Exporting (142/500)"`) that a polling client reads through `tasks/get`.
+  Push becomes poll; the service body is byte-identical either way, which is
+  the point.
+
+  The numbers stay server-side — the protocol `Task` has no numeric field — and
+  `meta` is dropped on this path, since a task has no notification to put it
+  in. A finished task is never rewritten, no `notifications/tasks` is published
+  per tick, and a store that is down does not take the operation with it.
+
+  ⚠ The **sync** dispatch path now forwards `context.progress`, which it
+  previously skipped on the grounds that there was "no stream to report on" —
+  true of the connection, false of the worker that runs it.
+
 ### Fixed
 
 - **Docs: `async-auth-backend` recipe corrected.** It now directs async

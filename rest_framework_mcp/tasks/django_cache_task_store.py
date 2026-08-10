@@ -106,6 +106,8 @@ def _serialize(record: TaskRecord) -> dict[str, Any]:
         "audience": record.audience,
         "enqueued": record.enqueued,
         "inputResponses": record.input_responses,
+        "progress": record.progress,
+        "total": record.total,
     }
 
 
@@ -142,6 +144,8 @@ def _deserialize(raw: dict[str, Any]) -> TaskRecord | None:
             audience=raw.get("audience"),
             enqueued=bool(raw.get("enqueued")),
             input_responses=raw.get("inputResponses") or {},
+            progress=raw.get("progress"),
+            total=raw.get("total"),
         )
     except (KeyError, ValueError, TypeError):
         return None

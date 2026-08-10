@@ -8,6 +8,7 @@ serialisation, namespacing) get their own tests.
 
 from __future__ import annotations
 
+import dataclasses
 import time
 from typing import Any
 
@@ -258,7 +259,21 @@ def _distinct_record() -> TaskRecord:
         audience="aud",
         enqueued=True,
         input_responses={"q": "a"},
+        progress=42.0,
+        total=100.0,
     )
+
+
+_REQUIRED = object()
+"""Stands in for "this field has no default", so nothing can equal it."""
+
+
+def _default_of(f: Any) -> Any:
+    if f.default is not dataclasses.MISSING:
+        return f.default
+    if f.default_factory is not dataclasses.MISSING:
+        return f.default_factory()
+    return _REQUIRED
 
 
 def test_every_field_of_the_fixture_is_non_default() -> None:
@@ -269,17 +284,21 @@ def test_every_field_of_the_fixture_is_non_default() -> None:
     round-trip vacuously, and leave the codec untested for it — so this asserts
     exhaustiveness directly off ``dataclasses.fields`` rather than trusting the
     fixture to be maintained.
-    """
-    import dataclasses
 
+    ⚠ **A missing default is not the same as a default of ``None``, and
+    conflating them put a hole in this check.** An earlier version mapped
+    ``MISSING`` onto ``None`` and then skipped every field whose default was
+    ``None`` — which is most of ``Task`` and both fields ``progress`` /
+    ``total`` were added as. The guard would have waved through exactly the
+    change it was built for. ``_REQUIRED`` keeps the two apart: a field with no
+    default can never match it, and a ``None``-defaulted field left at ``None``
+    is flagged like any other.
+    """
     record = _distinct_record()
     stale: list[str] = []
     for obj, label in ((record, "TaskRecord"), (record.task, "Task")):
         for f in dataclasses.fields(obj):
-            default = f.default if f.default is not dataclasses.MISSING else None
-            if f.default_factory is not dataclasses.MISSING:  # type: ignore[misc]
-                default = f.default_factory()  # type: ignore[misc]
-            if default is not None and getattr(obj, f.name) == default:
+            if getattr(obj, f.name) == _default_of(f):
                 stale.append(f"{label}.{f.name}")
     assert stale == [], f"fixture leaves these at their default: {stale}"
 
@@ -296,8 +315,6 @@ def test_the_cache_codec_preserves_every_field() -> None:
     watching. 100% branch coverage cannot catch it: a codec that drops a field
     still executes every line of itself. Completeness is not reachability.
     """
-    import dataclasses
-
     store = DjangoCacheTaskStore(namespace="codec")
     original = _distinct_record()
     store.create(original)

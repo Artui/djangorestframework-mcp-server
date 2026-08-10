@@ -22,6 +22,7 @@ point: task creation happens inside ``tools/call``, and workers call
 
 from rest_framework_mcp.tasks.django_cache_task_store import DjangoCacheTaskStore
 from rest_framework_mcp.tasks.in_memory_task_store import InMemoryTaskStore
+from rest_framework_mcp.tasks.report_task_progress import report_task_progress
 from rest_framework_mcp.tasks.transition_task import transition_task
 from rest_framework_mcp.tasks.types.task_executor import TaskExecutor
 from rest_framework_mcp.tasks.types.task_record import TaskRecord
@@ -33,5 +34,6 @@ __all__ = [
     "TaskExecutor",
     "TaskRecord",
     "TaskStore",
+    "report_task_progress",
     "transition_task",
 ]

@@ -101,6 +101,11 @@ def dispatch_selector_tool(
         result = dispatch_spec(
             binding.spec,
             **_dispatch_kwargs(binding, validated, drf_request, view, arguments_raw, context),
+            # A task worker runs the sync path, and its reporter writes to the
+            # task record rather than to a connection — so this is live here
+            # too, not only in the async sibling. ``None`` on an ordinary
+            # request, which drf-services turns into its no-op.
+            progress=context.progress,
         )
     except ServiceValidationError as exc:
         # Tool-level failure → ``isError`` result the model can read and
@@ -166,8 +171,8 @@ async def dispatch_selector_tool_async(
         result = await adispatch_spec(
             binding.spec,
             **_dispatch_kwargs(binding, validated, drf_request, view, arguments_raw, context),
-            # Async path only: the sync sibling has no stream to report on, and
-            # ``_dispatch_kwargs`` is shared between the two.
+            # Passed explicitly rather than through ``_dispatch_kwargs``, which
+            # is shared between the two siblings.
             progress=context.progress,
         )
     except ServiceValidationError as exc:
