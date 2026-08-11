@@ -201,7 +201,14 @@ DEFAULTS: dict[str, Any] = {
     # this as ``maximum`` on ``limit``, so a well-behaved model asks for
     # something serveable in the first place; the clamp is what stops us
     # trusting it.
-    "MAX_PAGE_SIZE": 500,
+    #
+    # The default matches the dispatch default applied when ``limit`` is
+    # absent, and deliberately so: publishing a ``maximum`` is an invitation to
+    # take it, so a ceiling above that default would have an unconfigured
+    # deployment advertising a page several times larger than the one it serves
+    # by default. Raise it where the rows are small and the consumer wants
+    # fewer round trips.
+    "MAX_PAGE_SIZE": 100,
     # Wall-clock ceiling, in seconds, on a single dispatch. ``None`` disables.
     #
     # ⚠ **Async transport only.** A sync (WSGI) view has no in-process way to

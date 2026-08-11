@@ -169,15 +169,22 @@ def list_invoices(*, user):
       "enum": ["created_at", "-created_at", "amount_cents", "-amount_cents"]
     },
     "page": {"type": "integer", "minimum": 1},
-    "limit": {"type": "integer", "minimum": 1}
+    "limit": {"type": "integer", "minimum": 1, "maximum": 100}
   }
 }
 ```
 
 Filter properties are always optional — they narrow the queryset but
 aren't required to call the tool. Ordering accepts both ascending
-(`field`) and descending (`-field`) variants. `page` defaults to `1`,
-`limit` to the configured page size.
+(`field`) and descending (`-field`) variants. `page` defaults to `1`
+and `limit` to `100` when the model omits it.
+
+`limit`'s `maximum` is the effective [`MAX_PAGE_SIZE`](../reference/settings.md#outbound-bounds)
+— the server-wide setting, or the `max_page_size=` passed at registration.
+It is advertised here *and* clamped at dispatch, and it disappears from the
+schema entirely when the bound is `None`. It is unrelated to `PAGE_SIZE`,
+which bounds listing calls such as `tools/list` and never reaches a selector
+tool's `limit`.
 
 ## Filter type mapping
 

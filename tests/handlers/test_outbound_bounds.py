@@ -420,7 +420,7 @@ def test_resolve_bound_treats_unset_as_defer_and_none_as_disabled() -> None:
 
 
 def test_build_mcp_config_distinguishes_omitted_from_disabled() -> None:
-    assert build_mcp_config().max_page_size == 500
+    assert build_mcp_config().max_page_size == 100
     assert build_mcp_config(max_page_size=None).max_page_size is None
     assert build_mcp_config(max_page_size=10).max_page_size == 10
     assert build_mcp_config(max_result_bytes=None).max_result_bytes is None
