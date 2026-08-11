@@ -1780,8 +1780,8 @@ See <a href="../../performance/#what-the-package-bounds">What the package bounds
 </tr>
 <tr>
 <td><code>MAX_PAGE_SIZE</code></td>
-<td><code>500</code></td>
-<td>Ceiling on the model-supplied <code>limit</code> of a <code>paginate=True</code> selector tool. Advertised as <code>maximum</code> on the generated <code>inputSchema</code> <em>and</em> clamped at dispatch — the schema tells a well-behaved model what to ask for, the clamp is what stops you trusting it. Clamping is safe here because <code>totalPages</code> / <code>hasNext</code> keep a clamped page self-describing.</td>
+<td><code>100</code></td>
+<td>Ceiling on the model-supplied <code>limit</code> of a <code>paginate=True</code> selector tool. Advertised as <code>maximum</code> on the generated <code>inputSchema</code> <em>and</em> clamped at dispatch — the schema tells a well-behaved model what to ask for, the clamp is what stops you trusting it. Clamping is safe here because <code>totalPages</code> / <code>hasNext</code> keep a clamped page self-describing. The default matches the page a selector tool serves when the model omits <code>limit</code> entirely, so an unconfigured deployment never advertises a page larger than the one it defaults to.</td>
 </tr>
 <tr>
 <td><code>DISPATCH_TIMEOUT</code></td>

@@ -1698,14 +1698,20 @@ covers <code>ordering_fields</code> / <code>paginate</code> but <strong>not</str
 </span><span id="__span-8-10"><a id="__codelineno-8-10" name="__codelineno-8-10" href="#__codelineno-8-10"></a><span class="w">      </span><span class="nt">&quot;enum&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">[</span><span class="s2">&quot;created_at&quot;</span><span class="p">,</span><span class="w"> </span><span class="s2">&quot;-created_at&quot;</span><span class="p">,</span><span class="w"> </span><span class="s2">&quot;amount_cents&quot;</span><span class="p">,</span><span class="w"> </span><span class="s2">&quot;-amount_cents&quot;</span><span class="p">]</span>
 </span><span id="__span-8-11"><a id="__codelineno-8-11" name="__codelineno-8-11" href="#__codelineno-8-11"></a><span class="w">    </span><span class="p">},</span>
 </span><span id="__span-8-12"><a id="__codelineno-8-12" name="__codelineno-8-12" href="#__codelineno-8-12"></a><span class="w">    </span><span class="nt">&quot;page&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">{</span><span class="nt">&quot;type&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;integer&quot;</span><span class="p">,</span><span class="w"> </span><span class="nt">&quot;minimum&quot;</span><span class="p">:</span><span class="w"> </span><span class="mi">1</span><span class="p">},</span>
-</span><span id="__span-8-13"><a id="__codelineno-8-13" name="__codelineno-8-13" href="#__codelineno-8-13"></a><span class="w">    </span><span class="nt">&quot;limit&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">{</span><span class="nt">&quot;type&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;integer&quot;</span><span class="p">,</span><span class="w"> </span><span class="nt">&quot;minimum&quot;</span><span class="p">:</span><span class="w"> </span><span class="mi">1</span><span class="p">}</span>
+</span><span id="__span-8-13"><a id="__codelineno-8-13" name="__codelineno-8-13" href="#__codelineno-8-13"></a><span class="w">    </span><span class="nt">&quot;limit&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">{</span><span class="nt">&quot;type&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;integer&quot;</span><span class="p">,</span><span class="w"> </span><span class="nt">&quot;minimum&quot;</span><span class="p">:</span><span class="w"> </span><span class="mi">1</span><span class="p">,</span><span class="w"> </span><span class="nt">&quot;maximum&quot;</span><span class="p">:</span><span class="w"> </span><span class="mi">100</span><span class="p">}</span>
 </span><span id="__span-8-14"><a id="__codelineno-8-14" name="__codelineno-8-14" href="#__codelineno-8-14"></a><span class="w">  </span><span class="p">}</span>
 </span><span id="__span-8-15"><a id="__codelineno-8-15" name="__codelineno-8-15" href="#__codelineno-8-15"></a><span class="p">}</span>
 </span></code></pre></div>
 <p>Filter properties are always optional — they narrow the queryset but
 aren't required to call the tool. Ordering accepts both ascending
-(<code>field</code>) and descending (<code>-field</code>) variants. <code>page</code> defaults to <code>1</code>,
-<code>limit</code> to the configured page size.</p>
+(<code>field</code>) and descending (<code>-field</code>) variants. <code>page</code> defaults to <code>1</code>
+and <code>limit</code> to <code>100</code> when the model omits it.</p>
+<p><code>limit</code>'s <code>maximum</code> is the effective <a href="../../reference/settings/#outbound-bounds"><code>MAX_PAGE_SIZE</code></a>
+— the server-wide setting, or the <code>max_page_size=</code> passed at registration.
+It is advertised here <em>and</em> clamped at dispatch, and it disappears from the
+schema entirely when the bound is <code>None</code>. It is unrelated to <code>PAGE_SIZE</code>,
+which bounds listing calls such as <code>tools/list</code> and never reaches a selector
+tool's <code>limit</code>.</p>
 <h2 id="filter-type-mapping">Filter type mapping<a class="headerlink" href="#filter-type-mapping" title="Permanent link">&para;</a></h2>
 <p>The schema generator reads <code>FilterSet.base_filters</code> — no FilterSet
 instantiation, so a <code>Meta</code>-driven set without an explicit queryset
