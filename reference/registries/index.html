@@ -1648,6 +1648,17 @@
   
 </li>
         
+          <li class="md-nav__item">
+  <a href="#rest_framework_mcp.registry.types.selector_tool_binding.SelectorToolBinding.filter_advertises_ordering" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        filter_advertises_ordering
+      
+    </span>
+  </a>
+  
+</li>
+        
       </ul>
     </nav>
   
@@ -3213,6 +3224,17 @@
   
 </li>
         
+          <li class="md-nav__item">
+  <a href="#rest_framework_mcp.registry.types.selector_tool_binding.SelectorToolBinding.filter_advertises_ordering" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        filter_advertises_ordering
+      
+    </span>
+  </a>
+  
+</li>
+        
       </ul>
     </nav>
   
@@ -4267,7 +4289,8 @@
 <p>Tool, resource, and prompt lookup, plus session storage and SSE infrastructure.</p>
 <p><code>ToolBinding</code> wraps a <code>ServiceSpec</code> (mutation tools);
 <code>SelectorToolBinding</code> wraps a <code>SelectorSpec</code> and exposes the read-shaped
-pipeline knobs — <code>filter_set</code> is read from the spec; <code>ordering_fields</code> /
+pipeline knobs — <code>filter_set</code> is read from the spec (and owns ordering,
+via an <code>OrderingFilter</code>); the deprecated <code>ordering_fields</code> /
 <code>paginate</code> are binding-level MCP mechanics. The shared
 <code>ToolRegistry</code> accepts either kind and is what <code>tools/list</code> and
 <code>tools/call</code> iterate.</p>
@@ -5414,6 +5437,41 @@ the spec, and both the HTTP and MCP transports honour it.</p>
 <p>Typed <code>Any</code> because <code>django-filter</code> is an optional dep behind
 the <code>[filter]</code> extra — narrowing the type would force a hard
 import here.</p>
+
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-attribute">
+
+
+
+<h3 id="rest_framework_mcp.registry.types.selector_tool_binding.SelectorToolBinding.filter_advertises_ordering" class="doc doc-heading">
+            <span class="doc doc-object-name doc-attribute-name">filter_advertises_ordering</span>
+
+
+  <span class="doc doc-labels">
+      <small class="doc doc-label doc-label-property"><code>property</code></small>
+  </span>
+
+<a href="#rest_framework_mcp.registry.types.selector_tool_binding.SelectorToolBinding.filter_advertises_ordering" class="headerlink" title="Permanent link">&para;</a></h3>
+<div class="language-python doc-signature highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="n">filter_advertises_ordering</span><span class="p">:</span> <span class="nb">bool</span>
+</span></code></pre></div>
+
+    <div class="doc doc-contents ">
+
+        <p>Whether the spec's own reflected shape already offers an <code>ordering</code> arg.</p>
+<p><code>django_filters.OrderingFilter</code> subclasses <code>ChoiceFilter</code>, so
+drf-services' reflection maps it to an enum exactly like any other
+choice filter — which means a spec carrying one advertises <code>ordering</code>
+to the model with nothing declared here at all.</p>
+<p>The question is asked of the <strong>reflected schema</strong> rather than by
+isinstance-checking <code>django_filters</code> types, for two reasons:
+<code>django-filter</code> is an optional extra, and more importantly the
+invariant worth encoding is <em>whatever the inputSchema advertises, the
+dispatch must deliver</em>. Reading the same reflection the schema builder
+reads is what makes the promise and the delivery agree by construction
+rather than by two matching guesses.</p>
 
     </div>
 
@@ -7922,14 +7980,21 @@ earlier ones on key collision):</p>
    the <em>same</em> reflection the Pydantic-AI <code>SpecToolset</code> consumes, so both
    transports advertise the same shape. This is what makes a URL kwarg a
    selector reads from its <code>extras</code> (a nested route's <code>parent_pk</code>)
-   discoverable over MCP without an explicit <code>UrlKwarg</code>.</li>
+   discoverable over MCP without an explicit <code>UrlKwarg</code> — and what makes
+   a <code>FilterSet</code>'s <code>OrderingFilter</code> advertise <code>ordering</code> here with
+   nothing else declared, since it subclasses <code>ChoiceFilter</code> and reflects
+   as an enum of the FilterSet's public choices.</li>
 <li><strong><code>spec.input_serializer</code></strong> — any explicit input shape declared by the
    consumer (tool-specific args that aren't reflected selector params). A
    <code>SelectorSpec</code> carries no input serializer, so this is MCP-only; its
    curated fields win over a reflected param of the same name, and all
    required-marked fields stay required.</li>
 <li><strong><code>ordering_fields</code></strong> — adds an <code>ordering</code> property as an enum
-   of <code>"&lt;field&gt;"</code> and <code>"-&lt;field&gt;"</code> values. Optional.</li>
+   of <code>"&lt;field&gt;"</code> and <code>"-&lt;field&gt;"</code> values. Optional, and <strong>deprecated</strong>
+   in favour of source 1: these are raw ORM paths, a second vocabulary for
+   the same key. Declaring it alongside a filter-provided ordering is
+   refused at construction, so it can never overwrite the reflected enum
+   here — which is what it used to do, silently.</li>
 <li><strong><code>paginate=True</code></strong> — adds optional <code>page</code> (positive integer)
    and <code>limit</code> (positive integer) properties. <code>limit</code> carries a
    <code>maximum</code> when the caller supplies the effective <code>max_page_size</code>

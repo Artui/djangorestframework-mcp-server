@@ -1589,10 +1589,9 @@ not to this package — check its docs for the current shape.</p>
 </span><span id="__span-2-7"><a id="__codelineno-2-7" name="__codelineno-2-7" href="#__codelineno-2-7"></a>        <span class="n">filter_set</span><span class="o">=</span><span class="n">InvoiceFilterSet</span><span class="p">,</span>
 </span><span id="__span-2-8"><a id="__codelineno-2-8" name="__codelineno-2-8" href="#__codelineno-2-8"></a>        <span class="n">permission_classes</span><span class="o">=</span><span class="p">[</span><span class="n">IsAuthenticated</span><span class="p">],</span>
 </span><span id="__span-2-9"><a id="__codelineno-2-9" name="__codelineno-2-9" href="#__codelineno-2-9"></a>    <span class="p">),</span>
-</span><span id="__span-2-10"><a id="__codelineno-2-10" name="__codelineno-2-10" href="#__codelineno-2-10"></a>    <span class="n">ordering_fields</span><span class="o">=</span><span class="p">[</span><span class="s2">&quot;issued_at&quot;</span><span class="p">,</span> <span class="s2">&quot;total&quot;</span><span class="p">],</span>
-</span><span id="__span-2-11"><a id="__codelineno-2-11" name="__codelineno-2-11" href="#__codelineno-2-11"></a>    <span class="n">paginate</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
-</span><span id="__span-2-12"><a id="__codelineno-2-12" name="__codelineno-2-12" href="#__codelineno-2-12"></a>    <span class="n">ui</span><span class="o">=</span><span class="n">UIToolMeta</span><span class="p">(</span><span class="n">resource_uri</span><span class="o">=</span><span class="s2">&quot;ui://invoices/table.html&quot;</span><span class="p">),</span>
-</span><span id="__span-2-13"><a id="__codelineno-2-13" name="__codelineno-2-13" href="#__codelineno-2-13"></a><span class="p">)</span>
+</span><span id="__span-2-10"><a id="__codelineno-2-10" name="__codelineno-2-10" href="#__codelineno-2-10"></a>    <span class="n">paginate</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
+</span><span id="__span-2-11"><a id="__codelineno-2-11" name="__codelineno-2-11" href="#__codelineno-2-11"></a>    <span class="n">ui</span><span class="o">=</span><span class="n">UIToolMeta</span><span class="p">(</span><span class="n">resource_uri</span><span class="o">=</span><span class="s2">&quot;ui://invoices/table.html&quot;</span><span class="p">),</span>
+</span><span id="__span-2-12"><a id="__codelineno-2-12" name="__codelineno-2-12" href="#__codelineno-2-12"></a><span class="p">)</span>
 </span></code></pre></div>
 <p>That's the whole server side. The host fetches <code>ui://invoices/table.html</code>,
 sandboxes it in an iframe, and pushes each <code>list_invoices</code> result into it.</p>
