@@ -63,7 +63,7 @@ register a spec once and both surfaces get the same shape:
   (`LIST` or `RETRIEVE`). It drives the `many=` flag on the output
   serializer and gates which post-fetch knobs the registration
   accepts (a `RETRIEVE` spec rejects the collection-only
-  `ordering_fields` / `paginate`, but `filter_set` is allowed — it is
+  `ordering_fields` (deprecated) / `paginate`, but `filter_set` is allowed — it is
   shaped + applied before the single-instance `.first()`).
   `SelectorKind` is re-exported from `rest_framework_mcp` for
   convenience.

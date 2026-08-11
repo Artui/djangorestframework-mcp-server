@@ -163,10 +163,16 @@ class ToolKind(Enum):
 RESERVED_POST_FETCH_KEYS: frozenset[str] = frozenset({"ordering", "page", "limit"})
 """Keys consumed by the selector-tool post-fetch pipeline.
 
-FilterSet, ordering, and pagination read these out of the MCP arguments
-dict directly; they must not also leak into the kwarg pool of the
-dispatched selector, or the selector would receive surprise kwargs it
-never declared.
+Ordering and pagination read these out of the MCP arguments dict directly;
+they must not also leak into the kwarg pool of the dispatched selector, or
+the selector would receive surprise kwargs it never declared.
+
+⚠ Scoped to the *selector's* pool. The ``FilterSet`` is handed the arguments
+unstripped, because it reads only the fields it declares — and because a
+spec whose ``filter_set`` carries an ``OrderingFilter`` advertises
+``ordering`` through the reflected schema and must therefore receive it.
+Stripping both pools at once is what made that advertised argument silently
+disappear.
 """
 
 
