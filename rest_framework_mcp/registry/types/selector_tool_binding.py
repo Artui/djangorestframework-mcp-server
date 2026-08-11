@@ -1,11 +1,12 @@
 from __future__ import annotations
 
+import warnings
 from collections.abc import Callable
 from dataclasses import dataclass, field
 from typing import Any, Generic, TypeVar
 
 from django.core.exceptions import ImproperlyConfigured
-from rest_framework_services import UNSET, UnsetType
+from rest_framework_services import UNSET, UnsetType, spec_to_json_schema
 from rest_framework_services.types.selector_kind import SelectorKind
 from rest_framework_services.types.selector_spec import SelectorSpec
 
@@ -138,6 +139,14 @@ class SelectorToolBinding(Generic[ResultT, ExtraT]):
     # Field names allowed in the generated ``ordering`` enum. Each name is
     # exposed as both ``"<name>"`` (asc) and ``"-<name>"`` (desc) — django's
     # convention. Empty tuple disables ordering.
+    #
+    # DEPRECATED. A ``FilterSet``'s ``OrderingFilter`` is the canonical way to
+    # declare ordering: it is reflected into the inputSchema like any other
+    # filter, applied by the FilterSet itself, and speaks the FilterSet's public
+    # vocabulary. These names are raw ORM paths handed to ``.order_by()``, which
+    # is a *second* vocabulary for the same argument — and the two collide on the
+    # key ``ordering``. Declaring both is refused below; declaring this alone
+    # still works, for a spec that carries no ``filter_set``.
     ordering_fields: tuple[str, ...] = ()
     # When True, the binding generates ``page`` / ``limit`` arguments,
     # slices the queryset accordingly, and wraps the response with
@@ -222,6 +231,24 @@ class SelectorToolBinding(Generic[ResultT, ExtraT]):
                     "collection to order or paginate. Either drop the knob(s) or "
                     "set the spec's kind to LIST."
                 )
+        if self.ordering_fields and self.filter_advertises_ordering:
+            raise ImproperlyConfigured(
+                f"Selector tool {self.name!r}: ordering is declared twice — "
+                "spec.filter_set already advertises an 'ordering' argument, and "
+                f"ordering_fields={list(self.ordering_fields)!r} would overwrite it "
+                "under the same name with a different vocabulary (raw ORM paths "
+                "rather than the FilterSet's public choices). Drop ordering_fields; "
+                "the FilterSet's OrderingFilter is the canonical declaration."
+            )
+        if self.ordering_fields:
+            warnings.warn(
+                f"Selector tool {self.name!r}: ordering_fields is deprecated. Declare "
+                "ordering with an OrderingFilter on the spec's filter_set — it is "
+                "reflected into the inputSchema and applied by the FilterSet, so one "
+                "vocabulary serves both the HTTP and MCP transports.",
+                DeprecationWarning,
+                stacklevel=2,
+            )
         validate_content_kind(
             name=self.name,
             content_kind=self.content_kind,
@@ -265,6 +292,26 @@ class SelectorToolBinding(Generic[ResultT, ExtraT]):
         import here.
         """
         return self.spec.filter_set
+
+    @property
+    def filter_advertises_ordering(self) -> bool:
+        """Whether the spec's own reflected shape already offers an ``ordering`` arg.
+
+        ``django_filters.OrderingFilter`` subclasses ``ChoiceFilter``, so
+        drf-services' reflection maps it to an enum exactly like any other
+        choice filter — which means a spec carrying one advertises ``ordering``
+        to the model with nothing declared here at all.
+
+        The question is asked of the **reflected schema** rather than by
+        isinstance-checking ``django_filters`` types, for two reasons:
+        ``django-filter`` is an optional extra, and more importantly the
+        invariant worth encoding is *whatever the inputSchema advertises, the
+        dispatch must deliver*. Reading the same reflection the schema builder
+        reads is what makes the promise and the delivery agree by construction
+        rather than by two matching guesses.
+        """
+        reflected: dict[str, Any] = spec_to_json_schema(self.spec, phase="input") or {}
+        return "ordering" in reflected.get("properties", {})
 
 
 __all__ = ["SelectorToolBinding"]

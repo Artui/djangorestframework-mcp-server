@@ -7,6 +7,47 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### ⚠ Upgrade notes
+
+**A `FilterSet`'s `OrderingFilter` now owns ordering, and `ordering_fields` is
+deprecated.** Registering both on one tool is refused at construction;
+registering `ordering_fields` alone still works and warns.
+
+Migrate by moving the field list onto the spec's `FilterSet`:
+
+```python
+class InvoiceFilterSet(django_filters.FilterSet):
+    ordering = django_filters.OrderingFilter(
+        fields=(("created_at", "created"), ("amount_cents", "amount")),
+    )
+```
+
+...and dropping `ordering_fields=[...]` from the registration call. The public
+choices become the enum the model sees, so pick names you are happy to expose.
+A spec with no `filter_set` has no other route yet and can keep the old knob.
+
+### Fixed
+
+- **An advertised ordering is now actually applied.** `OrderingFilter`
+  subclasses `ChoiceFilter`, so a spec carrying one has always advertised an
+  `ordering` enum in the tool's `inputSchema` — while `ordering` sat in
+  `RESERVED_POST_FETCH_KEYS` and was stripped from the single mapping that
+  served as both the selector's kwarg pool *and* the `FilterSet`'s data. The
+  value never reached the filter and nothing applied it: rows came back
+  unordered, with no error. The two pools are now separate, so the strip still
+  protects a selector declaring `**kwargs` while the `FilterSet` sees the
+  arguments whole.
+
+  Requires `djangorestframework-services>=0.36`, where the `filter_data` seam
+  reaches the read path.
+
+- **`ordering_fields` can no longer silently overwrite a filter's enum.** The
+  two carry different vocabularies under one key — raw ORM paths handed to
+  `.order_by()` versus the FilterSet's public choices — so declaring
+  `ordering_fields` on a spec whose filter already ordered could *break* an
+  ordering that worked. That combination is now refused rather than resolved
+  in favour of one side.
+
 ## [0.29.0] — 2026-08-11
 
 ### ⚠ Upgrade notes

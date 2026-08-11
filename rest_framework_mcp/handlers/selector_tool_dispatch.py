@@ -9,7 +9,10 @@ Two shapes, gated by ``binding.kind``:
     arguments → permission check → rate limit → validate(input_serializer)
               → run_selector
               → FilterSet(data=filter_args, queryset=qs).qs    if filter_set
+                  (an OrderingFilter here owns ordering, and is the
+                   canonical way to declare it)
               → qs.order_by(<field>)                            if ordering_fields
+                  (deprecated; only for a spec with no filter_set)
               → paginate                                        if paginate=True
               → output_serializer(many=True)
               → ToolResult
@@ -483,6 +486,22 @@ def _dispatch_kwargs(
     return {
         "user": context.token.user,
         "params": _selector_dispatch_params(spec_params, validated),
+        # The FilterSet gets its own view of the arguments, and it is the wider
+        # one. ``params`` is the *selector callable's* pool, so the post-fetch
+        # knobs are stripped from it — a selector declaring ``**kwargs`` would
+        # otherwise receive surprise arguments it never declared. A FilterSet has
+        # no such problem: it reads only the fields it declares and ignores the
+        # rest, exactly as it does on HTTP where the query string carries
+        # ``?ordering=…&page=2`` alongside the filter values.
+        #
+        # ⚠ This is what lets a spec's ``OrderingFilter`` actually work. Without
+        # it, ``ordering`` was stripped from the single mapping that served as
+        # both pools, so the inputSchema advertised an ordering (the filter's
+        # enum, reflected) that the dispatch then silently discarded — rows came
+        # back unordered with nothing to say so.
+        "filter_data": _selector_dispatch_params(
+            spec_params, validated, strip_post_fetch_keys=False
+        ),
         "request": drf_request,
         "view": view,
         "argument_binding": argument_binding,
@@ -490,21 +509,30 @@ def _dispatch_kwargs(
     }
 
 
-def _selector_dispatch_params(arguments_raw: dict[str, Any], validated: Any) -> dict[str, Any]:
-    """Build the ``params`` ``dispatch_spec`` receives for a selector.
+def _selector_dispatch_params(
+    arguments_raw: dict[str, Any], validated: Any, *, strip_post_fetch_keys: bool = True
+) -> dict[str, Any]:
+    """Build a params mapping ``dispatch_spec`` receives for a selector.
 
-    ``dispatch_spec`` uses one ``params`` mapping for both the selector's kwarg
-    spread *and* the ``filter_set`` data, so this folds the two MCP sources into
-    one: the post-fetch knobs (``ordering`` / ``page`` / ``limit``) are stripped
-    (they're the MCP pipeline's, not the selector's), and the binding's
-    validated/coerced ``input_serializer`` values overlay the raw args — so a
-    typed selector arg reaches the callable coerced while filter-set args (which
-    bypass the serializer) keep their raw form for the ``FilterSet``. A
-    well-behaved ``FilterSet`` ignores ``None`` / absent values, so optional
-    filters left unset don't narrow the result.
+    Called twice, for the two pools ``dispatch_spec`` keeps separate: ``params``
+    (the selector's kwarg spread) with ``strip_post_fetch_keys=True``, and
+    ``filter_data`` (the ``FilterSet``'s input) with it False.
+
+    The binding's validated/coerced ``input_serializer`` values overlay the raw
+    args either way — so a typed selector arg reaches the callable coerced while
+    filter-set args (which bypass the serializer) keep their raw form for the
+    ``FilterSet``. A well-behaved ``FilterSet`` ignores ``None`` / absent
+    values, so optional filters left unset don't narrow the result.
+
+    The strip is about the *callable*, not the filter: ``ordering`` / ``page`` /
+    ``limit`` belong to the MCP read pipeline and a selector never declared
+    them, so a callable taking ``**kwargs`` must not receive them. The FilterSet
+    is handed the unstripped view because it reads only what it declares.
     """
     core: dict[str, Any] = {
-        k: v for k, v in arguments_raw.items() if k not in RESERVED_POST_FETCH_KEYS
+        k: v
+        for k, v in arguments_raw.items()
+        if not strip_post_fetch_keys or k not in RESERVED_POST_FETCH_KEYS
     }
     if isinstance(validated, dict):
         core.update(validated)

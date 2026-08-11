@@ -14,7 +14,7 @@ post-fetch knobs.
 arguments → validate(merged inputSchema)
           → run_selector
           → FilterSet(data=…).qs    (if spec.filter_set)
-          → qs.order_by(…)          (if ordering_fields)
+          → FilterSet applies ordering  (if it declares an OrderingFilter)
           → paginate                (if paginate=True)
           → output_serializer(many=True)
           → ToolResult
@@ -94,6 +94,13 @@ class InvoiceFilterSet(django_filters.FilterSet):
     min_amount = django_filters.NumberFilter(field_name="amount_cents", lookup_expr="gte")
     max_amount = django_filters.NumberFilter(field_name="amount_cents", lookup_expr="lte")
     created_after = django_filters.DateTimeFilter(field_name="created_at", lookup_expr="gte")
+    # Ordering is declared here, like any other filter. `OrderingFilter`
+    # subclasses `ChoiceFilter`, so it is reflected into the tool's
+    # `inputSchema` as an enum of the names on the left — the public
+    # vocabulary, not the ORM paths behind them.
+    ordering = django_filters.OrderingFilter(
+        fields=(("created_at", "created"), ("amount_cents", "amount")),
+    )
 
     class Meta:
         model = Invoice
@@ -122,20 +129,36 @@ server.register_selector_tool(
         filter_set=InvoiceFilterSet,
     ),
     description="List invoices, optionally filtered / ordered / paginated.",
-    ordering_fields=["created_at", "amount_cents"],
     paginate=True,
 )
 ```
 
 `filter_set` lives on the `SelectorSpec` (since
 `djangorestframework-services` 0.18), so the same declaration drives the
-HTTP transport and MCP — declare the filterable shape once. The
-MCP-only pipeline mechanics, `ordering_fields` and `paginate`, stay on
-the registration call.
+HTTP transport and MCP — declare the filterable shape once. Ordering
+rides along with it: nothing about ordering appears on the registration
+call, because the `OrderingFilter` already declared it. `paginate` is
+the one MCP-only pipeline mechanic left here.
+
+!!! warning "`ordering_fields` is deprecated"
+
+    The registration once took `ordering_fields=[...]`, a list of raw ORM
+    paths handed to `.order_by()`. That is a second vocabulary for the
+    same `ordering` argument, and the two collide on the key: declaring
+    it alongside a `FilterSet` that orders would overwrite the filter's
+    enum with the ORM names — so adding the declaration could break an
+    ordering the filter was already handling. Declaring both is now
+    refused at registration, and declaring it alone warns.
+
+    Migrate by moving the field list into an `OrderingFilter` on the
+    `FilterSet`, mapping each ORM path to the public name you want the
+    model to use. A spec with no `filter_set` can keep using
+    `ordering_fields` for now.
 
 The decorator form is symmetric with `@server.service_tool`. It
 auto-builds the `SelectorSpec` from `kind` + the wrapped function, so it
-covers `ordering_fields` / `paginate` but **not** `filter_set` (a
+covers `paginate` (and the deprecated `ordering_fields`) but **not**
+`filter_set` (a
 `FilterSet` belongs on the spec). For a filtered tool, use the explicit
 `register_selector_tool` form above, or hand the decorator a ready
 `spec=` that carries the `filter_set`:
@@ -145,7 +168,6 @@ covers `ordering_fields` / `paginate` but **not** `filter_set` (a
     name="invoices.list",
     kind=SelectorKind.LIST,
     output_serializer=InvoiceOutputSerializer,
-    ordering_fields=["created_at", "amount_cents"],
     paginate=True,
 )
 def list_invoices(*, user):
@@ -165,8 +187,7 @@ def list_invoices(*, user):
     "max_amount": {"type": "number"},
     "created_after": {"type": "string", "format": "date-time"},
     "ordering": {
-      "type": "string",
-      "enum": ["created_at", "-created_at", "amount_cents", "-amount_cents"]
+      "enum": ["created", "-created", "amount", "-amount"]
     },
     "page": {"type": "integer", "minimum": 1},
     "limit": {"type": "integer", "minimum": 1, "maximum": 100}
@@ -251,7 +272,6 @@ server.register_selector_tool(
         filter_set=InvoiceFilterSet,
     ),
     input_serializer=InvoiceListInput,
-    ordering_fields=["created_at"],
     paginate=True,
 )
 ```

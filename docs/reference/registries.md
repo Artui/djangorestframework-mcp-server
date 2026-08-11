@@ -4,7 +4,8 @@ Tool, resource, and prompt lookup, plus session storage and SSE infrastructure.
 
 `ToolBinding` wraps a `ServiceSpec` (mutation tools);
 `SelectorToolBinding` wraps a `SelectorSpec` and exposes the read-shaped
-pipeline knobs — `filter_set` is read from the spec; `ordering_fields` /
+pipeline knobs — `filter_set` is read from the spec (and owns ordering,
+via an `OrderingFilter`); the deprecated `ordering_fields` /
 `paginate` are binding-level MCP mechanics. The shared
 `ToolRegistry` accepts either kind and is what `tools/list` and
 `tools/call` iterate.

@@ -75,7 +75,7 @@ server.register_specs(
     overrides={
         "list_orders": {
             "paginate": True,
-            "ordering_fields": ["created_at", "total"],
+            "description": "List orders, newest first by default.",
         },
         "refund_order": {
             "annotations": {"destructiveHint": True, "idempotentHint": False},

@@ -24,14 +24,21 @@ def build_selector_tool_input_schema(
        the *same* reflection the Pydantic-AI ``SpecToolset`` consumes, so both
        transports advertise the same shape. This is what makes a URL kwarg a
        selector reads from its ``extras`` (a nested route's ``parent_pk``)
-       discoverable over MCP without an explicit ``UrlKwarg``.
+       discoverable over MCP without an explicit ``UrlKwarg`` — and what makes
+       a ``FilterSet``'s ``OrderingFilter`` advertise ``ordering`` here with
+       nothing else declared, since it subclasses ``ChoiceFilter`` and reflects
+       as an enum of the FilterSet's public choices.
     2. **``spec.input_serializer``** — any explicit input shape declared by the
        consumer (tool-specific args that aren't reflected selector params). A
        ``SelectorSpec`` carries no input serializer, so this is MCP-only; its
        curated fields win over a reflected param of the same name, and all
        required-marked fields stay required.
     3. **``ordering_fields``** — adds an ``ordering`` property as an enum
-       of ``"<field>"`` and ``"-<field>"`` values. Optional.
+       of ``"<field>"`` and ``"-<field>"`` values. Optional, and **deprecated**
+       in favour of source 1: these are raw ORM paths, a second vocabulary for
+       the same key. Declaring it alongside a filter-provided ordering is
+       refused at construction, so it can never overwrite the reflected enum
+       here — which is what it used to do, silently.
     4. **``paginate=True``** — adds optional ``page`` (positive integer)
        and ``limit`` (positive integer) properties. ``limit`` carries a
        ``maximum`` when the caller supplies the effective ``max_page_size``

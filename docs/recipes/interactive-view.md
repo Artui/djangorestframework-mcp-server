@@ -82,7 +82,6 @@ server.register_selector_tool(
         filter_set=InvoiceFilterSet,
         permission_classes=[IsAuthenticated],
     ),
-    ordering_fields=["issued_at", "total"],
     paginate=True,
     ui=UIToolMeta(resource_uri="ui://invoices/table.html"),
 )
