@@ -71,14 +71,30 @@ jobs:
       # floors mean what they say. A per-PR gate rather than a scheduled job,
       # because a floor stops being true the moment someone imports a newer
       # upstream symbol -- a code change, not the passage of time.
+      #
+      # Pinned to the oldest supported Python rather than whatever interpreter
+      # the runner exposes. The floor claim is about the oldest configuration
+      # we support, so that is the one to install, and leaving the choice to
+      # the image makes the answer drift when the image does. It is not
+      # academic: django-filter 23.1, the bottom of the `filter` extra's
+      # window, calls `pkgutil.find_loader`, which Python 3.14 removed.
+      - name: Install Python 3.10
+        run: uv python install 3.10
       - name: Resolve every declared dependency at its floor
         run: uv lock --resolution lowest-direct
+      # ⚠ `--frozen` here and `--no-sync` below, not a bare `uv sync` / `uv
+      # run`. uv records the resolution mode in the lockfile and silently
+      # discards one resolved in a different mode -- "Ignoring existing
+      # lockfile due to change in resolution mode: `lowest-direct` vs.
+      # `highest`". A plain `uv sync` therefore re-resolves at `highest` and
+      # undoes the step above, and the job then measures the newest versions
+      # twice while reporting that it tested the oldest.
       - name: Install
-        run: uv sync --all-groups --all-extras
+        run: uv sync --frozen --all-groups --all-extras --python 3.10
       - name: Name the versions that produced
         run: uv pip list
       - name: Test
-        run: uv run pytest
+        run: uv run --no-sync pytest
 
       # ⚠ The step above installs every extra, and an extra can hold a shared
       # dependency *above* the floor being claimed -- masking the lie rather

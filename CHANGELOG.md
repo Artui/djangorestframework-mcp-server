@@ -7,6 +7,51 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### ⚠ Upgrade notes
+
+**Two optional extras raise their floors.** `redis` moves to `>=5.0.1` and
+`jwt` to `>=5.3.1`, both from the `.0` of the same minor. Nothing that resolves
+today moves; a consumer pinning the exact bottom of either window was getting a
+combination that never worked.
+
+### Fixed
+
+- **The `floor` job added in 0.31.0 was not measuring the floor.** uv records
+  the resolution mode in the lockfile and silently discards a lock resolved in
+  a different mode — "Ignoring existing lockfile due to change in resolution
+  mode: `lowest-direct` vs. `highest`". The plain `uv sync` that followed
+  `uv lock --resolution lowest-direct` therefore re-resolved at *highest* and
+  undid the step before it, so the suite ran against the newest versions while
+  the job reported that it had tested the oldest. `uv sync --frozen` and
+  `uv run --no-sync` keep the resolve that was just made. The job also pins the
+  oldest supported Python instead of taking whatever the runner exposes: the
+  claim is about the oldest configuration we support, and leaving it to the
+  image makes the answer drift when the image does.
+
+  Only the second half of that job — the base install, which resolves
+  `lowest-direct` directly rather than through the lock — was ever measuring
+  anything.
+
+- **`redis>=5.0` was a floor that could not work.** The async SSE broker and
+  replay buffer call `Redis.aclose()`, which first exists in redis-py 5.0.1.
+  Now `>=5.0.1`.
+
+- **`djangorestframework-simplejwt>=5.3` was a floor that could not import.**
+  5.3.0 imports `pkg_resources` at module level, so on any environment without
+  setuptools — which includes a plain `uv venv` — the `SimpleJWTCookieAdapter`
+  fails at import. Now `>=5.3.1`.
+
+- **Two dev-group floors were wrong in the same way.** `fakeredis>=2.20` is
+  now `>=2.20.1` (`FakeAsyncRedis`, which the async broker tests import, first
+  exists there), and `pytest-cov>=5.0` is now `>=7.0` — this suite spawns
+  subprocesses that write their own coverage data, and every pytest-cov before
+  7.0 fails to combine them against a current coverage, after the last test has
+  passed, so the run prints a green summary and still exits non-zero.
+
+  All four were found by the corrected job on its first honest run. That is the
+  job working: none of them was reachable through the lockfile, because the
+  lockfile can only ever check the newest.
+
 ## [0.31.0] — 2026-08-11
 
 ### Changed
