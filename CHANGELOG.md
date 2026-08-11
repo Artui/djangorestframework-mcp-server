@@ -7,6 +7,39 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- **The `djangorestframework-services` ceiling is gone — the dependency is now
+  `>=0.36`, was `>=0.36,<0.37`.** A one-minor window over a sibling package we
+  publish ourselves is not a compatibility statement, it is a schedule: every
+  upstream release makes this package unresolvable until someone re-cuts it,
+  whether or not anything broke. Nine of the sixteen upper bounds across these
+  packages had that shape, and none of them has a recorded case of catching a
+  real incompatibility — while they have caused four incidents, including a
+  security release that was published and unreachable ecosystem-wide, and two
+  disjoint windows that resolved *successfully* by silently downgrading a
+  consumer past every fix.
+
+  The bound comes off because two measurements replaced it, not because the
+  risk was waved away. `upstream-drift.yml` resolves the newest versions
+  `pyproject.toml` admits, weekly, and runs the suite against them; the new
+  `floor` job below resolves every declared dependency at the bottom of its
+  window on every pull request. A ceiling was a guess about which future
+  versions break. These are measurements of which ones do.
+
+### Added
+
+- **A `floor` job in `tests.yml`, testing the oldest versions this package
+  claims to support.** A floor is a claim about the *oldest* version that
+  works, and a lockfile can only ever check the newest — so every gate stayed
+  green while a consumer whose own constraints pulled an older dependency could
+  get a package that does not import. The job resolves with
+  `--resolution lowest-direct`, runs the suite, and then repeats the check on
+  the install shape with the fewest constraints of all: the package alone, no
+  extras and no dev group, which is what `pip install
+  djangorestframework-mcp-server` produces. It is in the `tests-passed`
+  aggregate's `needs:`, so it can fail a pull request.
+
 ## [0.30.0] — 2026-08-11
 
 ### ⚠ Upgrade notes
