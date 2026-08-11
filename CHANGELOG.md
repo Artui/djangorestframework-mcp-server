@@ -7,6 +7,42 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### ⚠ Upgrade notes
+
+**`MAX_PAGE_SIZE` now defaults to `100`, down from `500`.** A `paginate=True`
+selector tool that was serving 500-row pages to a model that asked for them now
+serves 100, with `hasNext` true and `totalPages` recomputed. Nothing errors, and
+nothing is silently dropped — the extra rows are on the next page, and the
+response says so. If you want the old ceiling back it is one key:
+`REST_FRAMEWORK_MCP['MAX_PAGE_SIZE'] = 500`, or `max_page_size=500` on the
+binding that needs it.
+
+### Changed
+
+- **The advertised page ceiling and the page the server actually defaults to are
+  now the same number.** `MAX_PAGE_SIZE` is not only a clamp: it is stamped onto
+  the generated `inputSchema` as `limit.maximum`, so it is the figure the model
+  reads before it calls. Meanwhile a call that omits `limit` entirely gets 100
+  rows, from the dispatch path's own default. An unconfigured deployment was
+  therefore publishing a ceiling **five times** the page it serves by default —
+  and publishing a `maximum` is an invitation to take it, so the larger number
+  was the likelier one to be asked for. The two agree now.
+
+  ⚠ **This is not the fix for a page that is too big in bytes.** Rows are a poor
+  proxy for payload: a tool with fat serializers can blow a context window at
+  ten rows, and 100 does nothing for it. `MAX_RESULT_BYTES` is still the bound
+  that counts what the client actually pays.
+
+### Fixed
+
+- **The FilterSet recipe described a `limit` default that does not exist.** It
+  said `limit` defaults "to the configured page size", which is wrong in both
+  halves: the default is the dispatch path's own `100`, applied only when the
+  argument is absent, and there is no setting behind it. The phrase also pointed
+  a reader at `PAGE_SIZE` — the *listing* knob for `tools/list` and friends,
+  which never reaches a selector tool's `limit`. The same page's sample
+  `inputSchema` printed `limit` without the `maximum` the generator always emits.
+
 ## [0.28.1] — 2026-08-10
 
 ### Fixed

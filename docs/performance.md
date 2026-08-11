@@ -91,7 +91,7 @@ per tool at registration:
 | Bound | Setting | Per-tool | Behaviour over the bound |
 |---|---|---|---|
 | Result size | `MAX_RESULT_BYTES` (5 MiB) | `max_result_bytes=` | `isError` result naming the remedy |
-| Page size | `MAX_PAGE_SIZE` (500) | `max_page_size=` | `limit` clamped down; `hasNext` says there's more |
+| Page size | `MAX_PAGE_SIZE` (100) | `max_page_size=` | `limit` clamped down; `hasNext` says there's more |
 | Duration | `DISPATCH_TIMEOUT` (60 s) | `dispatch_timeout=` | `isError` result; ⚠ ASGI only |
 
 Three things worth knowing before you tune them:
