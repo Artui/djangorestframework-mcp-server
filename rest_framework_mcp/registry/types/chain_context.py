@@ -9,25 +9,25 @@ class ChainContext:
     """The accumulating context a chain tool threads through its steps.
 
     Passed to each :class:`~rest_framework_mcp.registry.types.chain_step.ChainStep`'s
-    ``inputs`` callable so a step can build its call kwargs from the
-    validated tool arguments and any prior step's output:
+    ``inputs`` callable so a step can build its call kwargs from the validated
+    tool arguments and any prior step's output:
 
     .. code-block:: python
 
         inputs=lambda ctx: {"account_id": ctx["acct"].id, **ctx.args}
 
-    - ``args`` — the validated chain input (a dataclass instance, a dict, or
-      the raw arguments mapping when no input serializer is resolved).
-    - ``ctx[alias]`` — the (post-output-selector) result a prior step stored
-      under its alias. ``KeyError`` if the alias hasn't run yet, which can
-      only happen if a step references a later alias — a wiring bug worth
-      surfacing loudly.
-    - ``request`` / ``user`` — the synthesised DRF request and the
-      authenticated user, for steps whose ``inputs`` need them.
+    ``ctx[alias]`` is the post-output-selector result a prior step stored, and
+    raises ``KeyError`` for an alias that has not run — only possible when a
+    step references a later one, a wiring bug worth surfacing loudly. Mutable
+    by design, and built fresh per tool call, so there is no cross-request
+    shared state.
 
-    Mutable by design: the dispatcher appends to ``outputs`` as each step
-    completes. A fresh instance is built per tool call, so there is no
-    cross-request shared state.
+    Attributes:
+        args: The validated chain input — a dataclass instance, a dict, or the
+            raw arguments mapping when no input serializer is resolved.
+        request: The synthesised DRF request.
+        user: The authenticated user.
+        outputs: Alias to step result, filled in as the chain runs.
     """
 
     args: Any

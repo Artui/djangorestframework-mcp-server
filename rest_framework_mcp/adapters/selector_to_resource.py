@@ -34,16 +34,12 @@ def selector_to_resource(
 ) -> ResourceBinding:
     """Lift a :class:`SelectorSpec` into a :class:`ResourceBinding`.
 
-    Mirrors :func:`service_spec_to_tool` — the unit of registration is always
-    a spec from ``djangorestframework-services``. ``.selector`` must be set
-    (a spec with ``selector=None`` is rejected because there's nothing to
-    dispatch to), ``.output_serializer`` fills in when the caller didn't pass
-    one explicitly, and ``.kwargs`` becomes the binding's per-request kwargs
-    provider.
-
-    The selector is dispatched at ``resources/read`` time via
-    ``run_selector`` / ``arun_selector`` so async selectors work
-    transparently.
+    Mirrors :func:`service_spec_to_tool` — the unit of registration is always a
+    spec from ``djangorestframework-services``. ``.selector`` must be set (there
+    is nothing to dispatch to otherwise), ``.output_serializer`` fills in when
+    the caller passed none, and ``.kwargs`` becomes the binding's per-request
+    kwargs provider. Dispatch happens at ``resources/read`` time through
+    ``run_selector`` / ``arun_selector``, so async selectors work transparently.
 
     ``meta`` is the base-protocol ``_meta`` bundle the resource's listing
     entry and its ``resources/read`` contents block carry — see
@@ -61,8 +57,8 @@ def selector_to_resource(
             f"SelectorSpec for resource {name!r} has selector=None — MCP needs a "
             "concrete callable to dispatch to."
         )
-    # Spec values fill in caller-omitted kwargs. We don't override
-    # explicit caller args because those represent intentional choices.
+    # Spec values fill in caller-omitted kwargs only; an explicit caller
+    # argument is an intentional choice and is never overridden.
     resolved_callable: Callable[..., Any] = selector.selector
     if output_serializer is None:
         output_serializer = selector.output_serializer

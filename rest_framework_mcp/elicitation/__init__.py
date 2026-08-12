@@ -19,11 +19,10 @@ What the pieces here do, in the order a call meets them:
 4. :func:`~rest_framework_mcp.elicitation.sign_request_state.sign_request_state`
    seals what the next round will need to trust.
 
-⭐ **The service's involvement is one ``raise``.** It never holds a callback and
-is never resumed — it re-runs from the top with the answer present as an
-ordinary argument. That falls out of statelessness rather than being a choice,
-and it is why the transport-neutral half of this lives in drf-services as a bare
-exception carrying a message and a schema.
+**The service's involvement is one ``raise``.** It never holds a callback and is
+never resumed — it re-runs from the top with the answer present as an ordinary
+argument, which is why the transport-neutral half of this lives in drf-services
+as a bare exception carrying a message and a schema.
 """
 
 from rest_framework_mcp.elicitation.build_requested_schema import build_requested_schema

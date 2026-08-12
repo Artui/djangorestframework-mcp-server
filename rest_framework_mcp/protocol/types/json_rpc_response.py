@@ -20,9 +20,8 @@ class JsonRpcResponse:
 
     Every result carries it from ``2026-07-28`` onward, so it is applied here —
     the one place a handler's return value becomes wire JSON — rather than in
-    each of the nine handlers, where the tenth would eventually be forgotten.
-    A handler that has already set the field wins, which is what leaves room
-    for a non-``complete`` result to be built where it is produced.
+    each handler. A result that has already named itself wins, which leaves room
+    for a non-``complete`` one to be built where it is produced.
     """
 
     def to_dict(self) -> dict[str, Any]:
@@ -36,10 +35,9 @@ class JsonRpcResponse:
     def _typed_result(self) -> Any:
         """The result object with ``resultType`` stamped in.
 
-        Non-dict results pass through untouched. Nothing here produces one —
-        every MCP result is an object — but a JSON-RPC result may legally be
-        any JSON value, and silently corrupting one would be a worse bug than
-        omitting a field a legacy client ignores anyway.
+        Non-dict results pass through untouched. Every MCP result is an object,
+        but a JSON-RPC result may legally be any JSON value, and corrupting one
+        would be worse than omitting a field a legacy client ignores anyway.
         """
         if not isinstance(self.result, dict) or "resultType" in self.result:
             return self.result

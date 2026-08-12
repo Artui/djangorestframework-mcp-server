@@ -8,23 +8,18 @@ from typing import Any, Protocol, runtime_checkable
 class SSEBroker(Protocol):
     """Pluggable pub/sub for server-pushed MCP messages.
 
-    The transport calls :meth:`subscribe` when a client opens
-    ``GET /mcp/``, :meth:`publish` from app code that wants to push a
-    payload to a specific session, and :meth:`unsubscribe` when the
-    streaming generator unwinds.
+    The transport calls :meth:`subscribe` when a client opens ``GET /mcp/``,
+    :meth:`publish` from app code pushing a payload to a specific session, and
+    :meth:`unsubscribe` when the streaming generator unwinds.
 
-    Two concrete implementations ship today:
+    Two implementations ship: :class:`InMemorySSEBroker` (single-process, no
+    infra) and :class:`RedisSSEBroker` (the ``[redis]`` extra), required for
+    multi-worker deployments where any worker can serve the streaming GET.
 
-    - :class:`InMemorySSEBroker` — single-process, no infra. Suitable for
-      development and single-worker ASGI deployments.
-    - :class:`RedisSSEBroker` — Redis pub/sub. Required for multi-worker
-      deployments where any worker can serve the streaming GET. Pulled in
-      via the ``[redis]`` optional extra.
-
-    The contract is intentionally narrow: a session has at most one live
-    subscriber; ``publish`` returns ``True`` if a delivery was attempted,
-    ``False`` if no subscriber was attached. Implementations decide whether
-    ``publish`` is fire-and-forget or awaits delivery confirmation; the MCP
+    The contract is deliberately narrow: a session has at most one live
+    subscriber, and ``publish`` returns ``True`` if a delivery was attempted,
+    ``False`` if no subscriber was attached. Whether ``publish`` is
+    fire-and-forget or awaits confirmation is the implementation's choice; the
     transport treats it as best-effort either way.
     """
 

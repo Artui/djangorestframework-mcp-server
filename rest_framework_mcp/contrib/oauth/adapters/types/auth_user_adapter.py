@@ -10,24 +10,18 @@ from django.http import HttpRequest
 class AuthUserAdapter(Protocol):
     """Hydrate ``request.user`` before DOT's ``AuthorizationView`` dispatches.
 
-    The common production setup is "DRF backend with SimpleJWT cookies on
-    the same host". DOT's ``AuthorizationView`` only knows about Django's
-    standard session-based ``request.user`` — without an adapter, a
-    JWT-authenticated user appears anonymous to the OAuth flow and the
-    consent screen gets shown again. The adapter is the seam where the
-    consumer's preferred authentication scheme decides which user the
-    OAuth flow should attribute the grant to.
+    DOT's ``AuthorizationView`` knows only Django's session-based
+    ``request.user``, so on the common "DRF backend with SimpleJWT cookies"
+    setup an authenticated user appears anonymous to the OAuth flow and is
+    shown the consent screen again. The adapter is the seam where the
+    consumer's own authentication scheme decides which user the flow should
+    attribute the grant to.
 
-    Implementations return:
+    :meth:`hydrate` returns the authenticated user to set on the request before
+    delegating to DOT, or ``None`` to leave ``request.user`` untouched — DOT
+    then falls back to its session-based flow, which may redirect to login.
 
-    - The authenticated :class:`AbstractBaseUser` to set on the request
-      before delegating to DOT.
-    - ``None`` to leave ``request.user`` untouched — DOT then falls back
-      to its own session-based flow (which may redirect to login).
-
-    Adapters MUST be safe to instantiate without arguments —
-    settings-driven configuration belongs inside the adapter's own
-    module so the dotted-path setting can resolve it directly.
+    Implementations MUST be safe to instantiate without arguments.
     """
 
     def hydrate(self, request: HttpRequest) -> AbstractBaseUser | None: ...

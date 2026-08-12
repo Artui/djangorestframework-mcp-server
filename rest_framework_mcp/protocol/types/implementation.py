@@ -10,22 +10,23 @@ from rest_framework_mcp.protocol.types.icon import Icon
 class Implementation:
     """Identifies an MCP client or server: name + version, with an optional title.
 
-    Mirrors the spec's ``Implementation extends BaseMetadata, Icons``. The two
-    labels are **not** interchangeable, and the split is the spec's own:
+    Mirrors the spec's ``Implementation extends BaseMetadata, Icons``.
 
-    - :attr:`name` is *"intended for programmatic or logical use"* — the stable
-      identifier. This is what distinguishes two servers to a client, and what
-      server-scoped state keys off.
-    - :attr:`title` is *"intended for UI and end-user contexts"* — the
-      human-readable label. Optional; clients fall back to ``name`` when absent.
-
-    ⚠ :attr:`description` is **not** the ``instructions`` string the server
-    sends in its ``initialize`` result, though both are prose about the server.
-    ``instructions`` tells the *model* how to use this server and is consumed
-    as context; ``description`` is UI copy a client shows next to the server's
-    name in a connection list. ``MCPServer(description=...)`` sets the former —
-    the latter comes from the ``SERVER_INFO`` setting, which is the one place
-    the two cannot be confused for each other.
+    Attributes:
+        name: *"Intended for programmatic or logical use"* — the stable
+            identifier. What distinguishes two servers to a client, and what
+            server-scoped state keys off. Not interchangeable with
+            :attr:`title`; the split is the spec's own.
+        version: The implementation's version string.
+        title: *"Intended for UI and end-user contexts"* — the human-readable
+            label. Clients fall back to :attr:`name` when absent.
+        description: UI copy a client shows next to the server's name in a
+            connection list. **Not** the ``initialize`` ``instructions``
+            string, which tells the *model* how to use this server and is
+            consumed as context. ``MCPServer(description=...)`` sets
+            ``instructions``; this comes from the ``SERVER_INFO`` setting.
+        website_url: A link a client can offer alongside the name.
+        icons: Display icons, emitted only when non-empty.
     """
 
     name: str

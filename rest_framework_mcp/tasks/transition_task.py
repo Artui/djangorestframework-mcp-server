@@ -25,29 +25,25 @@ def transition_task(
 
     Returns the record as it now stands, or ``None`` if there is no such task.
 
-    ⚠ **The terminal guard is the whole reason this exists** rather than each
-    caller writing its own ``store.save``. Two writers race by construction:
-    the worker finishing the job, and a ``tasks/cancel`` arriving from the
-    client. Whoever writes second wins in every backend here — none of them
-    lock — so without a guard a cancel landing just after completion would move
-    a task from ``completed`` back to ``cancelled``, and the client would be
-    told its finished work never ran. The state machine is one-way: once
-    ``completed`` / ``failed`` / ``cancelled``, a task stays there.
+    **The terminal guard is the whole reason this exists** rather than each
+    caller writing its own ``store.save``. Two writers race by construction —
+    the worker finishing the job and a ``tasks/cancel`` from the client — and
+    no backend here locks, so without a guard a cancel landing just after
+    completion would move a task from ``completed`` back to ``cancelled`` and
+    tell the client its finished work never ran. The state machine is one-way:
+    once ``completed`` / ``failed`` / ``cancelled``, a task stays there.
 
-    A refused transition is **not an error**. The caller asked for something
-    that has already been decided, and the record it gets back says what was
-    decided — which is exactly what a cancel-after-completion should report.
-    Callers that need to know whether they won compare the returned status to
-    the one they asked for.
+    A refused transition is **not an error**: the caller asked for something
+    already decided, and the record it gets back says what was decided, which is
+    what a cancel-after-completion should report. Callers needing to know
+    whether they won compare the returned status to the one they asked for.
 
-    ``lastUpdatedAt`` moves only on a transition that actually happened, so it
-    stays an honest "when did this task last change" rather than "when was it
-    last written to".
+    ``lastUpdatedAt`` moves only on a transition that happened, so it stays an
+    honest "when did this task last change".
 
-    ``broker`` opts the transition into ``notifications/tasks``. Published only
+    ``broker`` opts the transition into ``notifications/tasks``, published only
     for a transition that *happened* — a refused one changed nothing, and
-    telling a subscriber otherwise would have it re-read a status that had not
-    moved. ``None`` (a server that pushes nothing) skips it.
+    saying otherwise would have a subscriber re-read an unmoved status.
     """
     record: TaskRecord | None = store.get(task_id)
     if record is None:

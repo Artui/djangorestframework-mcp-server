@@ -44,10 +44,9 @@ def ui_view_to_resource(
     type, ``TEXT`` body encoding (JSON-encoding HTML would return a quoted
     string literal, not a document), and a ``_meta`` bundle under the Apps key.
 
-    Being an ordinary resource is the point — URI-collision checking, the
-    listing handlers, permission filtering and ``always_listed`` all work with
-    no special case, and a view can still be guarded with ``permissions=`` if
-    a project wants that.
+    Being an ordinary resource is the point: URI-collision checking, the listing
+    handlers, permission filtering and ``always_listed`` all work with no
+    special case, and a view can still be guarded with ``permissions=``.
 
     Exactly one content source:
 

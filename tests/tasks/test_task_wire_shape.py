@@ -58,7 +58,7 @@ def test_a_status_message_rides_along_when_set() -> None:
 
 
 def test_the_status_decides_which_extra_field_appears_not_what_is_stored() -> None:
-    """⚠ A record holding both a result and an error must not emit a shape no
+    """A record holding both a result and an error must not emit a shape no
     variant in the spec describes. The status is the single source of truth."""
     emitted = _task(
         status=TaskStatus.COMPLETED, result={"a": 1}, error={"b": 2}, input_requests={"c": 3}
@@ -131,7 +131,7 @@ def test_an_optional_tool_runs_inline_when_the_client_did_not_declare() -> None:
 
 
 def test_a_permission_denial_stops_the_task_before_it_is_created() -> None:
-    """⚠ A task is durable, queued work carrying the caller's authorization.
+    """A task is durable, queued work carrying the caller's authorization.
     Creating one for a caller who may not run the tool would put a denied call
     in the queue and let its own check fail in a worker, where the 403 has
     nowhere to go."""
@@ -211,7 +211,7 @@ def test_an_explicit_value_wins_over_the_setting() -> None:
 
 @override_settings(REST_FRAMEWORK_MCP={"TASK_TTL_MS": None, "TASK_POLL_INTERVAL_MS": None})
 def test_none_in_settings_means_none_rather_than_unset() -> None:
-    """⚠ Why these two cannot use the ``x if x is not None else setting`` shape
+    """Why these two cannot use the ``x if x is not None else setting`` shape
     the other scalars use: ``None`` is a configured answer here — "never
     expire", "send no poll hint" — not an absent one."""
     config = build_mcp_config()

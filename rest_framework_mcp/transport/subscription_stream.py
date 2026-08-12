@@ -28,39 +28,27 @@ def build_subscription_stream(
 ) -> StreamingHttpResponse:
     """Answer ``subscriptions/listen`` with a stream that stays open.
 
-    ⚠ **A different shape from the progress stream**, despite sharing the SSE
-    framing. That one wraps a dispatch: it runs work, reports on it, and ends
-    with the work's result. This one has no dispatch at all — it opens, and then
-    waits indefinitely for events other requests produce. The consequences are
-    worth stating plainly:
+    **A different shape from the progress stream**, despite sharing the SSE
+    framing: that one wraps a dispatch and ends with its result, while this has
+    none. It opens and waits indefinitely for events other requests produce, so
+    it ends when the client leaves and parks one ASGI task per subscriber for
+    that whole time — inherent to the wire format the spec chose.
 
-    - **It ends when the client leaves.** There is no natural completion, so the
-      lifetime is the connection's.
-    - **It occupies a worker for that whole time.** One parked ASGI task per
-      subscriber. That is inherent to the wire format the spec chose (this
-      method exists to replace the GET endpoint), not something tuneable here.
-
-    Two ordering rules, both normative and both easy to get wrong:
+    Two ordering rules, both normative:
 
     1. ``notifications/subscriptions/acknowledged`` **MUST** be the first
        message carrying this subscription's id, and no notification may precede
-       it. Emitted before the queue is read at all, so there is no window in
-       which an event could overtake it.
+       it. Emitted before the queue is read at all, so nothing can overtake it.
     2. Every frame carries the subscription id in ``_meta`` — the id of the
-       ``listen`` request that opened the stream. That is what lets one client
-       run several subscriptions and tell their notifications apart.
+       ``listen`` request that opened the stream — which is what lets one
+       client run several subscriptions and tell their notifications apart.
 
-    The closing ``SubscriptionsListenResult`` is sent on a graceful teardown —
-    which happens in two cases, both of them the server's decision:
-
-    - **Nothing was granted.** A subscription with no topics can never carry
-      anything, so holding it open would occupy a worker forever to deliver
-      silence. It is acknowledged honestly and closed.
-    - **``max_seconds`` elapsed.** See ``SUBSCRIPTION_MAX_SECONDS``.
-
-    An abrupt client disconnect carries no response, which is the spec's own
-    rule and also the only thing that could happen — there is nobody left to
-    read it.
+    The closing ``SubscriptionsListenResult`` is sent on a graceful teardown,
+    which is always the server's decision: nothing was granted (a subscription
+    with no topics can only deliver silence, so it is acknowledged honestly and
+    closed), or ``max_seconds`` elapsed. An abrupt client disconnect carries no
+    response — the spec's own rule, and the only possibility, since there is
+    nobody left to read it.
     """
     return _sse(
         _stream(
@@ -77,8 +65,8 @@ def build_subscription_stream(
 def _sse(body: AsyncIterator[bytes]) -> StreamingHttpResponse:
     response = StreamingHttpResponse(body, content_type="text/event-stream")
     response["Cache-Control"] = "no-cache"
-    # Without this nginx buffers the whole response and flushes on close, which
-    # for a stream that never ends means the client receives nothing, ever.
+    # Without this nginx buffers the response and flushes on close, which for a
+    # stream that never ends means the client receives nothing, ever.
     response["X-Accel-Buffering"] = "no"
     return response
 
@@ -93,10 +81,9 @@ async def _stream(
     keepalive: float,
 ) -> AsyncIterator[bytes]:
     if not topics:
-        # ⚠ Nothing was granted, so nothing can ever arrive. Acknowledging and
-        # closing tells the client exactly that in one round trip; the
-        # alternative is an infinite keepalive stream occupying a worker to
-        # deliver silence, which is what this used to do.
+        # Nothing was granted, so nothing can ever arrive. Acknowledging and
+        # closing says exactly that in one round trip, instead of parking a
+        # worker on an infinite keepalive stream that delivers silence.
         yield format_event(_acknowledgement(granted, request_id))
         yield format_event(subscription_closed_response(request_id))
         return
@@ -109,7 +96,7 @@ async def _stream(
         yield format_event(_acknowledgement(granted, request_id))
         while True:
             if deadline is not None and asyncio.get_running_loop().time() >= deadline:
-                # ⚠ The permission check happened once, when the subscription
+                # The permission check happened once, when the subscription
                 # opened. Ending it forces the client to re-subscribe, which
                 # re-runs that check — so a revoked principal stops receiving
                 # change signals within one window rather than indefinitely.
@@ -118,28 +105,26 @@ async def _stream(
             try:
                 payload: Any = await asyncio.wait_for(queue.get(), timeout=keepalive)
             except asyncio.TimeoutError:  # noqa: UP041 — 3.10 keeps this distinct
-                # A comment frame. Proxies and load balancers drop idle
-                # connections, and a subscription can legitimately be silent for
-                # hours — this is what keeps it alive without inventing a
-                # notification the client did not ask for.
+                # A comment frame: proxies drop idle connections and a
+                # subscription can legitimately be silent for hours, so this
+                # keeps it alive without inventing a notification.
                 yield b": keepalive\n\n"
                 continue
             yield format_event(_with_subscription_id(payload, request_id))
     finally:
-        # Runs on client disconnect, on server shutdown, and on cancellation.
-        # Without it the broker keeps a queue nobody reads and — for the Redis
-        # broker — a listener task and its channel subscriptions, for the life
-        # of the process.
+        # Runs on client disconnect, server shutdown and cancellation. Without
+        # it the broker keeps a queue nobody reads — and, for the Redis broker,
+        # a listener task and its channel subscriptions — for the life of the
+        # process.
         broker.unsubscribe(queue)
 
 
 def _acknowledgement(granted: SubscriptionFilter, request_id: Any) -> dict[str, Any]:
     """The mandatory first frame, naming what will actually be delivered.
 
-    Reports the *granted* filter rather than the requested one. A client that
-    asked for ``promptsListChanged`` on a server with no prompts sees it absent
-    here and knows immediately, instead of waiting for a notification that was
-    never going to come.
+    Reports the *granted* filter, not the requested one, so a client that asked
+    for something this server will never send sees it absent here instead of
+    waiting for a notification that was never coming.
     """
     return {
         "jsonrpc": JSONRPC_VERSION,
@@ -154,11 +139,10 @@ def _acknowledgement(granted: SubscriptionFilter, request_id: Any) -> dict[str, 
 def _with_subscription_id(payload: Any, request_id: Any) -> Any:
     """Stamp the subscription id into a notification's ``params._meta``.
 
-    Done here rather than by the publisher, because the publisher does not know
-    who is listening — the same ``resources/updated`` goes to every subscription
-    watching that URI, and each needs its own id. A payload that already carries
-    one is left alone, so a future notification that needs to name a different
-    subscription can.
+    Done here rather than by the publisher, which does not know who is
+    listening: the same ``resources/updated`` goes to every subscription
+    watching that URI, and each needs its own id. A payload that already
+    carries one is left alone.
     """
     if not isinstance(payload, dict):
         return payload
@@ -174,9 +158,9 @@ def _with_subscription_id(payload: Any, request_id: Any) -> Any:
 def subscription_closed_response(request_id: Any) -> dict[str, Any]:
     """The result that ends a subscription the *server* tore down.
 
-    Emitted when nothing was granted, and when the lifetime cap elapses. Never
-    on a client disconnect — there would be nobody to read it, which is the
-    spec's own reasoning for making it optional.
+    Emitted when nothing was granted and when the lifetime cap elapses; never
+    on a client disconnect, there being nobody to read it — the spec's own
+    reasoning for making it optional.
     """
     return JsonRpcResponse(
         id=request_id,

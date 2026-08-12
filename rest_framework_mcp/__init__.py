@@ -1,7 +1,5 @@
-# Re-exports from the sister package — provided here so MCP consumers don't
-# need to know which sub-package each symbol lives in. The dependency on
-# ``djangorestframework-services`` is mandatory anyway, so this is purely an
-# ergonomic convenience.
+# Re-exported from the sister package so MCP consumers need not know which
+# sub-package each symbol lives in. The dependency is mandatory anyway.
 from rest_framework_services.selectors.list_selector import ListSelector
 from rest_framework_services.selectors.retrieve_selector import RetrieveSelector
 from rest_framework_services.services.create_service import CreateService

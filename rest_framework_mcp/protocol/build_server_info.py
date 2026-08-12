@@ -9,6 +9,9 @@ from rest_framework_mcp.protocol.types.implementation import Implementation
 from rest_framework_mcp.version import __version__ as package_version
 
 
+# Lives here rather than beside ``handle_initialize`` because ``MCPServer`` needs
+# it too and ``server`` already imports ``handlers``; the other direction would
+# cycle.
 def build_server_info(
     name: str | None = None,
     version: str | None = None,
@@ -19,29 +22,21 @@ def build_server_info(
     """Resolve a server's wire identity, falling back to the ``SERVER_INFO`` setting.
 
     Called once per server from :meth:`MCPServer.__init__`, so the settings read
-    happens at construction rather than on every ``initialize`` — the instance is
-    then the single source of truth and two servers mounted in one project answer
-    with their own names.
+    happens at construction rather than on every ``initialize`` and two servers
+    mounted in one project answer with their own names.
 
-    Any field may be ``None`` to take that value from ``SERVER_INFO`` (and,
-    failing that, the package defaults), so a project that configures
-    ``SERVER_INFO`` and never passes ``name=`` keeps its current wire identity.
-    ``title`` / ``website_url`` / ``icons`` have no default — absent means
-    absent, and the client falls back to ``name`` per the spec.
+    Any field may be ``None`` to take that value from ``SERVER_INFO`` and, failing
+    that, the package defaults. ``title`` / ``website_url`` / ``icons`` have no
+    default — absent means absent, and the client falls back to ``name`` per the
+    spec.
 
     ``description`` is deliberately settings-only, with no parameter here:
     ``MCPServer`` already spends the name ``description=`` on the ``initialize``
-    ``instructions`` string, and two constructor kwargs that differ only in
-    which audience reads them is a worse API than one that lives in settings.
-    :class:`Implementation` documents the distinction.
+    ``instructions`` string. :class:`Implementation` documents the distinction.
 
-    ``icons`` arriving from ``SERVER_INFO`` are plain data (settings are), so
-    dicts are accepted alongside :class:`Icon` instances — normalised here so
-    ``Icon``'s scheme validation runs whichever form the project used.
-
-    Lives here rather than beside ``handle_initialize`` because ``MCPServer``
-    also needs it, and ``server`` already imports ``handlers`` — the other
-    direction would cycle.
+    ``icons`` arriving from ``SERVER_INFO`` are plain data, so dicts are accepted
+    alongside :class:`Icon` instances and normalised here — ``Icon``'s scheme
+    validation runs whichever form the project used.
     """
     server_info_settings: dict[str, Any] = get_setting("SERVER_INFO")
     return Implementation(
@@ -70,10 +65,9 @@ def _coerce_icons(raw: Any) -> tuple[Icon, ...]:
 def _icon_from_mapping(item: Any) -> Icon:
     """Build an :class:`Icon` from settings data, which uses the wire spellings.
 
-    Fields are read by name rather than splatted so a stray key in a project's
-    settings is a clear ``KeyError``/ignored extra rather than a confusing
-    ``TypeError`` from the dataclass initialiser — and so ``mimeType`` maps to
-    ``mime_type`` without the caller having to know the Python attribute name.
+    Fields are read by name rather than splatted so ``mimeType`` maps to
+    ``mime_type``, and so a stray settings key is an ignored extra rather than a
+    confusing ``TypeError`` from the dataclass initialiser.
     """
     theme: Any = item.get("theme")
     return Icon(

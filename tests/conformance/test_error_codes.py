@@ -109,7 +109,7 @@ def test_server_discover_needs_no_session_or_version_header(client) -> None:
 def test_a_non_sessionless_method_still_requires_a_session(client) -> None:
     """Widening the gate for discovery must not have widened it for everything.
 
-    ⚠ **400, not 404.** The spec reserves ``404`` for a request *"containing
+    **400, not 404.** The spec reserves ``404`` for a request *"containing
     that session ID"* after the server dropped it; a request carrying **no**
     header "SHOULD" get ``400 Bad Request``. This asserted 404 until the
     2026-08-05 spec read caught the conflation.

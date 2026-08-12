@@ -13,21 +13,18 @@ class DiscoverResult:
     """The server's response to a ``server/discover`` request.
 
     ``server/discover`` is the ``2026-07-28`` revision's replacement for the
-    ``initialize`` handshake: same three answers — which protocol versions,
-    which capabilities, who is this — but as an ordinary request rather than a
-    stateful negotiation, so it can be cached, repeated, or skipped entirely.
+    ``initialize`` handshake: the same three answers, but as an ordinary request
+    rather than a stateful negotiation, so it can be cached, repeated or
+    skipped.
 
-    Two shape differences from :class:`InitializeResult` are worth noticing,
-    because they are not cosmetic:
+    Two shape differences from :class:`InitializeResult`, neither cosmetic:
 
     - ``supportedVersions`` is a **list**, not a negotiated single version.
       Nothing is agreed here; the client picks one and puts it on subsequent
       requests.
-    - ``serverInfo`` moves into ``_meta`` under a reserved key. The spec is
-      pointed about why: it is self-reported, unverified, and clients
-      **SHOULD NOT** change behaviour or make security decisions from it — so
-      it lives in the metadata namespace rather than looking like protocol
-      state.
+    - ``serverInfo`` moves into ``_meta`` under a reserved key, because it is
+      self-reported and unverified and clients **SHOULD NOT** change behaviour
+      or make security decisions from it.
     """
 
     supported_versions: tuple[str, ...]

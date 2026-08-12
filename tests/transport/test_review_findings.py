@@ -44,7 +44,7 @@ def test_a_modern_only_server_has_no_legacy_fallback() -> None:
 
 
 def test_discovery_still_works_on_a_modern_only_server() -> None:
-    """⚠ This used to raise ``IndexError`` → HTTP 500.
+    """This used to raise ``IndexError`` → HTTP 500.
 
     ``server/discover`` is the request a modern client leads with, sent without
     a version header precisely because it is asking which versions exist.
@@ -66,7 +66,7 @@ def test_a_legacy_client_mid_session_is_rejected_not_answered_with_a_modern_vers
 
 
 def test_initialize_on_a_modern_only_server_explains_itself(rf: Any) -> None:
-    """⚠ Also an ``IndexError`` → 500 before. A legacy client learns the
+    """Also an ``IndexError`` → 500 before. A legacy client learns the
     handshake era is gone and what replaced it — something it can report to a
     human, which a 500 is not."""
     server = MCPServer(
@@ -169,7 +169,7 @@ def _post(client: Client, method: str, params: dict[str, Any]) -> Any:
 def test_a_denied_resource_read_keeps_its_403_even_with_a_progress_token(
     stream_urls: Any,
 ) -> None:
-    """⚠ **The security-relevant one.** ``resources/read`` runs a permission
+    """**The security-relevant one.** ``resources/read`` runs a permission
     stack but the pre-flight could only speak for ``tools/call``, so a denial
     rode inside a ``200`` SSE body with no ``WWW-Authenticate`` — and a client
     acting on status parsed the denial as success."""

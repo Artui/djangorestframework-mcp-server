@@ -13,44 +13,41 @@ def build_selector_tool_input_schema(
 ) -> dict[str, Any]:
     """Build the JSON Schema for a selector tool's ``inputSchema``.
 
-    Merges five sources, in order of precedence (later sources override
-    earlier ones on key collision):
+    Merges five sources, in order of precedence (later sources override earlier
+    ones on key collision):
 
-    1. **Reflected ``spec`` shape** — the selector callable's own parameters
-       (an ``**extras: Unpack[TypedDict]`` expanded into one property per key,
-       the TypedDict's required keys populating ``required``, the
-       ``request`` / ``user`` / ``view`` transport seeds skipped) plus the
-       ``filter_set`` fields — via drf-services' :func:`spec_to_json_schema`,
-       the *same* reflection the Pydantic-AI ``SpecToolset`` consumes, so both
-       transports advertise the same shape. This is what makes a URL kwarg a
-       selector reads from its ``extras`` (a nested route's ``parent_pk``)
-       discoverable over MCP without an explicit ``UrlKwarg`` — and what makes
-       a ``FilterSet``'s ``OrderingFilter`` advertise ``ordering`` here with
-       nothing else declared, since it subclasses ``ChoiceFilter`` and reflects
-       as an enum of the FilterSet's public choices.
-    2. **``spec.input_serializer``** — any explicit input shape declared by the
-       consumer (tool-specific args that aren't reflected selector params). A
-       ``SelectorSpec`` carries no input serializer, so this is MCP-only; its
-       curated fields win over a reflected param of the same name, and all
-       required-marked fields stay required.
-    3. **``ordering_fields``** — adds an ``ordering`` property as an enum
-       of ``"<field>"`` and ``"-<field>"`` values. Optional, and **deprecated**
-       in favour of source 1: these are raw ORM paths, a second vocabulary for
-       the same key. Declaring it alongside a filter-provided ordering is
-       refused at construction, so it can never overwrite the reflected enum
-       here — which is what it used to do, silently.
-    4. **``paginate=True``** — adds optional ``page`` (positive integer)
-       and ``limit`` (positive integer) properties. ``limit`` carries a
-       ``maximum`` when the caller supplies the effective ``max_page_size``
-       (the binding's override, else the server's) so the model sees the same
-       ceiling dispatch will clamp to.
+    1. **Reflected ``spec`` shape** — the selector callable's own parameters (an
+       ``**extras: Unpack[TypedDict]`` expanded into one property per key, its
+       required keys populating ``required``, the ``request`` / ``user`` /
+       ``view`` transport seeds skipped) plus the ``filter_set`` fields, via
+       drf-services' :func:`spec_to_json_schema`. This is the *same* reflection
+       the Pydantic-AI ``SpecToolset`` consumes, so both transports advertise
+       the same shape: a nested route's ``parent_pk`` read from ``extras`` is
+       discoverable without an explicit ``UrlKwarg``, and a ``FilterSet``'s
+       ``OrderingFilter`` advertises ``ordering`` with nothing else declared.
+    2. **``spec.input_serializer``** — tool-specific args that aren't reflected
+       selector params. A ``SelectorSpec`` carries no input serializer, so this
+       is MCP-only; its curated fields win over a reflected param of the same
+       name, and required-marked fields stay required.
+    3. **``ordering_fields``** — adds an ``ordering`` enum of ``"<field>"`` and
+       ``"-<field>"`` values. **Deprecated** in favour of source 1: these are
+       raw ORM paths, a second vocabulary for the same key. Declaring it
+       alongside a filter-provided ordering is refused at construction, so it
+       can never overwrite the reflected enum here.
+    4. **``paginate=True``** — adds optional ``page`` and ``limit`` positive
+       integers. ``limit`` carries a ``maximum`` when ``max_page_size`` is
+       supplied, so the model sees the ceiling dispatch will clamp to.
     5. **``url_kwargs``** — each registered :class:`UrlKwarg`'s advertised
-       schema; wins over a reflected key of the same name (it is the
-       intentional, authoritative declaration).
+       schema, winning over a reflected key of the same name.
 
-    The final schema is always an object with ``"type": "object"``,
-    ``"properties": {...}``, and ``"required": [...]`` only when at
-    least one required field exists.
+    Args:
+        binding: The selector tool binding to describe.
+        max_page_size: The effective page ceiling — the binding's override, else
+            the server's. ``None`` advertises no ``maximum``.
+
+    Returns:
+        An object schema carrying ``properties``, and ``required`` only when at
+        least one required field exists.
     """
     # ``spec_to_json_schema(phase="input")`` always returns a dict (only the
     # output phase is nullable), so ``or {}`` only narrows the type — it never
@@ -59,8 +56,6 @@ def build_selector_tool_input_schema(
     properties: dict[str, Any] = dict(reflected.get("properties", {}))
     required: list[str] = list(reflected.get("required", []))
 
-    # Explicit ``input_serializer`` args override reflected params of the same
-    # name (the curated declaration wins); its required fields join the set.
     base: dict[str, Any] = build_input_schema(binding.input_serializer)
     properties.update(base.get("properties", {}))
     required.extend(name for name in base.get("required", []) if name not in required)
@@ -75,26 +70,22 @@ def build_selector_tool_input_schema(
     if binding.paginate:
         properties["page"] = {"type": "integer", "minimum": 1}
         limit_schema: dict[str, Any] = {"type": "integer", "minimum": 1}
-        # Advertise the ceiling the dispatch path will clamp to. Telling the
-        # model and clamping the value are both needed and fail differently: a
-        # schema with no ``maximum`` invites a request for 100 000 rows, and a
-        # schema alone is only a hint — nothing obliges a model to honour it.
+        # Advertising and clamping are both needed and fail differently: no
+        # ``maximum`` invites a request for 100 000 rows, and nothing obliges a
+        # model to honour a schema anyway.
         if max_page_size is not None:
             limit_schema["maximum"] = max_page_size
         properties["limit"] = limit_schema
 
     for url_kwarg in binding.url_kwargs:
-        # URL-derived args — model-supplied, seeded into ``view.kwargs`` at
-        # dispatch (never a selector param). Optional unless the registration
-        # says otherwise: a route capture the spec cannot run without is worth
-        # advertising as required, so the model learns it up front instead of
-        # through a failed call.
+        # Model-supplied but seeded into ``view.kwargs`` at dispatch, never a
+        # selector param.
         properties[url_kwarg.name] = url_kwarg.json_schema()
         if url_kwarg.required and url_kwarg.name not in required:
             required.append(url_kwarg.name)
 
-    # Read-shaping params, routed to ``request.query_params`` at dispatch. Never
-    # required — see ``build_service_tool_input_schema``.
+    # Routed to ``request.query_params`` at dispatch, and never required — see
+    # ``build_service_tool_input_schema``.
     for query_param in binding.query_params:
         properties[query_param.name] = query_param.json_schema()
 

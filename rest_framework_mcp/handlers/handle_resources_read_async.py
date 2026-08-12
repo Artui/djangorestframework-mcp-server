@@ -32,11 +32,9 @@ async def handle_resources_read_async(
 ) -> dict[str, Any] | JsonRpcError:
     """Async sibling of :func:`handle_resources_read`.
 
-    Same shape — resolve the URI, check permissions, run the selector, then
-    render and encode through the shared :func:`build_resource_contents` — but
-    nothing that can touch the ORM runs on the event loop: the selector goes
-    through :func:`arun_selector_sync_safe` (genuinely async selectors run
-    native, sync ones are bridged), and the render + encode step goes through
+    Same shape, but nothing that can touch the ORM runs on the event loop: the
+    selector goes through :func:`arun_selector_sync_safe` (async selectors run
+    native, sync ones are bridged) and the render + encode step through
     :func:`acall`, because a selector returning a queryset returns it **lazy**
     and the serializer is what evaluates it.
     """
@@ -88,10 +86,8 @@ async def handle_resources_read_async(
             context.token.user,
             None,
             http_request=context.http_request,
-            # Resources take the closing of the undeclared channel and nothing
-            # more: a resource URI *is* a locator, so per-call read-shaping
-            # belongs in its URI template (whose variables already route to
-            # ``view.kwargs``) rather than in a second registration knob.
+            # See the sync sibling: a resource URI *is* a locator, so per-call
+            # read-shaping belongs in its URI template.
             query_params={},
         ).request
 
@@ -100,17 +96,14 @@ async def handle_resources_read_async(
             "user": context.token.user,
             **vars_,
         }
-        # URI-template variables are exposed via ``view.kwargs`` so a provider
-        # (and the output serializer's context) can read them without parsing
-        # the URI again.
+        # URI-template variables ride on ``view.kwargs`` so a provider (and the
+        # output serializer's context) reads them without re-parsing the URI.
         view = OfflineServiceView(request=drf_request, action=binding.name, kwargs=dict(vars_))
         if binding.kwargs_provider is not None:
-            # Per-spec kwargs provider from ``SelectorSpec.kwargs``, invoked
-            # through the keyword pool exactly as drf-services invokes it on the
-            # HTTP path — by name, so ``def kwargs(request): ...`` works here too.
-            # It is sync (a spec is written once for both transports) and its
-            # headline use is a scoping tenant / role lookup, i.e. a query — so
-            # it runs off the loop, as drf-services runs it in ``adispatch_spec``.
+            # ``SelectorSpec.kwargs``, invoked by name through the keyword pool
+            # as on the HTTP path. It is sync — a spec is written once for both
+            # transports — and its headline use is a scoping tenant / role
+            # query, so it runs off the loop.
             provider_pool: dict[str, Any] = {"view": view, "request": drf_request}
             pool.update(
                 await acall(
@@ -122,8 +115,8 @@ async def handle_resources_read_async(
         raw: Any = await arun_selector_sync_safe(binding.selector, kwargs)
 
         # Rendering is ORM work: ``output_serializer(...).data`` iterates the
-        # value, so a LIST resource whose selector returned a (lazy) queryset
-        # evaluates it right here. Off the loop, like the selector above.
+        # value, evaluating a lazy queryset right here. Off the loop, like the
+        # selector above.
         contents = await acall(
             build_resource_contents,
             binding=binding,

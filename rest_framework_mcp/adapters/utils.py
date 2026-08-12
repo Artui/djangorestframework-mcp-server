@@ -1,19 +1,10 @@
 """Adapter-layer helpers shared by the service / selector / chain adapters.
 
-Two pieces of shared logic live here:
-
-- :func:`validate_input_serializer_against_callable` — the
-  registration-time check that an ``input_serializer``'s declared fields
-  actually map to the dispatched callable's parameter list. Run at
-  adapter time — *before* the binding lands in a registry — so
-  configuration mistakes surface during application startup rather than
-  the first time a client calls the tool.
-- :func:`merge_tool_annotations` — auto-derives the MCP ``ToolAnnotations``
-  hint bundle from a tool's mutation profile (read vs. write), with any
-  explicitly-registered hints taking precedence.
-- :func:`merge_meta` — shallow-merges the base-protocol ``_meta`` bundles a
-  binding assembles from several sources into the single dict the wire
-  types emit.
+The ``validate_*`` functions run at adapter time — *before* the binding lands
+in a registry — so a configuration mistake surfaces during application startup
+rather than the first time a client calls the tool. The ``merge_*`` ones fold
+the several contributions a binding assembles (tool annotations, ``_meta``
+bundles) into the single dict the wire types emit.
 """
 
 from __future__ import annotations
@@ -45,14 +36,12 @@ def validate_url_kwargs(*, label: str, url_kwargs: tuple[UrlKwarg, ...]) -> None
     dispatcher's pool seeds — nor be declared twice, nor claim to be ``required``
     while carrying a ``default``. Colliding with an ordinary spec input is
     *allowed*: that is the intended way to route a route-capture the spec also
-    reads (the value flows through ``view.kwargs``, drf-services spreads it
-    authoritatively).
+    reads.
 
-    The checks themselves live in drf-services' ``validate_channel_names``, which
-    always folds in the pool seeds it owns; only the pagination names are ours to
-    contribute. Sharing the check is what stops this package's notion of a valid
-    declaration drifting from the agent toolset's again — they had already
-    diverged on both the seed set and the pagination names.
+    The checks live in drf-services' ``validate_channel_names``, which folds in
+    the pool seeds it owns; only the pagination names are ours to contribute.
+    Sharing the check is what keeps this package's notion of a valid declaration
+    from drifting away from the agent toolset's.
     """
     validate_channel_names(
         label=label,
@@ -73,25 +62,17 @@ def validate_query_params(
     The sibling of :func:`validate_url_kwargs`, delegating the name checks to the
     same shared ``validate_channel_names`` with the same reserved set: a query
     param is popped out of the caller's arguments exactly as a URL kwarg is, so
-    the same names are off-limits (the post-fetch pagination knobs and the
-    dispatcher's pool seeds). ``QueryParam`` carries no ``required`` flag, so the
-    validator's required-with-a-default check is inert here — by construction, not
-    by omission: a read-shaping param the spec runs fine without cannot be
+    the same names are off-limits. ``QueryParam`` carries no ``required`` flag,
+    so the validator's required-with-a-default check is inert here by
+    construction — a read-shaping param the spec runs fine without cannot be
     required.
 
-    **Cross-channel exclusivity is checked here rather than upstream**, and that
-    is a deliberate (small) deviation from the plan. ``validate_channel_names``
-    takes *one* declaration list, so it cannot see that a name appears in both
-    channels; expressing the rule through it would mean either an upstream
-    signature change or calling it with a concatenated list, which would report
-    the overlap as a "duplicate url_kwargs name" and point the consumer at the
-    wrong knob. The check is three lines and the message is the whole value, so
-    it lives here until a second consumer needs it — at which point the shared
-    validator is still the right home.
-
     One name cannot route to two channels: a URL kwarg lands in ``view.kwargs``
-    and a query param in ``request.query_params``, and a value can only be popped
-    from the arguments once.
+    and a query param in ``request.query_params``, and a value is popped from the
+    arguments once. **That exclusivity is checked here rather than upstream**
+    because ``validate_channel_names`` takes one declaration list and so cannot
+    see a name in both channels; a concatenated list would report the overlap as
+    a duplicate ``url_kwargs`` name and point the consumer at the wrong knob.
     """
     validate_channel_names(
         label=label,
@@ -124,48 +105,36 @@ def validate_input_serializer_against_callable(
     Runs two complementary checks:
 
     1. **Serializer fields reach the callable** — every declared
-       ``input_serializer`` field must correspond to a named parameter
-       on the callable, or be a reserved-name exemption (pool seed /
-       post-fetch key), or be absorbed by ``**kwargs`` / a ``data``
-       bundle parameter. Without this check, a misspelt field name
-       would be silently dropped by :func:`resolve_callable_kwargs`
-       at dispatch time.
+       ``input_serializer`` field must correspond to a named parameter on the
+       callable, be a reserved-name exemption (pool seed / post-fetch key), or
+       be absorbed by ``**kwargs`` / a ``data`` bundle parameter. Without it, a
+       misspelt field name is silently dropped at dispatch.
 
-    2. **Required callable parameters have a source** — every
-       parameter the callable declares as required (no default,
-       no ``**kwargs``) must come from somewhere the MCP transport
-       can produce at dispatch: an ``input_serializer`` field, a
-       reserved pool seed (``request`` / ``user`` / ``data``), or an
-       explicit ``spec_kwargs_provides`` opt-in declaring that
-       ``spec.kwargs(...)`` will supply the value. Post-fetch keys
-       (``ordering`` / ``page`` / ``limit``) are *not* sources — the
-       dispatch pipeline consumes them before the callable runs.
+    2. **Required callable parameters have a source** — every parameter with no
+       default must come from something the MCP transport can produce: an
+       ``input_serializer`` field, a reserved pool seed, or an explicit
+       ``spec_kwargs_provides`` opt-in declaring that ``spec.kwargs(...)``
+       supplies it. Post-fetch keys (``ordering`` / ``page`` / ``limit``) are
+       *not* sources — the pipeline consumes them before the callable runs.
 
-       The opt-in exists because ``spec.kwargs`` is a runtime callable
-       whose output depends on the transport context. A spec reused
-       across DRF API views and MCP tools may receive a populated
-       ``view.kwargs`` in the DRF case (URL path params) and an empty
-       one in the MCP-tool case, returning ``None`` for keys it tried
-       to derive from path params. Trusting ``spec.kwargs`` to
-       satisfy a required callable parameter on the MCP side is
-       therefore explicit — list the parameter names in
-       ``spec_kwargs_provides`` to acknowledge the contract.
+       The opt-in is explicit because ``spec.kwargs`` output depends on the
+       transport: a spec reused across DRF views and MCP tools sees populated
+       URL path params in the first case and none in the second, so it may
+       return ``None`` for keys it derives from them.
 
-    ``input_serializer=None`` skips check (1) (no fields to validate)
-    but check (2) still runs against the pool-seed and opt-in sources.
-
-    ``callable_=None`` short-circuits everything — the per-adapter
-    "selector=None" / "service=None" guards already cover that case
-    with a more specific error.
+    ``input_serializer=None`` skips check (1) but check (2) still runs against
+    the pool-seed and opt-in sources. ``callable_=None`` short-circuits
+    everything — the per-adapter ``selector=None`` / ``service=None`` guards
+    cover that with a more specific error.
     """
     if callable_ is None:
         return
 
     sig = _resolve_signature(callable_)
     if sig is None:  # pragma: no cover - paired with _resolve_signature's except branch
-        # Builtin / C-extension callables don't expose a signature. The
-        # check can't fire — fall through silently rather than spuriously
-        # raising on something the framework can't introspect.
+        # Builtin / C-extension callables expose no signature, so the check
+        # cannot fire; falling through beats raising on something the framework
+        # cannot introspect.
         return
 
     if argument_binding is ArgumentBinding.BUNDLE:
@@ -200,9 +169,9 @@ def _validate_data_only(label: str, sig: inspect.Signature) -> None:
     if "data" in sig.parameters:
         return
     if "serializer" in sig.parameters:
-        # Sister-repo 0.16: the bound, validated serializer is a pool seed —
-        # a callable that owns persistence via ``serializer.save()`` receives
-        # the payload through it and needs no ``data`` parameter.
+        # The bound, validated serializer is itself a pool seed: a callable that
+        # owns persistence via ``serializer.save()`` receives the payload
+        # through it and needs no ``data`` parameter.
         return
     raise ImproperlyConfigured(
         f"{label}: argument_binding=BUNDLE requires the callable to declare a "
@@ -224,11 +193,9 @@ def _validate_merge_or_replace(label: str, sig: inspect.Signature, input_seriali
             inspect.Parameter.KEYWORD_ONLY,
         )
     )
-    # If the callable declares ``data``, the full validated payload is
-    # forwarded under that name — individual fields don't need to map to
-    # individual parameters. This is a deliberate SPREAD_AUTHOR_WINS-mode pattern
-    # (``def fn(*, data, request)``): the callable wants the bundle, not
-    # the spread. Skip the per-field check in that case.
+    # A callable declaring ``data`` receives the whole validated payload under
+    # that name, so its fields need not map to individual parameters — a
+    # deliberate spread-mode pattern (``def fn(*, data, request)``).
     if "data" in declared_params:
         return
     fields: frozenset[str] = frozenset(_serializer_field_names(input_serializer))
@@ -260,36 +227,21 @@ def _validate_required_params_have_sources(
 
     Sources, in priority order:
 
-    - ``request`` / ``user`` / ``data`` — always in the pool (transport
-      seeds). In ``SPREAD_AUTHOR_WINS`` / ``SPREAD_CALLER_WINS`` mode the validated payload
-      also lands as ``data=`` in the pool, so a callable declaring
-      ``data`` always gets it regardless of mode. ``instance`` counts
-      only when the spec resolves one (``provides_instance``) and
-      ``serializer`` only when an ``input_serializer`` is declared —
-      sister-repo 0.16's conditional seeds.
-    - ``input_serializer`` fields — only count as sources in
-      ``SPREAD_AUTHOR_WINS`` / ``SPREAD_CALLER_WINS`` mode, where the validated dict is
-      spread into the pool. In ``BUNDLE`` mode the fields are
-      bundled into ``data`` and individual names never reach the
-      callable as kwargs.
-    - ``spec_kwargs_provides`` — explicit opt-in declaring that
-      ``spec.kwargs(view, request)`` will supply these names at
-      dispatch. The registration site is the right place to make
-      this trust visible because the same spec may behave
-      differently across transports.
+    - **Pool seeds.** ``request`` / ``user`` / ``data`` / ``progress`` always;
+      ``instance`` and ``collection`` only when the spec resolves one, and
+      ``serializer`` only when an ``input_serializer`` is declared.
+    - **``input_serializer`` fields**, in the spread modes only, where the
+      validated dict is spread into the pool. Under ``BUNDLE`` the fields ride
+      inside ``data`` and their names never reach the callable as kwargs.
+    - **``spec_kwargs_provides``** — the explicit opt-in that
+      ``spec.kwargs(view, request)`` supplies these names at dispatch.
 
-    ``**kwargs`` callables are exempt — every required name is
-    structurally satisfiable.
-
-    When ``input_serializer`` is ``None`` we treat the binding as
-    "trust mode" — the client's raw ``arguments`` dict is spread
-    verbatim and there is no static contract to validate against.
-    The check then only requires that pool-seed sources cover the
-    callable's required params; the rest are presumed to come from
-    the raw arguments. Combined with ``spec_kwargs_provides``, this
-    still catches a callable that declares a required param the
-    transport has no way to produce (e.g. ``BUNDLE`` with no
-    serializer and a callable that doesn't take ``data``).
+    ``**kwargs`` callables are exempt: every required name is structurally
+    satisfiable. With ``input_serializer=None`` the binding is in trust mode —
+    the client's raw ``arguments`` are spread verbatim, so there is no static
+    contract and only the pool seeds are checked. That still catches a callable
+    the transport could never satisfy, such as ``BUNDLE`` with no serializer and
+    no ``data`` parameter.
     """
     if _accepts_var_keyword(sig):
         return
@@ -303,17 +255,10 @@ def _validate_required_params_have_sources(
         )
         and param.default is inspect.Parameter.empty
     )
-    # Conditional pool seeds: ``instance`` only exists when the spec
-    # carries an ``instance_selector_spec`` with a selector, ``collection``
-    # only when it carries a ``collection_selector_spec`` with a selector (the
-    # bulk / list-mutation target), ``serializer`` only when an
-    # ``input_serializer`` produces a bound instance.
-    #
-    # The unconditional seeds are ``request`` / ``user`` / ``data`` /
-    # ``progress``. ⚠ ``progress`` is unconditional even though most requests
-    # carry nowhere to send it: drf-services substitutes its no-op reporter, so
-    # the parameter is *always* satisfiable and refusing to register a service
-    # that declares one would be refusing a service that runs perfectly well.
+    # ``progress`` is an unconditional seed even though most requests carry
+    # nowhere to send it: drf-services substitutes its no-op reporter, so the
+    # parameter is always satisfiable and refusing to register a service that
+    # declares one would refuse a service that runs perfectly well.
     sources: set[str] = {"request", "user", "data", "progress"}
     if provides_instance:
         sources.add("instance")
@@ -326,14 +271,10 @@ def _validate_required_params_have_sources(
         if input_serializer is not None:
             sources.update(_serializer_field_names(input_serializer))
         else:
-            # Trust mode — raw ``arguments`` are spread verbatim, so any
-            # name the callable declares can in principle be supplied by
-            # the client. We can't validate names statically, but we
-            # *can* still flag a required param that's outside the
-            # spread (i.e. a pool seed the transport could supply but
-            # the callable didn't declare any other way). Since the
-            # raw-spread set is dynamic, mark every required param as
-            # satisfiable.
+            # Trust mode: raw ``arguments`` are spread verbatim, so the client
+            # can in principle supply any name the callable declares. The set is
+            # dynamic and cannot be validated statically, so every required
+            # param counts as satisfiable.
             sources.update(required_params)
     missing: set[str] = set(required_params) - sources
     if missing:
@@ -353,26 +294,25 @@ def _validate_required_params_have_sources(
 def merge_tool_annotations(explicit: dict[str, Any] | None, *, read_only: bool) -> dict[str, Any]:
     """Auto-derive a tool's MCP ``ToolAnnotations``, explicit hints winning.
 
-    drf-mcp knows each tool's mutation profile from its kind, so it can
-    stamp the standard MCP hints instead of leaving downstream consumers
-    to hand-set a non-standard flag:
+    A tool's mutation profile is known from its kind, so the standard MCP hints
+    are stamped here rather than hand-set downstream:
 
     - ``read_only=True`` (selector tools, and chains whose every step is a
       selector) → ``{"readOnlyHint": True}``. ``destructiveHint`` /
-      ``idempotentHint`` are deliberately *not* emitted — the MCP spec
-      defines them as meaningful only when ``readOnlyHint`` is false.
-    - ``read_only=False`` (service tools, and chains with any service
-      step) → ``{"readOnlyHint": False, "destructiveHint": True}``. A
-      mutation is treated as destructive by default; ``idempotentHint`` is
-      left unset because ``ServiceSpec`` carries no idempotency signal.
+      ``idempotentHint`` are deliberately *not* emitted — the MCP spec defines
+      them as meaningful only when ``readOnlyHint`` is false.
+    - ``read_only=False`` (service tools, and chains with any service step) →
+      ``{"readOnlyHint": False, "destructiveHint": True}``. A mutation is
+      destructive by default, and ``idempotentHint`` stays unset because
+      ``ServiceSpec`` carries no idempotency signal.
 
-    Any hint supplied at registration via ``annotations=`` overrides the
-    derived default — a non-destructive mutation passes
+    Any hint supplied at registration via ``annotations=`` overrides the derived
+    default: a non-destructive mutation passes
     ``annotations={"destructiveHint": False}``, an idempotent one adds
     ``{"idempotentHint": True}``, and either kind can set ``title`` /
-    ``openWorldHint``. The result is stored on the binding so it is the
-    single source of truth for both ``tools/list`` and any downstream
-    consumer that reads ``binding.annotations``.
+    ``openWorldHint``. The result is stored on the binding, so it is the single
+    source of truth for ``tools/list`` and for anything reading
+    ``binding.annotations``.
     """
     derived: dict[str, Any] = (
         {"readOnlyHint": True} if read_only else {"readOnlyHint": False, "destructiveHint": True}
@@ -383,28 +323,23 @@ def merge_tool_annotations(explicit: dict[str, Any] | None, *, read_only: bool) 
 def merge_meta(*pieces: Mapping[str, Any] | None) -> dict[str, Any]:
     """Shallow-merge ``_meta`` contributions into one bundle, later wins.
 
-    ``_meta`` is the base protocol's open extension namespace: each
-    extension owns a top-level key inside it, and several sources may want
-    to contribute at once — the ``meta=`` a consumer passes at registration
-    plus whatever a framework feature derives for itself. This is the single
-    place those get combined, so a later feature injects its key by adding
-    one argument at the adapter call site instead of touching every binding.
+    ``_meta`` is the base protocol's open extension namespace, where each
+    extension owns a top-level key and several sources may contribute at once:
+    the ``meta=`` a consumer passes at registration plus whatever a framework
+    feature derives. Combining them here means a later feature injects its key
+    by adding one argument at the adapter call site.
 
     Semantics, deliberately narrow:
 
-    - **Shallow**, one level deep. A later piece replaces an earlier piece's
-      value for the same top-level key outright; it does not deep-merge into
-      it. Extension keys are opaque bundles owned by one extension, so
-      splicing two of them together would produce a shape neither owner
-      declared.
-    - **Later wins**, so call sites read as precedence order (put the
-      framework-derived piece first and the consumer's ``meta=`` last for
-      "consumer overrides", or the reverse when the framework must win).
-      Mirrors :func:`merge_tool_annotations`, where the explicit hints
-      likewise override the derived ones.
-    - ``None`` and empty pieces are skipped, and the result is always a new
-      dict — no piece is mutated and no caller ends up sharing a mutable
-      default.
+    - **Shallow**, one level deep. A later piece replaces an earlier one's value
+      for the same top-level key outright rather than deep-merging into it —
+      extension keys are opaque bundles owned by one extension, and splicing two
+      together produces a shape neither owner declared.
+    - **Later wins**, so call sites read as precedence order: framework piece
+      first and the consumer's ``meta=`` last for "consumer overrides", the
+      reverse when the framework must win.
+    - ``None`` and empty pieces are skipped, and the result is always a new dict,
+      so no piece is mutated and no caller shares a mutable default.
     """
     merged: dict[str, Any] = {}
     for piece in pieces:
@@ -421,11 +356,9 @@ def _serializer_field_names(input_serializer: type) -> Iterable[str]:
     """Best-effort field-name extraction for the kinds of inputs MCP accepts.
 
     Supports the same shapes :func:`build_input_schema` does: a DRF
-    ``Serializer`` subclass (via ``_declared_fields``), or a bare
-    ``@dataclass`` (via :func:`dataclasses.fields`). Anything else is
-    ignored — :func:`validate_input_serializer_against_callable` will
-    then have nothing to validate against, which is preferable to a
-    false positive.
+    ``Serializer`` subclass (via ``_declared_fields``) or a bare ``@dataclass``
+    (via :func:`dataclasses.fields`). Anything else yields nothing to validate
+    against, which is preferable to a false positive.
     """
     if isinstance(input_serializer, type) and issubclass(
         input_serializer, drf_serializers.Serializer

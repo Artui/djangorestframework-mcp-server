@@ -26,25 +26,21 @@ async def adispatch(
 
     Only the I/O-bound handlers (``tools/call``, ``resources/read``,
     ``prompts/get``) have async-native variants; ``completion/complete``
-    borrows the executor instead. The rest are CPU-only — schema generation,
-    capability advertisement, error wrapping — and run inline through the sync
-    :func:`dispatch` table without blocking the event loop noticeably.
+    borrows the executor instead. The rest are CPU-only and run inline through
+    the sync :func:`dispatch` table.
     """
     if method == "tools/call":
-        # Not wrapped here: a tool call resolves its own deadline from the
-        # binding (falling back to the server's), so wrapping it again at this
-        # level would start a second, unrelated timer around the first.
+        # Not wrapped: a tool call resolves its own deadline from the binding,
+        # so a second timer here would run unrelated to the first.
         return await handle_tools_call_async(params, context)
     if method == "resources/read":
         return await _with_deadline(handle_resources_read_async(params, context), context)
     if method == "prompts/get":
         return await _with_deadline(handle_prompts_get_async(params, context), context)
     if method == "completion/complete":
-        # No async-native sibling: a completer is a small sync callable, and
-        # the realistic implementation reads a queryset — which raises
-        # ``SynchronousOnlyOperation`` if called straight from the loop. The
-        # thread-sensitive executor is the same answer ``alist_tools`` uses,
-        # and it costs one hop instead of a parallel handler.
+        # No async-native sibling: a completer is a small sync callable, and the
+        # realistic implementation reads a queryset, which raises
+        # ``SynchronousOnlyOperation`` straight from the loop.
         return await _with_deadline(
             sync_to_async(handle_completion_complete, thread_sensitive=True)(params, context),
             context,
@@ -56,9 +52,8 @@ async def _with_deadline(coro: Awaitable[Any], context: MCPCallContext) -> Any:
     """Apply the server's dispatch deadline, rendering expiry as a JSON-RPC error.
 
     Resources and prompts have no per-binding override — the knob lives on tool
-    bindings, where a slow report generator genuinely differs from a lookup —
-    and no ``isError`` envelope to explain themselves in, so expiry is a
-    protocol error rather than a result.
+    bindings — and no ``isError`` envelope to explain themselves in, so expiry
+    is a protocol error rather than a result.
     """
     try:
         return await run_with_deadline(coro, context.config.dispatch_timeout)

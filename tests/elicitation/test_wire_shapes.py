@@ -115,7 +115,7 @@ def test_other_keys_are_ignored_rather_than_rejected() -> None:
     ],
 )
 def test_anything_unusable_reads_as_no_answer(params: dict[str, Any]) -> None:
-    """⚠ Deliberately the same outcome as "the client did not answer": the
+    """Deliberately the same outcome as "the client did not answer": the
     service raises again, the question is re-issued, and the spec's *"respond
     with a new InputRequiredResult rather than returning an error"* happens
     without this layer knowing it is happening."""
@@ -146,7 +146,7 @@ def test_content_that_is_not_an_object_is_treated_as_empty() -> None:
     ],
 )
 def test_who_may_be_asked(capabilities: dict[str, Any], expected: bool) -> None:
-    """⚠ ``{}`` means yes. Form was the only mode before this revision added URL
+    """``{}`` means yes. Form was the only mode before this revision added URL
     mode, so a client that omits the sub-keys is declaring the original
     behaviour — which is exactly what the schema's "form mode only (implicit)"
     example shows. A *non-empty* object is an enumeration, so url-only is a

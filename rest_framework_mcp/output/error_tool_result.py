@@ -16,24 +16,21 @@ def build_error_tool_result(
 ) -> ToolResult:
     """Build an ``isError: true`` :class:`ToolResult` for a tool-level failure.
 
-    Per the MCP spec, *execution* failures (business rules, validation the
-    service performed on well-shaped input, missing rows) should come back
-    as tool results the model can read and self-correct from — JSON-RPC
-    protocol errors are reserved for faults in the call itself (malformed
-    params shape, unknown tool, auth, rate limits).
+    Per the MCP spec, *execution* failures (business rules, validation of
+    well-shaped input, missing rows) come back as tool results the model can
+    read and self-correct from; JSON-RPC protocol errors are reserved for faults
+    in the call itself — malformed params shape, unknown tool, auth, rate limits.
 
-    The error payload is rendered as JSON text in ``content[0]``:
-
-    .. code-block:: json
+    The payload is rendered as JSON text in ``content[0]``::
 
         {"error": {"type": "service_error", "message": "...", "detail": {...}}}
 
-    ``structuredContent`` is deliberately omitted — the spec ties it to the
-    tool's ``outputSchema``, which describes the *success* shape; a strict
+    ``structuredContent`` is deliberately omitted: the spec ties it to the
+    tool's ``outputSchema``, which describes the *success* shape, so a strict
     client validating an error payload against it would reject the result.
 
-    ``detail`` (when supplied) is merged into the ``error`` object — used
-    for per-field validation detail and chain-tool ``failedStep`` markers.
+    ``detail`` is merged into the ``error`` object — per-field validation detail
+    and chain-tool ``failedStep`` markers.
     """
     error: dict[str, Any] = {"type": error_type, "message": message}
     if detail:

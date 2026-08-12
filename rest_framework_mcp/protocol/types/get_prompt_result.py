@@ -10,8 +10,8 @@ from rest_framework_mcp.protocol.types.prompt_message import PromptMessage
 class GetPromptResult:
     """Result envelope returned by ``prompts/get``.
 
-    ``description`` is optional — the spec uses it to surface the prompt's
-    purpose to the client UI alongside the rendered messages.
+    ``description`` surfaces the prompt's purpose to the client UI alongside
+    the rendered messages.
     """
 
     messages: list[PromptMessage] = field(default_factory=list)

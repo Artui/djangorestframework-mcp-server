@@ -17,15 +17,13 @@ from rest_framework_mcp.transport.response_stream import build_response_stream
 def progress_token(params: Any) -> str | int | None:
     """The token by which a client asked to hear about this request's progress.
 
-    ⭐ Era-independent: ``_meta.progressToken`` sits in the same place in
-    ``2025-11-25`` and ``2026-07-28``, so a legacy client gets streamed
-    progress on the same terms as a modern one. One of the few things the
-    transport fork does not have to branch on.
+    Era-independent: ``_meta.progressToken`` sits in the same place in
+    ``2025-11-25`` and ``2026-07-28``, so the transport does not branch here.
 
     A non-string, non-integer token is treated as absent rather than rejected.
-    The spec constrains the type but a server **MAY** decline to send progress
-    at all, so declining is always a legal answer — and a stricter reading
-    would fail a request over a field that only affects an optional courtesy.
+    The spec constrains the type, but a server **MAY** decline to send progress
+    at all, so declining is always legal, while rejecting would fail a request
+    over a field that only affects an optional courtesy.
     """
     if not isinstance(params, dict):
         return None
@@ -42,31 +40,17 @@ def progress_token(params: Any) -> str | int | None:
 def can_report_progress(method: str, params: Any, context: MCPCallContext) -> bool:
     """Whether this request's dispatch can actually emit progress.
 
-    ⚠ **The gate that keeps two other guarantees true**, and it is narrower
-    than "the client asked". A ``progressToken`` is a request to stream, but
-    opening a stream for a dispatch that will never report costs a connection
-    and buys nothing — which is the design's own argument against streaming —
-    and it silently gives up the normative ``403``, because a
-    ``StreamingHttpResponse`` commits its status before the handler runs and
-    :func:`preflight_permissions` can only speak for ``tools/call``.
+    Narrower than "the client asked", and deliberately so. Opening a stream for
+    a dispatch that will never report costs a connection, buys nothing, and
+    silently gives up the normative ``403``: a ``StreamingHttpResponse`` commits
+    its status before the handler runs, and :func:`preflight_permissions` can
+    only speak for ``tools/call``. So streaming is confined to the paths that
+    actually thread a reporter — ``tools/call`` on a service or selector
+    binding.
 
-    Both problems have the same shape and the same fix: stream only where a
-    reporter is actually threaded through. Today that is ``tools/call`` on a
-    service or selector binding — the two paths that pass ``progress=`` into
-    dispatch.
-
-    Deliberately **excluded**, and none of them loses anything, because none of
-    them emitted a frame before either:
-
-    - ``resources/read`` and ``prompts/get`` never receive a reporter. Streamed,
-      their permission denials rode inside a ``200`` with no challenge; answered
-      as plain JSON they keep the ``403`` the authorization spec makes
-      normative.
-    - **Chain tools** run the whole sync pipeline in a worker thread and their
-      steps build their own kwarg pool, which has no ``progress`` seed. A chain
-      is the tool kind that would benefit most from reporting ("step 3 of 5"),
-      so threading one through is worth doing — and when it is, this gate is
-      where it gets re-enabled.
+    ``resources/read`` and ``prompts/get`` never receive one, and chain tools
+    build their own kwarg pool with no ``progress`` seed. This gate is where
+    reporting gets re-enabled once one is threaded through.
     """
     if method != "tools/call" or not isinstance(params, dict):
         return False
@@ -77,27 +61,21 @@ def can_report_progress(method: str, params: Any, context: MCPCallContext) -> bo
 def preflight_permissions(method: str, params: Any, context: MCPCallContext) -> JsonRpcError | None:
     """Run a tool's permission stack *before* deciding to stream.
 
-    ⚠ **The one thing streaming would otherwise cost.** A
-    ``StreamingHttpResponse`` commits its status before the dispatch runs, so a
-    permission denial discovered inside the handler could only ride as an
-    in-stream error inside a ``200`` — losing the ``403`` the MCP authorization
-    spec makes normative, and the ``WWW-Authenticate`` challenge that tells the
-    client what to ask for instead.
+    A ``StreamingHttpResponse`` commits its status before the dispatch runs, so
+    a denial discovered inside the handler could only ride as an in-stream
+    error inside a ``200`` — losing the ``403`` the MCP authorization spec
+    makes normative and the ``WWW-Authenticate`` challenge. Safe to run twice:
+    a permission check is a pure predicate over ``(request, token)``.
 
-    Checking here first restores it. Safe to run twice because a permission
-    check is a pure predicate over ``(request, token)``; the handler runs its
-    own again and reaches the same answer.
-
-    ⚠ **Permissions only, never rate limits.** Consuming a rate limit is not
-    idempotent, so pre-flighting one would charge every streamed request twice.
-    They stay inside the handler — and cost nothing, because a rate-limit
-    rejection was already a ``200`` with the detail in the body.
+    **Permissions only, never rate limits.** Consuming a rate limit is not
+    idempotent, so pre-flighting one would charge every streamed request twice,
+    and buy nothing — a rate-limit rejection is already a ``200`` with the
+    detail in the body.
 
     Returns ``None`` when there is nothing to deny: only ``tools/call`` has a
-    binding to check at this point, and an unknown tool is the handler's error
-    to report. That narrowness is safe **because** :func:`can_report_progress`
-    refuses to stream anything this cannot speak for — the two run together, and
-    changing one without the other reopens the hole.
+    binding to check here. That narrowness is safe **because**
+    :func:`can_report_progress` refuses to stream anything this cannot speak
+    for — changing one without the other reopens the hole.
     """
     if method != "tools/call" or not isinstance(params, dict):
         return None
@@ -120,8 +98,8 @@ def _tool_binding(params: dict[str, Any], context: MCPCallContext) -> Any:
     """The binding a ``tools/call`` names, or ``None`` if it names none.
 
     Shared so the streaming gate and the permission pre-flight resolve the
-    *same* binding from the same params — two lookups that disagreed would be
-    the exact bug this pairing exists to prevent.
+    *same* binding: two lookups that disagreed would be the exact bug this
+    pairing exists to prevent.
     """
     name: Any = params.get("name")
     if not isinstance(name, str):

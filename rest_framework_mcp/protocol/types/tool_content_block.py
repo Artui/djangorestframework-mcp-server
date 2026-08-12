@@ -14,41 +14,32 @@ class ToolContentBlock:
     The spec models content as a five-member union — ``text``, ``image``,
     ``audio``, ``resource_link``, ``resource`` — whose members share no fields
     beyond ``type``, ``annotations`` and ``_meta``. This is one dataclass with
-    every member's fields optional rather than five dataclasses behind a union,
-    because ``content`` is a wire boundary: the shape is decided by ``type``,
-    :meth:`to_dict` emits only what is set, and a union type would buy nothing
-    a reader of the JSON can see.
+    every member's fields optional rather than five behind a union: ``content``
+    is a wire boundary, the shape is decided by ``type``, and :meth:`to_dict`
+    emits only what is set.
 
-    **Construct through the classmethods, not the initialiser.** Each one takes
+    **Construct through the classmethods, not the initialiser.** Each takes
     exactly the fields its block type requires, which is where the spec's rules
     live — an image without a ``mimeType`` or a ``resource_link`` without a
-    ``uri`` is not a block a client can do anything with, and the constructors
-    make those unrepresentable rather than merely discouraged. (Same reasoning
-    as :meth:`ToolDefinition.service` / :meth:`ToolDefinition.selector`.) Two
-    are named around a field they would otherwise shadow — ``text_block`` and
-    ``embedded_resource``, for the ``text`` and ``resource`` fields.
+    ``uri`` is not a block a client can use, and the constructors make those
+    unrepresentable. ``text_block`` and ``embedded_resource`` are named around
+    the ``text`` and ``resource`` fields they would otherwise shadow.
 
     ``annotations`` carry ``audience`` / ``priority`` / ``lastModified`` — the
-    identical bundle resources use, which is the spec's own choice and the
-    reason it stays a free-form dict here.
+    identical bundle resources use, which is why it stays a free-form dict.
     """
 
     type: str
     text: str | None = None
     data: str | None = None
     mime_type: str | None = None
-    # ``resource_link`` is a ``Resource`` with a ``type`` — it carries the
-    # resource's own descriptive fields rather than a payload.
+    # A ``resource_link`` is a ``Resource`` with a ``type``: descriptive fields,
+    # no payload.
     uri: str | None = None
     name: str | None = None
     description: str | None = None
-    # ``resource`` embeds the contents themselves, which is the one place a
-    # block nests another wire type rather than flattening it.
     resource: ResourceContents | None = None
     annotations: dict[str, Any] | None = None
-    # Base-protocol ``_meta`` bundle. Free-form dict at this wire boundary
-    # because ``_meta`` is MCP's open extension namespace (see
-    # :class:`~rest_framework_mcp.protocol.types.tool.Tool`).
     meta: dict[str, Any] | None = None
 
     @classmethod
@@ -73,7 +64,7 @@ class ToolContentBlock:
     ) -> ToolContentBlock:
         """An image block. ``data`` may be raw bytes or an existing base64 string.
 
-        ``mime_type`` is required by the spec, not merely recommended: a client
+        ``mime_type`` is required by the spec, not merely recommended — a client
         has no other way to know how to decode the bytes.
         """
         return cls(
@@ -115,11 +106,10 @@ class ToolContentBlock:
     ) -> ToolContentBlock:
         """A pointer to a resource the client can read separately.
 
-        ⭐ The cheapest way for a tool here to return something large or
-        non-JSON: the URI is one this server's own ``resources/read`` already
-        serves, so no bytes ride on the tool-result path and the client fetches
-        only what it decides it wants. The spec notes a linked resource need
-        not appear in ``resources/list``.
+        The cheapest way to return something large or non-JSON: the URI is one
+        this server's own ``resources/read`` already serves, so no bytes ride on
+        the tool-result path. Per the spec a linked resource need not appear in
+        ``resources/list``.
         """
         return cls(
             type="resource_link",
@@ -141,9 +131,9 @@ class ToolContentBlock:
     ) -> ToolContentBlock:
         """A resource's contents inlined into the result.
 
-        Prefer :meth:`resource_link` unless the client genuinely cannot make a
-        second round trip — embedding spends the caller's context on bytes it
-        may not need.
+        Prefer :meth:`resource_link` unless the client cannot make a second
+        round trip — embedding spends the caller's context on bytes it may not
+        need.
         """
         return cls(type="resource", resource=resource, annotations=annotations, meta=meta)
 
@@ -173,12 +163,9 @@ class ToolContentBlock:
 def _encode_base64(data: bytes | str) -> str:
     """Base64-encode binary payloads; pass strings through unchanged.
 
-    A ``str`` is taken to be base64 already — the alternative reading, "text to
-    be encoded", would silently double-encode anyone who did the encoding
-    themselves, and there is no way to tell the two apart by inspection.
-
-    Lives beside the block rather than in ``output/`` because the block's own
-    constructors are its only callers and the rule is part of their contract.
+    A ``str`` is taken to be base64 already: the alternative reading, "text to
+    be encoded", would silently double-encode anyone who encoded it themselves,
+    and the two cannot be told apart by inspection.
     """
     if isinstance(data, str):
         return data

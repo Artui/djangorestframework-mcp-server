@@ -1,78 +1,59 @@
-"""Single-file home for the package's enums and shared constants.
+"""The package's enums and shared constants.
 
-Centralising these here keeps the public type surface obvious at a glance
-and lets internal modules import a stable, predictable path rather than
-hunting through ``output/format.py`` / ``protocol/json_rpc_error_code.py``
-/ ``registry/argument_binding.py`` etc. The top-level
-``rest_framework_mcp.__init__`` re-exports the public names so consumers
-don't need to know they live here.
-
-Each leaf module that previously held one of these now re-exports from
-this file for backward compatibility; new code should import from
-``rest_framework_mcp.constants`` directly.
+The single file allowed to export several symbols (see ``CLAUDE.md``), so new
+enums and shared constant-like values go here rather than into leaf modules.
+The top-level ``rest_framework_mcp.__init__`` re-exports the public names.
 """
 
 from __future__ import annotations
 
 from enum import Enum, IntEnum
 
-# ``ArgumentBinding`` / ``UnknownArguments`` are re-exported from drf-services:
 # ``dispatch_spec`` is the single dispatch core and owns these neutral-core
-# policies, so MCP consumes them rather than maintaining a parallel copy. The
-# stable import path (``rest_framework_mcp.constants``) is preserved.
+# policies, so MCP consumes them rather than keeping a parallel copy.
 from rest_framework_services import ArgumentBinding, UnknownArguments
 from rest_framework_services.types.reserved_pool_seeds import RESERVED_POOL_SEEDS
 
-"""Keys carrying transport-controlled pool seeds — re-exported from the sister
-repo, which owns the set. A client-supplied argument with one of these names
-would override the transport's authoritative values (a credential-spoofing
-footgun), so the spread silently drops them. The dispatched callable is free to
-*declare* a parameter of that name; it receives the seed, the documented idiom.
+"""Keys carrying transport-controlled pool seeds, owned by the sister repo.
 
-Previously a local copy, which had silently fallen a key behind the set it
-mirrored (``collection``). The stable import path is preserved.
+A client-supplied argument with one of these names would override the
+transport's authoritative values (a credential-spoofing footgun), so the spread
+drops them. The dispatched callable may still *declare* a parameter of that
+name; it receives the seed, which is the documented idiom.
 """
 
 # ---------- JSON-RPC envelope ----------
 
 JSONRPC_VERSION: str = "2.0"
-"""The JSON-RPC protocol version this server speaks.
-
-MCP layers on JSON-RPC 2.0; every envelope carries ``"jsonrpc": "2.0"``.
-"""
+"""The JSON-RPC protocol version this server speaks. MCP layers on JSON-RPC
+2.0; every envelope carries ``"jsonrpc": "2.0"``."""
 
 JsonRpcId = str | int | None
-"""Type alias for the JSON-RPC ``id`` field.
-
-JSON-RPC 2.0 allows string, integer, or null IDs. Notifications carry
-``null``; requests carry a non-null ID and clients correlate responses
-back by matching.
-"""
+"""Type alias for the JSON-RPC ``id`` field. JSON-RPC 2.0 allows string,
+integer or null IDs; notifications carry ``null``, requests carry a non-null ID
+that clients correlate responses back by."""
 
 
 class JsonRpcErrorCode(IntEnum):
     """JSON-RPC 2.0 standard error codes plus MCP-specific reservations.
 
-    The standard codes (-32700 through -32600 and -32603) are defined by
-    JSON-RPC. MCP then partitions the server-error range: ``-32000..-32019``
-    is implementation-defined, ``-32020..-32099`` is reserved for the spec
-    itself. Everything we allocate below sits in the implementation-defined
-    half — with one exception, and it is the important one.
+    JSON-RPC defines -32700 through -32600 and -32603. MCP then partitions the
+    server-error range: ``-32000..-32019`` is implementation-defined,
+    ``-32020..-32099`` is reserved for the spec itself, and everything
+    allocated here sits in the implementation-defined half — with one
+    exception.
 
-    ⚠ **``-32002`` is not ours to allocate.** The MCP resources spec names it
-    for "Resource not found", and the ``2026-07-28`` revision singles it out
-    as the one legacy code clients should keep recognising. A server that
-    spends it on something else is not merely unconventional: a spec-following
-    client reads that error as a missing resource. It therefore belongs to
-    :attr:`RESOURCE_NOT_FOUND` here and nothing else.
+    **``-32002`` is not ours to allocate.** The resources spec names it for
+    "Resource not found", and the ``2026-07-28`` revision singles it out as the
+    one legacy code clients should keep recognising, so a spec-following client
+    reads it as a missing resource whatever a server spends it on. It belongs
+    to :attr:`RESOURCE_NOT_FOUND` and nothing else.
 
-    Two codes are **burned** rather than reused. ``-32003`` and ``-32004``
-    were this package's own not-found codes before the wire values were
-    aligned with the spec; a client written against an older release still
-    reads them as "resource/prompt not found" and "unknown tool". Re-issuing
-    either for a different condition would silently mislead exactly the
-    clients that took the trouble to special-case them, so the next
-    implementation-defined code allocated is ``-32006``.
+    ``-32003`` and ``-32004`` are **burned** rather than reused: they were this
+    package's own not-found codes before the wire values were aligned with the
+    spec, so an older client still reads them as "resource/prompt not found"
+    and "unknown tool". The next implementation-defined code allocated is
+    ``-32006``.
     """
 
     PARSE_ERROR = -32700
@@ -87,8 +68,8 @@ class JsonRpcErrorCode(IntEnum):
     # -32003, -32004: burned — see the class docstring.
     RATE_LIMITED = -32005
     FORBIDDEN = -32006
-    # Spec-reserved (``-32020..-32099``, allocated sequentially by the MCP
-    # specification itself). These are not ours to number or to repurpose.
+    # Spec-reserved (``-32020..-32099``), allocated by the MCP specification
+    # itself. Not ours to number or to repurpose.
     HEADER_MISMATCH = -32020
     MISSING_REQUIRED_CLIENT_CAPABILITY = -32021
     UNSUPPORTED_PROTOCOL_VERSION = -32022
@@ -98,17 +79,16 @@ class JsonRpcErrorCode(IntEnum):
 
 
 class OutputFormat(str, Enum):
-    """Output format for the human-readable text block of a ``ToolResult``.
+    """Encoding of a ``ToolResult``'s human-readable text block.
 
-    ``structuredContent`` is always JSON; this enum only controls the
-    encoding of the ``content[0]`` text block:
+    Only ``content[0]`` varies; ``structuredContent`` is always JSON.
 
-    - ``JSON``: pretty-printed JSON, the safe default.
-    - ``TOON``: token-oriented object notation. Compact for large uniform
-      arrays; falls back to JSON if the optional ``toon`` extra is not
-      installed.
-    - ``AUTO``: encoder picks per-payload — TOON for uniform list-of-objects,
-      JSON otherwise.
+    Attributes:
+        JSON: Pretty-printed JSON. The safe default.
+        TOON: Token-oriented object notation, compact for large uniform arrays.
+            Falls back to JSON when the optional ``toon`` extra is absent.
+        AUTO: Per-payload choice — TOON for a uniform list of objects, JSON
+            otherwise.
     """
 
     JSON = "json"
@@ -127,13 +107,9 @@ class OutputFormat(str, Enum):
 
 # ---------- Argument binding / unknown-argument policy ----------
 #
-# ``ArgumentBinding`` (``AUTO`` / ``BUNDLE`` / ``SPREAD_AUTHOR_WINS`` /
-# ``SPREAD_CALLER_WINS``) and ``UnknownArguments`` (``IGNORE`` / ``REJECT`` /
-# ``PASSTHROUGH``) are imported at the top of this module from drf-services.
-# ``dispatch_spec`` owns them as neutral-core policies; MCP service- and
-# selector-tool dispatch routes through it and passes the binding's choice.
-# Service tools default to ``BUNDLE`` (one validated ``data`` payload) and
-# selector tools to ``SPREAD_AUTHOR_WINS`` (spread, ``spec.kwargs`` wins).
+# ``ArgumentBinding`` and ``UnknownArguments`` are imported from drf-services at
+# the top of this module. Service tools default to ``BUNDLE`` (one validated
+# ``data`` payload) and selector tools to ``SPREAD_AUTHOR_WINS``.
 
 
 # ---------- Tool kind discriminator ----------
@@ -143,15 +119,11 @@ class ToolKind(Enum):
     """Discriminator for :class:`ToolDefinition` and the
     :func:`register_tools` dispatch table.
 
-    Internal-only — never appears on the wire. Members map directly to
-    the two registration entry points on :class:`MCPServer`:
-
-    - ``SERVICE`` → :meth:`MCPServer.register_service_tool`
-    - ``SELECTOR`` → :meth:`MCPServer.register_selector_tool`
-
-    Use :meth:`ToolDefinition.service` / :meth:`ToolDefinition.selector`
-    instead of constructing :class:`ToolDefinition` with this kwarg
-    directly — the classmethods are the typed entry points.
+    Internal-only — never appears on the wire. ``SERVICE`` maps to
+    :meth:`MCPServer.register_service_tool`, ``SELECTOR`` to
+    :meth:`MCPServer.register_selector_tool`. Prefer
+    :meth:`ToolDefinition.service` / :meth:`ToolDefinition.selector` over
+    passing this kwarg by hand — those are the typed entry points.
     """
 
     SERVICE = "service"
@@ -161,18 +133,13 @@ class ToolKind(Enum):
 # ---------- Reserved kwarg-pool keys (shared across handlers) ----------
 
 RESERVED_POST_FETCH_KEYS: frozenset[str] = frozenset({"ordering", "page", "limit"})
-"""Keys consumed by the selector-tool post-fetch pipeline.
+"""Keys the selector-tool post-fetch pipeline consumes.
 
-Ordering and pagination read these out of the MCP arguments dict directly;
-they must not also leak into the kwarg pool of the dispatched selector, or
-the selector would receive surprise kwargs it never declared.
-
-⚠ Scoped to the *selector's* pool. The ``FilterSet`` is handed the arguments
-unstripped, because it reads only the fields it declares — and because a
-spec whose ``filter_set`` carries an ``OrderingFilter`` advertises
-``ordering`` through the reflected schema and must therefore receive it.
-Stripping both pools at once is what made that advertised argument silently
-disappear.
+Stripped from the dispatched selector's kwarg pool, which would otherwise
+receive kwargs it never declared. Scoped to that pool only: the ``FilterSet``
+is handed the arguments unstripped, because a spec whose ``filter_set`` carries
+an ``OrderingFilter`` advertises ``ordering`` through the reflected schema and
+must therefore receive it.
 """
 
 
@@ -180,36 +147,26 @@ MODERN_PROTOCOL_VERSIONS: frozenset[str] = frozenset({"2026-07-28"})
 """Protocol revisions that carry version, identity and capabilities per request.
 
 The spec's own split: **modern** revisions (``2026-07-28`` and later) declare
-everything on each request and hold no session; **legacy** ones (``2025-11-25``
-and earlier) negotiate once through ``initialize``. Everything this package
-branches on era for reads from this set, so adding a revision is one edit.
-
-A server may serve both concurrently on one endpoint, which is what this
-package does — legacy clients have no fall-forward mechanism, so dropping them
-would strand every client that has not migrated with nothing but an error
-string to go on.
+everything on each request and hold no session; **legacy** ones
+(``2025-11-25`` and earlier) negotiate once through ``initialize``. Every
+era branch in this package reads from this set, so adding a revision is one
+edit. Both eras are served concurrently on one endpoint, because legacy clients
+have no fall-forward mechanism.
 """
 
 MCP_ERROR_HEADER: str = "MCP-Error"
 """Response header naming the *class* of a transport-level rejection.
 
-Ours, not the spec's — the spec fixes the status code and says nothing about
-diagnosis. It exists because the statuses this package must return are, by
-themselves, undiagnosable in production:
+Ours, not the spec's, which fixes the status code and says nothing about
+diagnosis: a ``404`` from an unknown session and a ``404`` from a load balancer
+with no matching rule are otherwise indistinguishable, and the JSON-RPC body
+that would tell them apart is lost to clients that log
+``${status} ${statusText}`` over HTTP/2, which has no reason phrase.
 
-- A ``404`` from an unknown session and a ``404`` from a load balancer with no
-  matching rule are indistinguishable to a client.
-- The JSON-RPC body that *would* distinguish them frequently never reaches a
-  human: clients commonly log ``${status} ${statusText}``, and **HTTP/2 has no
-  reason phrase**, so the useful half is empty on any HTTP/2 connection — which
-  is every deployment behind a modern load balancer or CDN.
-
-A header survives both. It carries strictly less than the body it summarises, so
-it leaks nothing new: in particular the session slugs deliberately do **not**
-separate "unknown id" from "id owned by another principal", preserving the
-no-ownership-oracle property that merges those two into one ``404``.
-
-Costs one header on failure responses only. Never set on success.
+It carries strictly less than the body it summarises, so it leaks nothing new:
+the session slugs deliberately do not separate "unknown id" from "id owned by
+another principal", preserving the no-ownership-oracle property. Set on failure
+responses only.
 """
 
 SESSION_MISSING_HINT: str = "session-missing"
@@ -224,63 +181,49 @@ re-``initialize``."""
 PROTOCOL_VERSION_META_KEY: str = "io.modelcontextprotocol/protocolVersion"
 """Per-request ``_meta`` key naming the revision a modern request speaks.
 
-⭐ **This is the era discriminator.** Its presence is what tells a dual-era
-server it is talking to a modern client — not the ``MCP-Protocol-Version``
-header, which legacy clients have sent since ``2025-06-18``, and not the
-method, since most methods exist in both eras.
+**This is the era discriminator** — not the ``MCP-Protocol-Version`` header,
+which legacy clients have sent since ``2025-06-18``, and not the method, since
+most methods exist in both eras.
 """
 
 CLIENT_INFO_META_KEY: str = "io.modelcontextprotocol/clientInfo"
 """Per-request ``_meta`` key carrying the client's self-reported identity.
-
-Optional, and — like the server's own — unverified. Parsed for introspection
-and logging; nothing branches on it.
-"""
+Optional and unverified; parsed for introspection and logging, and nothing
+branches on it."""
 
 CLIENT_CAPABILITIES_META_KEY: str = "io.modelcontextprotocol/clientCapabilities"
 """Per-request ``_meta`` key declaring what the client supports.
 
-Required on a modern request, and empty (``{}``) is a valid declaration. What
-replaces the ``initialize`` handshake's one-time capability exchange: a server
-**MUST NOT** rely on a capability the client did not declare *on that request*.
+Required on a modern request, and empty (``{}``) is a valid declaration. It
+replaces the ``initialize`` handshake's one-time exchange: a server **MUST
+NOT** rely on a capability the client did not declare *on that request*.
 """
 
 PROGRESS_TOKEN_META_KEY: str = "progressToken"
 """Per-request ``_meta`` key by which a client asks to be told about progress.
 
-⭐ **Unprefixed, and identical in both eras** — ``2025-11-25`` puts it in the
-request's ``_meta`` and ``2026-07-28`` keeps it there alongside the new
-protocol fields. So progress is one of the few things this package does not
-have to branch on era for: a legacy client gets it on the same terms.
-
-Its presence is also the *only* signal that streaming is wanted. A server MAY
-decline to send notifications at all, so a request without the token is
-answered with a single JSON object rather than a stream that would carry one
-event.
+Unprefixed and identical in both eras, so progress needs no era branch. Its
+presence is the *only* signal that streaming is wanted: a server MAY decline to
+notify at all, so a request without the token is answered with a single JSON
+object rather than a one-event stream.
 """
 
 SESSIONLESS_METHODS: frozenset[str] = frozenset({"initialize", "server/discover"})
 """Methods answerable before a session exists.
 
 The legacy transport requires an ``Mcp-Session-Id`` on everything except the
-request that mints one. ``server/discover`` has to join it: its whole purpose
-is to be the first thing a client sends — a modern client has no handshake to
-run and nothing to present — so gating it behind a session would leave it
-reachable only by clients that did not need it.
-
-They are exempt from the ``MCP-Protocol-Version`` header requirement for the
-same reason, and only ``initialize`` mints a session. Discovery creates no
-state; that is the point of it.
+request that mints one. ``server/discover`` joins it because its purpose is to
+be the first thing a client sends. Both are exempt from the
+``MCP-Protocol-Version`` header requirement for the same reason, and only
+``initialize`` mints a session.
 """
 
 SERVER_INFO_META_KEY: str = "io.modelcontextprotocol/serverInfo"
 """Reserved ``_meta`` key carrying the server's self-reported identity.
 
 Where ``server/discover`` puts what ``initialize`` returned as a top-level
-``serverInfo``. The move is deliberate on the spec's part: the value is
-unverified, and clients are told not to change behaviour or make security
-decisions from it, so it sits in the metadata namespace rather than looking
-like negotiated protocol state.
+``serverInfo``. Unverified, and clients are told not to make security decisions
+from it — hence the metadata namespace rather than negotiated protocol state.
 """
 
 
@@ -290,17 +233,16 @@ like negotiated protocol state.
 class ResultType(str, Enum):
     """The discriminator every result carries from ``2026-07-28`` onward.
 
-    A **MUST** for servers implementing that revision, and harmless before it:
+    A **MUST** for servers implementing that revision and harmless before it —
     a legacy result object is an open shape, and a client on an older revision
-    is told to read an absent ``resultType`` as ``complete``. So this is
-    emitted unconditionally rather than era-branched — one less thing for the
-    transport fork to have to get right.
+    reads an absent ``resultType`` as ``complete`` — so it is emitted
+    unconditionally rather than era-branched.
 
-    ``INPUT_REQUIRED`` is the other value the spec defines: a result that asks
-    the client for input and expects the original request to be retried with
-    the answers. Nothing here produces one yet — it is the shape elicitation
-    will take when it lands — but the vocabulary is the spec's, not ours, so
-    both members live here.
+    Attributes:
+        COMPLETE: The result is the answer.
+        INPUT_REQUIRED: The result asks the client for input and expects the
+            original request to be retried with the answers. Nothing here
+            produces one yet; the vocabulary is the spec's.
     """
 
     COMPLETE = "complete"
@@ -309,25 +251,23 @@ class ResultType(str, Enum):
     """A durable handle instead of the result — see :mod:`rest_framework_mcp.tasks`.
 
     The spec types ``ResultType`` as ``"complete" | "input_required" | string``,
-    the open tail being how extensions add their own; ``"task"`` is the tasks
-    extension's. Servers **MUST NOT** set it on any result other than a
-    ``CreateTaskResult``, which is why nothing stamps it centrally the way
-    ``COMPLETE`` is stamped — the task handler sets it explicitly and no other
-    handler can reach it.
+    the open tail being how extensions add their own. Servers **MUST NOT** set
+    this on any result other than a ``CreateTaskResult``, which is why nothing
+    stamps it centrally the way ``COMPLETE`` is stamped — the task handler sets
+    it explicitly and no other handler can reach it.
     """
 
 
 class CacheScope(str, Enum):
     """How widely a cacheable result may be reused, per ``Cache-Control``.
 
-    ⚠ **Derived, never configured.** ``PUBLIC`` licenses any intermediary — a
-    shared gateway, a caching proxy — to serve this response *across
-    authorization contexts*. A result that varies by caller and is labelled
-    ``PUBLIC`` is a cross-tenant disclosure with a cache in front of it, which
-    is precisely the kind of mistake a settings knob invites. The handlers work
-    it out from what actually shaped the response instead: a permission-filtered
-    listing is ``PRIVATE``, an unfiltered one is ``PUBLIC``, and a resource body
-    a selector produced for this caller is always ``PRIVATE``.
+    **Derived, never configured.** ``PUBLIC`` licenses any intermediary to
+    serve the response *across authorization contexts*, so a result that varies
+    by caller and is labelled ``PUBLIC`` is a cross-tenant disclosure with a
+    cache in front of it — precisely the mistake a settings knob would invite.
+    The handlers work it out from what shaped the response: a
+    permission-filtered listing is ``PRIVATE``, an unfiltered one ``PUBLIC``,
+    and a resource body always ``PRIVATE``.
     """
 
     PUBLIC = "public"
@@ -337,11 +277,8 @@ class CacheScope(str, Enum):
 # ---------- Argument completion ----------
 
 MAX_COMPLETION_VALUES: int = 100
-"""The spec's hard cap on ``values`` in one ``completion/complete`` result.
-
-A completer is free to return more; the handler slices to this and sets
-``hasMore``, so the cap is never something a consumer has to remember.
-"""
+"""The spec's hard cap on ``values`` in one ``completion/complete`` result. A
+completer may return more; the handler slices to this and sets ``hasMore``."""
 
 
 # ---------- Display metadata ----------
@@ -352,8 +289,8 @@ class IconTheme(str, Enum):
     was designed for.
 
     Omitting the theme (``None``) tells the client the icon works on either,
-    which is the right answer for most artwork. Declare it only when you are
-    shipping a light/dark pair.
+    which is right for most artwork. Declare it only when shipping a
+    light/dark pair.
     """
 
     LIGHT = "light"
@@ -364,23 +301,21 @@ class IconTheme(str, Enum):
 
 
 class ResourceEncoding(str, Enum):
-    """How a resource's selector return value becomes the ``text`` body.
+    """How a resource's selector return value becomes the ``resources/read`` body.
 
-    ``resources/read`` advertises ``mimeType`` from the binding but the body
-    encoding is a separate decision, so it is declared separately rather than
-    sniffed from the mime type — sniffing would silently change behaviour for
-    anyone already advertising a non-JSON type.
+    Declared separately from the binding's ``mimeType`` rather than sniffed
+    from it — sniffing would silently change behaviour for anyone already
+    advertising a non-JSON type.
 
-    - ``JSON``: pretty-print the value as JSON. The default, and what every
-      selector-backed data resource wants.
-    - ``TEXT``: the value is already the body. Used for HTML, Markdown, CSV,
-      plain text — anything where JSON-encoding would wrap the payload in a
-      quoted string literal instead of returning it. The selector must return
-      a ``str``.
-    - ``BLOB``: the value is binary. The selector returns ``bytes`` and the
-      body is base64-encoded into the spec's ``blob`` field instead of
-      ``text`` — the two are mutually exclusive on a ``contents`` entry.
-      This is what a PDF, an image, or a generated spreadsheet needs.
+    Attributes:
+        JSON: Pretty-print the value as JSON. The default, and what every
+            selector-backed data resource wants.
+        TEXT: The value is already the body; the selector must return a
+            ``str``. For HTML, Markdown, CSV or plain text, where
+            JSON-encoding would wrap the payload in a quoted string literal.
+        BLOB: The value is binary. The selector returns ``bytes`` and the body
+            is base64-encoded into the spec's ``blob`` field instead of
+            ``text`` — the two are mutually exclusive on a ``contents`` entry.
     """
 
     JSON = "json"
@@ -396,27 +331,26 @@ class ToolContentKind(str, Enum):
 
     Declared per binding rather than sniffed from the payload, for the same
     reason as :class:`ResourceEncoding`: a base64 ``str`` and a text body are
-    indistinguishable by inspection, so guessing would silently change
-    behaviour for a tool that already returns one.
+    indistinguishable by inspection.
 
-    - ``TEXT``: the payload is rendered per the binding's ``OutputFormat`` into
-      one text block, and mirrored in ``structuredContent``. The default, and
-      what every JSON-shaped tool wants.
-    - ``IMAGE`` / ``AUDIO``: the payload is the media itself — ``bytes``, or a
-      ``str`` already in base64. ⚠ These carry **no** ``structuredContent``:
-      binary is not JSON, and advertising an ``outputSchema`` over it would
-      describe a shape that never arrives.
-    - ``RESOURCE_LINK``: the payload names resources rather than containing
-      them — one mapping with ``uri`` / ``name`` (plus optional ``description``
-      / ``mimeType``), or a list of them. ``structuredContent`` is kept, since
-      the links *are* JSON, so the model sees both projections.
+    Embedded (``resource``) blocks have no kind here on purpose — inlining
+    contents means producing them, which ``resources/read`` already does, so a
+    tool returns a ``RESOURCE_LINK`` and lets the client decide whether to
+    spend context on the body. :meth:`ToolContentBlock.embedded_resource`
+    remains available for a caller building blocks by hand.
 
-    Embedded (``resource``) blocks have no kind here on purpose. Inlining
-    contents means producing them, which is what ``resources/read`` already
-    does — a tool that wants to hand over a resource returns a
-    ``RESOURCE_LINK`` and lets the client decide whether to spend context on
-    the body. :meth:`ToolContentBlock.embedded_resource` remains available for
-    a caller building blocks by hand.
+    Attributes:
+        TEXT: One text block rendered per the binding's ``OutputFormat``,
+            mirrored in ``structuredContent``. The default.
+        IMAGE: The payload is the media itself — ``bytes``, or a ``str``
+            already in base64. Carries **no** ``structuredContent``: binary is
+            not JSON, and an ``outputSchema`` over it would describe a shape
+            that never arrives.
+        AUDIO: As ``IMAGE``.
+        RESOURCE_LINK: The payload names resources rather than containing them
+            — one mapping with ``uri`` / ``name`` (plus optional
+            ``description`` / ``mimeType``), or a list of them.
+            ``structuredContent`` is kept, since the links *are* JSON.
     """
 
     TEXT = "text"
@@ -428,26 +362,21 @@ class ToolContentKind(str, Enum):
 # ---------- MCP Apps (interactive UI) ----------
 
 UI_RESOURCE_MIME_TYPE: str = "text/html;profile=mcp-app"
-"""Mime type identifying a resource as an interactive HTML view.
-
-Defined by the MCP Apps extension over the base protocol. A host that does
-not implement the extension sees an ordinary HTML resource.
-"""
+"""Mime type identifying a resource as an interactive HTML view. Defined by the
+MCP Apps extension; a host that does not implement it sees an ordinary HTML
+resource."""
 
 UI_META_KEY: str = "ui"
-"""The ``_meta`` key MCP Apps owns on a resource or tool descriptor.
-
-``_meta`` is a namespace shared by every extension, each owning one
-top-level key; this is Apps'.
-"""
+"""The ``_meta`` key MCP Apps owns on a resource or tool descriptor. ``_meta``
+is a namespace shared by every extension, each owning one top-level key."""
 
 
 class UIPermission(str, Enum):
     """A browser capability an interactive view asks the host to grant.
 
-    The host decides — this only declares what the view would use, in the
-    resource's ``_meta.ui.permissions``. Anything not declared is denied by
-    the iframe sandbox the host builds.
+    The host decides; this only declares what the view would use, in the
+    resource's ``_meta.ui.permissions``. Anything not declared is denied by the
+    iframe sandbox the host builds.
     """
 
     CAMERA = "camera"
@@ -465,9 +394,10 @@ class UIVisibility(str, Enum):
     ``tools/list`` on it, because a client that does not implement the
     extension would not honour the rule anyway.
 
-    - ``MODEL``: the agent may call it — ordinary tool behaviour.
-    - ``APP``: the view may call it. An ``APP``-only tool is a fine-grained
-      operation that exists to serve the view rather than the conversation.
+    Attributes:
+        MODEL: The agent may call it — ordinary tool behaviour.
+        APP: The view may call it. An ``APP``-only tool is a fine-grained
+            operation that serves the view rather than the conversation.
     """
 
     MODEL = "model"
@@ -480,20 +410,19 @@ class UIVisibility(str, Enum):
 SUBSCRIPTION_ID_META_KEY: str = "io.modelcontextprotocol/subscriptionId"
 """``_meta`` key correlating a notification with the subscription that wanted it.
 
-The value is the JSON-RPC id of the ``subscriptions/listen`` request that opened
-the stream. Carried on **every** notification the subscription delivers and on
-the result that closes it, which is what lets a client run several subscriptions
-over one connection and still tell them apart.
+The value is the JSON-RPC id of the ``subscriptions/listen`` request that
+opened the stream, carried on **every** notification it delivers and on the
+result that closes it, so a client can run several subscriptions over one
+connection and still tell them apart.
 """
 
 
 class NotificationKind(str, Enum):
     """The notification types a client can opt in to, other than by URI or id.
 
-    ⚠ **Opt-in is not a courtesy — it is a MUST.** The spec: *"the server MUST
-    NOT send notification types the client has not explicitly requested."* So
-    this enum is a closed set of things a subscriber can ask for, and anything
-    not in the request's filter is not sent, however interesting it might be.
+    **Opt-in is a MUST**, not a courtesy: *"the server MUST NOT send
+    notification types the client has not explicitly requested."* So this is a
+    closed set, and anything outside the request's filter is not sent.
 
     The values are the notification methods with the ``notifications/`` prefix
     stripped, and the filter field names are their camelCase forms — kept
@@ -522,11 +451,9 @@ _NOTIFICATION_FILTER_FIELDS: dict[NotificationKind, str] = {
 }
 
 SUBSCRIPTIONS_LISTEN_METHOD: str = "subscriptions/listen"
-"""The method that opens a notification stream.
-
-Named here rather than inline at the transport because it is the one method the
-viewset branches on before dispatch, and its siblings already live in this
-module."""
+"""The method that opens a notification stream. Named here rather than inline
+at the transport because it is the one method the viewset branches on before
+dispatch."""
 
 TASK_STATUS_METHOD: str = "notifications/tasks"
 """Pushed when a task changes status, to whoever subscribed to that task.
@@ -539,11 +466,10 @@ RESOURCE_UPDATED_METHOD: str = "notifications/resources/updated"
 """Sent when a subscribed resource changed and may need re-reading."""
 
 SUBSCRIPTIONS_ACKNOWLEDGED_METHOD: str = "notifications/subscriptions/acknowledged"
-"""⚠ **MUST be the first message a subscription carries.** It reports the subset
-of the requested filter the server actually agreed to honour, so a client learns
+"""**MUST be the first message a subscription carries.** It reports the subset
+of the requested filter the server agreed to honour, so a client learns
 immediately that (say) ``promptsListChanged`` will never arrive because this
-server has no prompts — rather than waiting indefinitely for a notification that
-was never going to come."""
+server has no prompts, rather than waiting indefinitely for it."""
 
 
 # ---------- Tasks extension ----------
@@ -552,26 +478,20 @@ was never going to come."""
 TASKS_EXTENSION_ID: str = "io.modelcontextprotocol/tasks"
 """Identifier for the tasks extension, in both directions.
 
-Unlike :data:`UI_EXTENSION_ID`, this one is symmetric: the client declares it
-under ``clientCapabilities.extensions`` on **every** request, and the server
-declares it under ``capabilities.extensions`` in ``server/discover``. The value
-is an empty settings object in both directions — support is the whole message.
-
-⚠ The client's declaration is **per request**, and the spec means it: a server
-**MUST NOT** answer with a task "regardless of prior declarations". There is
-nowhere to remember one anyway, which is the point of the stateless revision.
+Unlike :data:`UI_EXTENSION_ID` this one is symmetric: the client declares it
+under ``clientCapabilities.extensions`` on **every** request and the server
+under ``capabilities.extensions`` in ``server/discover``, with an empty settings
+object each way. The client's declaration is per request, and a server **MUST
+NOT** answer with a task "regardless of prior declarations".
 """
 
 TASK_METHODS: frozenset[str] = frozenset({"tasks/get", "tasks/update", "tasks/cancel"})
 """The extension's three methods.
 
-⛔ There is no ``tasks/list``. That is a deliberate omission in the spec, not
-one of ours: without sessions there is no principal-scoped view to list *over*,
-so the only defence against one caller reading another's work is that task ids
-are unguessable. Adding a listing would quietly remove it.
-
-⛔ There is no ``tasks/result`` either — an earlier draft had one that blocked
-until terminal. Retrieval is polling ``tasks/get``, paced by ``pollIntervalMs``.
+There is no ``tasks/list``, and the omission is the spec's: without sessions
+there is no principal-scoped view to list *over*, so the only defence against
+one caller reading another's work is that task ids are unguessable. Retrieval
+is polling ``tasks/get``, paced by ``pollIntervalMs``.
 """
 
 
@@ -581,14 +501,13 @@ class TaskStatus(str, Enum):
     ``WORKING`` and ``INPUT_REQUIRED`` are live; the other three are terminal
     and a task never leaves them.
 
-    ⚠ **``FAILED`` is narrower than it looks.** The spec: the status **MUST
-    NOT** be used to represent non-JSON-RPC errors. A tool that raises
-    ``ServiceError`` has *completed* — it produced a well-formed
-    ``CallToolResult`` carrying ``isError: true``, which is what this package
-    already builds in ``build_error_tool_result``. ``FAILED`` is for the task
-    machinery itself failing: the worker died, the payload could not be
-    revived. Getting this backwards would hide every tool error behind a status
-    the client reads as "the server broke".
+    **``FAILED`` is narrower than it looks.** The spec forbids using the status
+    to represent non-JSON-RPC errors. A tool that raises ``ServiceError`` has
+    *completed* — it produced a well-formed ``CallToolResult`` carrying
+    ``isError: true``. ``FAILED`` is for the task machinery itself failing: the
+    worker died, the payload could not be revived. Getting this backwards would
+    hide every tool error behind a status the client reads as "the server
+    broke".
     """
 
     WORKING = "working"
@@ -610,26 +529,21 @@ _TERMINAL_TASK_STATUSES: frozenset[TaskStatus] = frozenset(
 class TaskPolicy(str, Enum):
     """Whether a binding may — or must — answer with a task handle.
 
-    ⚠ **This is our policy surface, not a wire field.** An earlier draft of the
-    extension negotiated per tool via ``execution.taskSupport`` on
-    ``tools/list``; the shipped extension removed it and says instead that *"the
-    server is the sole decider; clients do not signal task preference on the
-    request itself."* So the decision has to be made somewhere on this side, and
-    the binding is where every other per-tool knob already lives.
+    **A policy surface, not a wire field.** The shipped extension makes *"the
+    server the sole decider; clients do not signal task preference on the
+    request itself"*, so the decision has to be made on this side, and the
+    binding is where every other per-tool knob lives.
 
-    The three values are not invented — they are the two branches the spec
-    actually distinguishes, plus the default:
-
-    - ``FORBIDDEN`` (default): never a task. Every tool registered before this
-      existed keeps behaving exactly as it did.
-    - ``OPTIONAL``: a task for a client that declared the extension, an ordinary
-      inline call for one that did not. The safe choice for a slow tool that can
-      still run inline if it has to.
-    - ``REQUIRED``: a task, or nothing. A client that did not declare the
-      extension gets ``-32021`` — this is the case the spec covers with *"if a
-      server is unable to service a request ... without returning
-      CreateTaskResult"*. For work that genuinely cannot finish inside a
-      request, where running it anyway would just hit the deadline.
+    Attributes:
+        FORBIDDEN: Never a task. The default, so every tool registered before
+            this existed behaves exactly as it did.
+        OPTIONAL: A task for a client that declared the extension, an ordinary
+            inline call for one that did not. The safe choice for a slow tool
+            that can still run inline.
+        REQUIRED: A task, or nothing — a client that did not declare the
+            extension gets ``-32021``. For work that genuinely cannot finish
+            inside a request, where running it anyway would just hit the
+            deadline.
     """
 
     FORBIDDEN = "forbidden"
@@ -641,32 +555,28 @@ class TaskPolicy(str, Enum):
 
 
 ELICITATION_CREATE_METHOD: str = "elicitation/create"
-"""The one server→client request this package ever issues.
+"""The one server-to-client request this package ever issues.
 
-⚠ **It is not sent as a request.** From ``2026-07-28`` the server-initiated
+**It is not sent as a request.** From ``2026-07-28`` the server-initiated
 direction is gone: an ``ElicitRequest`` travels as a *value* inside an
 ``InputRequiredResult``'s ``inputRequests`` map, and the client answers by
 retrying the original call. The method name survives only as the discriminator
-telling the client which kind of input is being asked for.
-
-The two siblings the spec allows there — ``sampling/createMessage`` and
-``roots/list`` — are both **Deprecated** as of this revision and are not built.
+naming which kind of input is being asked for. The siblings the spec allows
+there, ``sampling/createMessage`` and ``roots/list``, are Deprecated as of this
+revision and are not built.
 """
 
 ELICITATION_KEY: str = "additionalInput"
 """The key this package files its one question under in ``inputRequests``.
-
 Keys are server-assigned and need only be unique within a single result; one
-``AdditionalInputRequired`` asks one question, so a fixed name is enough and is
-easier to read in a log than a generated id."""
+``AdditionalInputRequired`` asks one question, so a fixed name is enough."""
 
 REQUEST_STATE_SALT: str = "rest_framework_mcp.elicitation.request_state"
 """Namespace for the HMAC over ``requestState``.
 
 A salt rather than a bare ``SECRET_KEY`` signature so a token minted here can
 never verify against another of the project's signed values (password reset
-links, session cookies, ``django.core.signing`` callers elsewhere) and vice
-versa."""
+links, session cookies, other ``django.core.signing`` callers) or vice versa."""
 
 
 class ElicitAction(str, Enum):
@@ -696,10 +606,9 @@ separately rather than being a fourth member here."""
 UI_EXTENSION_ID: str = "io.modelcontextprotocol/ui"
 """Identifier a client uses to advertise MCP Apps support.
 
-Advertisement is **client → server only** — it arrives under
-``capabilities.extensions`` in the ``initialize`` request, and the spec
-defines no matching server-side capability. Parsed for introspection; nothing
-gates on it (see :class:`UIVisibility`).
+Client to server only: it arrives under ``capabilities.extensions`` in the
+``initialize`` request and the spec defines no matching server-side capability.
+Parsed for introspection; nothing gates on it (see :class:`UIVisibility`).
 """
 
 

@@ -60,25 +60,19 @@ def selector_spec_to_tool(
 ) -> SelectorToolBinding:
     """Lift a ``SelectorSpec`` into a :class:`SelectorToolBinding`.
 
-    Sister of :func:`service_spec_to_tool` for the read-shaped pipeline.
-    Validation of the spec (must have a concrete ``selector`` callable)
-    happens here so registration fails loudly rather than at first call.
+    Sister of :func:`service_spec_to_tool` for the read-shaped pipeline. The
+    spec must carry a concrete ``selector`` callable, checked here so
+    registration fails loudly rather than at first call.
 
-    ``input_serializer`` is a tool-layer parameter — the spec doesn't
-    carry it because the sister repo's read-views derive their args from
-    the URL/query, not a request body. MCP tools always pass arguments
-    as a JSON dict, so we surface the serializer on the binding instead.
+    ``input_serializer`` is a tool-layer parameter: the spec does not carry one
+    because the sister repo's read-views derive their arguments from the URL and
+    query, while MCP tools always pass a JSON dict.
 
-    The selector's shape (``LIST`` vs ``RETRIEVE``) is read from
-    ``spec.kind`` — a required field on ``SelectorSpec`` since
-    ``djangorestframework-services`` 0.13. No separate ``kind`` kwarg is
-    accepted here; the spec is the single source of truth.
-
-    Filtering follows the same rule: ``spec.filter_set``
-    (``djangorestframework-services`` 0.18+) is read off the spec, not
-    passed here, so the filterable shape is declared once and shared by
-    the HTTP and MCP transports. ``ordering_fields`` / ``paginate`` stay
-    binding-level — they are MCP pipeline mechanics with no spec analogue.
+    The selector's shape (``LIST`` vs ``RETRIEVE``) and its ``filter_set`` are
+    read off the spec, which is the single source of truth — no ``kind`` kwarg is
+    accepted here, and the filterable shape is declared once and shared by the
+    HTTP and MCP transports. ``ordering_fields`` / ``paginate`` stay
+    binding-level: they are MCP pipeline mechanics with no spec analogue.
 
     ``meta`` is the base-protocol ``_meta`` bundle the tool's ``tools/list``
     entry carries — see :func:`service_spec_to_tool`.

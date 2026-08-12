@@ -16,9 +16,8 @@ from rest_framework_mcp.registry.types.ui_tool_meta import UIToolMeta
 class UnguardedToolWarning(UserWarning):
     """A tool was registered with no MCP permissions at all.
 
-    Dedicated category so consumers can silence or escalate it precisely
-    via ``warnings.filterwarnings`` without touching other ``UserWarning``
-    traffic.
+    Its own category so consumers can filter it precisely via
+    ``warnings.filterwarnings``.
     """
 
 
@@ -28,23 +27,15 @@ def check_tool_permissions_declared(
     """Warn (or raise) when a tool binding carries no permissions.
 
     ``permissions`` is the binding's *effective* tuple — author-declared
-    ``spec.permission_classes`` (wrapped in ``DRFPermissionAdapter``) plus
-    any per-binding ``MCPPermission`` instances — so an empty tuple means
-    nothing gates the call beyond transport authentication.
+    ``spec.permission_classes`` (wrapped in ``DRFPermissionAdapter``) plus any
+    per-binding ``MCPPermission`` — so an empty tuple means nothing gates the
+    call beyond transport authentication. The trap: DRF viewset-level and
+    ``REST_FRAMEWORK`` default permission classes do **not** apply over MCP,
+    so a spec guarded the usual way, with passing HTTP tests, otherwise ships
+    as an unguarded tool with no signal.
 
-    The trap this guards: DRF viewset-level and ``REST_FRAMEWORK`` default
-    permission classes do **not** apply over MCP (the package deliberately
-    bypasses DRF's view pipeline). A developer who guards a viewset the
-    usual way, sees HTTP tests pass, and exposes the same spec over MCP
-    would otherwise ship an unguarded tool with no signal.
-
-    Deliberately emits on every unguarded registration (no warn-once
-    module state — see the repo's no-module-level-mutable-state rule);
-    registration happens once per server instance, so the volume is one
-    warning per unguarded tool. ``require`` (the server's
-    ``MCPConfig.require_tool_permissions``) refuses the registration
-    outright instead — so one server in a project can demand guarded tools
-    while another only warns.
+    Emits on every unguarded registration — no warn-once module state, per the
+    repo's no-module-level-mutable-state rule.
     """
     if permissions:
         return
@@ -58,9 +49,8 @@ def check_tool_permissions_declared(
     )
     if require:
         # The remedy on this branch is the opposite of the warning's: the check
-        # is already strict, so what a caller needs is the way *out*. Telling
-        # them to enable the setting that just raised is the kind of message
-        # that reads as a bug in the framework.
+        # is already strict, so name the way *out*, not the setting that just
+        # raised.
         raise ImproperlyConfigured(
             f"{problem} To downgrade this to a warning while you migrate, set "
             "REST_FRAMEWORK_MCP['REQUIRE_TOOL_PERMISSIONS'] = False."
@@ -77,35 +67,19 @@ def check_tool_permissions_declared(
 class UndescribedToolWarning(UserWarning):
     """A tool was registered with no description.
 
-    Dedicated category, matching :class:`UnguardedToolWarning`, so consumers
-    can silence or escalate it precisely via ``warnings.filterwarnings``.
+    Its own category, matching :class:`UnguardedToolWarning`.
     """
 
 
 def check_tool_description_present(name: str, description: str | None, *, require: bool) -> None:
     """Warn (or raise) when a tool binding carries no description.
 
-    The counterpart to :func:`check_tool_permissions_declared`, and added
-    for the asymmetry it closes: two properties are equally required for a
-    tool to be *usable* by a model — something must gate the call, and
-    something must tell the model what the call does — and only the first
-    was checked. A tool registered without a description was served with
-    an empty one in ``tools/list``, indistinguishable from a documented
-    tool anywhere in the package, the transport, or the test surface. The
-    consumer who reported this found theirs by dumping every registered
-    tool and reading the output.
-
-    Deliberately **no docstring fallback.** ``register_specs`` could
-    default to ``inspect.getdoc(spec.service)``, but a docstring is
-    written for the next developer, not for a model choosing between
-    tools — quietly promoting one to a tool description ships prose that
-    was never reviewed for that audience, and silences the warning that
-    would have prompted someone to write the right thing. The decorator
-    registration paths that already fall back to ``fn.__doc__`` keep doing
-    so; this check simply reports whatever survived that.
-
-    Emits on every undescribed registration (no warn-once module state —
-    see the repo's no-module-level-mutable-state rule).
+    Deliberately **no docstring fallback.** A docstring is written for the next
+    developer, not for a model choosing between tools, so promoting one would
+    ship prose never reviewed for that audience and silence the warning that
+    would have prompted someone to write the right thing. The decorator paths
+    that already fall back to ``fn.__doc__`` keep doing so; this reports
+    whatever survived that.
     """
     if description and description.strip():
         return
@@ -124,32 +98,19 @@ def check_tool_description_present(name: str, description: str | None, *, requir
 class UnboundedListWarning(UserWarning):
     """A LIST selector tool was registered without pagination.
 
-    Dedicated category, matching :class:`UnguardedToolWarning`, so consumers
-    can silence or escalate it precisely via ``warnings.filterwarnings``.
+    Its own category, matching :class:`UnguardedToolWarning`.
     """
 
 
 def check_list_pagination_declared(name: str, *, paginate: bool, require: bool) -> None:
     """Warn (or raise) when a LIST selector tool has no pagination.
 
-    The third member of the registration-time family, and the one with a
-    production incident behind it: an unpaginated LIST tool serialises whatever
-    its selector returns, which for a plain ``Model.objects.all()`` is the whole
-    table. The failure is not a crash — it is a response large enough to
-    exhaust the client's context, or slow enough that the client gives up
-    first.
-
     **Why this warns rather than silently clamping.** A ``paginate=True`` tool
-    can have its ``limit`` clamped safely, because ``totalPages`` / ``hasNext``
-    tell the model rows were left behind. An unpaginated result carries no such
-    metadata, so a clamped one would look complete — and a model reasoning from
-    a silently truncated list is worse off than one that got an error. There is
-    nowhere honest to put the truth except the registration, hence a warning
-    here and ``MAX_RESULT_BYTES`` as the backstop at dispatch.
-
-    Emits on every unpaginated LIST registration (no warn-once module state —
-    see the repo's no-module-level-mutable-state rule). ``RETRIEVE`` selectors
-    are exempt: a single instance is bounded by construction.
+    clamps safely because ``totalPages`` / ``hasNext`` tell the model rows were
+    left behind; an unpaginated result carries no such metadata, so a clamped
+    one would look complete. There is nowhere honest to put the truth except
+    the registration, hence a warning here and ``MAX_RESULT_BYTES`` as the
+    backstop at dispatch.
     """
     if paginate:
         return
@@ -178,25 +139,18 @@ def build_ui_tool_meta(
 ) -> dict[str, Any]:
     """Validate a tool's view link and return its ``_meta`` contribution.
 
-    Returns an empty dict when the tool declares no link, so the caller can
-    hand the result to ``merge_meta`` unconditionally.
+    Empty dict when the tool declares no link, so the caller can hand the
+    result to ``merge_meta`` unconditionally.
 
-    Three ways a link can be wrong, all of which fail the same way at runtime —
-    a view that silently never renders — and all of which are therefore raised
-    here, at registration:
-
-    1. **Both ``ui=`` and a ``"ui"`` key in ``meta=``.** They write the same
-       ``_meta`` key, so one would quietly overwrite the other.
-    2. **``resource_uri`` doesn't name a view on this server.** The host reads
-       the view from the same server it read the tool from, so the URI has to
-       resolve here — a typo would otherwise reach the host as a dangling
-       reference. This means a view must be registered *before* the tool that
-       links to it.
-    3. **The tool doesn't emit ``structuredContent``.** That *is* the render
-       payload a view consumes, so a linked tool with it switched off starves
-       its own view. Checked against the effective value — the per-binding
-       override if given, otherwise the server's configured default — which
-       also catches a project that turned it off globally.
+    Three ways a link can be wrong, each of which would otherwise fail at
+    runtime as a view that silently never renders, so all three raise here:
+    ``ui=`` and a ``"ui"`` key in ``meta=`` together (same ``_meta`` key, so
+    one would quietly win); a ``resource_uri`` naming no view on this server
+    (a host resolves it against the server it read the tool from, so a view
+    must be registered *before* the tool linking to it); and a tool not
+    emitting ``structuredContent``, the payload a view renders from — checked
+    against the effective value, so a project that turned it off globally is
+    caught too.
     """
     if ui is None:
         return {}
@@ -241,26 +195,18 @@ def build_ui_tool_meta(
 def check_permissions_shape(label: str, permissions: Any) -> tuple[Any, ...]:
     """Normalise a registration's ``permissions=`` and refuse a shape that lies.
 
-    ⚠ **Security-relevant, not tidiness.** ``permissions="Scope"`` normalises to
+    **Security-relevant.** ``permissions="Scope"`` normalises to
     ``tuple("Scope")`` — five one-character entries. The tuple is non-empty, so
     :func:`check_tool_permissions_declared` sees a guarded tool and stays quiet;
     at dispatch, :func:`check_permissions` skips every entry that is not an
-    :class:`MCPPermission`, and the call is **allowed**. The end state is a
-    binding that reads as guarded at the registration site, satisfies the
-    unguarded-tool check, and gates nothing.
+    :class:`MCPPermission`, and the call is **allowed**. A bare string is the
+    likely way in, being what the permission classes themselves accept, so it
+    gets its own message.
 
-    A bare string is the likely way in — it is what the two permission classes
-    themselves accept — so it gets its own message. Anything else that cannot
-    answer ``has_permission`` is refused with the offending entry named.
-
-    ⚠ Only ``has_permission`` is required, deliberately. ``MCPPermission``
-    documents ``required_scopes`` as having an implied ``[]`` default, so a
-    custom permission that implements the gate and nothing else is legitimate
-    — an ``isinstance`` check against the runtime-checkable Protocol would
-    reject it, because that checks for *every* member.
-
-    Returns the normalised tuple, so callers use this in place of
-    ``tuple(permissions or ())``.
+    Only ``has_permission`` is required, deliberately: ``required_scopes`` has
+    an implied ``[]`` default, so a permission implementing the gate and
+    nothing else is legitimate, while an ``isinstance`` against the
+    runtime-checkable Protocol would reject it for the missing member.
     """
     if isinstance(permissions, str):
         raise ImproperlyConfigured(
@@ -288,14 +234,9 @@ def check_completions_declared(
 ) -> None:
     """Refuse a completer keyed to an argument that doesn't exist.
 
-    A completer for ``langauge`` is not a completer that never fires with a
-    warning in the logs — it is silence in a dropdown, on a surface nobody has
-    a test for. The argument names are known at registration (a prompt
-    declares them, a URI template contains them), so the typo is catchable
-    exactly once, at startup.
-
-    A binding with **no** completable arguments and no completers is the
-    ordinary case and passes straight through.
+    A misspelled completer never fires, and its failure is silence in a
+    dropdown rather than a log line. The argument names are known at
+    registration, so the typo is catchable at startup.
     """
     known: set[str] = set(completable)
     unknown: list[str] = sorted(set(completions) - known)

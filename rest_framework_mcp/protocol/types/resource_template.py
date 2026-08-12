@@ -10,7 +10,7 @@ from rest_framework_mcp.protocol.types.icon import Icon
 class ResourceTemplate:
     """A parameterised resource address (RFC 6570 URI Template).
 
-    Returned by ``resources/templates/list``. Clients fill in template
+    Returned by ``resources/templates/list``. Clients fill in the template
     variables and call ``resources/read`` with the resulting URI.
     """
 
@@ -20,14 +20,10 @@ class ResourceTemplate:
     mime_type: str | None = None
     title: str | None = None
     annotations: dict[str, Any] | None = None
-    # Base-protocol ``_meta`` bundle. Free-form dict at this wire boundary
-    # because ``_meta`` is MCP's open extension namespace (see
-    # :class:`~rest_framework_mcp.protocol.types.tool.Tool`).
     meta: dict[str, Any] | None = None
 
     icons: tuple[Icon, ...] = ()
-    """Display icons for this entry. Emitted only when non-empty — the
-    spec makes ``icons`` optional and an empty array carries no meaning."""
+    """Display icons for this entry, emitted only when non-empty."""
 
     def to_dict(self) -> dict[str, Any]:
         out: dict[str, Any] = {"uriTemplate": self.uri_template, "name": self.name}

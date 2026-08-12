@@ -12,24 +12,20 @@ from rest_framework_mcp.conf import get_setting
 class SimpleJWTCookieAdapter:
     """Reference :class:`AuthUserAdapter` for SimpleJWT cookie-authenticated apps.
 
-    Reads the access-token cookie (name configured via
-    ``REST_FRAMEWORK_MCP['SIMPLEJWT_ACCESS_COOKIE']``, default
-    ``"access"``), decodes it with
-    :class:`rest_framework_simplejwt.tokens.AccessToken`, looks the user
-    up by primary key, and returns it. Returns ``None`` for any failure
-    mode (no cookie, malformed token, expired token, unknown user) —
-    DOT's view then falls back to its session-based flow.
+    Reads the access-token cookie (``cookie_name=``, defaulting to
+    ``REST_FRAMEWORK_MCP['SIMPLEJWT_ACCESS_COOKIE']``), decodes it with
+    :class:`rest_framework_simplejwt.tokens.AccessToken` and looks the user up
+    by primary key. Every failure mode — no cookie, malformed or expired
+    token, unknown user — returns ``None``, so DOT's view falls back to its
+    session-based flow.
 
-    ``rest_framework_simplejwt`` is imported lazily inside :meth:`hydrate`
-    so this module remains importable without the ``[jwt]`` extra. A
-    consumer who configures this adapter without the extra installed
-    surfaces a clear ``ImportError`` at first request, not at import.
+    ``rest_framework_simplejwt`` is imported lazily inside :meth:`hydrate`, so
+    this module stays importable without the ``[jwt]`` extra and a consumer
+    who configures the adapter without it gets a clear ``ImportError`` at first
+    request rather than at import.
     """
 
     def __init__(self, *, cookie_name: str | None = None) -> None:
-        # Resolved once. ``None`` takes SIMPLEJWT_ACCESS_COOKIE, so a project
-        # that configures the setting and constructs the adapter bare keeps
-        # working.
         self._cookie_name: str = (
             cookie_name if cookie_name is not None else get_setting("SIMPLEJWT_ACCESS_COOKIE")
         )
@@ -52,16 +48,13 @@ class SimpleJWTCookieAdapter:
 
         try:
             # simplejwt's stub declares ``token: Optional[Token]`` but the
-            # runtime accepts a raw string (the documented public surface).
-            # Cast through ``Any`` to bypass the over-narrow stub without
-            # disabling type-checking on the surrounding code.
+            # runtime accepts a raw string, its documented public surface. Cast
+            # through ``Any`` rather than loosening the surrounding code.
             token = AccessToken(cast(Any, token_str))
         except Exception:
-            # ``AccessToken`` raises a hierarchy of ``TokenError`` subclasses
-            # (invalid signature, expired, malformed claims). Treat them all
-            # as "no valid user from this cookie" rather than surfacing the
-            # internal failure mode — the consumer can read simplejwt's logs
-            # if they need the detail.
+            # ``AccessToken`` raises a hierarchy of ``TokenError`` subclasses.
+            # All of them mean "no valid user from this cookie"; the detail is
+            # in simplejwt's own logs.
             return None
 
         user_id = token.get("user_id")

@@ -6,7 +6,7 @@ that a sync path consults**, so the family is asserted as a family. Adding a
 sixth hook and forgetting to guard it should look like a missing row here, not
 like nothing at all.
 
-⚠ Three of these fail *open* without the guard — an ``async def`` returns a
+Three of these fail *open* without the guard — an ``async def`` returns a
 truthy coroutine and the caller is authenticated, granted, or shown every
 binding. That is why refusing is not a downgrade: the behaviour it replaces is
 a silent, total bypass.

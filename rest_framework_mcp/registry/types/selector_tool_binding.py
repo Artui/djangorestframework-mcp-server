@@ -28,11 +28,11 @@ ExtraT = TypeVar("ExtraT", bound=dict[str, Any])
 
 @dataclass(frozen=True)
 class SelectorToolBinding(Generic[ResultT, ExtraT]):
-    """All wiring for a single MCP **read-shaped** tool, derived from a ``SelectorSpec``.
+    """All wiring for a single MCP **read-shaped** tool, from a ``SelectorSpec``.
 
-    Mirrors :class:`ToolBinding` (which wraps a ``ServiceSpec`` for
-    mutations), but the dispatch pipeline is read-shaped. The shape is
-    chosen by :attr:`kind`:
+    The read-shaped mirror of :class:`ToolBinding`. Selectors return raw,
+    unscoped data and the tool layer owns every shape decision, chosen by
+    :attr:`kind`.
 
     ``kind=LIST`` runs the full pipeline:
 
@@ -45,132 +45,111 @@ class SelectorToolBinding(Generic[ResultT, ExtraT]):
                   → output_serializer(many=True)
                   → ToolResult
 
-    ``kind=RETRIEVE`` skips ordering / pagination but still applies
-    queryset shaping + ``spec.filter_set`` before materializing the
-    single instance via ``.first()`` (so a "stats from a filtered set"
-    retrieve works, matching the sister repo's ``dispatch_spec``), then
-    renders ``output_serializer(many=False)``. Combining ``RETRIEVE``
-    with ``ordering_fields`` / ``paginate`` is rejected at construction
-    (those knobs only make sense on a collection).
+    With none of the three set it behaves as a plain RPC read, rendering the
+    selector's return value verbatim.
 
-    Selectors return raw, unscoped data (a queryset for ``LIST``, a
-    single instance for ``RETRIEVE``) — the tool layer owns shape
-    decisions. A ``LIST`` binding with none of ``filter_set`` /
-    ``ordering_fields`` / ``paginate`` set behaves like a plain RPC
-    read that calls the selector and renders its return value verbatim.
+    ``kind=RETRIEVE`` skips ordering and pagination but still applies queryset
+    shaping and ``spec.filter_set`` before materializing the instance via
+    ``.first()`` — so a "stats from a filtered set" retrieve works — then
+    renders ``output_serializer(many=False)``. Pairing it with
+    ``ordering_fields`` / ``paginate`` is rejected at construction: those knobs
+    only mean something on a collection.
 
-    The ``Generic[InputT, ResultT, ExtraT]`` parameters mirror
-    ``SelectorSpec``'s generics and are purely informational for type
-    checkers.
+    ``paginate=True`` generates ``page`` / ``limit`` arguments, slices the
+    queryset and wraps the response with ``items`` / ``page`` / ``totalPages``
+    / ``hasNext``. ``ordering_fields`` is **deprecated**: it exposes each name
+    as ``"<name>"`` and ``"-<name>"`` and hands raw ORM paths to
+    ``.order_by()``, a second vocabulary for the same ``ordering`` argument a
+    ``FilterSet``'s ``OrderingFilter`` already advertises. Declaring both is
+    refused; declaring it alone still works for a spec with no ``filter_set``.
+
+    ``annotations`` and ``meta`` are emitted verbatim on this tool's
+    ``tools/list`` entry, under ``annotations`` and ``_meta`` respectively.
+
+    The generic parameters mirror ``SelectorSpec``'s and are purely
+    informational for type checkers.
     """
 
     name: str
     description: str | None
     spec: SelectorSpec[ResultT, ExtraT]
     display_name: str | None = None
-    """Consumer-only label — **never emitted on the MCP wire** (``tools/list``
-    ignores it). Provided so a downstream library can render a richer label
-    than the protocol ``title``. ``None`` means "unset"."""
+    """Consumer-only label, **never emitted on the MCP wire**, so a downstream
+    library can render a richer label than the protocol ``title``."""
 
     display_description: str | None = None
-    """Consumer-only blurb, the sibling of :attr:`display_name` — also never
-    emitted on the MCP wire. Lets a downstream library show more than the
-    protocol ``description``. ``None`` means "unset"."""
+    """Consumer-only blurb, the sibling of :attr:`display_name` and likewise
+    never emitted on the MCP wire."""
 
     input_serializer: type | None = None
     """Custom non-filter tool arguments, declared MCP-side.
 
-    ``SelectorSpec`` carries no input serializer of its own — a selector only
-    describes how to fetch, and the HTTP transport validates the URL / query
-    separately. MCP has no such split (every tool call is one JSON
-    ``arguments`` dict), so arguments that aren't filter / ordering /
-    pagination knobs are declared here."""
+    ``SelectorSpec`` carries no input serializer of its own: a selector only
+    describes how to fetch, and the HTTP transport validates the URL and query
+    separately. MCP has no such split — every tool call is one ``arguments``
+    dict — so arguments that are not filter / ordering / pagination knobs are
+    declared here."""
     output_format: OutputFormat = OutputFormat.JSON
     permissions: tuple[Any, ...] = ()
     rate_limits: tuple[Any, ...] = ()
     annotations: dict[str, Any] = field(default_factory=dict)
-    # See ``ToolBinding.meta`` — free-form ``_meta`` bundle for this tool's
-    # ``tools/list`` entry.
+    # Free-form for the reason given on ``ToolBinding.meta``.
     meta: dict[str, Any] = field(default_factory=dict)
     title: str | None = None
     icons: tuple[Icon, ...] = ()
-    """Display icons for this entry, emitted in its listing. Purely
-    presentational — a client renders them; nothing in dispatch reads them."""
+    """Display icons, emitted in this tool's listing entry. Purely
+    presentational; nothing in dispatch reads them."""
 
     include_structured_content: bool | None = None
-    """Tri-state override for whether this tool's ``tools/call`` response
-    includes a ``structuredContent`` field. ``None`` (the default) defers to the
-    ``INCLUDE_STRUCTURED_CONTENT`` setting; ``True`` / ``False`` force the
-    behaviour regardless of the global."""
+    """Whether this tool's ``tools/call`` response carries
+    ``structuredContent``. ``None`` defers to the
+    ``INCLUDE_STRUCTURED_CONTENT`` setting."""
 
     include_output_schema: bool | None = None
-    """Tri-state override for whether this tool's ``tools/list`` entry carries
-    an ``outputSchema``. ``None`` (the default) defers to the
-    ``INCLUDE_OUTPUT_SCHEMA`` setting; ``True`` / ``False`` force the behaviour
-    regardless of the global.
+    """Whether this tool's ``tools/list`` entry carries an ``outputSchema``.
+    ``None`` defers to the ``INCLUDE_OUTPUT_SCHEMA`` setting.
 
     The MCP spec forbids advertising ``outputSchema`` while suppressing
-    ``structuredContent``, so ``include_output_schema=True`` together with
-    ``include_structured_content=False`` is rejected at construction time."""
+    ``structuredContent``, so ``True`` together with
+    ``include_structured_content=False`` is rejected at construction."""
 
     max_result_bytes: int | None | UnsetType = UNSET
-    """Per-tool override for the outbound result ceiling. ``UNSET`` defers to
-    the server's ``MAX_RESULT_BYTES``; ``None`` disables it here; an ``int``
-    sets its own."""
+    """Per-tool outbound result ceiling. ``UNSET`` defers to the server's
+    ``MAX_RESULT_BYTES``, ``None`` disables it here, an ``int`` sets its own."""
 
     dispatch_timeout: float | None | UnsetType = UNSET
-    """Per-tool override for the dispatch deadline, in seconds. ``UNSET``
-    defers to the server's ``DISPATCH_TIMEOUT``; ``None`` disables it here.
-    ⚠ Async transport only."""
+    """Per-tool dispatch deadline, in seconds. ``UNSET`` defers to the server's
+    ``DISPATCH_TIMEOUT``, ``None`` disables it here. Async transport only."""
 
     max_page_size: int | None | UnsetType = UNSET
     """Per-tool ceiling on the model-supplied ``limit``. ``UNSET`` defers to the
-    server's ``MAX_PAGE_SIZE``; ``None`` lets this tool serve any ``limit`` the
-    model asks for; an ``int`` sets its own.
+    server's ``MAX_PAGE_SIZE``, ``None`` serves any ``limit`` the model asks
+    for.
 
-    Only meaningful with ``paginate=True`` — an unpaginated selector has no
-    ``limit`` argument to clamp, and clamping its result silently would drop
-    rows with nothing in the payload to say so (see
-    ``UnboundedListWarning``)."""
+    Only meaningful with ``paginate=True``: an unpaginated selector has no
+    ``limit`` to clamp, and clamping its result would drop rows with nothing in
+    the payload to say so (see ``UnboundedListWarning``)."""
     # ----- read-shaped pipeline knobs -----
-    # ``filter_set`` is no longer stored here — it is sourced from
-    # ``spec.filter_set`` via the property below (the spec is the single
-    # source of truth, exactly like ``kind`` / ``selector``).
-    # Field names allowed in the generated ``ordering`` enum. Each name is
-    # exposed as both ``"<name>"`` (asc) and ``"-<name>"`` (desc) — django's
-    # convention. Empty tuple disables ordering.
-    #
-    # DEPRECATED. A ``FilterSet``'s ``OrderingFilter`` is the canonical way to
-    # declare ordering: it is reflected into the inputSchema like any other
-    # filter, applied by the FilterSet itself, and speaks the FilterSet's public
-    # vocabulary. These names are raw ORM paths handed to ``.order_by()``, which
-    # is a *second* vocabulary for the same argument — and the two collide on the
-    # key ``ordering``. Declaring both is refused below; declaring this alone
-    # still works, for a spec that carries no ``filter_set``.
+    # ``filter_set`` is not stored here; it is sourced from ``spec.filter_set``
+    # via the property below, like ``kind`` and ``selector``.
     ordering_fields: tuple[str, ...] = ()
-    # When True, the binding generates ``page`` / ``limit`` arguments,
-    # slices the queryset accordingly, and wraps the response with
-    # pagination metadata (``items`` / ``page`` / ``totalPages`` /
-    # ``hasNext``). When False, the queryset is rendered as-is.
     paginate: bool = False
     argument_binding: ArgumentBinding = ArgumentBinding.SPREAD_AUTHOR_WINS
-    """How MCP ``arguments`` flow into the kwarg pool. Defaults to
-    ``SPREAD_AUTHOR_WINS`` for selector tools: selectors typically declare their
-    query parameters as individual function arguments
-    (``def list_drafts(*, project_id, page=1, limit=10)``), so the MCP layer
-    spreads the validated / raw arguments across the pool."""
+    """How MCP ``arguments`` flow into the kwarg pool. ``SPREAD_AUTHOR_WINS``
+    for selector tools, because a selector typically declares its query
+    parameters as individual function arguments
+    (``def list_drafts(*, project_id, page=1, limit=10)``)."""
 
     unknown_arguments: UnknownArguments = UnknownArguments.REJECT
-    """How unknown ``arguments`` keys are handled relative to the binding's
-    merged ``inputSchema`` (``input_serializer`` fields + ``filter_set``
-    properties + ordering + pagination). ``REJECT`` (default) rejects unknown
-    keys with ``-32602``; ``PASSTHROUGH`` merges them into the validated
-    payload; ``IGNORE`` silently drops them."""
+    """How unknown ``arguments`` keys are handled relative to the merged
+    ``inputSchema`` (``input_serializer`` fields, ``filter_set`` properties,
+    ordering, pagination). ``REJECT`` answers ``-32602``, ``PASSTHROUGH``
+    merges them into the validated payload, ``IGNORE`` drops them."""
 
     always_listed: bool = False
-    """Opt this binding back into listings it would otherwise be filtered out
-    of — same semantics as :attr:`ToolBinding.always_listed`, applied to
-    selector tools when ``FILTER_LISTINGS_BY_PERMISSIONS`` is enabled."""
+    """Keep this binding in ``tools/list`` even when
+    ``FILTER_LISTINGS_BY_PERMISSIONS`` would drop it — same semantics as
+    :attr:`ToolBinding.always_listed`."""
 
     query_params: tuple[QueryParam, ...] = ()
     """Read-shaping params routed to ``request.query_params`` at dispatch.
@@ -178,33 +157,29 @@ class SelectorToolBinding(Generic[ResultT, ExtraT]):
     Popped from the caller's arguments like a URL kwarg, but landing in the
     synthetic request's ``GET`` rather than ``view.kwargs`` — the channel a
     serializer reads when it branches on the query string. A ``filter_set``
-    field is **not** one of these; see ``split_query_params``."""
+    field is **not** one of these."""
 
     url_kwargs: tuple[UrlKwarg, ...] = ()
     """URL-derived values the model supplies as tool args, seeded into the
-    off-HTTP view's ``kwargs`` rather than reaching the selector as ordinary
-    params — from there drf-services spreads them into the selector / target
-    pools. See :class:`UrlKwarg`. Advertised in the ``inputSchema``, exempt from
-    the unknown-argument check, and stripped from the dispatched params."""
+    off-HTTP view's ``kwargs`` instead of reaching the selector as ordinary
+    params. Advertised in the ``inputSchema``, exempt from the unknown-argument
+    check, and stripped from the dispatched params. See :class:`UrlKwarg`."""
 
     content_kind: ToolContentKind = ToolContentKind.TEXT
     """What this tool's payload becomes in the result's ``content`` array.
-    ``TEXT`` (the default) renders JSON per :attr:`output_format`; the other
-    kinds project the payload into an image / audio / resource-link block.
-    See :class:`ToolContentKind`."""
+    ``TEXT`` renders JSON per :attr:`output_format`; the other kinds project it
+    into an image / audio / resource-link block. See :class:`ToolContentKind`."""
 
     content_mime_type: str | None = None
     """The media type for an ``IMAGE`` / ``AUDIO`` :attr:`content_kind`.
-    Required for those and meaningless for the rest — a resource link
-    carries its own ``mimeType`` per entry."""
+    Required for those and meaningless for the rest — a resource link carries
+    its own ``mimeType`` per entry."""
 
     task_policy: TaskPolicy = TaskPolicy.FORBIDDEN
     """Whether calling this tool hands back a task handle instead of a result.
-
-    ``FORBIDDEN`` by default, so nothing changes for a tool registered before
-    tasks existed. See :class:`TaskPolicy` — and note that the choice lives
-    here, on the binding, because the extension makes the *server* the sole
-    decider and gives the client no way to ask."""
+    The choice lives on the binding because the extension makes the *server*
+    the sole decider and gives the client no way to ask. See
+    :class:`TaskPolicy`."""
 
     def __post_init__(self) -> None:
         if self.include_output_schema is True and self.include_structured_content is False:
@@ -215,9 +190,9 @@ class SelectorToolBinding(Generic[ResultT, ExtraT]):
                 "conforming structuredContent. Set one of them differently."
             )
         if self.kind is SelectorKind.RETRIEVE:
-            # ``filter_set`` is *allowed* on RETRIEVE — the dispatcher shapes +
-            # filters the queryset before ``.first()`` (sister-repo parity).
-            # Ordering / pagination still only make sense on a collection.
+            # ``filter_set`` is allowed on RETRIEVE — the dispatcher shapes and
+            # filters the queryset before ``.first()``. Ordering and pagination
+            # still only make sense on a collection.
             list_only: list[str] = []
             if self.ordering_fields:
                 list_only.append("ordering_fields")
@@ -259,13 +234,10 @@ class SelectorToolBinding(Generic[ResultT, ExtraT]):
 
     @property
     def kind(self) -> SelectorKind:
-        """Shape discriminator — derived from the spec's required ``kind`` field.
+        """Shape discriminator, read from the spec's required ``kind`` field.
 
-        Sister-repo 0.13+ made ``kind`` a required field on
-        :class:`SelectorSpec`, so the binding doesn't store an
-        independent copy — it would only be a chance for the two to
-        drift. Exposed as a property so the dispatch layer can keep
-        reading ``binding.kind`` unchanged.
+        Not stored independently on the binding: a second copy would only be a
+        chance for the two to drift.
         """
         return self.spec.kind
 
@@ -277,38 +249,30 @@ class SelectorToolBinding(Generic[ResultT, ExtraT]):
 
     @property
     def filter_set(self) -> Any | None:
-        """Transport-neutral filtering, sourced from the spec.
+        """Transport-neutral filtering, read from ``SelectorSpec.filter_set``.
 
-        Like :attr:`kind` and :attr:`selector`, this delegates to the
-        :class:`SelectorSpec` rather than storing a copy — the spec is
-        the single source of truth (``SelectorSpec.filter_set``,
-        ``djangorestframework-services`` 0.18+). The MCP read pipeline
-        and ``inputSchema`` generation read ``binding.filter_set``
-        unchanged, so a project declares its filterable shape once, on
-        the spec, and both the HTTP and MCP transports honour it.
+        Delegated rather than copied, like :attr:`kind` and :attr:`selector`,
+        so a project declares its filterable shape once on the spec and both
+        the HTTP and MCP transports honour it.
 
-        Typed ``Any`` because ``django-filter`` is an optional dep behind
-        the ``[filter]`` extra — narrowing the type would force a hard
-        import here.
+        Typed ``Any`` because ``django-filter`` is optional behind the
+        ``[filter]`` extra, and narrowing would force a hard import here.
         """
         return self.spec.filter_set
 
     @property
     def filter_advertises_ordering(self) -> bool:
-        """Whether the spec's own reflected shape already offers an ``ordering`` arg.
+        """Whether the spec's reflected shape already offers an ``ordering`` arg.
 
         ``django_filters.OrderingFilter`` subclasses ``ChoiceFilter``, so
-        drf-services' reflection maps it to an enum exactly like any other
-        choice filter — which means a spec carrying one advertises ``ordering``
-        to the model with nothing declared here at all.
+        reflection maps it to an enum like any other choice filter: a spec
+        carrying one advertises ``ordering`` with nothing declared here.
 
-        The question is asked of the **reflected schema** rather than by
-        isinstance-checking ``django_filters`` types, for two reasons:
-        ``django-filter`` is an optional extra, and more importantly the
-        invariant worth encoding is *whatever the inputSchema advertises, the
-        dispatch must deliver*. Reading the same reflection the schema builder
-        reads is what makes the promise and the delivery agree by construction
-        rather than by two matching guesses.
+        Asked of the **reflected schema** rather than by isinstance-checking
+        ``django_filters`` types, because that extra is optional and because
+        the invariant worth encoding is that whatever the ``inputSchema``
+        advertises, the dispatch delivers. Reading the same reflection the
+        schema builder reads makes promise and delivery agree by construction.
         """
         reflected: dict[str, Any] = spec_to_json_schema(self.spec, phase="input") or {}
         return "ordering" in reflected.get("properties", {})

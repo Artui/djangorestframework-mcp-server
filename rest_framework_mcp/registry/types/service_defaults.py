@@ -11,18 +11,14 @@ from rest_framework_mcp.constants import ArgumentBinding, OutputFormat, UnknownA
 class ServiceDefaults:
     """Per-kind defaults for :func:`register_tools` over service definitions.
 
-    Every field is ``Optional`` and ``None`` is the "no override"
-    sentinel — only non-``None`` values are applied as defaults to the
-    matching :meth:`MCPServer.register_service_tool` call. A per-
-    definition value always wins over the default.
+    ``None`` is the "no override" sentinel: only non-``None`` values are
+    applied as defaults to the matching :meth:`MCPServer.register_service_tool`
+    call, and a per-definition value always wins.
 
-    Because ``include_structured_content`` and ``include_output_schema``
-    are tri-state on the registration method (``None`` = inherit global
-    setting, ``True``/``False`` = force), the same ``None``-as-sentinel
-    convention applies here: ``ServiceDefaults(include_structured_content=None)``
-    is identical to "no override" — if you want to force every binding
-    to inherit the global, leave it unset; if you want to force
-    ``True``/``False``, pass that explicitly.
+    That includes the tri-state fields, where ``None`` on the registration
+    method means "inherit the global setting": passing
+    ``include_structured_content=None`` here is "no override", not a request to
+    inherit. Leave it unset for the global, or pass ``True`` / ``False``.
     """
 
     description: str | None = None

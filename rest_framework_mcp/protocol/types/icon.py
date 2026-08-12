@@ -18,21 +18,20 @@ class Icon:
     Icons are pure display metadata: a client shows them beside a tool,
     resource, prompt or the server itself. This package only *emits* them —
     fetching, sanitising and rendering are the client's problem, and the spec
-    puts a long list of MUSTs on the consumer side (scheme allowlists, SSRF
-    defence, SVG sanitisation, magic-byte sniffing) precisely because icon
-    bytes are untrusted input.
+    puts a long list of MUSTs on the consumer side precisely because icon bytes
+    are untrusted input.
 
-    ``src`` is a URI pointing at the image. ``mime_type`` overrides the type
-    the source serves (useful when it serves a generic
-    ``application/octet-stream``). ``sizes`` are WxH strings — ``("48x48",)``,
-    or ``("any",)`` for a scalable format like SVG. ``theme`` says which
-    background the icon was drawn for; omit it when the icon works on both.
-
-    ⚠ **``src`` must be ``https:`` or ``data:``.** That is not a style
-    preference: the spec requires clients to *reject* icon URIs on any other
-    scheme, so an ``http:`` or ``file:`` icon is not a slightly-worse icon,
-    it is an icon that will never render. Rejecting it at registration turns
-    a silent no-op into a startup error naming the fix.
+    Attributes:
+        src: URI pointing at the image. Must be ``https:`` or ``data:`` — the
+            spec requires clients to *reject* any other scheme, so an ``http:``
+            or ``file:`` icon would never render. Rejected at construction, so
+            the failure is a startup error rather than a silent no-op.
+        mime_type: Overrides the type the source serves, for a source that
+            serves a generic ``application/octet-stream``.
+        sizes: WxH strings — ``("48x48",)``, or ``("any",)`` for a scalable
+            format like SVG.
+        theme: Which background the icon was drawn for. Omit when it works on
+            both.
     """
 
     src: str

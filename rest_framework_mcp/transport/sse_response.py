@@ -10,19 +10,18 @@ from django.http import StreamingHttpResponse
 from rest_framework_mcp.transport.types.sse_broker import SSEBroker
 from rest_framework_mcp.transport.types.sse_replay_buffer import SSEReplayBuffer
 
-# Time between idle keep-alive comments. The MCP spec doesn't prescribe a
-# value; 15 s is a common compromise that avoids most intermediate proxy
-# timeouts (60 s+ idle is risky behind nginx / cloudflare) without flooding
-# the connection.
+# Time between idle keep-alive comments. The MCP spec prescribes no value;
+# 15 s avoids most intermediate proxy timeouts (60 s+ idle is risky behind
+# nginx / cloudflare) without flooding the connection.
 _KEEPALIVE_INTERVAL_SECONDS: float = 15.0
 
 
 def keepalive_interval_seconds() -> float:
     """The idle keep-alive period shared by both SSE surfaces.
 
-    Exposed so the POST response stream and the GET session stream cannot
-    drift apart on a value whose whole purpose is matching what proxies in
-    front of them tolerate.
+    Shared so the POST response stream and the GET session stream cannot drift
+    apart on a value whose whole purpose is matching what the proxies in front
+    of them tolerate.
     """
     return _KEEPALIVE_INTERVAL_SECONDS
 
@@ -30,9 +29,9 @@ def keepalive_interval_seconds() -> float:
 def format_event(payload: Any, *, event_id: str | None = None) -> bytes:
     """Encode a single JSON-RPC payload as one SSE event.
 
-    SSE events are delimited by a blank line. ``event_id``, when set,
-    becomes an ``id:`` line preceding the ``data:`` payload — clients
-    echo the latest seen ID back via ``Last-Event-ID`` on reconnect.
+    SSE events are delimited by a blank line. ``event_id``, when set, becomes
+    an ``id:`` line preceding the ``data:`` payload; clients echo the latest
+    seen ID back via ``Last-Event-ID`` on reconnect.
     """
     body: str = json.dumps(payload, separators=(",", ":"))
     if event_id is None:
@@ -52,21 +51,16 @@ async def stream_events(
 
     Subscribes to ``broker`` for ``session_id``, emits an opening comment so
     intermediaries know the stream is alive, then drains the queue forever.
-    Idle periods produce ``: keepalive`` comment frames so proxies don't
-    close the connection. Cancellation (client disconnect) unsubscribes the
-    session cleanly via the ``finally`` block.
+    Idle periods produce ``: keepalive`` comment frames so proxies do not close
+    the connection, and a client disconnect unsubscribes the session cleanly
+    through the ``finally``.
 
-    When ``replay_buffer`` is supplied:
-
-    - On open, every event recorded after ``last_event_id`` is replayed
-      first as ``id: <id>\\ndata: <payload>\\n\\n`` frames so the client
-      catches up before live mode begins.
-    - Live frames arrive on the broker queue wrapped as
-      ``{"_mcp_event_id", "_mcp_payload"}`` (see :meth:`MCPServer.notify`);
-      the wrapper is unpacked here so the wire stays SSE-shaped.
-
-    Without a buffer no ``id:`` lines are emitted and ``last_event_id`` is
-    ignored — backward-compatible with the v1 wire.
+    With a ``replay_buffer``, every event recorded after ``last_event_id`` is
+    replayed on open as ``id: <id>\\ndata: <payload>\\n\\n`` frames before live
+    mode begins, and live frames arrive wrapped as ``{"_mcp_event_id",
+    "_mcp_payload"}`` (see :meth:`MCPServer.notify`), unpacked here so the wire
+    stays SSE-shaped. Without one, no ``id:`` lines are emitted and
+    ``last_event_id`` is ignored.
     """
     queue: asyncio.Queue[Any] = broker.subscribe(session_id)
     try:
@@ -107,7 +101,6 @@ def build_sse_response(
 
     ``X-Accel-Buffering: no`` disables nginx response buffering; without it
     nginx waits for the connection to close before flushing, defeating SSE.
-    Other reverse proxies follow similar conventions.
     """
     response = StreamingHttpResponse(
         stream_events(

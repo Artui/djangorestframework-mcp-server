@@ -15,21 +15,20 @@ from rest_framework_mcp.auth.types.auth_backend import MCPAuthBackend
 class AuthorizationServerMetadataViewSet(ViewSet):
     """RFC 8414 OAuth 2.0 Authorization Server Metadata endpoint.
 
-    Mounted by :func:`build_oauth_urlpatterns` at the canonical
-    ``/.well-known/oauth-authorization-server`` URL plus aliases. The
-    canonical GET wires up as the ``list`` action via
-    ``AuthorizationServerMetadataViewSet.as_view({"get": "list"}, auth_backend=...)``.
+    Mounted by :func:`build_oauth_urlpatterns` at
+    ``/.well-known/oauth-authorization-server`` plus aliases, wired as the
+    ``list`` action:
+    ``as_view({"get": "list"}, auth_backend=...)``.
 
-    Delegates payload construction to
-    :meth:`MCPAuthBackend.authorization_server_metadata`, which returns
-    an :class:`AuthorizationServerMetadata` dataclass. Backends that
-    don't host an authorization server raise :class:`NotImplementedError`
-    on the method; this view surfaces that as ``501 Not Implemented`` so
-    clients see a deterministic "no AS here" signal rather than a 500.
+    The payload comes from
+    :meth:`MCPAuthBackend.authorization_server_metadata`. A backend that hosts
+    no authorization server raises :class:`NotImplementedError`, which this
+    view surfaces as ``501`` so clients get a deterministic "no AS here" rather
+    than a 500.
 
-    DRF's default auth / permission / throttling layers are disabled —
-    discovery is public and the MCP transport owns its own pipeline.
-    The renderer is pinned to JSON; the payload shape is RFC-defined.
+    DRF's default auth / permission / throttling layers are off: discovery is
+    public and the MCP transport owns its own pipeline. The renderer is pinned
+    to JSON, the payload shape being RFC-defined.
     """
 
     authentication_classes: tuple = ()  # noqa: RUF012 — DRF class-level config

@@ -34,30 +34,22 @@ def build_response_stream(
 ) -> StreamingHttpResponse:
     """Answer one POST with an SSE stream carrying progress, then the response.
 
-    ``keepalive`` overrides the shared idle interval; it exists so tests can
-    observe a keep-alive without waiting the production period out.
+    ``keepalive`` overrides the shared idle interval so tests can observe a
+    keep-alive without waiting the production period out.
 
-    The spec lets a server choose, per request, between a single JSON object
-    and a stream. This package streams exactly when the client asked for
-    progress — a stream whose only event is the final response costs a
-    connection and buys nothing.
+    **Async transport only** — a sync WSGI view cannot yield while the dispatch
+    runs, so the sync viewset keeps answering ``application/json``, which the
+    spec always permits.
 
-    ⚠ **Async transport only.** A sync WSGI view has no way to yield while the
-    dispatch is still running, so the sync viewset keeps answering
-    ``application/json``, which stays spec-legal: a single JSON object is
-    always permitted.
-
-    ⚠ **The HTTP status is committed before the dispatch runs.** That costs
-    exactly one thing — the ``403`` a permission denial would otherwise carry —
-    which is why the caller pre-flights the permission check before choosing to
-    stream. Rate limits and tool-level failures were already ``200`` with the
-    detail in the body, so they are unaffected.
+    **The HTTP status is committed before the dispatch runs**, which costs the
+    ``403`` a permission denial would otherwise carry — hence the caller's
+    permission pre-flight.
 
     Closing the stream is the cancellation signal: the ``finally`` cancels the
     dispatch task, which is what the ``2026-07-28`` revision means by
-    cancellation-by-disconnect. ⚠ It cancels the *await*, not the work — a
-    thread parked in a database driver's socket read is not interruptible by
-    asyncio, the same caveat ``DISPATCH_TIMEOUT`` carries.
+    cancellation-by-disconnect. It cancels the *await*, not the work — a thread
+    parked in a database driver's socket read is not interruptible by asyncio,
+    the same caveat ``DISPATCH_TIMEOUT`` carries.
     """
     response = StreamingHttpResponse(
         _stream(
@@ -121,17 +113,16 @@ async def _stream(
 async def _run(coro: Awaitable[Any], queue: asyncio.Queue[Any], *, request_id: Any) -> None:
     """Await the dispatch and put its final envelope on the queue.
 
-    An exception that escapes a handler would ordinarily reach Django and
-    become a ``500``. Inside a stream there is no status left to change, and
-    letting it propagate would truncate the connection with no explanation —
-    so it becomes an in-stream ``-32603`` instead, which is at least something
-    the client can read.
+    An escaping exception would ordinarily become a Django ``500``, but inside
+    a stream there is no status left to change and propagating would truncate
+    the connection with no explanation — so it becomes an in-stream ``-32603``,
+    which the client can at least read.
     """
     try:
         result: Any = await coro
     except asyncio.CancelledError:
-        # The client went away. Nothing to report to, and re-raising is what
-        # lets the task finish as cancelled rather than as a silent success.
+        # The client went away, so there is nobody to report to. Re-raising is
+        # what lets the task finish as cancelled rather than as a success.
         raise
     except Exception as exc:  # noqa: BLE001 — see the docstring
         body = JsonRpcResponse(
@@ -144,37 +135,27 @@ async def _run(coro: Awaitable[Any], queue: asyncio.Queue[Any], *, request_id: A
             if isinstance(result, JsonRpcError)
             else JsonRpcResponse(id=request_id, result=result).to_dict()
         )
-    # ⚠ **Through ``call_soon``, not ``queue.put``.** The reporter schedules its
-    # frames with ``call_soon_threadsafe``; both land in the loop's one ready
-    # queue, so going through it here makes the final response FIFO-ordered
-    # *behind* every progress frame already reported. Putting it on the queue
-    # directly does not yield, so an async-native service's last report could
-    # arrive after the response it preceded — the one ordering the spec's
-    # notifications-then-result flow actually depends on.
+    # **Through ``call_soon``, not ``queue.put``.** The reporter schedules its
+    # frames with ``call_soon_threadsafe``, so going through the loop's one
+    # ready queue orders the final response FIFO *behind* every progress frame
+    # already reported. Putting it on the queue directly does not yield, so an
+    # async-native service's last report could arrive after the response it
+    # preceded — the one ordering the spec's flow depends on.
     asyncio.get_running_loop().call_soon(queue.put_nowait, _Finished(body))
 
 
 class _StreamReporter:
     """The :class:`ProgressReporter` handed to the dispatched callable.
 
-    ⚠ **Called from a worker thread, not the event loop.** ``adispatch_spec``
-    bridges sync services off-loop, so a service reporting progress is doing so
-    from a thread — and ``asyncio.Queue`` is not thread-safe. Every frame goes
-    through ``call_soon_threadsafe``, which is correct for an async-native
-    service too (it merely schedules).
+    **Called from a worker thread, not the event loop.** ``adispatch_spec``
+    bridges sync services off-loop and ``asyncio.Queue`` is not thread-safe, so
+    every frame goes through ``call_soon_threadsafe``.
 
-    State is per-instance, one instance per request — no module-level
-    bookkeeping, per the package's no-shared-mutable-state rule.
-
-    ⚠ **The counters are guarded by a lock, not by an assumption.** The frame
-    hand-off is thread-safe by construction, but ``_remaining`` and the
-    monotonicity check are plain read-modify-write on the same
-    worker-thread-called path. Today ``adispatch_spec`` bridges to a single
-    thread, so nothing races — but that is a property of a collaborator, not of
-    this class, and a service fanning reports out across a thread pool would
-    quietly over-emit past the cap or slip a non-increasing frame through. The
-    lock is uncontended in the ordinary case and costs nothing worth measuring
-    against a queue hop.
+    **The counters are guarded by a lock, not by an assumption.** Today
+    ``adispatch_spec`` bridges to a single thread, so the read-modify-write on
+    ``_remaining`` and the monotonicity check does not race — but that is a
+    property of a collaborator, and a service fanning reports across a thread
+    pool would over-emit past the cap or slip a non-increasing frame through.
     """
 
     def __init__(
@@ -201,18 +182,17 @@ class _StreamReporter:
         meta: Mapping[str, Any] | None = None,
     ) -> None:
         with self._lock:
-            # Both decisions and both writes inside one critical section: read
-            # the cap, read the last value, then claim them. Splitting it would
-            # let two threads both pass a check that only one should.
+            # Both decisions and both writes in one critical section: splitting
+            # it would let two threads pass a check only one should.
             if self._remaining <= 0:
                 # The spec asks both parties to rate-limit progress; a service
                 # reporting per row over a large table would otherwise turn one
                 # call into a flood of frames.
                 return
             if self._last is not None and progress <= self._last:
-                # ⚠ Dropped rather than forwarded. The spec makes increase a
-                # MUST, so passing a service's non-monotonic report through
-                # would put *this server* in violation on its behalf.
+                # The spec makes increase a MUST, so forwarding a service's
+                # non-monotonic report would put *this server* in violation on
+                # its behalf.
                 return
             self._last = progress
             self._remaining -= 1
@@ -222,9 +202,9 @@ class _StreamReporter:
         if message is not None:
             params["message"] = message
         if meta:
-            # The structured half rides in the notification's ``_meta``, which
-            # is where the protocol puts extension data. Keys are the caller's
-            # to namespace.
+            # The structured half rides in the notification's ``_meta``, where
+            # the protocol puts extension data. Keys are the caller's to
+            # namespace.
             params["_meta"] = dict(meta)
         frame: dict[str, Any] = {
             "jsonrpc": JSONRPC_VERSION,
@@ -234,7 +214,7 @@ class _StreamReporter:
         try:
             self._loop.call_soon_threadsafe(self._queue.put_nowait, frame)
         except RuntimeError:
-            # The loop is gone — the client disconnected while the service was
+            # The loop is gone: the client disconnected while the service was
             # still working. A reporter must not raise into domain code that
             # has no reason to defend against it.
             return

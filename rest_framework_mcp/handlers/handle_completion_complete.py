@@ -22,27 +22,24 @@ def handle_completion_complete(
 ) -> dict[str, Any] | JsonRpcError:
     """Suggest values for one argument of a prompt or resource template.
 
-    This is the interactive-typing surface: a client shows a dropdown as the
-    user fills in a prompt argument or a URI-template variable, and asks here
-    for candidates. Completers are registered per binding, keyed by the
-    argument they complete, and are dispatched through
-    :func:`resolve_callable_kwargs` — so a completer declares whichever of
-    ``value`` / ``arguments`` / ``request`` / ``user`` it needs (plus any
-    already-resolved sibling argument by name) and gets nothing else.
+    The interactive-typing surface: a client shows a dropdown as the user fills
+    in a prompt argument or a URI-template variable and asks here for
+    candidates. Completers are registered per binding, keyed by the argument
+    they complete, and dispatched through :func:`resolve_callable_kwargs`, so
+    one declares whichever of ``value`` / ``arguments`` / ``request`` / ``user``
+    it needs (plus any already-resolved sibling by name) and gets nothing else.
 
-    ⚠ **A completion is a read of the thing being completed**, so it runs the
-    binding's permission and rate-limit stacks before the completer. Without
-    that, a resource a caller may not read would still answer "which ids
-    exist?" one keystroke at a time — a slower version of the same disclosure.
-    The spec asks for the rate limit explicitly; the permission check is the
-    same rule ``resources/read`` and ``prompts/get`` already apply.
+    **A completion is a read of the thing being completed**, so the binding's
+    permission and rate-limit stacks run before the completer. Without that, a
+    resource a caller may not read would still answer "which ids exist?" one
+    keystroke at a time.
 
-    ⚠ **Completers are sync callables.** Under ASGI this handler runs in
-    Django's thread-sensitive executor (see :func:`adispatch`), so ORM access
-    inside a completer is fine — but returning a coroutine is not, because
-    nothing awaits it.
+    **Completers are sync callables.** Under ASGI this handler runs in Django's
+    thread-sensitive executor (see :func:`adispatch`), so ORM access inside a
+    completer is fine — but returning a coroutine is not, since nothing awaits
+    it.
 
-    Errors are all ``-32602``, per the completion spec: an unknown prompt or
+    Errors are all ``-32602`` per the completion spec: an unknown prompt or
     template, an argument with no completer, or a malformed ``ref``.
     """
     if not isinstance(params, dict):
@@ -110,14 +107,13 @@ def handle_completion_complete(
             None,
             http_request=context.http_request,
             # Same reasoning as ``prompts/get``: nothing here reads the query
-            # string, and passing an empty mapping guarantees the endpoint's
-            # own can never leak into a completer if that ever changes.
+            # string, and an empty mapping guarantees the endpoint's own can
+            # never leak into a completer if that changes.
             query_params={},
         ).request
         # The transport's seeds are applied *after* the client-supplied
-        # siblings, so a sibling argument named ``user`` or ``value`` shadows
-        # nothing — the same precedence ``RESERVED_POOL_SEEDS`` enforces on the
-        # dispatch path.
+        # siblings, so a sibling named ``user`` or ``value`` shadows nothing —
+        # the precedence ``RESERVED_POOL_SEEDS`` enforces on the dispatch path.
         pool: dict[str, Any] = {
             **resolved_siblings,
             "request": drf_request,
@@ -133,10 +129,8 @@ def handle_completion_complete(
 class _CompletionTarget:
     """The slice of a prompt or resource binding a completion request needs.
 
-    A record rather than a tuple because the handler reads four unrelated
-    things off it and the two binding types have no common base — flattening
-    them here is what keeps the rest of the handler from branching on which
-    kind it got.
+    The two binding types have no common base, so flattening them here is what
+    keeps the rest of the handler from branching on which kind it got.
     """
 
     kind: str
@@ -184,10 +178,9 @@ def _resolve_ref(ref: Any, context: MCPCallContext) -> _CompletionTarget | JsonR
                 JsonRpcErrorCode.INVALID_PARAMS, "ref/resource requires a string 'uri'"
             )
         # The spec's example passes the *template* (``file:///{path}``), which
-        # is what a client has in hand while the user is still typing the
-        # variable. Matched exactly first, because a template string also
-        # happens to satisfy its own pattern — ``file:///{path}`` would
-        # otherwise "resolve" with ``path="{path}"``.
+        # is what a client holds while the user is still typing. Matched
+        # exactly first, because a template also satisfies its own pattern and
+        # would otherwise "resolve" with ``path="{path}"``.
         resource = context.resources.by_uri_template(uri)
         if resource is None:
             return JsonRpcError(JsonRpcErrorCode.INVALID_PARAMS, f"Unknown resource: {uri!r}")
@@ -208,10 +201,9 @@ def _resolve_ref(ref: Any, context: MCPCallContext) -> _CompletionTarget | JsonR
 def _to_completion(raw: Any) -> Completion:
     """Cap a completer's output at the spec's limit without draining it.
 
-    One value past the cap is pulled to decide ``hasMore`` and then discarded,
-    so a completer returning a queryset or a generator is sliced rather than
-    materialised — the difference between reading 101 rows and reading the
-    table.
+    One value past the cap is pulled to decide ``hasMore`` and discarded, so a
+    completer returning a queryset or generator is sliced rather than
+    materialised — 101 rows read instead of the table.
     """
     values: list[str] = [str(item) for item in islice(_iterable(raw), MAX_COMPLETION_VALUES + 1)]
     has_more: bool = len(values) > MAX_COMPLETION_VALUES

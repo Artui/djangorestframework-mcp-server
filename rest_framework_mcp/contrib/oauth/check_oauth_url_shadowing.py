@@ -8,9 +8,7 @@ from rest_framework_mcp.observability import get_logger
 
 logger = get_logger(__name__)
 
-# The paths this package and ``oauth2_provider`` both serve as of DOT 3.4.0.
-# Django resolves first-match, so whichever ``urlpatterns`` entry comes first
-# silently wins and the other is dead.
+# Paths this package and ``oauth2_provider`` both serve as of DOT 3.4.0.
 _CONTESTED_PATHS: tuple[str, ...] = (
     "/oauth/register/",
     "/.well-known/oauth-authorization-server",
@@ -21,25 +19,23 @@ _CONTESTED_PATHS: tuple[str, ...] = (
 def check_oauth_url_shadowing(*, warn: bool = True) -> list[str]:
     """Report contested OAuth paths that resolve to something other than ours.
 
-    **Why this is a function you call rather than a Django system check:**
-    ``rest_framework_mcp`` is a library, not an installed app — it has no
-    ``AppConfig``, so there is nowhere to register one. Call it from your own
+    django-oauth-toolkit 3.4.0 serves its own ``register/`` (RFC 7591) and
+    ``.well-known/oauth-authorization-server`` (RFC 8414). Django resolves
+    first-match, so mounting ``include("oauth2_provider.urls")`` *before*
+    :func:`build_oauth_urlpatterns`'s output makes DOT answer those paths, with
+    an issuer of ``<host>/oauth``. Nothing errors; clients just read the wrong
+    document.
+
+    A function rather than a Django system check because ``rest_framework_mcp``
+    is a library with no ``AppConfig`` to register one on. Call it from your own
     check, a startup hook, or a test::
 
         def test_our_oauth_routes_are_not_shadowed():
             assert check_oauth_url_shadowing() == []
 
-    **The trap.** django-oauth-toolkit 3.4.0 grew its own ``register/``
-    (RFC 7591) and ``.well-known/oauth-authorization-server`` (RFC 8414). If
-    ``include("oauth2_provider.urls")`` is mounted *before*
-    :func:`build_oauth_urlpatterns`'s output, DOT answers those paths instead —
-    with an issuer of ``<host>/oauth``, which is also the value that breaks
-    :meth:`DjangoOAuthToolkitBackend.authorization_server_metadata`. Nothing
-    errors; clients just get the wrong document.
-
-    Returns the contested paths that resolve elsewhere, empty when all is well.
-    A path that resolves nowhere is **not** reported: not mounting the OAuth
-    surface at all is a legitimate configuration.
+    Returns the contested paths that resolve elsewhere, and is empty when all
+    is well. A path resolving nowhere is **not** reported — not mounting the
+    OAuth surface at all is a legitimate configuration.
     """
     shadowed: list[str] = []
     for path in _CONTESTED_PATHS:

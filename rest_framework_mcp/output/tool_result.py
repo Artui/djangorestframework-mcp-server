@@ -14,8 +14,7 @@ from rest_framework_mcp.protocol.types.tool_result import ToolResult
 def _is_uniform_list_of_objects(payload: Any) -> bool:
     """Heuristic for ``OutputFormat.AUTO``: TOON shines on uniform arrays.
 
-    True when the payload is a non-empty list whose elements are all dicts
-    with the same set of keys.
+    True for a non-empty list whose elements are all dicts sharing one key set.
     """
     if not isinstance(payload, list) or not payload:
         return False
@@ -44,29 +43,25 @@ def build_tool_result(
 ) -> ToolResult:
     """Build a :class:`ToolResult` for a successful (or tool-level error) call.
 
-    ``payload`` is the JSON-shaped tool output; it becomes ``structuredContent``
-    verbatim and is also rendered as the first content block per
-    ``output_format``. TOON output is wrapped in a fenced ``toon`` block with
-    a leading marker line so clients that don't parse TOON natively can still
-    display it.
-
-    When ``include_structured_content`` is ``False``, the
-    ``structuredContent`` field is omitted from the response. The text
-    rendering in ``content[0]`` still carries the full payload, so clients
-    that don't consume the structured field lose nothing.
-
-    ``meta`` is the base protocol's generic ``_meta`` bundle on the *result
-    envelope* — genuinely per-call, so it is a parameter here rather than
-    something sourced from the binding: a tool's static ``_meta`` is already
-    advertised on its ``tools/list`` entry and repeating it on every result
-    would be redundant. Omitted from the payload when empty.
-
-    ``content_kind`` selects the block type, per the binding's declaration.
-    Anything other than ``TEXT`` bypasses ``output_format`` entirely — there is
-    no TOON rendering of a PNG — and a payload that doesn't match the declared
-    kind comes back as an ``isError`` result naming the binding, which is the
-    same treatment an oversized result or a missed deadline gets.
-    ``binding_name`` exists only to make that message actionable.
+    Args:
+        payload: The JSON-shaped tool output. Becomes ``structuredContent``
+            verbatim and is also rendered as the first content block.
+        output_format: How ``content[0]`` renders the payload. TOON output is
+            wrapped in a fenced ``toon`` block with a leading marker line so
+            clients that don't parse TOON natively can still display it.
+        is_error: Stamped onto the result as ``isError``.
+        include_structured_content: ``False`` omits ``structuredContent``. The
+            text block still carries the full payload, so a client that doesn't
+            consume the structured field loses nothing.
+        meta: The base protocol's ``_meta`` bundle on the *result envelope* —
+            per-call, unlike the static ``_meta`` already advertised on the
+            ``tools/list`` entry. Omitted from the payload when empty.
+        content_kind: The block type the binding declared. Anything other than
+            ``TEXT`` bypasses ``output_format`` entirely — there is no TOON
+            rendering of a PNG — and a payload that doesn't match the declared
+            kind comes back as an ``isError`` result naming the binding.
+        content_mime_type: Media type for a non-``TEXT`` block.
+        binding_name: Names the binding in that mismatch message.
     """
     if content_kind is not ToolContentKind.TEXT:
         blocks = build_content_blocks(
@@ -78,8 +73,7 @@ def build_tool_result(
         return ToolResult(
             content=blocks,
             # Media blocks carry no ``structuredContent`` — binary is not JSON.
-            # Resource links do: the links themselves are an ordinary JSON
-            # payload, so the model gets both projections of the same answer.
+            # Resource links do: the links are an ordinary JSON payload.
             structured_content=payload
             if include_structured_content and content_kind is ToolContentKind.RESOURCE_LINK
             else None,

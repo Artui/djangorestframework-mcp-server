@@ -25,44 +25,44 @@ class ChainToolBinding:
 
     A chain tool threads a :class:`~rest_framework_mcp.registry.types.chain_context.ChainContext`
     through its ordered ``steps`` — each step's result is stored under its
-    alias and is readable by later steps — so a single tool call can express
+    alias and readable by later steps — so one tool call can express
     ``retrieve x → write y → write z`` with ``z`` derived from both ``x`` and
-    ``y``. Sequencing/orchestration is a transport concern owned by the MCP
-    layer; the steps themselves are ordinary ``ServiceSpec`` / ``SelectorSpec``
-    units of API behaviour.
+    ``y``. Sequencing is a transport concern owned by the MCP layer; the steps
+    themselves are ordinary ``ServiceSpec`` / ``SelectorSpec`` units of API
+    behaviour.
 
-    Fields:
+    Fields not listed below mirror
+    :class:`~rest_framework_mcp.registry.types.tool_binding.ToolBinding`.
 
-    - ``steps`` — the ordered steps, run front to back. Aliases must be
-      unique. Non-empty.
-    - ``input_serializer`` — the chain's input schema / validation. ``None``
-      falls back to the **first step's** ``ServiceSpec.input_serializer`` (a
-      first selector step has none, so the chain then validates nothing and
-      ``ctx.args`` is the raw arguments mapping).
-    - ``atomic`` — when ``True`` (default) the whole step sequence runs inside
-      a single ``transaction.atomic()``; any step raising rolls back every
-      prior write. Per-step ``spec.atomic`` is subordinate (steps run with
-      ``atomic=False`` under the chain transaction).
-    - ``output_alias`` — which step's result is rendered as the tool response.
-      ``None`` (default) renders the **last** step. Mutually exclusive with
-      ``output_all``.
-    - ``output_all`` — when ``True`` the response is ``{alias: rendered}`` for
-      every step that declares an output serializer.
-
-    The remaining fields mirror :class:`~rest_framework_mcp.registry.types.tool_binding.ToolBinding`.
+    Attributes:
+        steps: The ordered steps, run front to back. Non-empty, and aliases
+            must be unique.
+        input_serializer: The chain's input schema and validation. ``None``
+            falls back to the **first step's**
+            ``ServiceSpec.input_serializer``; a first selector step has none,
+            so the chain then validates nothing and ``ctx.args`` is the raw
+            arguments mapping.
+        atomic: Run the whole sequence inside one ``transaction.atomic()``, so
+            any step raising rolls back every prior write. Per-step
+            ``spec.atomic`` is subordinate — steps run with ``atomic=False``
+            under the chain transaction.
+        output_alias: Which step's result is rendered as the tool response.
+            ``None`` renders the **last** step. Mutually exclusive with
+            ``output_all``.
+        output_all: Render ``{alias: rendered}`` for every step that declares
+            an output serializer.
     """
 
     name: str
     description: str | None
     steps: tuple[ChainStep, ...]
     display_name: str | None = None
-    """Consumer-only label — **never emitted on the MCP wire** (``tools/list``
-    ignores it). Provided so a downstream library can render a richer label
-    than the protocol ``title``. ``None`` means "unset"."""
+    """Consumer-only label, **never emitted on the MCP wire**, so a downstream
+    library can render a richer label than the protocol ``title``."""
 
     display_description: str | None = None
-    """Consumer-only blurb, the sibling of :attr:`display_name` — also never
-    emitted on the MCP wire. ``None`` means "unset"."""
+    """Consumer-only blurb, the sibling of :attr:`display_name` and likewise
+    never emitted on the MCP wire."""
     input_serializer: type | None = None
     atomic: bool = True
     output_alias: str | None = None
@@ -71,20 +71,18 @@ class ChainToolBinding:
     permissions: tuple[Any, ...] = ()
     rate_limits: tuple[Any, ...] = ()
     annotations: dict[str, Any] = field(default_factory=dict)
-    # See ``ToolBinding.meta`` — free-form ``_meta`` bundle for this tool's
-    # ``tools/list`` entry.
+    # Free-form for the reason given on ``ToolBinding.meta``.
     meta: dict[str, Any] = field(default_factory=dict)
     title: str | None = None
     icons: tuple[Icon, ...] = ()
-    """Display icons for this entry, emitted in its listing. Purely
-    presentational — a client renders them; nothing in dispatch reads them."""
+    """Display icons, emitted in this tool's listing entry. Purely
+    presentational; nothing in dispatch reads them."""
 
     include_structured_content: bool | None = None
     include_output_schema: bool | None = None
-    # See ``ToolBinding.max_result_bytes`` / ``.dispatch_timeout`` — ``UNSET``
-    # defers to the server config, ``None`` disables the bound for this tool.
-    # A chain runs several specs in sequence, so its deadline covers the whole
-    # sequence, not each step: the client is waiting on one ``tools/call``.
+    # As ``ToolBinding.max_result_bytes`` / ``.dispatch_timeout``. The deadline
+    # covers the whole sequence rather than each step: the client is waiting on
+    # one ``tools/call``.
     max_result_bytes: int | None | UnsetType = UNSET
     dispatch_timeout: float | None | UnsetType = UNSET
     unknown_arguments: UnknownArguments = UnknownArguments.REJECT
@@ -92,43 +90,29 @@ class ChainToolBinding:
 
     content_kind: ToolContentKind = ToolContentKind.TEXT
     """What this tool's payload becomes in the result's ``content`` array.
-    ``TEXT`` (the default) renders JSON per :attr:`output_format`; the other
-    kinds project the payload into an image / audio / resource-link block.
-    See :class:`ToolContentKind`."""
+    ``TEXT`` renders JSON per :attr:`output_format`; the other kinds project it
+    into an image / audio / resource-link block. See :class:`ToolContentKind`."""
 
     content_mime_type: str | None = None
     """The media type for an ``IMAGE`` / ``AUDIO`` :attr:`content_kind`.
-    Required for those and meaningless for the rest — a resource link
-    carries its own ``mimeType`` per entry."""
+    Required for those and meaningless for the rest — a resource link carries
+    its own ``mimeType`` per entry."""
 
     task_policy: TaskPolicy = TaskPolicy.FORBIDDEN
     """Whether calling this tool hands back a task handle instead of a result.
-
-    ``FORBIDDEN`` by default, so nothing changes for a tool registered before
-    tasks existed. See :class:`TaskPolicy` — and note that the choice lives
-    here, on the binding, because the extension makes the *server* the sole
-    decider and gives the client no way to ask."""
+    The choice lives on the binding because the extension makes the *server*
+    the sole decider and gives the client no way to ask. See
+    :class:`TaskPolicy`."""
 
     invalidates: tuple[str, ...] = ()
     """URI templates naming the resources a successful call changed.
 
-    Published as ``notifications/resources/updated`` after the transaction
-    commits, so subscribers re-read. Uses the same ``{var}`` syntax as a
-    resource's ``uri_template``, rendered against the result merged with the
-    call's arguments::
+    Same contract as :attr:`~rest_framework_mcp.registry.types.tool_binding.ToolBinding.invalidates`:
+    published as ``notifications/resources/updated`` once the transaction
+    commits, rendered against the result merged with the call's arguments, and
+    matched exactly — so name the collection too if you want it watched::
 
-        invalidates=("invoices://{pk}", "invoices://")
-
-    ⚠ **Name the collection too if you want it watched.** Topic matching is
-    exact — a prefix rule would match ``invoices://1`` against ``invoices://11``
-    and miss a tenant-scoped scheme entirely — so a client watching
-    ``invoices://`` hears nothing unless the write says so.
-
-    ⚠ **Its boundary is real:** this fires for calls that go through this
-    server and for nothing else. A management command, a Celery job or an admin
-    edit changes the same rows and publishes nothing, which is why
-    ``MCPServer.notify_resource_updated`` exists rather than being an
-    afterthought."""
+        invalidates=("invoices://{pk}", "invoices://")"""
 
     def __post_init__(self) -> None:
         if not self.steps:
@@ -187,11 +171,9 @@ class ChainToolBinding:
         """The serializer used to validate the chain's ``arguments``.
 
         ``input_serializer`` when set, else the **first step's**
-        ``ServiceSpec.input_serializer`` (the first-step fallback). A first
-        selector step contributes no serializer — the chain then validates
-        nothing and ``ctx.args`` is the raw arguments mapping. Shared by the
-        ``tools/list`` schema builder and the dispatcher so the advertised
-        schema and the validation never drift.
+        ``ServiceSpec.input_serializer``. Shared by the ``tools/list`` schema
+        builder and the dispatcher, so the advertised schema and the validation
+        cannot drift.
         """
         if self.input_serializer is not None:
             return self.input_serializer
@@ -202,10 +184,10 @@ class ChainToolBinding:
     def output_serializer(self) -> type | None:
         """The serializer the rendered output goes through, for ``outputSchema``.
 
-        The output step's serializer (``ServiceSpec.output_selector_spec.
+        The output step's own (``ServiceSpec.output_selector_spec.
         output_serializer`` or ``SelectorSpec.output_serializer``). ``None``
-        when ``output_all`` (the response is a multi-key object with no single
-        schema) or when the output step declares no serializer.
+        under ``output_all``, where the response is a multi-key object with no
+        single schema, or when the output step declares no serializer.
         """
         if self.output_all:
             return None

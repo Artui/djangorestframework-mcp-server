@@ -4,22 +4,18 @@ from rest_framework_mcp.registry.types.chain_tool_binding import ChainToolBindin
 from rest_framework_mcp.registry.types.selector_tool_binding import SelectorToolBinding
 from rest_framework_mcp.registry.types.tool_binding import ToolBinding
 
-# Each binding type counts as a "tool" on the wire — ``tools/list`` and
-# ``tools/call`` discriminate at dispatch time. We deliberately do NOT
-# define a shared base class so each binding stays a frozen dataclass with
-# its own structure; the union here is enough for type checkers and runtime
-# isinstance() checks.
+# Deliberately a union rather than a shared base class, so each binding stays a
+# frozen dataclass with its own structure. ``tools/list`` and ``tools/call``
+# discriminate at dispatch time.
 ToolBindingLike = ToolBinding | SelectorToolBinding | ChainToolBinding
 
 
 class ToolRegistry:
-    """Name → tool binding lookup.
+    """Name to tool binding lookup.
 
-    Holds both :class:`ToolBinding` (service tools, mutations) and
-    :class:`SelectorToolBinding` (selector tools, reads). Names share a
-    namespace — duplicates are rejected loudly so a misconfigured project
-    surfaces the conflict at discovery time rather than silently shadowing
-    a tool.
+    Holds service, selector and chain bindings in one namespace, rejecting
+    duplicates loudly so a misconfigured project surfaces the conflict at
+    registration rather than silently shadowing a tool.
     """
 
     def __init__(self) -> None:
@@ -36,15 +32,11 @@ class ToolRegistry:
     def all(self) -> list[ToolBindingLike]:
         """Every binding, in **registration order**.
 
-        The spec asks that ``tools/list`` be deterministic, so clients can
-        cache the catalog and so cursor pagination is stable. A dict satisfies
-        that: insertion order is preserved, and registration runs the same code
-        in the same order on every boot.
-
-        Deliberately not sorted by name. Registration order is *authored*
-        order — the sequence a server's author put the tools in — which is a
-        better first page for a model than an alphabetical one, and sorting
-        would buy nothing the dict does not already give.
+        ``tools/list`` has to be deterministic so clients can cache the catalog
+        and cursor pagination stays stable, which dict insertion order already
+        gives. Deliberately not sorted by name: registration order is authored
+        order, which is a better first page for a model than an alphabetical
+        one.
         """
         return list(self._bindings.values())
 

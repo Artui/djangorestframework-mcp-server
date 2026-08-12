@@ -10,19 +10,18 @@ class DjangoPermRequired:
     """Allow only requests whose user has the given Django permission(s).
 
     Wraps ``user.has_perm`` from the standard Django auth backend. A token
-    backed by ``AnonymousUser`` will always be rejected — that is the point
-    of using this class instead of :class:`ScopeRequired`.
-
-    Takes a list or a bare string, as :class:`ScopeRequired` now also does.
+    backed by ``AnonymousUser`` is always rejected — that is the point of using
+    this class instead of :class:`ScopeRequired`. Takes a list or a bare
+    string, like :class:`ScopeRequired`.
     """
 
     def __init__(self, perm: str | list[str]) -> None:
         resolved: list[str] = [perm] if isinstance(perm, str) else list(perm)
         if not resolved:
             # Same trap as an empty ``ScopeRequired``: ``all(...)`` over an
-            # empty sequence is ``True``, so this would allow every
-            # authenticated user through while reading as a guard — and while
-            # satisfying the unguarded-tool check that would otherwise warn.
+            # empty sequence is ``True``, so this would let every authenticated
+            # user through while reading as a guard, and while satisfying the
+            # unguarded-tool check that would otherwise warn.
             raise ImproperlyConfigured(
                 "DjangoPermRequired() needs at least one permission: an empty one "
                 "allows every authenticated user while reading as a guard. Pass "

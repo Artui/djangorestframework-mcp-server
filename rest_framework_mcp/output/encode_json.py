@@ -7,9 +7,9 @@ from typing import Any
 def encode_json(payload: Any) -> str:
     """Encode ``payload`` as a stable, pretty JSON string.
 
-    Uses ``default=str`` so DRF outputs containing ``Decimal``, ``UUID``,
-    ``datetime``, etc. are rendered without raising. Sorts keys for
-    deterministic output (helpful in tests and diff-friendly transcripts).
+    ``default=str`` renders DRF outputs containing ``Decimal``, ``UUID`` or
+    ``datetime`` without raising; keys are sorted so the output is
+    deterministic.
     """
     return json.dumps(payload, indent=2, sort_keys=True, default=str, ensure_ascii=False)
 

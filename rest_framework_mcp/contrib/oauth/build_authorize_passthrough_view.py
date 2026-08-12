@@ -1,15 +1,13 @@
 """Factory for the DOT ``AuthorizationView`` subclass with an adapter hook.
 
-The view itself can't be defined at module load — DOT (``oauth2_provider``)
-is an optional extra. The factory lazy-imports DOT and returns a freshly-
-built subclass parameterised by the supplied adapter.
+The view cannot be defined at module load, because DOT (``oauth2_provider``)
+is an optional extra; the factory lazy-imports it and returns a subclass
+parameterised by the supplied adapter.
 
-This is the one documented exception to the "always ViewSet, never View"
-rule in `CLAUDE.md` §13: ``AuthorizationView`` lives in DOT, which we
-don't own, and converting it to a ViewSet would mean reimplementing the
-entire OAuth authorization flow. The subclass is wafer-thin — just a
-``dispatch`` override that calls the adapter — so the cost of staying on
-the View base class is minimal.
+The one documented exception to the "always ViewSet, never View" rule in
+``CLAUDE.md`` §13: ``AuthorizationView`` belongs to DOT, and converting it
+would mean reimplementing the whole OAuth authorization flow. The subclass is
+one ``dispatch`` override.
 """
 
 from __future__ import annotations
@@ -24,15 +22,10 @@ from rest_framework_mcp.contrib.oauth.adapters.types.auth_user_adapter import Au
 def build_authorize_passthrough_view(adapter: AuthUserAdapter | None) -> Any:
     """Return a ``View`` callable suitable for ``urlpatterns``.
 
-    Concretely: instantiates DOT's :class:`AuthorizationView` subclass
-    with the adapter baked in and calls ``.as_view()``. The resulting
-    callable matches the shape that
-    :func:`django.urls.path` / :func:`django.urls.re_path` expect.
-
-    When ``adapter`` is ``None`` the passthrough is functionally
-    identical to DOT's ``AuthorizationView`` — safe to mount in every
-    deployment regardless of whether the consumer plans to enable
-    hydration later.
+    Builds DOT's :class:`AuthorizationView` subclass with the adapter baked in
+    and calls ``.as_view()``. A ``None`` adapter makes the passthrough
+    functionally identical to DOT's own view, so it is safe to mount whether or
+    not hydration is wanted later.
     """
     try:
         from oauth2_provider.views import AuthorizationView  # type: ignore[import-not-found]
@@ -45,14 +38,14 @@ def build_authorize_passthrough_view(adapter: AuthUserAdapter | None) -> Any:
     class _AuthorizePassthroughView(AuthorizationView):  # type: ignore[misc, valid-type]
         """DOT ``AuthorizationView`` with a pre-dispatch user-hydration hook.
 
-        ``dispatch`` is the right injection point because it runs before
-        DOT's permission check / form rendering. Setting
-        ``request.user`` to the adapter-resolved user lets DOT treat the
-        request as authenticated without a session-based redirect.
+        ``dispatch`` is the injection point because it runs before DOT's
+        permission check and form rendering, so setting ``request.user`` there
+        lets DOT treat the request as authenticated without a session-based
+        redirect.
         """
 
-        # Bind the adapter into the class body so the closure semantics
-        # match DOT's expectation that views are stateless.
+        # Bound into the class body rather than closed over, matching DOT's
+        # expectation that views are stateless.
         _auth_user_adapter: AuthUserAdapter | None = adapter
 
         def dispatch(self, request: HttpRequest, *args: Any, **kwargs: Any) -> HttpResponse:

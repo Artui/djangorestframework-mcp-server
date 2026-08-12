@@ -70,7 +70,7 @@ class TestSessionExpiryWindows:
         assert store._ttl_seconds == 5  # noqa: SLF001
 
     def test_reading_a_session_refreshes_its_idle_window(self, monkeypatch) -> None:
-        """The point of NICE-5: a session in continuous use must not lapse.
+        """A session in continuous use must not lapse.
 
         Asserted on the timeout the store *passes* rather than on a remaining
         TTL, because ``cache.ttl()`` is a django-redis extension and the suite
@@ -104,7 +104,7 @@ class TestSessionExpiryWindows:
     def test_no_absolute_cap_means_a_pure_idle_window(self, monkeypatch) -> None:
         """``None`` **in the setting** disables the cap.
 
-        ⚠ Not the same as ``max_age_seconds=None`` on the constructor, which is
+        Not the same as ``max_age_seconds=None`` on the constructor, which is
         the tri-state "defer to the setting" — the usual shape in this package,
         and easy to mistake for "no cap" when writing a test.
         """

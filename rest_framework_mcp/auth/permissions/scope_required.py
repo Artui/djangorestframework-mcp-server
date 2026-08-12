@@ -14,24 +14,21 @@ class ScopeRequired:
         ScopeRequired(["invoices:read", "invoices:write"])
         ScopeRequired("invoices:write")
 
-    ⚠ **The bare string is not sugar — it closes a trap.** This used to accept
-    only a list and normalise with ``list(scopes)``, which silently turns
-    ``ScopeRequired("mcp:admin")`` into nine one-character scopes. Nothing
-    failed at registration; the misconfiguration surfaced much later as a
-    permission that could never be satisfied and a nonsense challenge
-    (``scope="m c p : a d m i n"``). :class:`DjangoPermRequired` had always
-    accepted a bare string, so the two siblings disagreed — and a developer who
-    learned the permissive one naturally wrote the same thing here.
+    **The bare string is not sugar — it closes a trap.** Normalising with
+    ``list(scopes)`` would silently turn ``ScopeRequired("mcp:admin")`` into
+    nine one-character scopes: nothing fails at registration, and the
+    misconfiguration surfaces much later as a permission that can never be
+    satisfied and a nonsense challenge. :class:`DjangoPermRequired` takes a
+    bare string too, so the siblings agree.
     """
 
     def __init__(self, scopes: str | list[str]) -> None:
         resolved: list[str] = [scopes] if isinstance(scopes, str) else list(scopes)
         if not resolved:
-            # A ``ScopeRequired`` with nothing to require permits everything —
-            # ``all(...)`` over an empty sequence is ``True`` — while *looking*
-            # like a guard at the registration site, and while satisfying the
-            # unguarded-tool check that would otherwise have warned. That is
-            # the exact failure this class exists to prevent.
+            # ``all(...)`` over an empty sequence is ``True``, so an empty
+            # ``ScopeRequired`` permits everything while reading as a guard at
+            # the registration site — and while satisfying the unguarded-tool
+            # check that would otherwise have warned.
             raise ImproperlyConfigured(
                 "ScopeRequired() needs at least one scope: an empty one permits "
                 "every request while reading as a guard. Pass e.g. "

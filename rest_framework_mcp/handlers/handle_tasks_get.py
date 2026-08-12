@@ -22,24 +22,19 @@ def handle_tasks_get(
 
     Polling is the whole retrieval story — there is no ``tasks/result`` that
     blocks until terminal, and ``pollIntervalMs`` on the record is how the
-    server asks for a sane cadence. A client keeps calling this until the
-    status is terminal.
+    server asks for a sane cadence.
 
-    The response is the task itself, and which extra field it carries follows
-    from the status: ``result`` when completed, ``error`` when failed,
-    ``inputRequests`` when input is required. :meth:`Task.to_dict` owns that
-    correspondence, so this handler does not branch on status at all.
+    The response is the task itself; which extra field it carries follows from
+    the status, and :meth:`Task.to_dict` owns that correspondence, so this
+    handler never branches on status.
 
-    ⚠ ``resultType`` is ``"complete"``, not ``"task"``. The distinction is
-    normative and easy to get backwards: ``"task"`` marks *the result that
-    hands out a task handle in place of the answer* — nothing else, ever. A
-    ``tasks/get`` response is an ordinary complete result that happens to be
-    about a task, and stamping it ``"task"`` would tell the client it had just
-    been handed a second task.
+    ``resultType`` is ``"complete"``, not ``"task"``. The distinction is
+    normative and easy to get backwards: ``"task"`` marks *the result that hands
+    out a task handle in place of the answer*, nothing else, so stamping it here
+    would tell the client it had been handed a second task.
 
-    Deliberately **not** cacheable, and the only catalog-shaped method here
-    that isn't: a task's whole purpose is to change, and the client is asking
-    precisely because it wants to know whether it has.
+    Deliberately **not** cacheable: a task's whole purpose is to change, and the
+    client is asking precisely because it wants to know whether it has.
     """
     if not declares_tasks_extension(context):
         return missing_capability_error()

@@ -66,7 +66,7 @@ def test_a_modern_caller_is_told_about_the_pushes() -> None:
 
 
 def test_a_legacy_caller_is_not() -> None:
-    """⚠ The bug this closes. Same server, same broker — the difference is only
+    """The bug this closes. Same server, same broker — the difference is only
     who is asking, and a legacy client has no method to receive any of it."""
     caps = build_capabilities(_context(_pushing_server()), modern=False)
     assert caps.resources == {}
@@ -96,7 +96,7 @@ def test_a_modern_caller_is() -> None:
 
 
 def test_initialize_never_advertises_a_push_whatever_the_context_says() -> None:
-    """⚠ ``initialize`` does not exist in ``2026-07-28``, so reaching the handler
+    """``initialize`` does not exist in ``2026-07-28``, so reaching the handler
     *is* the proof of era. Pinned with a context claiming a modern version, which
     is exactly the state that would make a version-sniffing implementation get it
     wrong."""
@@ -125,7 +125,7 @@ def test_discover_follows_the_caller_not_the_server() -> None:
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.urls("tests.subscriptions.urls")
 def test_the_method_a_legacy_client_would_have_called_does_not_exist(client: Client) -> None:
-    """⛔ ``resources/subscribe`` is deliberately not implemented: optional in
+    """``resources/subscribe`` is deliberately not implemented: optional in
     ``2025-11-25``, and in ``2026-07-28`` the schema says
     ``SubscriptionFilter.resourceUris`` *"replaces the former resources/subscribe
     RPC"*. This is the concrete thing the old advertisement invited a client to

@@ -4,10 +4,10 @@ from rest_framework_mcp.registry.types.prompt_binding import PromptBinding
 
 
 class PromptRegistry:
-    """Name → :class:`PromptBinding` lookup.
+    """Name to :class:`PromptBinding` lookup.
 
-    Mirrors :class:`ToolRegistry` exactly — names are unique, duplicates
-    raise loudly at registration time.
+    Mirrors :class:`ToolRegistry`: names are unique and a duplicate raises at
+    registration.
     """
 
     def __init__(self) -> None:

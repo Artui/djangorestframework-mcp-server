@@ -23,13 +23,11 @@ def _nullable_float(value: Any) -> float | None:
 def _bound(value: int | float | None | UnsetType, setting: str) -> Any:
     """Resolve a nullable bound: ``UNSET`` → settings, ``None`` → disabled.
 
-    The three outbound bounds differ from every other field here in that
-    ``None`` is a *meaningful value* ("no ceiling"), so it cannot double as
-    the "not supplied" sentinel the other arguments use. ``UNSET``
-    (drf-services' sentinel, reused rather than re-invented) carries that
-    distinction: ``build_mcp_config()`` takes the setting,
-    ``build_mcp_config(dispatch_timeout=None)`` genuinely disables the
-    deadline for this server.
+    ``None`` is a *meaningful value* for the outbound bounds ("no ceiling"), so
+    it cannot double as the "not supplied" sentinel the other arguments use.
+    ``UNSET`` (drf-services' sentinel) carries that distinction:
+    ``build_mcp_config()`` takes the setting,
+    ``build_mcp_config(dispatch_timeout=None)`` disables the deadline.
     """
     return get_setting(setting) if isinstance(value, UnsetType) else value
 
@@ -75,18 +73,15 @@ def build_mcp_config(
 
         MCPServer(name="internal", config=build_mcp_config(page_size=500))
 
-    Use this rather than constructing :class:`MCPConfig` directly — it is what
-    layers your overrides *over* the project's settings instead of discarding
-    them.
+    Use this rather than constructing :class:`MCPConfig` directly — it layers
+    overrides *over* the project's settings instead of discarding them.
     """
     resolved_versions: tuple[str, ...] = tuple(
         protocol_versions if protocol_versions is not None else get_setting("PROTOCOL_VERSIONS")
     )
     if not resolved_versions:
-        # The only genuinely unusable value: a server that supports no revision
-        # can answer nothing, and every version lookup downstream would be an
-        # index into an empty tuple. Caught here, once, at construction —
-        # rather than as an ``IndexError`` out of a view on the first request.
+        # Caught at construction rather than as an ``IndexError`` out of a view
+        # on the first request: every version lookup downstream indexes this.
         raise ImproperlyConfigured(
             "REST_FRAMEWORK_MCP['PROTOCOL_VERSIONS'] is empty, so this server supports "
             "no MCP revision and cannot answer any request. List at least one."
@@ -174,12 +169,10 @@ def build_mcp_config(
             if resource_cache_ttl_ms is not None
             else get_setting("RESOURCE_CACHE_TTL_MS")
         ),
-        # ⚠ ``None`` is meaningful for both — "no expiry" and "send no poll
-        # hint" — so neither can use the ``x if x is not None else setting``
-        # shape the scalars above use: passing ``None`` explicitly would be
-        # indistinguishable from not passing it, and would silently pick up the
-        # setting instead. The kwarg wins only when it differs from the
-        # setting's own default, which ``_resolve_optional`` decides.
+        # ``None`` is meaningful for both — "no expiry" and "send no poll hint"
+        # — so neither can use the ``x if x is not None else setting`` shape the
+        # scalars above use, which would read an explicit ``None`` as "not
+        # supplied" and silently pick up the setting instead.
         task_ttl_ms=_resolve_optional(task_ttl_ms, "TASK_TTL_MS"),
         task_poll_interval_ms=_resolve_optional(task_poll_interval_ms, "TASK_POLL_INTERVAL_MS"),
         subscription_max_seconds=_nullable_float(
@@ -202,10 +195,9 @@ def build_mcp_config(
 def _resolve_optional(value: int | None, setting: str) -> int | None:
     """Resolve a scalar whose ``None`` means something rather than "unset".
 
-    The kwarg is taken when given; otherwise the setting is read, and a
-    ``None`` there is passed through as the configured answer. An explicit
-    ``0`` is kept as ``0`` — for a TTL that means "already expired", which is
-    a strange thing to configure but not ours to override.
+    The kwarg is taken when given; otherwise the setting is read, and a ``None``
+    there is passed through as the configured answer. An explicit ``0`` is kept
+    as ``0``, not treated as absent.
     """
     if value is not None:
         return int(value)

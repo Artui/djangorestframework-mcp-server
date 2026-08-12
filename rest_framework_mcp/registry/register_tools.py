@@ -1,14 +1,10 @@
 """Bulk-registration entry point for :class:`ToolDefinition` lists.
 
-Sister of the imperative :meth:`MCPServer.register_service_tool` /
-:meth:`MCPServer.register_selector_tool` and the decorator
-``@server.service_tool`` / ``@server.selector_tool``. Additive surface —
-``register_tools`` is a thin loop over the existing per-tool methods,
-not a parallel registration engine, so every guarantee (and bug fix) of
-the imperative API applies automatically.
-
-Useful when a project has many tools in a single family and wants to
-collapse the repetitive defaults into one place:
+A thin loop over :meth:`MCPServer.register_service_tool` /
+:meth:`MCPServer.register_selector_tool` rather than a parallel registration
+engine, so every guarantee of the imperative API applies unchanged. Useful when
+a project has many tools in one family and wants the repetitive defaults in one
+place:
 
 .. code-block:: python
 
@@ -42,10 +38,8 @@ if TYPE_CHECKING:  # pragma: no cover - imported only for typing
     from rest_framework_mcp.server.mcp_server import MCPServer
 
 
-# Per-definition fields that ``register_tools`` strips before forwarding
-# to the underlying registration method — these are positional kwargs
-# (``name`` / ``spec``) or the discriminator (``kind``), not flexible
-# kwargs that get merged with defaults.
+# Stripped before forwarding: these are the registration method's own
+# positional kwargs, or the discriminator, not values merged with defaults.
 _DEFINITION_FIXED_FIELDS: frozenset[str] = frozenset({"kind", "name", "spec"})
 
 
@@ -58,18 +52,22 @@ def register_tools(
 ) -> list[ToolBinding | SelectorToolBinding]:
     """Register every :class:`ToolDefinition` against ``server``.
 
-    Defaults dataclasses supply per-kind kwarg defaults that are merged
-    underneath each definition's own values (definition wins on
-    conflict — every field on the definition that is *not* ``None`` is
-    considered "set by the author").
+    Args:
+        server: The server to register against.
+        definitions: The definitions to register, in order.
+        selector_defaults: Per-kind defaults merged underneath each selector
+            definition's own values. Any field the definition sets to something
+            other than ``None`` counts as authored and wins.
+        service_defaults: The same, for service definitions.
 
-    Returns the list of resulting bindings in the same order as
-    ``definitions``, so test harnesses and observability code can
-    introspect what landed.
+    Returns:
+        The resulting bindings, in the order of ``definitions``, so test
+        harnesses and observability code can introspect what landed.
 
-    Raises :class:`TypeError` if a definition's ``kind`` is unrecognised
-    (the discriminator is internal, so this can only happen via direct
-    :class:`ToolDefinition` construction with an unsupported value).
+    Raises:
+        TypeError: The definition's ``kind`` is unrecognised. The discriminator
+            is internal, so this needs direct :class:`ToolDefinition`
+            construction with an unsupported value.
     """
     selector_defaults_kwargs: dict[str, Any] = _non_none_field_dict(selector_defaults)
     service_defaults_kwargs: dict[str, Any] = _non_none_field_dict(service_defaults)
@@ -97,18 +95,13 @@ def register_tools(
 
 
 def _non_none_field_dict(obj: Any) -> dict[str, Any]:
-    """Return the dataclass's non-``None`` fields as a dict.
+    """Return the dataclass's non-``None`` fields as a dict, or ``{}`` for ``None``.
 
-    ``None`` is the "no override" sentinel across the
-    :class:`ToolDefinition` / :class:`SelectorDefaults` /
-    :class:`ServiceDefaults` family — stripping it here means the
-    downstream ``register_*_tool`` method's own default takes effect
-    rather than receiving an explicit ``None`` that might mean
-    something different (e.g. ``include_structured_content=None`` is
-    tri-state on the method).
-
-    Accepts ``None`` itself for callers that didn't supply a defaults
-    dataclass.
+    ``None`` is the "no override" sentinel across the :class:`ToolDefinition` /
+    :class:`SelectorDefaults` / :class:`ServiceDefaults` family, and stripping
+    it lets the downstream ``register_*_tool`` default apply — passing the
+    ``None`` through would mean something else, since several of those kwargs
+    are tri-state on the method.
     """
     if obj is None:
         return {}

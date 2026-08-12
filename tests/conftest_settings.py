@@ -48,7 +48,7 @@ DEFAULT_AUTO_FIELD = "django.db.models.AutoField"
 # path. What remains are scalars.
 REST_FRAMEWORK_MCP = {
     "ALLOWED_ORIGINS": ["*"],
-    # ⚠ The suite opts *out* of the strict default this package now ships.
+    # The suite opts *out* of the strict default this package now ships.
     #
     # 0.25.0 flipped REQUIRE_TOOL_PERMISSIONS to True, so registering a tool
     # with no permissions raises. Roughly 260 fixtures across ~50 files here

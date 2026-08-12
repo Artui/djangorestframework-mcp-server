@@ -13,21 +13,22 @@ def resolve_structured_output(
 ) -> tuple[bool, bool]:
     """Collapse the structured-output tri-state overrides against globals.
 
-    Returns ``(output_schema, structured_content)`` — the effective
-    booleans for whether the binding should advertise ``outputSchema`` in
-    ``tools/list`` and emit ``structuredContent`` in ``tools/call``.
+    Each override is tri-state: ``None`` defers to the passed-in server-level
+    default, ``True`` / ``False`` force the behaviour regardless.
 
-    Each override is tri-state: ``None`` defers to the server-level default
-    (``MCPConfig.include_output_schema`` / ``.include_structured_content``,
-    passed in), ``True`` / ``False`` force the behaviour regardless.
+    The MCP spec requires a tool declaring an ``outputSchema`` to always return
+    conforming ``structuredContent``; the reverse is allowed. This enforces that
+    asymmetry rather than emitting a non-compliant response.
 
-    The MCP spec (2025-06-18) requires that any tool which declares an
-    ``outputSchema`` always returns conforming ``structuredContent``. The
-    reverse — emitting ``structuredContent`` without an ``outputSchema``
-    — is allowed. This function enforces the asymmetric rule: if the
-    effective combination would advertise the schema while suppressing
-    the content, ``ImproperlyConfigured`` is raised so the misconfig
-    surfaces immediately rather than producing a non-compliant response.
+    Returns:
+        ``(output_schema, structured_content)`` — whether the binding advertises
+        ``outputSchema`` in ``tools/list`` and emits ``structuredContent`` in
+        ``tools/call``.
+
+    Raises:
+        django.core.exceptions.ImproperlyConfigured: If the effective
+            combination would advertise the schema while suppressing the
+            content.
     """
     output_schema: bool = (
         include_output_schema_override

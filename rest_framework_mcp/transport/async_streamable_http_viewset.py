@@ -91,8 +91,7 @@ def _error_response(
     ).to_dict()
     response = JsonResponse(body, status=status)
     if error_hint is not None:
-        # Summarises the body for the many clients that surface only the status
-        # line — see ``MCP_ERROR_HEADER``.
+        # Summarises the body for clients that surface only the status line.
         response[MCP_ERROR_HEADER] = error_hint
     return response
 
@@ -100,23 +99,15 @@ def _error_response(
 class AsyncStreamableHttpViewSet(ViewSet):
     """Async sibling of :class:`StreamableHttpViewSet` for ASGI deployments.
 
-    Wire behaviour matches the sync ViewSet for POST and DELETE — same
-    headers, same status codes, same JSON-RPC shapes. The async path
-    additionally supports server-initiated SSE on GET when an
-    :class:`SSEBroker` is wired in; without one, GET returns 405 (the
-    spec explicitly allows this when the server has nothing to push).
+    Wire behaviour matches the sync ViewSet for POST and DELETE — same headers,
+    same status codes, same JSON-RPC shapes — and the reasoning behind the
+    shared checks lives there. The async path additionally serves
+    server-initiated SSE on GET when an :class:`SSEBroker` is wired in; without
+    one, GET returns 405, which the spec allows when there is nothing to push.
 
-    The async ViewSet dispatches I/O-bound handlers via
-    :func:`arun_service` / :func:`arun_selector` and bridges sync
-    collaborators (auth backend, session store, permissions) through
-    :func:`asgiref.sync.sync_to_async` so a fully sync stack still works
-    correctly under ASGI.
-
-    DRF's default authentication / permission / throttling layers are
-    disabled for the same reasons :class:`StreamableHttpViewSet` skips
-    them — MCP's auth pipeline is bespoke. Wired via
-    ``AsyncStreamableHttpViewSet.as_view(ASYNC_STREAMABLE_HTTP_ACTION_MAP,
-    ...)``.
+    Sync collaborators (auth backend, session store, permissions) are bridged
+    through :func:`asgiref.sync.sync_to_async`, so a fully sync stack still
+    works under ASGI.
     """
 
     authentication_classes: tuple = ()
@@ -129,12 +120,10 @@ class AsyncStreamableHttpViewSet(ViewSet):
     prompts: PromptRegistry | None = None
     auth_backend: MCPAuthBackend | None = None
     session_store: SessionStore | None = None
-    # Supplied by ``MCPServer.as_view(...)``, like every other collaborator —
-    # never looked up from module scope. ``None`` on both means this server
-    # runs no tasks, which is the default and changes nothing.
-    # Async-only: a subscription is a stream that stays open, which a sync
-    # WSGI view cannot hold. The sync viewset is deliberately not given one.
+    # Async-only: a subscription is a stream that stays open, which a sync WSGI
+    # view cannot hold. The sync viewset is deliberately not given one.
     subscription_broker: SubscriptionBroker | None = None
+    # ``None`` on both means this server runs no tasks.
     task_store: TaskStore | None = None
     task_executor: TaskExecutor | None = None
     sse_broker: SSEBroker | None = None
@@ -145,60 +134,41 @@ class AsyncStreamableHttpViewSet(ViewSet):
     # ``SERVER_INFO``.
     server_info: Implementation | None = None
     instructions: str | None = None
-    # The owning server's resolved scalars, supplied by MCPServer like
-    # every other collaborator — never looked up from settings here.
     config: MCPConfig | None = None
 
     @classonlymethod
     def as_view(cls, actions: Any = None, **initkwargs: Any) -> Any:  # type: ignore[override]
         """Wrap DRF's sync ``as_view`` so Django routes the callable as async.
 
-        DRF's ``ViewSet.as_view`` returns a sync function that calls
-        ``self.dispatch(request)``. Because our ``dispatch`` is
-        ``async def``, that sync wrapper returns an unawaited coroutine
-        — Django's request handler then raises ``ValueError`` about an
-        unawaited coroutine. Wrapping in an async function and tagging
-        it with the ``_is_coroutine`` marker Django's ``View.as_view``
-        uses tells the request handler to ``await`` the view.
+        ``ViewSet.as_view`` returns a sync function calling
+        ``self.dispatch(request)``; because our ``dispatch`` is ``async def``,
+        that wrapper hands Django an unawaited coroutine and the request
+        handler raises. Wrapping and tagging it with the ``_is_coroutine``
+        marker tells the handler to ``await`` the view instead.
         """
         sync_view = super().as_view(actions=actions, **initkwargs)
 
         async def async_view(request: Any, *args: Any, **kwargs: Any) -> HttpResponseBase:
-            # ``sync_view`` returns whatever ``self.dispatch`` returns; our
-            # overridden ``dispatch`` is async, so this is a coroutine the
-            # DRF stub doesn't know about. Cast to ``Any`` to bypass the
-            # stub's ``Response`` return-type narrowing.
+            # Our overridden ``dispatch`` is async, so this is a coroutine the
+            # DRF stub does not know about; the cast bypasses its ``Response``
+            # return-type narrowing.
             return await cast(Any, sync_view(request, *args, **kwargs))
 
-        # Carry over every attribute DRF and Django hung on the sync view.
-        # Two kinds live here and both matter:
-        #
-        # * introspection — ``view_class`` / ``view_initkwargs`` / ``cls`` /
-        #   ``actions`` / ``initkwargs``, used by URL reversing and tests;
-        # * middleware opt-out flags — ``csrf_exempt`` (DRF wraps every
-        #   ``as_view`` result in :func:`django.views.decorators.csrf.csrf_exempt`)
-        #   and, on Django 5.1+, ``login_required = False``.
-        #
-        # The flags are the load-bearing half: ``CsrfViewMiddleware`` and
-        # ``LoginRequiredMiddleware`` read them off the *resolved callable*,
-        # which is this wrapper, not the sync view underneath. Without them a
-        # POST or DELETE to the MCP endpoint 403s on a missing CSRF token or
-        # 302s to the login page — for a bearer-token transport that has no
-        # CSRF token and no session to present. The sync ViewSet is exempt
-        # via DRF, so this is what keeps the two transports at parity.
-        #
-        # Copied wholesale rather than by allowlist so a future DRF/Django
-        # attribute doesn't silently go missing here. Dunders are skipped:
-        # ``__wrapped__`` (set by ``functools.wraps`` inside ``csrf_exempt``)
-        # would point introspection at the sync view through the async one.
+        # Carries over the introspection attributes and, load-bearingly, the
+        # middleware opt-out flags: ``CsrfViewMiddleware`` and
+        # ``LoginRequiredMiddleware`` read ``csrf_exempt`` / ``login_required``
+        # off the *resolved callable*, which is this wrapper rather than the
+        # sync view underneath, so without them a POST or DELETE 403s on a
+        # missing CSRF token or 302s to the login page — for a bearer-token
+        # transport that has neither. Copied wholesale so a future DRF/Django
+        # attribute cannot silently go missing; dunders are skipped because
+        # ``__wrapped__`` would point introspection at the sync view.
         for attr, value in sync_view.__dict__.items():
             if not attr.startswith("__"):
                 setattr(async_view, attr, value)
-        # Tag as a coroutine so ``django.core.handlers.base`` awaits it.
-        # ``asyncio.coroutines._is_coroutine`` is Django's documented marker
-        # for "this callable returns a coroutine"; the underscore-prefixed
-        # name is a private asyncio implementation detail (not part of the
-        # public API), but Django relies on it stably across versions.
+        # Django's marker for "this callable returns a coroutine", so
+        # ``django.core.handlers.base`` awaits it. The underscore-prefixed name
+        # is a private asyncio detail, but Django relies on it stably.
         async_view._is_coroutine = (  # ty: ignore[unresolved-attribute]
             asyncio.coroutines._is_coroutine  # ty: ignore[unresolved-attribute]
         )
@@ -209,19 +179,12 @@ class AsyncStreamableHttpViewSet(ViewSet):
     ) -> HttpResponseBase:
         """Async-aware mirror of :meth:`rest_framework.views.APIView.dispatch`.
 
-        DRF's stock ``APIView.dispatch`` is sync — it calls
-        ``handler(request)`` and passes whatever comes back to
-        ``finalize_response``. With ``async def`` action methods that
-        return coroutines, ``finalize_response`` chokes because it
-        ``isinstance``-checks against ``HttpResponseBase``. Awaiting
-        the coroutine here closes the gap.
-
-        DRF 3.16+ added some async hooks at the framework edges
-        (permissions, throttles) but the ViewSet dispatch path itself
-        still assumes sync. Until that lands upstream, this override
-        is the lightest-weight workaround that lets us return real
-        async-native responses without the ``async_to_sync`` thread-hop
-        that would defeat the point of an async transport.
+        DRF's stock ``dispatch`` is sync: it passes whatever the handler
+        returns to ``finalize_response``, which ``isinstance``-checks against
+        ``HttpResponseBase`` and so chokes on the coroutine an ``async def``
+        action returns. DRF 3.16+ added async hooks at the framework edges but
+        the ViewSet dispatch path still assumes sync, so until that lands
+        upstream this override is what avoids an ``async_to_sync`` thread-hop.
         """
         self.args = args
         self.kwargs = kwargs
@@ -231,25 +194,21 @@ class AsyncStreamableHttpViewSet(ViewSet):
 
         try:
             self.initial(request, *args, **kwargs)
-            # ``request.method`` is typed as ``str | None`` on the DRF stub
-            # because ``HttpRequest.method`` is theoretically Optional —
-            # but at this point we're inside an HTTP request flow, so
-            # ``method`` is always populated.
+            # The DRF stub types ``request.method`` as ``str | None``; inside
+            # an HTTP request flow it is always populated.
             method: str = request.method.lower()  # ty: ignore[unresolved-attribute]
             handler = getattr(self, method, self.http_method_not_allowed)
             result = handler(request, *args, **kwargs)
-            # Action handlers are normally async (``handle_jsonrpc`` etc.)
-            # but ``http_method_not_allowed`` from the base class is sync.
-            # Accept either shape so a stray sync handler doesn't 500.
+            # Action handlers are async, but the base class's
+            # ``http_method_not_allowed`` is sync — accept either shape so a
+            # stray sync handler does not 500.
             response = await result if asyncio.iscoroutine(result) else result
         except Exception as exc:
             response = self.handle_exception(exc)
 
-        # DRF's ``finalize_response`` is typed ``response: Response`` on
-        # the stub but accepts ``HttpResponseBase`` at runtime (it
-        # short-circuits for non-Response shapes). Our actions return
-        # Django ``HttpResponse`` / ``JsonResponse`` deliberately. Cast
-        # to ``Any`` at the boundary to bypass the over-narrow stub.
+        # ``finalize_response`` is typed ``response: Response`` on the stub but
+        # accepts ``HttpResponseBase`` at runtime, short-circuiting for
+        # non-Response shapes — which is what our actions deliberately return.
         self.response = self.finalize_response(request, cast(Any, response), *args, **kwargs)
         return self.response
 
@@ -282,17 +241,13 @@ class AsyncStreamableHttpViewSet(ViewSet):
             return _error_response(code=JsonRpcErrorCode.INVALID_REQUEST, message=str(exc))
 
         is_initialize: bool = isinstance(message, JsonRpcRequest) and message.method == "initialize"
-        # ``server/discover`` joins ``initialize`` in being answerable without a
-        # session — a client sends it precisely because it has nothing yet. It
-        # does *not* mint one, which is why this is a second flag rather than a
-        # widening of the first.
+        # Answerable without a session, but does *not* mint one — hence a
+        # second flag rather than a widening of the first.
         is_sessionless: bool = (
             isinstance(message, JsonRpcRequest) and message.method in SESSIONLESS_METHODS
         )
 
-        # ⭐ **The era fork** — see the sync sibling. Per-request ``_meta``
-        # carrying a protocol version means modern (stateless, header-validated);
-        # its absence means legacy (``initialize`` handshake, sessions).
+        # **The era fork** — see the sync sibling for the reasoning.
         metadata: RequestMetadata | None = RequestMetadata.from_params(
             _params_dict(getattr(message, "params", None))
         )
@@ -311,18 +266,15 @@ class AsyncStreamableHttpViewSet(ViewSet):
             )
         protocol_version: str = negotiated
 
-        # Authentication runs *before* the session lookup: an unauthenticated
-        # caller always sees 401 regardless of session validity, so session
-        # ids cannot be probed via a 404-vs-401 oracle. Origin / size /
-        # protocol-version checks above are not principal-revealing.
+        # Before the session lookup, so session ids cannot be probed through a
+        # 404-vs-401 oracle. See the sync sibling.
         token = await self._authenticate(http_request)
         if token is None:
             logger.warning("Authentication failed for %s", http_request.path)
             return self._unauthenticated_response()
 
-        # A session is bound to the principal it was minted for at
-        # ``initialize``; a wrong-principal presentation renders the same
-        # 404 as an unknown id (no fresh ownership oracle).
+        # A wrong-principal presentation renders the same 404 as an unknown id,
+        # so the gate is not an ownership oracle.
         store = self._require_session_store()
         session_id: str | None = http_request.headers.get(_SESSION_HEADER)
         principal: str = principal_for_token(token)
@@ -331,11 +283,7 @@ class AsyncStreamableHttpViewSet(ViewSet):
             failure = session_gate_failure(session_id, owner_matches=owner_matches)
             if failure is not None:
                 message_text, status, hint = failure
-                # ⭐ Server-side we name the *exact* condition. The response
-                # merges unknown-id with wrong-principal so the gate is not an
-                # ownership oracle, but the operator is not that adversary and
-                # a log line is not the wire. This is the line that ends the
-                # "is it the session or the load balancer?" incident.
+                # The log names the exact condition the response merges.
                 logger.warning(
                     "Session rejected: %s (session=%s, principal=%s, method=%s) -> HTTP %s",
                     hint,
@@ -386,12 +334,9 @@ class AsyncStreamableHttpViewSet(ViewSet):
             response_body = JsonRpcResponse(id=message.id, error=result).to_dict()
         else:
             response_body = JsonRpcResponse(id=message.id, result=result).to_dict()
-        # A permission denial is a 403 with a challenge naming the missing
-        # scopes, not a 200 with the error tucked inside. The MCP authorization
-        # spec's error table makes the status normative, and the challenge is
-        # how a client learns what to ask for instead of retrying the same
-        # token. Every other dispatch outcome — including a tool that failed on
-        # its own terms — stays a 200.
+        # 403 plus a challenge naming the missing scopes: the MCP authorization
+        # spec's error table makes the status normative. Every other outcome,
+        # including a tool that failed on its own terms, stays a 200.
         denied: bool = is_permission_denial(result)
         http_response = JsonResponse(response_body, status=403 if denied else 200)
         if denied:
@@ -412,9 +357,8 @@ class AsyncStreamableHttpViewSet(ViewSet):
         """Async sibling of the sync viewset's modern path — same rules.
 
         A full parallel implementation rather than a wrapper, as everywhere
-        else in this transport: the only difference is which dispatcher runs,
-        and threading a sync/async switch through would put the era branch
-        somewhere it does not belong.
+        else in this transport: threading a sync/async switch through would put
+        the era branch somewhere it does not belong.
         """
         config: MCPConfig = self._require_config()
         request_id: Any = getattr(message, "id", None)
@@ -447,10 +391,9 @@ class AsyncStreamableHttpViewSet(ViewSet):
             prompts=self._require_prompts(),
             protocol_version=metadata.protocol_version,
             session_id=None,
-            # ⚠ Modern path only. The legacy context leaves this empty, which is
-            # correct rather than a gap: a legacy client declared its
-            # capabilities once, at ``initialize``, and the spec forbids relying
-            # on a declaration that did not arrive *with the request*.
+            # Modern path only: the spec forbids relying on a declaration that
+            # did not arrive *with the request*, so the legacy context leaves
+            # this empty.
             client_capabilities=metadata.client_capabilities,
             server_info=self.server_info,
             instructions=self.instructions,
@@ -489,19 +432,15 @@ class AsyncStreamableHttpViewSet(ViewSet):
     async def handle_get(self, request: Request) -> HttpResponseBase:
         """GET action: open a server-pushed SSE stream for the current session.
 
-        Spec compliance:
-
-        - 401 if the caller cannot authenticate — the stream carries
-          server-pushed payloads for a session, so it is gated exactly
-          like POST.
-        - 405 if no broker is configured (server has nothing to push).
-        - 400 if the protocol-version header is missing/unsupported
-          (parity with POST — the spec is silent on GET version handling,
-          but consistent enforcement avoids surprising behaviour).
-        - 404 if the supplied session id is unknown **or owned by a
-          different principal** (indistinguishable on purpose).
-        - Otherwise: ``text/event-stream`` with idle keep-alives and any
-          payloads ``MCPServer.notify`` enqueues.
+        - 401 if the caller cannot authenticate — the stream carries a
+          session's payloads, so it is gated exactly like POST.
+        - 405 if no broker is configured (nothing to push).
+        - 400 if the protocol-version header is missing or unsupported. The
+          spec is silent on GET here; this is parity with POST.
+        - 404 if the session id is unknown **or owned by a different
+          principal** (indistinguishable on purpose).
+        - Otherwise ``text/event-stream``, with idle keep-alives and whatever
+          ``MCPServer.notify`` enqueues.
         """
         http_request = request._request  # noqa: SLF001
         guard: HttpResponse | None = self._check_origin(http_request)
@@ -515,9 +454,9 @@ class AsyncStreamableHttpViewSet(ViewSet):
             return self._unauthenticated_response()
 
         if self.sse_broker is None or not self._sessions_enabled():
-            # Sessionless: the session id *is* the channel address, so there is
-            # nothing to open a per-client stream against. 405 is the status the
-            # spec defines for "this endpoint does not offer an SSE stream".
+            # The session id *is* the channel address, so sessionless leaves
+            # nothing to open a per-client stream against. 405 is the spec's
+            # status for "this endpoint offers no SSE stream".
             return HttpResponse(status=405)
 
         version_header: str | None = http_request.headers.get(_VERSION_HEADER)
@@ -541,8 +480,8 @@ class AsyncStreamableHttpViewSet(ViewSet):
                 status=404,
             )
 
-        # ``Last-Event-ID`` is only honored when a replay buffer is wired in;
-        # otherwise we silently ignore it (no buffered events to replay).
+        # ``Last-Event-ID`` is honoured only with a replay buffer wired in;
+        # otherwise there is nothing buffered to replay and it is ignored.
         last_event_id: str | None = (
             http_request.headers.get("Last-Event-ID")
             if self.sse_replay_buffer is not None
@@ -582,8 +521,8 @@ class AsyncStreamableHttpViewSet(ViewSet):
                     message="Unknown or missing MCP-Session-Id",
                     status=404,
                 )
-            # Drop replay history first; the session is going away and any
-            # buffered events would never be delivered.
+            # The session is going away, so buffered events would never be
+            # delivered.
             if self.sse_replay_buffer is not None:
                 await self.sse_replay_buffer.forget(session_id)
             await acall(store.destroy, session_id)
@@ -594,23 +533,20 @@ class AsyncStreamableHttpViewSet(ViewSet):
     ) -> HttpResponseBase | None:
         """Answer ``subscriptions/listen`` with a stream that stays open.
 
-        ``None`` for every other method. Separate from ``_maybe_stream``
-        because the two share only their framing: that one wraps a dispatch and
-        ends with its result, while this one has no dispatch and ends when the
-        client leaves.
+        ``None`` for every other method. Separate from ``_maybe_stream``: that
+        one wraps a dispatch and ends with its result, while this has no
+        dispatch and ends when the client leaves.
 
-        ⚠ **Modern era only.** ``subscriptions/listen`` exists to replace the
-        legacy GET stream, so a legacy client reaching here is one that read the
-        wrong revision's docs — it gets the ordinary unknown-method answer from
-        dispatch rather than a stream it has no way to interpret.
+        **Modern era only.** A legacy client reaching here gets dispatch's
+        unknown-method answer rather than a stream it cannot interpret.
         """
         if getattr(message, "method", None) != SUBSCRIPTIONS_LISTEN_METHOD:
             return None
         broker = context.subscriptions
         if broker is None:
             # Checked before granting: evaluating permissions and reading the
-            # task store to build a grant we are about to discard is work for
-            # nothing. An empty grant closes after the acknowledgement.
+            # task store to build a grant we then discard is work for nothing.
+            # An empty grant closes after the acknowledgement.
             return build_subscription_stream(
                 broker=InMemorySubscriptionBroker(),
                 topics=frozenset(),
@@ -621,7 +557,7 @@ class AsyncStreamableHttpViewSet(ViewSet):
 
         cap: int | None = context.config.max_concurrent_subscriptions
         if cap is not None and broker.active_subscriptions >= cap:
-            # ⚠ Refused rather than queued. Each subscription parks a worker for
+            # Refused rather than queued. Each subscription parks a worker for
             # its lifetime, so accepting past the cap trades a clear error for a
             # server that stops answering anything.
             return _error_response(
@@ -639,7 +575,7 @@ class AsyncStreamableHttpViewSet(ViewSet):
         requested = SubscriptionFilter.from_params(
             params.get("notifications") if params is not None else None
         )
-        # ⛔ The spec's one exception to "refused entries are dropped": a client
+        # The spec's one exception to "refused entries are dropped": a client
         # asking for task notifications without declaring the tasks extension
         # MUST get an error, not a quiet omission. Answered here rather than in
         # the grant because it produces an error response instead of a stream.
@@ -669,23 +605,19 @@ class AsyncStreamableHttpViewSet(ViewSet):
         stream whose only event is the final response costs a connection and
         buys nothing.
 
-        Era-independent: the token sits at ``_meta.progressToken`` in both, so
-        a legacy client streams on the same terms as a modern one.
+        Era-independent: the token sits at ``_meta.progressToken`` in both.
         """
         params: dict[str, Any] | None = _params_dict(message.params)
         token: str | int | None = progress_token(params)
         if token is None:
             return None
 
-        # ⚠ Asking is not enough — the dispatch has to be able to answer. A
-        # stream over a path that threads no reporter emits keepalives and one
-        # event, and gives up the normative ``403`` on the way. See
-        # ``can_report_progress`` for which paths qualify and why the rest lose
-        # nothing by being excluded.
+        # Asking is not enough — the dispatch has to be able to answer. See
+        # ``can_report_progress`` for which paths qualify and why.
         if not await acall(can_report_progress, message.method, params, context):
             return None
 
-        # ⚠ Before the stream opens, while a status can still be chosen. See
+        # Before the stream opens, while a status can still be chosen. See
         # ``preflight_permissions`` for why this one check moves out here.
         denied: JsonRpcError | None = await acall(
             preflight_permissions, message.method, params, context
@@ -716,10 +648,9 @@ class AsyncStreamableHttpViewSet(ViewSet):
         """Whether the caller named a modern revision in its version header.
 
         GET and DELETE carry no body, so the per-request ``_meta`` that decides
-        the era everywhere else is unavailable — the header is the only signal
-        there is. ``2026-07-28`` removed both the GET stream and session
-        termination, so a caller naming that revision and then using either
-        verb gets ``405`` rather than a mechanism its own revision retired.
+        the era elsewhere is unavailable and the header is the only signal.
+        ``2026-07-28`` removed both the GET stream and session termination, so
+        a caller naming that revision and using either verb gets ``405``.
         """
         version: str | None = http_request.headers.get(_VERSION_HEADER)
         return version in MODERN_PROTOCOL_VERSIONS
@@ -794,8 +725,8 @@ def _params_dict(params: Any) -> dict[str, Any] | None:
     return None  # JSON-RPC list params are not used by MCP today.
 
 
-# Action map convenience: pass directly to ``as_view`` so the URL conf
-# stays compact.
+# Passed directly to ``as_view``, so the canonical mapping lives next to the
+# ViewSet rather than in the URL conf.
 ASYNC_STREAMABLE_HTTP_ACTION_MAP: dict[str, str] = {
     "post": "handle_jsonrpc",
     "get": "handle_get",

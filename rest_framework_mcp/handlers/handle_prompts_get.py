@@ -23,12 +23,11 @@ def handle_prompts_get(
 ) -> dict[str, Any] | JsonRpcError:
     """Render a registered prompt for the supplied arguments.
 
-    Validates the spec'd shape — required arguments must be present — runs
-    the binding's permission stack, then dispatches the render callable via
-    :func:`resolve_callable_kwargs` so render functions can declare any
-    subset of ``request`` / ``user`` plus their per-prompt arguments without
-    boilerplate. Whatever shape the callable returns is normalised into a
-    list of :class:`PromptMessage` instances.
+    Checks that required arguments are present, runs the binding's permission
+    stack, then dispatches the render callable via
+    :func:`resolve_callable_kwargs` so it can declare any subset of ``request``
+    / ``user`` plus its per-prompt arguments. Whatever it returns is normalised
+    into a list of :class:`PromptMessage`.
     """
     if not isinstance(params, dict):
         return JsonRpcError(JsonRpcErrorCode.INVALID_PARAMS, "prompts/get params must be an object")
@@ -41,8 +40,8 @@ def handle_prompts_get(
     binding = context.prompts.get(name)
     if binding is None:
         # The prompts spec is explicit: "Invalid prompt name: -32602". An
-        # unknown name is a fault in the *params*, not a missing resource —
-        # ``-32002`` is reserved for ``resources/read``.
+        # unknown name is a fault in the *params*, and ``-32002`` is reserved
+        # for ``resources/read``.
         return JsonRpcError(JsonRpcErrorCode.INVALID_PARAMS, f"Unknown prompt: {name!r}")
 
     arguments_raw: Any = params.get("arguments") or {}
@@ -53,8 +52,6 @@ def handle_prompts_get(
         arg.name for arg in binding.arguments if arg.required and arg.name not in arguments_raw
     ]
     if missing:
-        # Shape stays ``{"missing": [...]}`` for backward compat; only
-        # the value-echo augments it.
         data: dict[str, Any] = {"missing": missing}
         if context.config.include_validation_value:
             data["value"] = arguments_raw
@@ -89,11 +86,9 @@ def handle_prompts_get(
             context.token.user,
             None,
             http_request=context.http_request,
-            # A prompt renders messages — no queryset, no serializer — so there
-            # is nothing here to read ``request.query_params``. Passed anyway so
-            # the endpoint's own query string can never reach one if that
-            # changes: what the synthetic ``GET`` holds is this package's choice
-            # at every call site, not the client's.
+            # A prompt renders messages, so nothing here reads
+            # ``request.query_params``. Passed anyway so the endpoint's own
+            # query string can never reach one if that changes.
             query_params={},
         ).request
         pool: dict[str, Any] = {

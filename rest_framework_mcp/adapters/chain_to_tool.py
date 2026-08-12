@@ -52,13 +52,12 @@ def chain_steps_to_tool(
     Pure projection — no side effects on the specs or their callables. The
     handler layer (``handlers/chain_tool_dispatch.py``) runs the steps.
 
-    Each step's ``spec.permission_classes`` (sister-repo 0.12+) is wrapped
-    via :func:`wrap_spec_permissions` and AND-combined with the chain-level
-    ``permissions``. Because permissions are evaluated up front and all must
-    pass, this is the chain's "a failing step permission blocks the whole
-    chain" semantics — without running any step. Structural validation
-    (non-empty, unique aliases, known ``output_alias``, spec types) happens
-    in :meth:`ChainToolBinding.__post_init__`.
+    Each step's ``spec.permission_classes`` is wrapped via
+    :func:`wrap_spec_permissions` and AND-combined with the chain-level
+    ``permissions``. They are all evaluated up front, which is what makes a
+    failing step permission block the whole chain without running any step.
+    Structural validation (non-empty, unique aliases, known ``output_alias``,
+    spec types) happens in :meth:`ChainToolBinding.__post_init__`.
 
     ``meta`` is the base-protocol ``_meta`` bundle the tool's ``tools/list``
     entry carries — see :func:`service_spec_to_tool`.

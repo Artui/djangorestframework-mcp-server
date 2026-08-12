@@ -9,8 +9,8 @@ from django.http import HttpRequest
 
 from rest_framework_mcp.auth.types.token_info import TokenInfo
 
-# Sliding-window key namespace. Separate from ``FixedWindowRateLimit``'s prefix
-# so brokers/operators can spot which scheme produced a counter at a glance.
+# Distinct from the other limiters' prefixes so an operator can tell which
+# scheme produced a counter from the cache key alone.
 _DEFAULT_KEY_PREFIX: str = "drf-mcp:rl-sw"
 
 
@@ -25,27 +25,23 @@ def _default_key(request: HttpRequest, token: TokenInfo) -> str:
 class SlidingWindowRateLimit:
     """Sliding-window rate limiter using a list of timestamps in cache.
 
-    Avoids the well-known fixed-window edge case where a client can issue
-    ``2 * max_calls`` requests across two adjacent windows. Stores the
-    timestamps of recent calls in a Django cache entry; on each call,
-    expired entries are pruned and the live count is compared against
-    ``max_calls``.
+    Avoids the fixed-window edge case where a client issues ``2 * max_calls``
+    requests across two adjacent windows: the timestamps of recent calls are
+    stored in a cache entry, and each call prunes the expired ones and compares
+    the live count against ``max_calls``.
 
-    Trade-offs vs :class:`FixedWindowRateLimit`:
+    Trade-offs against :class:`FixedWindowRateLimit`:
 
-    - **Smoother**: limits actual request rate over the trailing
-      ``per_seconds`` window, not bucketed counts.
-    - **Memory cost**: the timestamp list grows with traffic up to
-      ``max_calls`` entries per key; negligible for typical limits.
-    - **Read-modify-write**: doesn't have the atomic guarantees of the
-      fixed-window's ``cache.add`` + ``cache.incr`` primitives. Concurrent
-      calls can see slightly stale state and admit a small number of
-      extra requests under contention. For strict atomicity in
-      multi-worker deployments, use a Redis-backed limiter with Lua.
+    - **Smoother**: limits the actual rate over the trailing ``per_seconds``,
+      not bucketed counts.
+    - **Memory cost**: up to ``max_calls`` timestamps per key.
+    - **Read-modify-write**: no atomic guarantee, unlike the fixed window's
+      ``cache.add`` + ``cache.incr``. Concurrent calls can read stale state and
+      admit a few extra requests under contention; for strict atomicity in a
+      multi-worker deployment, back the limiter with a Redis-Lua script.
 
     The cache **must** be a shared backend in multi-process deployments;
-    Django's ``locmem`` works for tests but won't share state across
-    workers.
+    Django's ``locmem`` works for tests but shares no state across workers.
     """
 
     def __init__(
@@ -69,18 +65,15 @@ class SlidingWindowRateLimit:
         now: float = time.time()
         cutoff: float = now - self._window
         cache_key: str = f"{_DEFAULT_KEY_PREFIX}:{self._namespace}:{self._key_fn(request, token)}"
-        # Cache stores a list of timestamps; ``None`` on first call.
         timestamps: list[float] = cache.get(cache_key) or []
-        # Drop entries that fell outside the trailing window.
         live: list[float] = [ts for ts in timestamps if ts > cutoff]
         if len(live) >= self._max:
-            # The oldest live timestamp determines when the window first has
-            # capacity again; clamp to >= 1 so callers always see a usable
-            # ``Retry-After`` value.
+            # The oldest live timestamp is when the window regains capacity;
+            # clamped to >= 1 so ``Retry-After`` is always usable.
             retry_at: float = live[0] + self._window
             retry_after: int = max(int(retry_at - now), 1)
-            # Save the pruned list so we don't keep iterating over expired
-            # entries on every denied call.
+            # Persist the pruned list so denied calls stop re-walking expired
+            # entries.
             cache.set(cache_key, live, timeout=self._window)
             return retry_after
         live.append(now)

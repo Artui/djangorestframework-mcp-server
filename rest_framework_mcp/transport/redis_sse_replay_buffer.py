@@ -24,15 +24,13 @@ class RedisSSEReplayBuffer:
     """Cross-process replay buffer backed by Redis Streams.
 
     Drop-in replacement for :class:`InMemorySSEReplayBuffer` when running
-    multiple ASGI workers. The streaming GET that handles a reconnect
-    can land on any worker; reading from a shared Redis Stream means the
-    replay is the same regardless of which worker recorded the events.
+    multiple ASGI workers: a reconnect can land on any worker, and a shared
+    Redis Stream replays the same events whichever worker recorded them.
 
-    Stream IDs are auto-assigned by Redis (``ms-seq`` format) and are
-    monotonic within a session — they double as the SSE event IDs the
-    client echoes back via ``Last-Event-ID``. ``MAXLEN ~ N`` caps the
-    retained history per session; the ``~`` makes trimming approximate
-    (Redis trims when convenient) which is fine for replay buffers.
+    Stream IDs are auto-assigned by Redis and monotonic within a session, so
+    they double as the SSE event IDs the client echoes back via
+    ``Last-Event-ID``. ``MAXLEN ~ N`` caps the retained history per session,
+    approximately — Redis trims when convenient, which is fine here.
 
     Wire it into :class:`MCPServer`::
 
@@ -74,14 +72,13 @@ class RedisSSEReplayBuffer:
     async def record(self, session_id: str, payload: Any) -> str:
         """Append ``payload`` to the session's stream and return the assigned ID.
 
-        ``XADD <key> MAXLEN ~ N * data <json>`` — the ``*`` lets Redis
-        choose a monotonic ID; ``~`` makes trimming approximate (Redis
-        trims at internal node boundaries, which is faster than exact
-        trimming and bounds memory in the same shape).
+        ``XADD <key> MAXLEN ~ N * data <json>``: the ``*`` lets Redis choose a
+        monotonic ID, and ``~`` trims at internal node boundaries, which bounds
+        memory in the same shape as exact trimming and is faster.
         """
         body: str = json.dumps(payload)
-        # ``redis-py`` returns the assigned ID as bytes; decode to a plain
-        # string so it survives JSON round-trips and SSE wire framing.
+        # Decoded from bytes so the ID survives JSON round-trips and SSE
+        # framing.
         raw_id: Any = await self._client.xadd(
             self._key(session_id),
             {"data": body},
@@ -95,9 +92,8 @@ class RedisSSEReplayBuffer:
     async def replay(self, session_id: str, after_id: str | None) -> AsyncIterator[tuple[str, Any]]:
         if after_id is None:
             return
-        # ``XRANGE`` with an exclusive lower bound (``(<id>``) yields every
-        # entry strictly greater than ``after_id``. Redis returns
-        # ``[(id, {b"data": b"<json>"}), ...]`` so we unpack and decode.
+        # The exclusive lower bound (``(<id>``) yields every entry strictly
+        # greater than ``after_id``.
         entries: Any = await self._client.xrange(self._key(session_id), min=f"({after_id}")
         for raw_id, fields in entries:
             event_id: str = (

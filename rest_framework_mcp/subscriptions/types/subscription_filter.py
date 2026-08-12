@@ -12,14 +12,13 @@ class SubscriptionFilter:
 
     One type for both directions, because they are the same shape: the client
     sends a filter on ``subscriptions/listen`` and the server answers with the
-    subset it will honour. Using two types would let them drift, and the whole
-    point of the acknowledgement is that the client can compare them.
+    subset it will honour. Two types could drift, and the point of the
+    acknowledgement is that the client can compare them.
 
-    ⚠ **Empty means nothing is delivered, and that is correct.** The spec makes
-    every type opt-in and says the server **MUST NOT** send what was not
-    requested, so an absent field is a refusal rather than a default. A client
-    that sends ``{}`` is acknowledged with nothing and its stream is closed
-    immediately, since nothing could ever reach it.
+    **Empty means nothing is delivered.** The spec makes every type opt-in and
+    says the server **MUST NOT** send what was not requested, so an absent field
+    is a refusal rather than a default: a client that sends ``{}`` is
+    acknowledged with nothing and its stream closes immediately.
     """
 
     kinds: frozenset[NotificationKind] = frozenset()
@@ -30,11 +29,9 @@ class SubscriptionFilter:
     def from_params(cls, raw: Any) -> SubscriptionFilter:
         """Read a filter off the wire, ignoring anything unusable.
 
-        Tolerant on the way in: a malformed entry is dropped rather than
-        failing the request. The acknowledgement is what tells the client what
-        actually took effect, so a dropped field is *reported* rather than
-        silent — which is a better outcome than rejecting a subscription
-        outright over one unrecognised key.
+        A malformed entry is dropped rather than failing the request: the
+        acknowledgement reports what actually took effect, so the drop is
+        visible, which beats rejecting a subscription over one bad key.
         """
         if not isinstance(raw, dict):
             return cls()
@@ -50,9 +47,9 @@ class SubscriptionFilter:
     def to_dict(self) -> dict[str, Any]:
         """The wire form, omitting everything not asked for.
 
-        Only truthy entries appear: the acknowledgement is read as "these are
-        the things you will actually receive", and a ``false`` or an empty list
-        in it would read as a promise about something.
+        Only truthy entries appear: the acknowledgement reads as "these are the
+        things you will receive", so a ``false`` or an empty list in it would
+        read as a promise about something.
         """
         out: dict[str, Any] = {kind.filter_field: True for kind in sorted(self.kinds, key=str)}
         if self.resource_uris:

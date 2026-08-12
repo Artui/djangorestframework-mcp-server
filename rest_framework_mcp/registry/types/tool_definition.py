@@ -21,25 +21,21 @@ from rest_framework_mcp.registry.types.url_kwarg import UrlKwarg
 class ToolDefinition:
     """Declarative description of a single tool, fed to :func:`register_tools`.
 
-    ``ToolDefinition`` is a transport-agnostic container — it holds the
-    kwargs that would otherwise be passed to
-    :meth:`MCPServer.register_service_tool` or
+    A transport-agnostic container for the kwargs that would otherwise be
+    passed to :meth:`MCPServer.register_service_tool` or
     :meth:`MCPServer.register_selector_tool`, plus a :class:`ToolKind`
-    discriminator that selects between them at dispatch time.
+    discriminator selecting between them at dispatch time.
 
-    Construct via the classmethods, not the dataclass constructor — the
-    methods enforce the per-kind kwarg surface (a service definition
-    can't set ``ordering_fields`` / ``paginate``; a selector definition
-    can't omit ``input_serializer`` quietly etc.). Filtering is declared
-    on the spec (``SelectorSpec.filter_set``), not here, so neither kind
-    carries a ``filter_set`` kwarg. Direct construction is available for
-    tests and tooling but bypasses the type-shape guarantees.
+    Construct via :meth:`service` / :meth:`selector`, which enforce the
+    per-kind kwarg surface; direct construction is available for tests and
+    tooling but bypasses that. Filtering is declared on the spec
+    (``SelectorSpec.filter_set``), so neither kind carries a ``filter_set``
+    kwarg.
 
-    Every per-call kwarg defaults to ``None``; downstream
-    :func:`register_tools` treats ``None`` as "no override", which lets
-    a :class:`SelectorDefaults` / :class:`ServiceDefaults` instance
-    supply the value, falling back to the registration method's own
-    default if neither is set.
+    Every per-call kwarg defaults to ``None``, which :func:`register_tools`
+    reads as "no override" — letting a :class:`SelectorDefaults` /
+    :class:`ServiceDefaults` supply the value, and falling back to the
+    registration method's own default when neither does.
     """
 
     kind: ToolKind
@@ -48,21 +44,19 @@ class ToolDefinition:
     description: str | None = None
     title: str | None = None
     display_name: str | None = None
-    """Consumer-only label — **never emitted on the MCP wire**. Carried onto the
-    resulting binding so a downstream library can render a richer label than the
-    protocol ``title``."""
+    """Consumer-only label, **never emitted on the MCP wire**. Carried onto the
+    resulting binding so a downstream library can render a richer label than
+    the protocol ``title``."""
 
     display_description: str | None = None
-    """Consumer-only blurb, the sibling of :attr:`display_name` — also never
-    emitted on the MCP wire, and likewise carried onto the binding."""
+    """Consumer-only blurb, the sibling of :attr:`display_name` and likewise
+    never emitted on the MCP wire."""
 
     # Both kinds:
     output_format: OutputFormat | None = None
     permissions: Sequence[Any] | None = None
     rate_limits: Sequence[Any] | None = None
     annotations: dict[str, Any] | None = None
-    # Generic ``_meta`` bundle forwarded to the registration method. ``None``
-    # means "no override" like every other field here.
     meta: dict[str, Any] | None = None
     include_structured_content: bool | None = None
     include_output_schema: bool | None = None
@@ -73,10 +67,9 @@ class ToolDefinition:
     ordering_fields: Sequence[str] | None = None
     paginate: bool | None = None
     always_listed: bool | None = None
-    """Per-binding opt-back-in to ``tools/list`` when
-    ``FILTER_LISTINGS_BY_PERMISSIONS`` would otherwise hide this binding.
-    ``None`` means "use the registration default" (``False``); ``True`` /
-    ``False`` force the behaviour."""
+    """Keep this binding in ``tools/list`` when
+    ``FILTER_LISTINGS_BY_PERMISSIONS`` would otherwise hide it. ``None`` takes
+    the registration default (``False``)."""
 
     spec_kwargs_provides: Sequence[str] | None = None
     """Explicit opt-in declaring that ``spec.kwargs(view, request)`` supplies
@@ -85,18 +78,16 @@ class ToolDefinition:
     Trust has to be declared **per transport**, because ``spec.kwargs`` is a
     runtime callable whose output depends on the view context — URL path params
     under DRF, URI template vars for MCP resources, neither for MCP tools.
-    ``None`` means no opt-in; supply a sequence to acknowledge that the provider
-    is the static source for those names."""
+    Supply a sequence to acknowledge that the provider is the static source for
+    those names."""
 
     url_kwargs: Sequence[UrlKwarg] | None = None
     """URL-derived values the model supplies as tool args, seeded into the
-    off-HTTP ``view.kwargs`` at dispatch (see :class:`UrlKwarg`). ``None`` means
-    "use the registration default" (no URL kwargs)."""
+    off-HTTP ``view.kwargs`` at dispatch. See :class:`UrlKwarg`."""
 
     query_params: Sequence[QueryParam] | None = None
     """Read-shaping values the model supplies as tool args, seeded into the
-    off-HTTP ``request.query_params`` at dispatch (see :class:`QueryParam`).
-    ``None`` means "use the registration default" (no query params)."""
+    off-HTTP ``request.query_params`` at dispatch. See :class:`QueryParam`."""
 
     @classmethod
     def service(
@@ -175,10 +166,9 @@ class ToolDefinition:
     ) -> ToolDefinition:
         """Typed entry point for selector-tool definitions.
 
-        The selector's ``LIST`` / ``RETRIEVE`` shape lives on the spec
-        (``SelectorSpec.kind``, required in
-        ``djangorestframework-services`` 0.13+), not here — the bulk
-        registration loop reads it from there.
+        The ``LIST`` / ``RETRIEVE`` shape lives on the spec
+        (``SelectorSpec.kind``), not here — the bulk registration loop reads it
+        from there.
         """
         return cls(
             kind=ToolKind.SELECTOR,

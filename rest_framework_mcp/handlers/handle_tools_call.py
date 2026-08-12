@@ -71,31 +71,26 @@ def handle_tools_call(
 
     binding = context.tools.get(tool_name)
     if binding is None:
-        # The tools spec's own worked example of a protocol error is an
-        # unknown tool answered with ``-32602`` — the name is a bad param,
-        # and the model cannot self-correct from it, so it is a JSON-RPC
-        # error rather than an ``isError`` result.
+        # The tools spec's own worked example of a protocol error: an unknown
+        # tool is a bad param, so ``-32602`` rather than an ``isError`` result.
         return JsonRpcError(JsonRpcErrorCode.INVALID_PARAMS, f"Unknown tool: {tool_name!r}")
 
     arguments_raw: Any = params.get("arguments") or {}
     if not isinstance(arguments_raw, dict):
         return JsonRpcError(JsonRpcErrorCode.INVALID_PARAMS, "'arguments' must be an object")
 
-    # Before dispatching anything: does this call get a task handle instead of
-    # a result? Placed after argument shape validation so a malformed call is
-    # still rejected outright rather than queued, and before dispatch because a
-    # task exists precisely so the dispatch does not happen here. ``None`` —
-    # the ordinary answer — falls through to the inline path unchanged.
+    # Ordering: after argument-shape validation so a malformed call is rejected
+    # outright rather than queued, and before dispatch because a task exists
+    # precisely so the dispatch does not happen here.
     as_task: dict[str, Any] | JsonRpcError | None = maybe_create_task(
         binding, arguments_raw, context
     )
     if as_task is not None:
         return as_task
 
-    # The outbound size ceiling is applied once, here, rather than at each of
-    # the three dispatch paths' several ``build_tool_result`` sites — one place
-    # to reason about, and it measures the finished result (both copies of the
-    # payload) rather than a renderer's intermediate.
+    # The ceiling is applied once, here, rather than at the three dispatch
+    # paths' several ``build_tool_result`` sites, so it measures the finished
+    # result (both copies of the payload) rather than a renderer's intermediate.
     result: dict[str, Any] | JsonRpcError = enforce_result_ceiling(
         _dispatch_tool_call(binding, params, arguments_raw, context),
         max_result_bytes=resolve_bound(binding.max_result_bytes, context.config.max_result_bytes),
@@ -117,19 +112,16 @@ def _dispatch_tool_call(
 
     Split out of :func:`handle_tools_call` so the size ceiling wraps every
     return — including the ones the chain and selector helpers make — at a
-    single point. The async sibling splits the same way, for the same reason
-    plus the deadline.
+    single point. The async sibling splits the same way, plus the deadline.
     """
-    # OpenTelemetry span: scoped to the dispatch portion (after binding
-    # resolution) so cheap validation rejections don't generate noise. The
-    # span is a no-op when ``opentelemetry-api`` isn't installed.
+    # Scoped to the dispatch portion, after binding resolution, so cheap
+    # validation rejections don't generate noise. A no-op without
+    # ``opentelemetry-api``.
     with span(
         "mcp.tools.call",
         attributes=_span_attrs(binding.name, context),
     ) as otel_span:
-        # Chain tools run an ordered sequence of specs; selector tools
-        # (read-shaped) own the post-fetch pipeline (filter / order /
-        # paginate). Both route through dedicated dispatch helpers. Service
+        # Chain and selector tools have their own dispatch helpers; service
         # tools fall through to the mutation-shaped path below.
         if isinstance(binding, ChainToolBinding):
             return dispatch_chain_tool(binding, params, arguments_raw, context, otel_span)
@@ -156,33 +148,27 @@ def _dispatch_tool_call(
                 data={"retryAfter": retry_after},
             )
 
-        # If this is a retry of a call that asked the user something, the answer
-        # arrives as ``inputResponses`` and becomes an ordinary argument here —
-        # which is the whole of what the service ever sees of the exchange.
+        # On a retry of a call that asked the user something, the answer arrives
+        # as ``inputResponses`` and becomes an ordinary argument here — the
+        # whole of what the service ever sees of the exchange.
         prior: ResolvedInput = resolve_prior_input(params, binding.name, arguments_raw, context)
         if prior.refused_with is not None:
             return refusal_result(prior.refused_with)
         arguments_raw = prior.arguments
 
-        # Synthesise the off-HTTP request/view a spec's callables expect from the
-        # real HTTP request + MCP-supplied arguments, then dispatch through the
-        # neutral core. ``enforce_permissions`` is the object-permission hook —
-        # it runs ``spec.permission_classes`` against the resolved target.
-        # URL kwargs (a scoping ``spec.kwargs`` provider's ``view.kwargs`` inputs)
-        # route through the view, not the params — stripped from what the spec
-        # validates / spreads, seeded into ``build_offline_context(kwargs=…)``.
+        # ``enforce_permissions`` is the object-permission hook: it runs
+        # ``spec.permission_classes`` against the resolved target.
         argument_binding, unknown_arguments = services_dispatch_policies(binding)
-        # Inside the ``try``: ``split_url_kwargs`` raises ``ServiceValidationError``
-        # when a ``required=True`` URL kwarg was omitted, and that must reach the
-        # same ``isError`` mapping as any other dispatch-time validation failure
-        # rather than escaping as an unhandled 500.
+        # The split stays inside the ``try``: ``split_url_kwargs`` raises
+        # ``ServiceValidationError`` for an omitted ``required=True`` kwarg, and
+        # that must reach the same ``isError`` mapping as any other
+        # dispatch-time validation failure rather than escaping as a 500.
         try:
             spec_params, url_kwarg_values = split_url_kwargs(arguments_raw, binding.url_kwargs)
-            # Read-shaping params leave the spec params and land in the
-            # synthetic request's ``GET`` instead. Always passed — an empty
-            # mapping still *replaces* whatever query string the client hung off
-            # the MCP endpoint URL, so ``request.query_params`` is this
-            # package's value rather than the caller's.
+            # ``query_params`` is always passed — an empty mapping still
+            # *replaces* whatever query string the client hung off the MCP
+            # endpoint URL, so ``request.query_params`` is this package's value
+            # rather than the caller's.
             spec_params, query_param_values = split_query_params(spec_params, binding.query_params)
             offline = build_offline_context(
                 context.token.user,
@@ -201,11 +187,9 @@ def _dispatch_tool_call(
                 argument_binding=argument_binding,
                 unknown_arguments=unknown_arguments,
                 on_target_resolved=enforce_permissions,
-                # ⚠ Not dead on the sync path, despite there being no stream to
-                # report on: a task worker runs *this* function, and its
-                # reporter writes to the task record rather than to a
-                # connection. ``None`` for an ordinary sync request, which
-                # drf-services turns into its no-op.
+                # Not dead on the sync path despite there being no stream: a
+                # task worker runs *this* function and its reporter writes to
+                # the task record. ``None`` for an ordinary sync request.
                 progress=context.progress,
             )
         except drf_serializers.ValidationError as exc:
@@ -221,8 +205,7 @@ def _dispatch_tool_call(
             return JsonRpcError(JsonRpcErrorCode.FORBIDDEN, "Insufficient permission")
         except ServiceValidationError as exc:
             # Business validation on well-shaped input is a *tool-level* failure
-            # per the MCP spec — an ``isError`` result the model can self-correct
-            # from, not a protocol error.
+            # per the MCP spec: an ``isError`` result, not a protocol error.
             return build_error_tool_result(
                 exc.message,
                 error_type="validation_error",
@@ -231,18 +214,14 @@ def _dispatch_tool_call(
                 ),
             ).to_dict()
         except AdditionalInputRequired as exc:
-            # ⚠ **Must precede the ``ServiceError`` arm below** — this is a
-            # subclass of it, and the generic handler would otherwise swallow
-            # the request for input and report it as a plain failure. The
-            # subclassing is deliberate on the drf-services side (a transport
-            # that has never heard of elicitation still says something useful);
-            # this ordering is what a transport that *has* heard of it owes in
-            # return.
+            # **Must precede the ``ServiceError`` arm below** — this is a
+            # subclass of it, so the generic handler would otherwise swallow the
+            # request for input and report it as a plain failure.
             return ask_for_input(exc, prior, context)
         except ServiceError as exc:
-            # The "real failure" channel — recorded on the active span when the
-            # consumer opted in. ``ServiceValidationError`` is deliberately not
-            # recorded (input-shape feedback, not a server fault).
+            # The real-failure channel, recorded on the span when the consumer
+            # opted in. ``ServiceValidationError`` deliberately is not — that is
+            # input-shape feedback, not a server fault.
             if context.config.record_service_exceptions:
                 otel_span.record_exception(exc)
             return build_error_tool_result(exc.message, error_type="service_error").to_dict()
@@ -278,8 +257,8 @@ def _render(binding: Any, result: Any, offline: Any) -> Any:
 
     ``render_spec_output`` reads the output serializer off
     ``spec.output_selector_spec`` and resolves its ``output_serializer_context``
-    provider with the resolved-data extras it declares (``page`` for a list
-    result, ``instance`` / ``result`` for a single one).
+    provider with the extras it declares (``page`` for a list result,
+    ``instance`` / ``result`` for a single one).
     """
     many: bool = result.kind == "list"
     extras: dict[str, Any] = (
@@ -293,9 +272,8 @@ def _render(binding: Any, result: Any, offline: Any) -> Any:
         request=offline.request,
         extras=extras,
     )
-    # MCP contract: a tool returning ``None`` (no output serializer) must still
-    # emit a JSON object as ``structuredContent``. ``render_spec_output`` passes
-    # ``None`` through, so coerce it here.
+    # MCP contract: a tool returning ``None`` must still emit a JSON object as
+    # ``structuredContent``, and ``render_spec_output`` passes ``None`` through.
     return {} if payload is None else payload
 
 

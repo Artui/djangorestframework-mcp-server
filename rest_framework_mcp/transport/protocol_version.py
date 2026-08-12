@@ -6,12 +6,9 @@ from collections.abc import Sequence
 def resolve_protocol_version(header_value: str | None, supported: Sequence[str]) -> str | None:
     """Validate the ``MCP-Protocol-Version`` header against ``supported``.
 
-    Returns the version when supported, ``None`` when it is not. Callers
-    translate ``None`` into a 400 response. A missing header is allowed only
-    on the ``initialize`` request — that branching belongs in the view, so
-    we treat absence and presence-but-unsupported as separate cases here:
-    ``""`` -> ``None`` (so a stripped/empty header behaves like missing on
-    the negative path), ``None`` -> ``None``.
+    Returns the version when supported, ``None`` when it is not or when the
+    header is missing or empty. Deciding what absence means belongs to the
+    caller: a missing header is allowed only on ``initialize``.
     """
     if not header_value:
         return None

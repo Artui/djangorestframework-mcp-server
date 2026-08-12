@@ -191,7 +191,7 @@ async def test_an_ordinary_request_is_unaffected() -> None:
 
 
 async def test_a_grant_of_nothing_closes_instead_of_holding_a_worker() -> None:
-    """⚠ The fix for a stream that used to keep an ASGI worker parked forever
+    """The fix for a stream that used to keep an ASGI worker parked forever
     emitting keepalives it could never follow with anything."""
     response = await _listen(
         AsyncClient(), {"notifications": {"resourceSubscriptions": ["gated://thing"]}}
@@ -248,7 +248,7 @@ async def test_a_capped_server_refuses_a_further_subscription() -> None:
 
 
 async def test_a_capped_stream_closes_itself_and_forces_resubscription() -> None:
-    """⚠ Permissions are checked once, at open. The cap is what stops a revoked
+    """Permissions are checked once, at open. The cap is what stops a revoked
     principal receiving change signals indefinitely."""
     from rest_framework_mcp.subscriptions.in_memory_subscription_broker import (
         InMemorySubscriptionBroker,

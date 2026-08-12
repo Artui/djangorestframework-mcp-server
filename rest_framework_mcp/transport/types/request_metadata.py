@@ -15,16 +15,15 @@ from rest_framework_mcp.protocol.types.implementation import Implementation
 class RequestMetadata:
     """The per-request ``_meta`` a modern client sends on every request.
 
-    This is what replaced the ``initialize`` handshake: version, identity and
-    capabilities, restated on each request rather than agreed once and
-    remembered. Nothing is negotiated, so nothing has to be stored — which is
-    the whole point of the stateless revision.
+    What replaced the ``initialize`` handshake: version, identity and
+    capabilities restated on each request rather than agreed once and
+    remembered, so nothing is negotiated and nothing has to be stored.
 
-    :meth:`from_params` doubles as the **era test**: it returns ``None`` when
-    the request carries no modern protocol version, and a legacy request is
-    exactly a request that carries none. That is deliberately not a test on the
+    :meth:`from_params` doubles as the **era test**, returning ``None`` when
+    the request carries no modern protocol version — a legacy request being
+    exactly one that carries none. Deliberately not a test on the
     ``MCP-Protocol-Version`` header (legacy clients have sent one since
-    ``2025-06-18``) nor on the method (most methods exist in both eras).
+    ``2025-06-18``) nor on the method (most exist in both eras).
     """
 
     protocol_version: str
@@ -35,13 +34,12 @@ class RequestMetadata:
     def from_params(cls, params: Any) -> RequestMetadata | None:
         """Read modern metadata off a request's ``params``, or ``None`` if legacy.
 
-        Tolerant on the way in: a malformed ``_meta`` yields ``None`` (read as
-        legacy) rather than an error, because a *missing* modern marker and a
-        *broken* one are indistinguishable from here — and answering a legacy
-        client with a modern header-validation error would be the more
-        confusing failure of the two. A modern request that gets this far and
-        is then missing a required field is rejected downstream, where the
-        error can name the field.
+        Tolerant on the way in: a malformed ``_meta`` reads as legacy rather
+        than erroring, because a *missing* modern marker and a *broken* one are
+        indistinguishable from here, and answering a legacy client with a
+        modern header-validation error is the more confusing failure. A modern
+        request missing a required field is rejected downstream, where the
+        error can name it.
         """
         if not isinstance(params, dict):
             return None
@@ -64,9 +62,8 @@ class RequestMetadata:
 def _implementation(raw: Any) -> Implementation | None:
     """Project a ``clientInfo`` mapping, ignoring anything unusable.
 
-    Self-reported and unverified — the spec says as much about the server's
-    own — so a half-filled one is projected as far as it goes rather than
-    rejected. Nothing branches on it.
+    Self-reported and unverified, as the spec says of the server's own, so a
+    half-filled one is projected as far as it goes. Nothing branches on it.
     """
     if not isinstance(raw, dict) or not isinstance(raw.get("name"), str):
         return None

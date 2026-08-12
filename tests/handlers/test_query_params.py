@@ -200,7 +200,7 @@ def test_a_query_param_is_never_required() -> None:
     assert "fields" in schema["properties"]
 
 
-# ---------- closing the undeclared channel (QP-3a) ----------
+# ---------- closing the undeclared channel ----------
 
 
 def test_the_endpoint_query_string_no_longer_reaches_a_service_tool() -> None:

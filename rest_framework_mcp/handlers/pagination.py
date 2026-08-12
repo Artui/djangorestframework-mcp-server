@@ -4,10 +4,9 @@ import base64
 from collections.abc import Sequence
 from typing import Any
 
-# Cursor scheme: base64url-encoded ``offset:N``. Opaque to clients (the spec
-# requires they treat it as a black box) but trivially debuggable when needed.
-# A custom prefix lets us reject cursors crafted for a different list endpoint
-# in the future without changing the wire format.
+# Cursor scheme: base64url-encoded ``offset:N``. Opaque to clients, which the
+# spec requires, but debuggable; the prefix leaves room to reject a cursor
+# crafted for a different list endpoint without changing the wire format.
 _CURSOR_PREFIX: str = "offset:"
 
 
@@ -43,12 +42,9 @@ def paginate(
 ) -> tuple[list[Any], str | None]:
     """Slice ``items`` into a page of at most ``page_size``, starting at ``cursor``.
 
-    Returns ``(page, next_cursor)``. ``next_cursor`` is ``None`` when the page
-    reaches the end of the sequence — that's the spec-compliant signal that
-    no more pages are available.
-
-    The function is pure: callers handle the JSON-RPC error translation when
-    ``ValueError`` propagates from a malformed cursor.
+    Returns ``(page, next_cursor)``; ``next_cursor`` is ``None`` at the end of
+    the sequence, the spec's signal that no more pages are available. A
+    malformed cursor raises ``ValueError`` for the caller to translate.
     """
     offset: int = _decode_cursor(cursor) if cursor else 0
     if offset < 0:

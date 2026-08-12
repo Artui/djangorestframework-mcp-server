@@ -1,25 +1,20 @@
 """``call_spec_tool`` — transport-neutral invocation of a spec-backed MCP tool.
 
-The blessed surface this introduces: drive a ``ServiceSpec`` / ``SelectorSpec``
-tool through the sister repo's transport-neutral ``dispatch_spec`` +
-``render_spec_output`` + ``enforce_permissions`` (off the HTTP / JSON-RPC path),
-returning the same :class:`ToolResult` the wire handlers build. A programmatic
-caller — the django-ag-ui bridge, a Pydantic-AI toolset, a management command —
-gets a tool result without reaching into handler internals or re-implementing
-dispatch.
+Drives a ``ServiceSpec`` / ``SelectorSpec`` tool through the sister repo's
+transport-neutral ``dispatch_spec`` + ``render_spec_output`` +
+``enforce_permissions``, off the HTTP / JSON-RPC path, returning the same
+:class:`ToolResult` the wire handlers build. A programmatic caller — the
+django-ag-ui bridge, a Pydantic-AI toolset, a management command — gets a tool
+result without reaching into handler internals or re-implementing dispatch.
 
-This is deliberately the **spec core**: it resolves the instance, validates the
-spec's ``input_serializer``, runs the service / selector, re-fetches through the
-output selector, shapes + filters the queryset, and renders — honouring the
-binding's ``argument_binding`` / ``unknown_arguments`` policies (mapped onto
-``dispatch_spec``'s) and its ``permission_classes`` in two layers: an upfront
-``enforce_permissions`` call for the class-level ``has_permission`` check, plus
-the ``on_target_resolved=enforce_permissions`` hook for object-level checks on
-the resolved target.
-It does *not* layer on the read-shaped transport extras — pagination, ordering,
+Deliberately the **spec core**: instance resolution, ``input_serializer``
+validation, the service / selector run, the output-selector re-fetch, queryset
+shaping and rendering, honouring the binding's ``argument_binding`` /
+``unknown_arguments`` policies and its ``permission_classes`` in two layers.
+It does *not* layer on the read-shaped transport extras — pagination, ordering
 and a selector binding's MCP-only ``input_serializer`` stay with the wire
-handlers. The transport-level MCP permissions / rate limits are a wire concern
-and are not consulted here.
+handlers — and the transport-level MCP permissions / rate limits are a wire
+concern not consulted here.
 """
 
 from __future__ import annotations
@@ -62,16 +57,15 @@ def call_spec_tool(
     """Invoke a spec-backed tool through the transport-neutral dispatch core.
 
     Enforces the spec's ``permission_classes`` against a synthetic off-HTTP
-    context, dispatches via ``dispatch_spec``, and renders via
-    ``render_spec_output``. Business-rule failures the service raises
-    (``ServiceValidationError`` / ``ServiceError``) and a missing required
-    instance come back as ``isError`` tool results the model can self-correct
-    from; a denied permission raises ``PermissionDenied`` and a malformed input
-    payload raises DRF's ``ValidationError`` — protocol faults the caller maps to
-    its own wire.
+    context, dispatches via ``dispatch_spec`` and renders via
+    ``render_spec_output``.
 
-    Chain tools have no single ``dispatch_spec`` target (they orchestrate several
-    specs) and are rejected with :class:`TypeError`.
+    ``ServiceValidationError`` / ``ServiceError`` and a missing required instance
+    come back as ``isError`` tool results the model can self-correct from; a
+    denied permission raises ``PermissionDenied`` and a malformed payload raises
+    DRF's ``ValidationError`` — protocol faults the caller maps to its own wire.
+    A chain tool orchestrates several specs, has no single dispatch target, and
+    is rejected with :class:`TypeError`.
     """
     if isinstance(binding, ChainToolBinding):
         raise TypeError(
@@ -80,14 +74,11 @@ def call_spec_tool(
             "over the HTTP / JSON-RPC transport instead."
         )
     spec = binding.spec
-    # URL kwargs route through the view (a scoping ``spec.kwargs`` provider's
-    # ``view.kwargs`` inputs), not the spec params — see :class:`UrlKwarg`.
-    # Mapped here rather than in the ``dispatch_spec`` try below: the offline
-    # context this feeds is also what ``enforce_permissions`` needs, so the split
-    # cannot move down without dragging the permission check into a block that
-    # turns exceptions into tool results. A missing ``required=True`` URL kwarg
-    # must still surface as an ``isError`` result on this in-process surface, the
-    # same as over the wire.
+    # Split here rather than in the ``dispatch_spec`` try below: the offline
+    # context it feeds is also what ``enforce_permissions`` needs, so moving it
+    # down would drag the permission check into a block that turns exceptions
+    # into tool results. Its own try is because a missing ``required=True`` URL
+    # kwarg must surface as an ``isError`` result here as it does over the wire.
     try:
         spec_params, url_kwarg_values = split_url_kwargs(arguments, binding.url_kwargs)
     except ServiceValidationError as exc:
@@ -107,13 +98,11 @@ def call_spec_tool(
         kwargs=url_kwarg_values or None,
         query_params=query_param_values,
     )
-    # Class-level ``permission_classes``, enforced upfront and unconditionally.
-    # ``dispatch_spec`` never consults ``permission_classes`` (authz is the
-    # caller's job), and the ``on_target_resolved`` hook only adds *object-level*
-    # checks on a resolved target — and, before drf-services 0.21, never fired on
-    # the selector paths at all. So a spec whose ``has_permission`` denies (e.g.
-    # a ``DenyAll`` selector) would otherwise leak its payload through this
-    # in-process surface. The hook below still covers object-level checks.
+    # Class-level ``permission_classes``, enforced upfront and unconditionally:
+    # ``dispatch_spec`` never consults them (authz is the caller's job) and the
+    # ``on_target_resolved`` hook below only adds *object-level* checks on a
+    # resolved target, so without this a spec whose ``has_permission`` denies
+    # would leak its payload through this in-process surface.
     enforce_permissions(spec, context)
     argument_binding, unknown_arguments = services_dispatch_policies(binding)
     try:
@@ -144,10 +133,8 @@ def call_spec_tool(
         )
 
     many: bool = result.kind == "list"
-    # The output-serializer-context provider receives only the resolved-data
-    # extras it declares; pass the kind-appropriate name(s) so both a list's
-    # ``page`` provider and a retrieve/mutation's ``instance`` / ``result``
-    # provider keep working off this surface.
+    # The output-serializer-context provider receives only the extras it
+    # declares, so pass the kind-appropriate names.
     extras: dict[str, Any] = (
         {"page": result.value} if many else {"instance": result.value, "result": result.value}
     )

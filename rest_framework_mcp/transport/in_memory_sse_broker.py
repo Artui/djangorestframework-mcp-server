@@ -7,21 +7,17 @@ from typing import Any
 class InMemorySSEBroker:
     """In-process per-session pub/sub for server-pushed MCP messages.
 
-    Each subscribed session gets a private :class:`asyncio.Queue`. App code
-    running in the same Python process publishes to it via :meth:`publish`;
-    the streaming GET generator pulls off the queue and emits SSE frames.
+    Each subscribed session gets a private :class:`asyncio.Queue`. App code in
+    the same process publishes to it via :meth:`publish`; the streaming GET
+    generator pulls off the queue and emits SSE frames.
 
-    State is instance-scoped — the :class:`MCPServer` owns one broker, so
-    multiple servers in the same process don't share state. Multi-process
-    deployments need an out-of-process backend; see
-    :class:`RedisSSEBroker` (in the ``[redis]`` extra) for the production
-    choice.
+    State is instance-scoped, so multiple servers in one process share none of
+    it. Multi-process deployments need an out-of-process backend — see
+    :class:`RedisSSEBroker` (the ``[redis]`` extra).
 
-    The broker enforces a single subscriber per session — if a client
-    re-subscribes (e.g. after a dropped connection), the previous queue is
-    replaced and the old generator will eventually error out on its next
-    ``await``. There is no replay; clients that need durability should call
-    ``tools/call`` directly rather than relying on SSE.
+    One subscriber per session: re-subscribing replaces the previous queue, and
+    the old generator errors out on its next ``await``. There is no replay;
+    clients needing durability call ``tools/call`` rather than relying on SSE.
     """
 
     def __init__(self) -> None:
@@ -46,9 +42,8 @@ class InMemorySSEBroker:
         """Enqueue ``payload`` for ``session_id`` if a subscriber exists.
 
         Returns ``True`` if delivery was attempted, ``False`` if the session
-        had no subscriber. The caller decides how to react to a miss — most
-        callers will ignore it (the client will catch up via a fresh
-        ``tools/call`` round-trip).
+        had no subscriber. A miss is the caller's to react to, and most ignore
+        it: the client catches up on a fresh ``tools/call`` round-trip.
         """
         queue: asyncio.Queue[Any] | None = self._queues.get(session_id)
         if queue is None:

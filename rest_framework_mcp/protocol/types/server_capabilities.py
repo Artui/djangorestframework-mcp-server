@@ -8,18 +8,14 @@ from typing import Any
 class ServerCapabilities:
     """Capability bundle the server advertises in the ``initialize`` response.
 
-    Every field defaults to ``None`` and is omitted from the payload when
-    unset, because a capability is a promise: a client that sees ``resources``
-    will call ``resources/list``, and one that sees ``completions`` will send
+    Every field defaults to ``None`` and is omitted from the payload when unset,
+    because a capability is a promise: a client that sees ``resources`` will
+    call ``resources/list``, and one that sees ``completions`` will send
     ``completion/complete``. :func:`handle_initialize` populates only what this
-    server can actually answer — ``tools`` and ``resources`` used to default to
-    ``{}`` here, which advertised both on a server that had neither.
+    server can actually answer.
 
-    ⛔ There is no ``logging`` field. One existed, unpopulated, until the
-    ``2026-07-28`` revision **deprecated** the logging utility outright — after
-    which an empty slot could only serve as an invitation to fill it in.
-    ``experimental`` stays: it is the spec's own escape hatch and carries no
-    such trap.
+    There is deliberately no ``logging`` field — the ``2026-07-28`` revision
+    **deprecated** the logging utility outright.
     """
 
     tools: dict[str, Any] | None = None
@@ -32,14 +28,13 @@ class ServerCapabilities:
     """Extensions this server supports, keyed by identifier.
 
     First-class in the ``2026-07-28`` schema and the counterpart to the
-    per-request ``clientCapabilities.extensions`` — the two sides of the only
-    negotiation the stateless revision still has. Values are per-extension
+    per-request ``clientCapabilities.extensions``. Values are per-extension
     settings objects; ``{}`` means "supported, nothing to configure", which is
     what every extension here uses.
 
-    Distinct from :attr:`experimental` despite the family resemblance:
-    ``experimental`` is a free-for-all with no naming rules, while extension
-    keys are namespaced identifiers a client matches exactly."""
+    Distinct from :attr:`experimental`: that is a free-for-all with no naming
+    rules, while extension keys are namespaced identifiers a client matches
+    exactly."""
 
     def to_dict(self) -> dict[str, Any]:
         out: dict[str, Any] = {}

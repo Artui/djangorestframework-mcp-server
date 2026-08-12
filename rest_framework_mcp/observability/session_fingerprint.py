@@ -6,13 +6,11 @@ _SESSION_ID_PREFIX_CHARS: int = 8
 def session_fingerprint(session_id: str | None) -> str:
     """A short, non-replayable tag for correlating log lines about one client.
 
-    A session id is a bearer credential. An operator reading logs must be able
-    to follow one client across requests and must **not** be handed something
-    they could replay; a prefix does the first without the second, and is enough
-    to tell concurrent clients apart in practice.
+    A session id is a bearer credential, so logs get a prefix rather than the
+    id: enough to follow one client across requests, not enough to replay.
 
-    ``"-"`` for a request that carried no id at all — which is itself the thing
-    worth seeing, since that is the ``400`` case rather than the ``404`` one.
+    ``"-"`` for a request that carried no id at all — the ``400`` case rather
+    than the ``404`` one, and worth seeing as such.
     """
     if not session_id:
         return "-"

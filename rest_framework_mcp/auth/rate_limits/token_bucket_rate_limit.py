@@ -10,8 +10,8 @@ from django.http import HttpRequest
 
 from rest_framework_mcp.auth.types.token_info import TokenInfo
 
-# Token-bucket key namespace. Distinct from the fixed/sliding-window prefixes
-# so operators can spot the scheme at a glance in cache keyspaces.
+# Distinct from the other limiters' prefixes so an operator can tell which
+# scheme produced a counter from the cache key alone.
 _DEFAULT_KEY_PREFIX: str = "drf-mcp:rl-tb"
 
 
@@ -26,24 +26,22 @@ def _default_key(request: HttpRequest, token: TokenInfo) -> str:
 class TokenBucketRateLimit:
     """Token-bucket rate limiter using Django cache for state.
 
-    A bucket has at most ``capacity`` tokens. Each accepted call consumes
-    one token; the bucket refills continuously at ``refill_per_second``
-    tokens per second. When empty, the limiter returns the suggested
-    retry-after time until at least one token is available again.
+    A bucket holds at most ``capacity`` tokens, each accepted call consumes
+    one, and the bucket refills continuously at ``refill_per_second``. When
+    empty, the limiter returns the time until one token is available again.
 
-    Trade-offs vs the sliding-window scheme:
+    Trade-offs against the sliding-window scheme:
 
-    - **Burst-friendly**: a full bucket can absorb a burst of ``capacity``
-      requests instantly, then rate-limit the steady state at
-      ``refill_per_second``. Useful when consumers naturally batch.
-    - **Read-modify-write**: like the sliding-window class, this is not
-      strictly atomic across concurrent workers. Under contention a small
-      number of extra tokens may slip through. For strict atomicity in
-      multi-worker deployments, back the limiter with a Redis-Lua script.
+    - **Burst-friendly**: a full bucket absorbs ``capacity`` requests
+      instantly, then holds the steady state at ``refill_per_second``. Useful
+      when consumers naturally batch.
+    - **Read-modify-write**: like the sliding window, not strictly atomic
+      across workers, so a few extra tokens can slip through under contention.
+      For strict atomicity, back the limiter with a Redis-Lua script.
 
     The cache **must** be a shared backend (Memcached or Redis) in
-    multi-process deployments; Django's ``locmem`` is fine for tests but
-    won't share state across workers.
+    multi-process deployments; Django's ``locmem`` is fine for tests but shares
+    no state across workers.
     """
 
     def __init__(
@@ -62,9 +60,9 @@ class TokenBucketRateLimit:
         self._refill: float = float(refill_per_second)
         self._namespace: str = namespace
         self._key_fn: Callable[[HttpRequest, TokenInfo], str] = key or _default_key
-        # Cache TTL — we let entries expire after a few drain-times so dead
-        # buckets don't accumulate forever. Worst case the bucket is
-        # re-created at full capacity, which is the safe direction.
+        # Entries expire after a couple of drain-times so dead buckets don't
+        # accumulate; an expired bucket is re-created full, which errs towards
+        # admitting rather than losing a legitimate caller.
         self._ttl: int = max(int(self._capacity / self._refill * 2), 60)
 
     def consume(self, request: HttpRequest, token: TokenInfo) -> int | None:
@@ -84,13 +82,12 @@ class TokenBucketRateLimit:
             cache.set(cache_key, (tokens - 1.0, now), timeout=self._ttl)
             return None
 
-        # Time until the bucket has one token: how long does refill at
-        # ``refill_per_second`` take to top up the deficit. Clamp to >= 1
-        # so callers always see a usable ``Retry-After`` value.
+        # How long refill takes to cover the deficit, clamped to >= 1 so
+        # ``Retry-After`` is always usable.
         deficit: float = 1.0 - tokens
         retry_after: int = max(math.ceil(deficit / self._refill), 1)
-        # Persist the (still-empty) state so concurrent requests see the same
-        # "denied" snapshot until the window slides.
+        # Persist the still-empty state so concurrent requests see the same
+        # denied snapshot.
         cache.set(cache_key, (tokens, now), timeout=self._ttl)
         return retry_after
 

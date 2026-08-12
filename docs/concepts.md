@@ -804,11 +804,11 @@ That token is the *only* trigger. With it, the response becomes
 result; without it, a single JSON object as before — a stream whose only event
 is the final response costs a connection and buys nothing.
 
-⭐ **Era-independent.** `_meta.progressToken` sits in the same place in
+**Era-independent.** `_meta.progressToken` sits in the same place in
 `2025-11-25` and `2026-07-28`, so a legacy client gets streamed progress on
 exactly the same terms as a modern one.
 
-⚠ **ASGI only, for *streamed* progress.** A sync WSGI view cannot yield while
+**ASGI only, for *streamed* progress.** A sync WSGI view cannot yield while
 its dispatch is still running, so `server.urls` keeps answering
 `application/json`. That stays spec-legal — a single JSON object is always
 permitted. Use `server.async_urls` if you want progress on the wire mid-call.
@@ -824,7 +824,7 @@ rather than to a stream, and the client polls for them.
 | `progress` must increase | A non-increasing report is **dropped**. The spec makes increase a MUST, so forwarding one would put this server in violation on the service's behalf. |
 | Frames are capped | `MAX_PROGRESS_NOTIFICATIONS` (default 1000) per request. The spec asks both parties to rate-limit; a per-row reporter over a large table is a flood. Past the cap reports are dropped — **the dispatch is untouched and the result still arrives**. |
 | `meta` rides in `_meta` | Structured detail goes where the protocol puts extension data, so `message` stays prose. Namespace your keys. |
-| Closing the stream cancels | Client disconnect *is* the cancellation signal in `2026-07-28`. ⚠ It cancels the await, not the work — a thread parked in a driver's socket read is not interruptible by asyncio, the same caveat `DISPATCH_TIMEOUT` carries. |
+| Closing the stream cancels | Client disconnect *is* the cancellation signal in `2026-07-28`. It cancels the await, not the work — a thread parked in a driver's socket read is not interruptible by asyncio, the same caveat `DISPATCH_TIMEOUT` carries. |
 
 !!! warning "Permissions are checked before the stream opens"
 
@@ -849,7 +849,7 @@ A client that wants to know when something changes opens `subscriptions/listen`
      "toolsListChanged": true}}}
 ```
 
-⚠ **Every type is opt-in, and that is a MUST**: the server must not send a
+**Every type is opt-in, and that is a MUST**: the server must not send a
 notification type the client did not ask for. So an absent field is a refusal,
 not a default — and a subscription that was granted *nothing* is acknowledged
 and then **closed**, rather than held open to deliver silence.
@@ -888,13 +888,13 @@ second worker existed.
     changed". `RedisSubscriptionBroker` (in the `[redis]` extra) is the
     deployable one.
 
-⚠ **A subscription occupies a worker for as long as it is open.** One parked
+**A subscription occupies a worker for as long as it is open.** One parked
 ASGI task per subscriber — inherent to the wire format, since this method exists
 to replace the old GET endpoint. Two settings bound it:
 
 | | |
 |---|---|
-| `SUBSCRIPTION_MAX_SECONDS` (1 h) | The server closes the stream gracefully and the client re-subscribes. ⚠ Also the **re-authorization interval**: a subscription's permissions are checked once, when it opens, so this is what stops a principal whose access was revoked from receiving change signals indefinitely. |
+| `SUBSCRIPTION_MAX_SECONDS` (1 h) | The server closes the stream gracefully and the client re-subscribes. Also the **re-authorization interval**: a subscription's permissions are checked once, when it opens, so this is what stops a principal whose access was revoked from receiving change signals indefinitely. |
 | `MAX_CONCURRENT_SUBSCRIPTIONS` (100) | Per worker. Without it an authenticated caller can exhaust the pool by opening streams in a loop. Past the cap a new subscription is refused with `503` / `-32603` rather than queued. |
 
 ### Watching a task instead of polling it
@@ -915,13 +915,13 @@ A task is watchable only by the principal that created it: its status is as
 revealing as its result, since knowing someone else's export finished is knowing
 they ran one.
 
-⛔ **One exception to "refused entries are dropped":** a client asking for
+**One exception to "refused entries are dropped":** a client asking for
 `taskIds` without declaring the `io.modelcontextprotocol/tasks` extension gets a
 JSON-RPC error, not a quiet omission. The spec requires it, and it is not an
 existence oracle — the error turns on what the *client* declared, not on
 anything about the tasks it named.
 
-⛔ `notifications/progress` and `notifications/message` are **MUST NOT** on this
+`notifications/progress` and `notifications/message` are **MUST NOT** on this
 stream. Progress for a task is the task's own status; the progress channel
 belongs to the request-scoped stream, which a task by definition outlived.
 
@@ -944,7 +944,7 @@ write it is authoritative; the arguments cover a delete, whose result carries
 nothing). Publishing happens **after the transaction commits**, and a call that
 came back `isError` publishes nothing.
 
-⚠ **Its boundary is real, and is why the explicit trigger exists too.** It fires
+**Its boundary is real, and is why the explicit trigger exists too.** It fires
 for calls that go through this server and for nothing else — a management
 command, a Celery job or an admin edit changes the same rows and announces
 nothing. For those:
@@ -957,12 +957,12 @@ transaction.on_commit(
 )
 ```
 
-⚠ **Publish after the transaction commits.** Inside `transaction.atomic()` you
+**Publish after the transaction commits.** Inside `transaction.atomic()` you
 would be announcing a change that may still roll back, and a subscriber that
 re-reads immediately sees the old value — worse than no notification at all.
 `invalidates=` does this for you; `notify_resource_updated` is yours to place.
 
-⚠ **Matching is exact, not by prefix.** Publish the concrete URI *and* the
+**Matching is exact, not by prefix.** Publish the concrete URI *and* the
 collection URI if you want watchers of the collection to hear about it. A prefix
 rule would match `invoices://1` against `invoices://11` and would miss a
 tenant-scoped scheme entirely, so the publisher says what it means instead.
@@ -1066,7 +1066,7 @@ Then `tasks/get` until `completed` / `failed` / `cancelled`, honouring
 `pollIntervalMs`. `tasks/cancel` signals intent to stop; `tasks/update` answers
 a task that is parked on `input_required`.
 
-⚠ **`Mcp-Name` must carry the `taskId`** on all three methods — the extension
+**`Mcp-Name` must carry the `taskId`** on all three methods — the extension
 requires it so a gateway can route a follow-up to the instance holding the
 task's state. A mismatch is `-32020`, exactly as for `tools/call`.
 
@@ -1088,7 +1088,7 @@ the client reads them from the `statusMessage` it was already polling:
 {"taskId": "…", "status": "working", "statusMessage": "Exporting (142/500)"}
 ```
 
-⭐ **This is what makes `progress` worth declaring at all under the task
+**This is what makes `progress` worth declaring at all under the task
 model.** Without it the seed is live-connection-only, and the operations most
 in need of progress — the ones promoted to tasks *because* they run long — are
 exactly the ones it would silently do nothing for. Nothing about the service,
@@ -1154,7 +1154,7 @@ anything else a caller sent.
  "requestState": "…"}
 ```
 
-⚠ **This is a success, not an error.** `input_required` is a second legal shape
+**This is a success, not an error.** `input_required` is a second legal shape
 for a `tools/call` result, inside a `200`, and a client that treats a non-`complete`
 `resultType` as a failure will never retry.
 
@@ -1168,7 +1168,7 @@ a new JSON-RPC id — carrying `inputResponses` and the `requestState` verbatim:
  "requestState": "…"}
 ```
 
-⭐ **Nothing is held between the two requests.** That is the point of the pattern
+**Nothing is held between the two requests.** That is the point of the pattern
 — it replaced server-initiated requests precisely so the retry can land on a
 different process, behind a load balancer that knows nothing about the first one.
 The service is not resumed; it **runs again from the top**, with the answer
@@ -1225,11 +1225,11 @@ URL-only client, and a task worker replaying a call with nobody at the other end
 
 | | |
 |---|---|
-| Service tools only | ⛔ A **chain** tool degrades instead of asking. MRTR completes a call by re-running it, and a chain that asked at step three would run steps one and two twice on the retry. A **selector** is a read — one that needs the user to decide something is a tool wearing the wrong registration. |
+| Service tools only | A **chain** tool degrades instead of asking. MRTR completes a call by re-running it, and a chain that asked at step three would run steps one and two twice on the retry. A **selector** is a read — one that needs the user to decide something is a tool wearing the wrong registration. |
 | Form mode only | The spec's other mode hands the user a URL to complete out of band. Nothing here knows how to mint one; a service that needs it has a redirect to build, not a schema to declare. |
 | Top-level fields only | `requestedSchema` is a restricted subset: strings, numbers, booleans and enums, no nesting. A schema outside it raises `ImproperlyConfigured` at the moment it would have been sent, rather than shipping something the client must reject. |
 | `tools/call` only | The spec also permits `input_required` on `prompts/get` and `resources/read`. Neither is implemented: both dispatch a bare callable with no failure channel, and a prompt render or resource read that needs to stop and ask is not a shape this package has a caller for. |
-| Sampling and roots | ⛔ Not built. Both are **Deprecated** as of `2026-07-28`; elicitation is the only input worth asking for. |
+| Sampling and roots | Not built. Both are **Deprecated** as of `2026-07-28`; elicitation is the only input worth asking for. |
 
 ## Protocol eras
 
@@ -1290,7 +1290,7 @@ revision — the SSE stream and session termination were both removed there.
     — and `server/discover`, which both eras may call, answers according to the
     version the caller declared.
 
-    ⛔ **`resources/subscribe` is deliberately not implemented.** It is optional
+    **`resources/subscribe` is deliberately not implemented.** It is optional
     in `2025-11-25` and gone from `2026-07-28`, where the schema says
     `SubscriptionFilter.resourceSubscriptions` *"replaces the former `resources/subscribe`
     RPC"* — which this server does implement. Building the legacy RPC would mean

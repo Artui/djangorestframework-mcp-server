@@ -10,19 +10,17 @@ def fingerprint_request(method: str, payload: Any) -> str:
 
     The spec asks servers to bind state to *"an identifier for the originating
     request, e.g. the method name and a digest of its salient parameters,
-    rejecting state presented on a request that does not match"*. This is that
-    digest. Without it a token minted for a harmless call could be replayed onto
-    a destructive one — same principal, still unexpired, and carrying an
-    ``answers`` map that the second call would read as a confirmation the user
-    never gave.
+    rejecting state presented on a request that does not match"*. Without it a
+    token minted for a harmless call could be replayed onto a destructive one —
+    same principal, still unexpired, carrying an ``answers`` map the second call
+    would read as a confirmation the user never gave.
 
-    ``sort_keys`` plus ``default=str`` is what makes it *stable* rather than
-    merely deterministic: JSON object order is not meaningful, so two encodings
-    of the same arguments must not disagree, and an argument that is not
-    JSON-native (a ``Decimal``, a date the client sent as a string that DRF
-    already coerced) must not raise where a mismatch would do.
+    ``sort_keys`` plus ``default=str`` make it *stable* rather than merely
+    deterministic: two encodings of the same arguments must not disagree over
+    key order, and a non-JSON-native argument must not raise where a mismatch
+    would do.
 
-    ⚠ Feed it the arguments **as the client sent them**, never the merged ones —
+    Feed it the arguments **as the client sent them**, never the merged ones —
     see :attr:`~rest_framework_mcp.elicitation.types.request_state.RequestState.fingerprint`.
     """
     encoded: str = json.dumps(

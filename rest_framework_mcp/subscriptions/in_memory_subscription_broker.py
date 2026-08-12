@@ -7,15 +7,14 @@ from typing import Any
 class InMemorySubscriptionBroker:
     """In-process topic fan-out, for development and tests.
 
-    ⚠ **A multi-worker deployment needs a cross-process broker.** The write that
-    triggers a notification lands on whichever worker served that request, and
-    the subscriber's stream is parked on a different one — so an in-process
-    broker delivers to nobody, silently. The failure looks exactly like "the
-    resource never changed", which is why it is worth being blunt about:
-    subscriptions are a **single-worker feature** until a broker that crosses
-    processes is wired in. Pass one to ``MCPServer(subscription_broker=…)``.
+    **A multi-worker deployment needs a cross-process broker.** The write that
+    triggers a notification lands on whichever worker served that request while
+    the subscriber's stream is parked on a different one, so an in-process
+    broker delivers to nobody, silently, and the failure looks exactly like "the
+    resource never changed". Subscriptions are a **single-worker feature** until
+    a cross-process broker is passed to ``MCPServer(subscription_broker=…)``.
 
-    ⚠ **Not a default.** ``MCPServer`` constructs no broker at all when none is
+    **Not a default.** ``MCPServer`` constructs no broker at all when none is
     given, precisely so this class cannot be reached by accident.
 
     Unlike the session broker this keeps a *set* of queues per topic, and a
@@ -26,7 +25,7 @@ class InMemorySubscriptionBroker:
 
     def __init__(self) -> None:
         # Instance state, never module-level: two servers in one process keep
-        # separate subscription spaces, and a test cannot leak into the next.
+        # separate subscription spaces.
         self._by_topic: dict[str, set[asyncio.Queue[Any]]] = {}
         self._topics_by_queue: dict[int, tuple[asyncio.Queue[Any], frozenset[str]]] = {}
 
@@ -37,10 +36,8 @@ class InMemorySubscriptionBroker:
         queue: asyncio.Queue[Any] = asyncio.Queue()
         for topic in topics:
             self._by_topic.setdefault(topic, set()).add(queue)
-        # Keyed by ``id`` because ``asyncio.Queue`` is unhashable-by-value only
-        # in the sense that equality is identity — using the object as a dict
-        # key works, but holding the queue in the value keeps the reverse index
-        # readable and makes the identity comparison explicit.
+        # Keyed by ``id`` with the queue held in the value, so the identity
+        # comparison the reverse index relies on is explicit.
         self._topics_by_queue[id(queue)] = (queue, topics)
         return queue
 
@@ -51,16 +48,14 @@ class InMemorySubscriptionBroker:
         _, topics = entry
         for topic in topics:
             # Always present: ``subscribe`` registered this queue under every one
-            # of these topics, and a topic is only deleted once its last
-            # subscriber is discarded — which cannot have happened while this
-            # queue was still in the reverse index we just popped.
+            # of these topics, and a topic outlives its last subscriber only
+            # while that subscriber is still in the index just popped.
             subscribers = self._by_topic[topic]
             subscribers.discard(queue)
             if not subscribers:
                 # Topics are unbounded and caller-named (a resource URI), so an
-                # emptied one is removed rather than left as a permanent empty
-                # set — otherwise a long-lived server accumulates one entry per
-                # URI anyone ever watched.
+                # emptied one is removed rather than left behind — otherwise a
+                # long-lived server accumulates one entry per URI ever watched.
                 del self._by_topic[topic]
 
     @property
@@ -70,9 +65,9 @@ class InMemorySubscriptionBroker:
     async def publish(self, topic: str, payload: Any) -> int:
         """Deliver to every subscriber of ``topic``; returns how many got it.
 
-        The count is for the caller's benefit — ``0`` means nobody was
-        listening, which is ordinary and not an error. Notifications are
-        best-effort by design: a client that missed one re-reads the resource.
+        ``0`` means nobody was listening, which is ordinary and not an error:
+        notifications are best-effort by design, and a client that missed one
+        re-reads the resource.
         """
         subscribers = self._by_topic.get(topic)
         if not subscribers:

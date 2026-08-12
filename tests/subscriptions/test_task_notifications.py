@@ -78,7 +78,7 @@ def test_a_transition_reaches_a_watcher() -> None:
 
 
 def test_the_notification_carries_the_whole_task_not_a_delta() -> None:
-    """⚠ The spec: "a complete DetailedTask ... identical to what tasks/get
+    """The spec: "a complete DetailedTask ... identical to what tasks/get
     would have returned at that moment". That is what lets a missed
     notification cost nothing and keeps polling genuinely optional."""
     broker, store = InMemorySubscriptionBroker(), InMemoryTaskStore()
@@ -199,7 +199,7 @@ def _listen(client: Any, task_ids: list[str], *, declares: bool) -> Any:
 
 @pytest.mark.urls("tests.subscriptions.urls")
 async def test_asking_for_task_notifications_without_the_capability_is_an_error() -> None:
-    """⛔ The spec's one exception to "refused entries are dropped": this MUST
+    """The spec's one exception to "refused entries are dropped": this MUST
     be an error rather than a quiet omission from the acknowledgement."""
     from django.test import AsyncClient
 

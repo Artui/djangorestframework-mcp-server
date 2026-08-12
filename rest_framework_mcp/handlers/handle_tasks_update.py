@@ -24,33 +24,28 @@ def handle_tasks_update(
 ) -> dict[str, Any] | JsonRpcError:
     """Deliver the client's answers to a task's outstanding input requests.
 
-    The half of the extension that makes a task interactive: a worker that
-    needs something only the client can supply parks the task in
-    ``input_required`` with a set of keyed ``inputRequests``; the client
-    answers them here, and the task returns to ``working``.
+    The half of the extension that makes a task interactive: a worker needing
+    something only the client can supply parks the task in ``input_required``
+    with keyed ``inputRequests``; the client answers them here.
 
     Three rules from the spec, all about being forgiving in the right places:
 
     - **Unknown keys are ignored, not rejected.** A client that polls twice can
-      answer the same request twice, and a key it invents is not worth failing
+      answer the same request twice, and an invented key is not worth failing
       the whole call over.
-    - **A partial set is accepted.** A client may answer some of what is
-      outstanding and come back for the rest, so answers accumulate rather than
-      replace.
+    - **A partial set is accepted**, so answers accumulate rather than replace.
     - **Only when nothing is left outstanding** does the task go back to
-      ``working``. Until then it stays ``input_required`` with the remaining
-      requests, and the next ``tasks/get`` shows exactly what is still wanted.
+      ``working``; until then the next ``tasks/get`` shows what is still wanted.
 
-    ⚠ **Updating a task that is not waiting for input is refused.** Not
-    pedantry: the keys are the correlation, and a task in ``working`` has none
-    outstanding, so every answer would be an unknown key — silently ignored,
-    acknowledged as success, and lost. A client that got that answer would have
-    no way to tell it from a delivery that worked.
+    **Updating a task that is not waiting for input is refused.** The keys are
+    the correlation, and a task in ``working`` has none outstanding, so every
+    answer would be an unknown key: silently ignored, acknowledged as success,
+    and indistinguishable from a delivery that worked.
 
-    ⚠ **Answers arrive from the client and are model- or user-authored.** The
-    spec requires the same trust model as an elicitation response, which is to
-    say none: nothing here interprets a value, and a worker reading them owes
-    them the validation it would give any request body.
+    **Answers arrive from the client and are model- or user-authored.** The spec
+    requires the same trust model as an elicitation response, which is none:
+    nothing here interprets a value, and a worker reading them owes them the
+    validation it would give any request body.
     """
     if not declares_tasks_extension(context):
         return missing_capability_error()
@@ -91,9 +86,8 @@ def handle_tasks_update(
         status_message=None if not remaining else record.task.status_message,
     )
     store.save(updated)
-    # Answering an input request changes the task's status — back to
-    # ``working``, or to a smaller set of outstanding requests — so a subscriber
-    # watching it should hear, exactly as it would for any other transition.
+    # Answering changes the task's status, so a subscriber watching it hears,
+    # exactly as it would for any other transition.
     publish_task_status(context.subscriptions, updated)
     return {}
 

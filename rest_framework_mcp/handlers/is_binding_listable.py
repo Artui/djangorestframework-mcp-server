@@ -1,18 +1,15 @@
 """Shared per-binding visibility check for the four list handlers.
 
-Centralised so ``tools/list`` / ``resources/list`` /
-``resources/templates/list`` / ``prompts/list`` agree on what
-"listable" means: a binding is hidden when every one of its
-``permissions`` denies the caller, unless ``always_listed=True``
-explicitly opts it back in.
+Centralised so the four list handlers agree on what "listable" means: a binding
+is hidden when any of its ``permissions`` denies the caller, unless
+``always_listed=True`` opts it back in.
 
-Permissions can opt into a list-time-specific visibility decision by
-declaring an ``is_listable(token)`` method — useful for permissions
-whose ``has_permission(request, token)`` reads ``request.arguments``
-and would otherwise deny against the empty list-time arguments
-unfairly. The default (no ``is_listable`` method) falls back to
-``has_permission`` with a data-less synthesised request, which is the
-right semantic for binding-level permissions like ``ScopeRequired``.
+A permission may declare an ``is_listable(token)`` method for a list-time
+specific decision — useful when its ``has_permission(request, token)`` reads
+``request.arguments`` and would otherwise deny unfairly against the empty
+list-time arguments. Without one, ``has_permission`` runs against a data-less
+synthesised request, the right semantic for binding-level permissions such as
+``ScopeRequired``.
 """
 
 from __future__ import annotations
@@ -28,12 +25,9 @@ from rest_framework_mcp.handlers.utils import permission_verdict
 def is_binding_listable(binding: Any, http_request: HttpRequest, token: TokenInfo) -> bool:
     """Return ``True`` if the binding should appear in a list response.
 
-    ``binding`` is duck-typed because all four binding dataclasses
-    (``ToolBinding``, ``SelectorToolBinding``, ``ResourceBinding``,
-    ``PromptBinding``) carry the same shape — a ``permissions`` tuple
-    and an ``always_listed`` bool — without sharing a base class.
-    Typing as ``Any`` keeps the helper from importing all four
-    dataclasses just to spell a union.
+    ``binding`` is duck-typed: all four binding dataclasses carry the same shape
+    — a ``permissions`` tuple and an ``always_listed`` bool — without sharing a
+    base class, and ``Any`` saves importing all four to spell a union.
     """
     if getattr(binding, "always_listed", False):
         return True
@@ -49,9 +43,8 @@ def is_binding_listable(binding: Any, http_request: HttpRequest, token: TokenInf
             if not verdict:
                 return False
             continue
-        # Default: list-time visibility equals call-time permission,
-        # evaluated against a data-less request. Pool seeds (request,
-        # user, data) are still meaningful — only the caller-supplied
+        # List-time visibility equals call-time permission against a data-less
+        # request: the pool seeds are still meaningful, only the caller-supplied
         # ``arguments`` payload is absent.
         allowed = permission_verdict(
             perm,

@@ -1,39 +1,17 @@
 """Selector-tool dispatch — sync + async paths to the read pipeline.
 
-Two shapes, gated by ``binding.kind``:
+Both shapes run permission check, rate limit, ``input_serializer`` validation
+and then ``dispatch_spec`` (the selector plus queryset shaping and
+``filter_set``), before diverging on ``binding.kind``:
 
-``LIST`` (subset of steps optional, gated by binding flags):
+- ``LIST`` orders when ``ordering_fields`` is set (deprecated — an
+  ``OrderingFilter`` on the ``filter_set`` is the canonical way to declare
+  ordering), paginates when ``paginate=True``, and renders ``many=True``.
+- ``RETRIEVE`` takes ``.first()`` and renders ``many=False``; the binding
+  rejects the ordering / pagination knobs at construction.
 
-.. code-block:: text
-
-    arguments → permission check → rate limit → validate(input_serializer)
-              → run_selector
-              → FilterSet(data=filter_args, queryset=qs).qs    if filter_set
-                  (an OrderingFilter here owns ordering, and is the
-                   canonical way to declare it)
-              → qs.order_by(<field>)                            if ordering_fields
-                  (deprecated; only for a spec with no filter_set)
-              → paginate                                        if paginate=True
-              → output_serializer(many=True)
-              → ToolResult
-
-``RETRIEVE`` skips ordering / pagination (the binding rejects those
-knobs at construction) but still applies queryset shaping + ``filter_set``
-before the single-instance ``.first()``, then renders:
-
-.. code-block:: text
-
-    arguments → permission check → rate limit → validate(input_serializer)
-              → run_selector
-              → shape + FilterSet(data=…).qs            (if a queryset)
-              → .first()
-              → output_serializer(many=False)
-              → ToolResult
-
-The post-fetch pipeline is the differentiator from service-tool
-dispatch and is owned by the **tool layer**, not the selector.
-Selectors return raw, unscoped data (queryset for ``LIST``,
-single instance for ``RETRIEVE``).
+That post-fetch pipeline is the differentiator from service-tool dispatch and is
+owned by the tool layer, not the selector: selectors return raw, unscoped data.
 """
 
 from __future__ import annotations
@@ -104,16 +82,14 @@ def dispatch_selector_tool(
         result = dispatch_spec(
             binding.spec,
             **_dispatch_kwargs(binding, validated, drf_request, view, arguments_raw, context),
-            # A task worker runs the sync path, and its reporter writes to the
-            # task record rather than to a connection — so this is live here
-            # too, not only in the async sibling. ``None`` on an ordinary
-            # request, which drf-services turns into its no-op.
+            # A task worker runs the sync path and its reporter writes to the
+            # task record, so progress is live here too, not only in the async
+            # sibling. ``None`` on an ordinary request.
             progress=context.progress,
         )
     except ServiceValidationError as exc:
-        # Tool-level failure → ``isError`` result the model can read and
-        # self-correct from; JSON-RPC errors stay reserved for protocol
-        # faults (bad params shape, unknown tool, auth, rate limits).
+        # Tool-level failure, so an ``isError`` result the model can read and
+        # self-correct from. JSON-RPC errors stay reserved for protocol faults.
         return build_error_tool_result(
             exc.message,
             error_type="validation_error",
@@ -142,10 +118,8 @@ async def _post_fetch_and_render_async(
 ) -> dict[str, Any]:
     """Bridge the sync post-fetch pipeline through ``sync_to_async``.
 
-    Django querysets evaluate against the DB on ``count()`` / slicing, and
-    Django blocks sync DB I/O from an async context unless we route it
-    through a thread. The pipeline itself is unchanged — only the
-    async-context boundary differs.
+    Querysets evaluate against the DB on ``count()`` / slicing, and Django blocks
+    sync DB I/O from an async context. Only the boundary differs.
     """
     return await acall(
         _post_fetch_and_render, binding, result, drf_request, view, arguments_raw, params, config
@@ -233,28 +207,21 @@ def _build_request_and_validate(
 
     Returns ``(drf_request, view, validated, error)``; ``error`` is non-``None``
     when the call is already answered — a JSON-RPC ``INVALID_PARAMS`` envelope
-    for a serializer rejection, an ``isError`` tool result for a missing
-    required URL kwarg (a tool-level failure the model can self-correct from).
+    for a serializer rejection, an ``isError`` tool result for a missing required
+    URL kwarg.
 
     The ``view`` is built **once**, here, and threaded through dispatch and
     rendering: on HTTP a single view instance serves the whole request, so the
     ``view.kwargs`` a spec callable reads must be the ones a context provider
     sees too.
 
-    Filter / ordering / pagination args bypass ``input_serializer``
-    validation — they're shape-checked at runtime by the FilterSet, the
-    ordering enum at dispatch, and ``int(...)`` coercion respectively.
-    Their names are passed in as ``additional_known_keys`` so the
-    unknown-argument policy doesn't flag them as unrecognised.
-
-    The serializer is given DRF's baseline context, as it has over HTTP — a
-    validator reading ``self.context["request"]`` (a user-scoped
-    ``PrimaryKeyRelatedField`` queryset, an ownership check) behaves the same
-    over both transports.
+    Filter / ordering / pagination args bypass ``input_serializer`` validation —
+    they are shape-checked by the FilterSet, the ordering enum, and ``int(...)``
+    coercion respectively — so their names go in as ``additional_known_keys``.
+    The serializer gets DRF's baseline context, as it has over HTTP.
     """
     # Split first: the value has to be in hand before the request is built, and
-    # unlike the URL-kwarg split this one cannot fail (a ``QueryParam`` has no
-    # ``required``).
+    # unlike the URL-kwarg split this one cannot fail.
     _qp_params, query_param_values = split_query_params(arguments_raw, binding.query_params)
     drf_request = build_offline_context(
         context.token.user,
@@ -310,18 +277,13 @@ def _build_request_and_validate(
 def _selector_tool_additional_known_keys(binding: SelectorToolBinding) -> frozenset[str]:
     """Compute the keys a selector tool's pipeline knobs claim from ``arguments``.
 
-    The reflected selector shape (callable parameters, an ``**extras:
-    Unpack[TypedDict]`` expanded per key, and the ``filter_set`` fields) and
-    the post-fetch pipeline knobs (order / paginate) read their inputs directly
-    from ``arguments`` rather than going through ``input_serializer``. Surfacing
-    them here lets the unknown-argument policy treat them as "known" without
-    forcing every selector binding to restate them on its serializer. The
-    reflected names come from the *same* ``spec_to_json_schema`` call that drives
+    The reflected selector shape and the post-fetch knobs read their inputs
+    straight from ``arguments`` rather than through ``input_serializer``, so the
+    unknown-argument policy has to be told they are known — otherwise ``REJECT``
+    flags a legitimate read-shaping argument. The reflected names come from the
+    *same* ``spec_to_json_schema`` call that drives
     ``build_selector_tool_input_schema``, so the validation-side known set and
-    the wire-side advertised schema never drift.
-
-    Returns a ``frozenset`` for cheap union with the serializer's
-    declared fields.
+    the wire-side advertised schema cannot drift.
     """
     known: set[str] = set()
     # ``phase="input"`` never returns ``None``; ``or {}`` only narrows the type.
@@ -332,12 +294,7 @@ def _selector_tool_additional_known_keys(binding: SelectorToolBinding) -> frozen
     if binding.paginate:
         known.add("page")
         known.add("limit")
-    # Registered URL kwargs are advertised in the inputSchema and popped into
-    # ``view.kwargs`` at dispatch — known, not "unknown", to the arg check.
     known.update(url_kwarg.name for url_kwarg in binding.url_kwargs)
-    # Same for registered query params — advertised in the schema and popped into
-    # ``request.query_params``. Without this, ``unknown_arguments=REJECT`` would
-    # flag a legitimate read-shaping argument as unrecognised.
     known.update(query_param.name for query_param in binding.query_params)
     return frozenset(known)
 
@@ -351,13 +308,11 @@ def _post_fetch_and_render(
     params: dict[str, Any],
     config: MCPConfig,
 ) -> dict[str, Any]:
-    """Order → paginate → render the shaped value ``dispatch_spec`` returned.
+    """Order, paginate and render the shaped value ``dispatch_spec`` returned.
 
     ``dispatch_spec`` already ran the selector, applied queryset shaping +
-    ``filter_set``, and (for ``RETRIEVE``) materialized via ``.first()`` /
-    resolved the ``allow_none`` contract. This is the MCP-only read shell on
-    top: ordering, pagination, and output rendering — owned by the tool layer,
-    not the selector.
+    ``filter_set`` and (for ``RETRIEVE``) materialized via ``.first()``. This is
+    the MCP-only read shell on top.
     """
     output_format: OutputFormat = OutputFormat.coerce(
         params.get("outputFormat") or binding.output_format
@@ -371,9 +326,9 @@ def _post_fetch_and_render(
     )
 
     if binding.kind is SelectorKind.RETRIEVE:
-        # ``dispatch_spec`` routes a missing row to ``not_found`` (or, under the
-        # spec's ``allow_none`` contract, to a ``None`` value rendered as a
-        # successful ``null`` — the MCP analogue of HTTP's 200-with-null body).
+        # A missing row arrives as ``not_found``, or — under the spec's
+        # ``allow_none`` contract — as a ``None`` value rendered as a successful
+        # ``null``, the MCP analogue of HTTP's 200-with-null body.
         if result.kind == "not_found":
             return _render_missing_instance(binding)
         instance = result.value
@@ -415,8 +370,6 @@ def _post_fetch_and_render(
     # declaring ``page`` receives the exact objects being serialised — and the
     # same object the renderer iterates, so an id-keyed batched query reuses the
     # queryset's result cache instead of issuing a second query.
-    #
-    # Pagination — wraps the response in ``{items, page, totalPages, hasNext}``.
     if binding.paginate:
         page_no, limit, page_items, total = _slice_for_pagination(
             qs, arguments_raw, resolve_bound(binding.max_page_size, config.max_page_size)
@@ -453,11 +406,8 @@ def _post_fetch_and_render(
 def _render_missing_instance(binding: SelectorToolBinding) -> dict[str, Any]:
     """Render the RETRIEVE not-found case as a tool-level ``isError`` result.
 
-    Reached only when ``dispatch_spec`` returns ``kind="not_found"`` — i.e. the
-    spec did **not** opt into the ``allow_none`` nullable-resource contract (that
-    contract yields ``kind="instance"`` with a ``None`` value, rendered as a
-    successful ``null`` by the caller). A missing row the model can read and
-    self-correct from.
+    Reached only when the spec did *not* opt into the ``allow_none`` nullable
+    contract, which yields an instance with a ``None`` value instead.
     """
     return build_error_tool_result(
         f"{binding.name}: no matching instance found",
@@ -475,30 +425,18 @@ def _dispatch_kwargs(
 ) -> dict[str, Any]:
     """Keyword args for ``dispatch_spec`` / ``adispatch_spec`` on a selector tool."""
     argument_binding, unknown_arguments = services_dispatch_policies(binding)
-    # URL kwargs already rode onto ``view.kwargs`` (from where drf-services
-    # spreads them, authoritative over params); strip them from the params so a
-    # value never also reaches the selector as an ordinary input. The split
-    # cannot fail here — ``_build_request_and_validate`` ran it first.
+    # URL kwargs already rode onto ``view.kwargs`` and query params onto
+    # ``request.query_params``; strip both from the params so no value reaches
+    # the selector through two channels. The split cannot fail here —
+    # ``_build_request_and_validate`` ran it first.
     spec_params, _url_kwarg_values = split_url_kwargs(arguments_raw, binding.url_kwargs)
-    # Query params rode onto ``request.query_params``; strip them here for the
-    # same reason as the URL kwargs above — one value, one channel.
     spec_params, _query_param_values = split_query_params(spec_params, binding.query_params)
     return {
         "user": context.token.user,
         "params": _selector_dispatch_params(spec_params, validated),
-        # The FilterSet gets its own view of the arguments, and it is the wider
-        # one. ``params`` is the *selector callable's* pool, so the post-fetch
-        # knobs are stripped from it — a selector declaring ``**kwargs`` would
-        # otherwise receive surprise arguments it never declared. A FilterSet has
-        # no such problem: it reads only the fields it declares and ignores the
-        # rest, exactly as it does on HTTP where the query string carries
-        # ``?ordering=…&page=2`` alongside the filter values.
-        #
-        # ⚠ This is what lets a spec's ``OrderingFilter`` actually work. Without
-        # it, ``ordering`` was stripped from the single mapping that served as
-        # both pools, so the inputSchema advertised an ordering (the filter's
-        # enum, reflected) that the dispatch then silently discarded — rows came
-        # back unordered with nothing to say so.
+        # Unstripped, which is what lets a spec's ``OrderingFilter`` work at
+        # all: sharing one stripped mapping made the inputSchema advertise an
+        # ordering that dispatch then silently discarded.
         "filter_data": _selector_dispatch_params(
             spec_params, validated, strip_post_fetch_keys=False
         ),
@@ -515,19 +453,15 @@ def _selector_dispatch_params(
     """Build a params mapping ``dispatch_spec`` receives for a selector.
 
     Called twice, for the two pools ``dispatch_spec`` keeps separate: ``params``
-    (the selector's kwarg spread) with ``strip_post_fetch_keys=True``, and
-    ``filter_data`` (the ``FilterSet``'s input) with it False.
+    (the selector's kwarg spread) with the strip on, ``filter_data`` (the
+    ``FilterSet``'s input) with it off. The strip is about the *callable* —
+    ``ordering`` / ``page`` / ``limit`` belong to the MCP read pipeline, so a
+    selector taking ``**kwargs`` must not receive them, whereas a ``FilterSet``
+    reads only the fields it declares, as it does on HTTP.
 
-    The binding's validated/coerced ``input_serializer`` values overlay the raw
-    args either way — so a typed selector arg reaches the callable coerced while
-    filter-set args (which bypass the serializer) keep their raw form for the
-    ``FilterSet``. A well-behaved ``FilterSet`` ignores ``None`` / absent
-    values, so optional filters left unset don't narrow the result.
-
-    The strip is about the *callable*, not the filter: ``ordering`` / ``page`` /
-    ``limit`` belong to the MCP read pipeline and a selector never declared
-    them, so a callable taking ``**kwargs`` must not receive them. The FilterSet
-    is handed the unstripped view because it reads only what it declares.
+    The validated ``input_serializer`` values overlay the raw args either way, so
+    a typed selector arg reaches the callable coerced while filter-set args
+    (which bypass the serializer) keep the raw form the ``FilterSet`` wants.
     """
     core: dict[str, Any] = {
         k: v
@@ -549,25 +483,16 @@ def _slice_for_pagination(
 ) -> tuple[int, int, Any, int]:
     """Return ``(page, limit, page_slice, total)``.
 
-    ``total`` uses ``.count()`` for QuerySet shapes and ``len(...)`` for
-    plain sequences (lists / tuples). ``page`` / ``limit`` default to 1 /
-    100; non-positive values are clamped to 1, and ``limit`` is clamped
-    *down* to ``max_page_size`` when one is configured.
+    ``page`` / ``limit`` default to 1 / 100, non-positive values clamp to 1, and
+    ``limit`` clamps *down* to ``max_page_size``. That upper clamp is silent, and
+    safe in a way truncating an unpaginated result would not be: ``totalPages`` /
+    ``hasNext`` are computed from the clamped ``limit``, so a model that asked
+    for 500 rows and got 100 is told there are more pages.
 
-    The upper clamp is silent by design, and safe here in a way truncating an
-    unpaginated result would not be: the response carries ``totalPages`` /
-    ``hasNext`` computed from the clamped ``limit``, so a model that asked for
-    500 rows and got 100 is told there are more pages rather than being left to
-    assume it saw everything.
-
-    The shape is discriminated with the sister-repo's :func:`is_queryset`
-    predicate, **not** ``hasattr(qs, "count")``: ``list`` / ``tuple`` also
-    expose ``.count`` —
-    but it's ``.count(value)`` (counts occurrences) and needs an argument,
-    so the old guard turned a list-returning paginated selector into an
-    opaque ``count() takes exactly one argument (0 given)``. A selector
-    that returns neither a QuerySet nor a sized, sliceable sequence (e.g. a
-    generator or a scalar) raises a clear error instead.
+    The shape is discriminated with :func:`is_queryset`, **not**
+    ``hasattr(qs, "count")``: ``list`` / ``tuple`` expose ``.count`` too, but it
+    is ``.count(value)`` and needs an argument, which turned a list-returning
+    paginated selector into an opaque ``count() takes exactly one argument``.
     """
     page_no: int = max(1, _coerce_int(arguments_raw.get("page"), default=1))
     limit: int = max(1, _coerce_int(arguments_raw.get("limit"), default=100))
@@ -589,11 +514,10 @@ def _slice_for_pagination(
 
 
 def _coerce_int(value: Any, *, default: int) -> int:
-    """Best-effort int coercion. Falls back to ``default`` on failure.
+    """Best-effort int coercion, falling back to ``default``.
 
-    Pagination args come from JSON, which already gives us ints — but
-    string-shaped clients exist. Failing closed (clamping to ``default``)
-    is friendlier than 400-ing the entire call.
+    Pagination args come from JSON, which gives ints — but string-shaped clients
+    exist, and clamping is friendlier than 400-ing the whole call.
     """
     if isinstance(value, bool):  # ``True`` is an ``int`` in Python; reject
         return default

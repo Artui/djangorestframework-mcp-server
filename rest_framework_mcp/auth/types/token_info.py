@@ -12,13 +12,14 @@ class TokenInfo:
     ``HttpRequest`` (as ``request.mcp_token``). Permission classes consult it
     to gate tool/resource access.
 
-    - ``user``: the resolved Django user (or ``AnonymousUser``-equivalent).
-      ``Any`` here because the user model is project-defined.
-    - ``scopes``: OAuth scopes proven by the bearer token.
-    - ``audience``: the ``aud`` claim — must match the canonical ``/mcp`` URL
-      per RFC 8707; backends are responsible for that comparison.
-    - ``raw``: backend-specific opaque payload (the ``AccessToken`` row, the
-      JWT claims dict, etc.) for advanced use cases.
+    Attributes:
+        user: The resolved Django user, or an ``AnonymousUser`` equivalent.
+            ``Any`` because the user model is project-defined.
+        scopes: OAuth scopes proven by the bearer token.
+        audience: The ``aud`` claim. RFC 8707 requires it to match the
+            canonical ``/mcp`` URL; backends own that comparison.
+        raw: Backend-specific opaque payload — the ``AccessToken`` row, the JWT
+            claims dict — for advanced use cases.
     """
 
     user: Any

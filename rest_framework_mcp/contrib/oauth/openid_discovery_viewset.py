@@ -17,36 +17,25 @@ from rest_framework_mcp.contrib.oauth.utils import supported_id_token_algorithms
 class OpenIDDiscoveryViewSet(ViewSet):
     """OIDC discovery alias — ``/.well-known/openid-configuration``.
 
-    Some MCP / LLM-host clients probe ``/.well-known/openid-configuration``
-    before falling back to RFC 8414. This ViewSet returns the same
-    payload as :class:`AuthorizationServerMetadataViewSet` plus a small
-    set of OIDC defaults so the probe succeeds even though
-    :mod:`rest_framework_mcp` doesn't implement an actual ID-token
-    endpoint.
+    Some MCP hosts probe this path before falling back to RFC 8414, so the
+    payload is the backend's AS metadata plus a few OIDC defaults, letting the
+    probe succeed even though this package implements no ID-token endpoint.
+    Wired as the ``list`` action:
+    ``as_view({"get": "list"}, auth_backend=...)``.
 
-    Single-action ViewSet — the canonical GET wires up as ``list`` via
-    ``OpenIDDiscoveryViewSet.as_view({"get": "list"}, auth_backend=...)``.
+    The additions are ``subject_types_supported: ["public"]``,
+    ``response_modes_supported: ["query"]``, and
+    ``id_token_signing_alg_values_supported`` — the last **derived** rather
+    than fixed, because wherever DOT is the authorization server with
+    ``OIDC_ENABLED`` its token endpoint really does mint ID tokens. A client
+    that read a hardcoded ``RS256`` and requested ``openid`` would reach
+    ``Application.jwk_key`` on a client registered with no algorithm and take
+    an ``ImproperlyConfigured`` 500, after logging in and consenting. The list
+    is empty when no RSA key is configured.
 
-    Concretely, the payload is the backend's AS metadata composed with:
-
-    - ``subject_types_supported: ["public"]`` — DOT-style pseudonymous
-      identifiers.
-    - ``id_token_signing_alg_values_supported`` — **derived**, not fixed.
-      This used to be a hardcoded ``["RS256"]``, on the reasoning that
-      the value is inert because "we don't actually mint ID tokens". That
-      reasoning was wrong wherever DOT *is* the authorization server with
-      ``OIDC_ENABLED``: DOT's token endpoint mints ID tokens, so a client
-      that read this list, saw RS256 and requested ``openid`` reached
-      ``Application.jwk_key`` on a DCR-registered client that had no
-      algorithm — ``ImproperlyConfigured``, surfacing as a 500 after the
-      user had already logged in and consented. It now reports what the
-      server can genuinely sign with, which is empty when no RSA key is
-      configured.
-    - ``response_modes_supported: ["query"]`` — standard.
-
-    Backends that don't host an authorization server raise
-    :class:`NotImplementedError`; this view surfaces that as ``501`` for
-    parity with :class:`AuthorizationServerMetadataViewSet`.
+    A backend that hosts no authorization server raises
+    :class:`NotImplementedError`, surfaced as ``501`` for parity with
+    :class:`AuthorizationServerMetadataViewSet`.
     """
 
     authentication_classes: tuple = ()  # noqa: RUF012 — DRF class-level config
@@ -77,11 +66,10 @@ class OpenIDDiscoveryViewSet(ViewSet):
     def _rsa_key_configured() -> bool:
         """Whether DOT holds an RSA signing key.
 
-        Lazy + tolerant of DOT's absence: this ViewSet is backend-agnostic
-        (it renders whatever ``MCPAuthBackend`` returns), while the only
-        signing key it can see belongs to DOT. A mount fronting some other
-        authorization server reports no signable algorithm rather than
-        guessing on that server's behalf.
+        Lazy and tolerant of DOT's absence: this ViewSet renders whatever
+        ``MCPAuthBackend`` returns, while the only signing key it can see
+        belongs to DOT. A mount fronting some other authorization server
+        reports no signable algorithm rather than guessing for it.
         """
         try:
             from oauth2_provider.settings import (  # type: ignore[import-not-found]

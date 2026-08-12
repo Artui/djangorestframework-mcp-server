@@ -15,50 +15,33 @@ def principal_for_token(token: TokenInfo) -> str:
     treated as unknown (404 — deliberately indistinguishable from a
     non-existent session, so ownership probing yields no oracle). Tasks use the
     identical comparison, and answer an id belonging to someone else with the
-    same error as an id that never existed, for the same reason.
+    same error as an id that never existed.
 
     The id is the resolved user's primary key. Deliberately unauthenticated
     principals — an ``AnonymousUser`` from a permissive backend such as
     ``AllowAnyBackend``, or a token carrying no user at all — map to the shared
-    ``"anonymous"`` principal. That sharing is honest: nobody was identified, so
-    ownership is only ever as strong as the auth backend behind it.
+    ``"anonymous"`` principal: nobody was identified, so ownership is only ever
+    as strong as the auth backend behind it.
 
-    ⛔ **An *authenticated* token with no ``pk`` is refused, not shared.** That
-    is the whole of this function's security content. A backend that resolves a
-    real caller to something without a primary key — a service-account object, a
-    custom principal, a JWT claim wrapper — used to fall through to
-    ``"anonymous"`` alongside every other such caller, and the session store
-    keys on exactly this string. Two distinct authenticated callers landing on
-    one principal can each present the other's session id and be served, and
-    tasks use the identical comparison, so the same merge hands over another
-    caller's task results.
+    **An *authenticated* token with no ``pk`` is refused, not shared.** The
+    session store keys on exactly this string, so a backend resolving real
+    callers to objects without a primary key would collapse them onto one
+    principal, each able to present the others' session ids and read their task
+    results. That fails silently and looks like it is working — every request
+    succeeds and the only symptom is the missing isolation — hence the raise
+    rather than a fallback.
 
-    ⚠ **It fails silently and it looks like it is working**, which is why it
-    raises rather than degrades: every request succeeds, every session
-    resolves, and the only symptom is that isolation is not there. A backend
-    hitting this is one line from correct — give the principal a ``pk``, or
-    return ``AnonymousUser`` and mean it.
-
-    ⭐ **Related to C1 by mechanism, not coincidence.** The un-awaited coroutine
-    that authenticated every caller also had no ``pk``, so the same
-    misconfiguration that let everyone in *also* collapsed them onto one
-    session namespace. Two findings, one incident.
-
-    ⚠ **Lives in ``auth/``, not ``transport/``, and the move was forced.** It
-    is a pure function of a token with nothing transport-specific in it, but it
-    used to sit in ``transport/utils.py`` — and ``transport/__init__`` eagerly
-    imports both viewsets, which import the handler dispatch table. So a
-    *handler* importing this function pulled the whole transport in mid-import
-    and closed a cycle. Nothing in ``auth/`` imports anything that could.
+    Lives in ``auth/`` rather than ``transport/`` because handlers call it and
+    ``transport/__init__`` eagerly imports the viewsets, so a home in
+    ``transport`` closes an import cycle.
     """
     user: Any = token.user
     pk: Any = getattr(user, "pk", None)
     if pk is not None:
         return f"user:{pk}"
-    # ``is_authenticated`` is ``False`` on ``AnonymousUser`` and ``True`` on a
-    # real Django user, so it separates "nobody was identified" from "somebody
-    # was, and we cannot name them". A user object that declares neither is the
-    # ambiguous case, and ambiguity here means a shared session namespace.
+    # ``is_authenticated`` separates "nobody was identified" from "somebody was,
+    # and we cannot name them". A user object declaring neither is ambiguous,
+    # and ambiguity here means a shared session namespace.
     if user is None or getattr(user, "is_authenticated", None) is False:
         return "anonymous"
     raise ImproperlyConfigured(

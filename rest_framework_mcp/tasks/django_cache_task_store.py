@@ -12,9 +12,9 @@ from rest_framework_mcp.tasks.types.task_record import TaskRecord
 
 _KEY_PREFIX: str = "drf-mcp:task:"
 _NAMESPACE_DIGEST_CHARS: int = 12
-# Used when a task declares no TTL. Django's cache API has no "never expire"
-# that every backend honours identically, and a task nobody ever polls would
-# otherwise occupy the cache forever.
+# Used when a task declares no TTL: Django's cache API has no "never expire"
+# every backend honours identically, and a task nobody polls would otherwise
+# occupy the cache forever.
 _NO_TTL_FALLBACK_SECONDS: int = 60 * 60 * 24 * 7
 
 
@@ -32,16 +32,16 @@ class DjangoCacheTaskStore:
     (``name`` is free-form; memcached rejects spaces and caps length), not
     secrecy.
 
-    ⚠ **Records are serialised to plain dicts rather than pickled.** The cache
-    holds them across a deploy, so a pickled dataclass would be a version of
-    this package's class definition — rename a field and every in-flight task
-    becomes unreadable at exactly the moment a worker tries to finish it. It
-    also keeps the store usable under a JSON-serialising cache backend.
+    **Records are serialised to plain dicts rather than pickled.** The cache
+    holds them across a deploy, and a pickled dataclass is a version of this
+    package's class definition: rename a field and every in-flight task becomes
+    unreadable exactly when a worker tries to finish it. Plain dicts also keep
+    the store usable under a JSON-serialising backend.
 
     **Expiry** is absolute, stamped once at :meth:`create` from ``ttlMs`` and
     carried in the envelope, so :meth:`save` renews the cache timeout to the
-    *remaining* lifetime rather than restarting the clock. Without that, a task
-    that reports progress often would never expire.
+    *remaining* lifetime rather than restarting the clock — otherwise a task
+    reporting progress often would never expire.
     """
 
     def __init__(self, *, namespace: str | None = None) -> None:
@@ -75,10 +75,9 @@ class DjangoCacheTaskStore:
         if expires_at is None:
             timeout: float = _NO_TTL_FALLBACK_SECONDS
         else:
-            # Floor at one second rather than zero: a zero timeout means
-            # "expire immediately" on several backends, which would drop a task
-            # the caller is still writing to. An already-expired task is
-            # unreadable a second later either way.
+            # Floor at one second: a zero timeout means "expire immediately" on
+            # several backends, which would drop a task the caller is still
+            # writing to.
             timeout = max(1.0, expires_at - time.time())
         payload: dict[str, Any] = _serialize(record)
         payload["expiresAt"] = expires_at
@@ -114,11 +113,10 @@ def _serialize(record: TaskRecord) -> dict[str, Any]:
 def _deserialize(raw: dict[str, Any]) -> TaskRecord | None:
     """Rebuild a record, or ``None`` if the entry cannot be trusted.
 
-    An entry written by a different version of this package — or by anything
-    else that happens to share the cache — is treated as a task that does not
-    exist rather than raised on. The caller answers ``-32602``, which is the
-    honest thing to tell a client holding an id that no longer resolves, and is
-    what it would have got had the entry simply expired.
+    An entry written by a different version of this package, or by anything else
+    sharing the cache, is treated as a task that does not exist rather than
+    raised on: the caller answers ``-32602``, which is what a client holding an
+    id that no longer resolves would have got had the entry simply expired.
     """
     try:
         status: TaskStatus = TaskStatus(raw["status"])

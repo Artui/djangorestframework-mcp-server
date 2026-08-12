@@ -16,20 +16,17 @@ def build_content_blocks(
     """Project a rendered tool payload into non-text ``content`` blocks.
 
     Returns the blocks, or an **explanatory message** when the payload does not
-    match the kind the binding declared. Returning a message rather than a
-    response mirrors :func:`enforce_result_bytes`: the caller knows which
-    envelope it is building, and the two callers here want different ones.
+    match the kind the binding declared — a message rather than a response, so
+    each caller wraps it in the envelope it is already building (as with
+    :func:`enforce_result_bytes`).
 
-    A mismatch is always a server-side mistake — the binding says ``IMAGE`` and
-    the service returned a dict — but it can only be caught here, because a
+    A mismatch is a server-side mistake that can only be caught here, since a
     callable's return type is not knowable at registration. It surfaces as a
     tool-level error rather than an exception so the client still gets a
-    well-formed response, and the message names the declaration that is wrong
-    rather than the value that tripped over it.
+    well-formed response.
 
     ``TEXT`` never reaches this function; :func:`build_tool_result` handles it
-    directly, since it also owns the ``OutputFormat`` rendering that only text
-    blocks have.
+    directly, along with the ``OutputFormat`` rendering only text blocks have.
     """
     if content_kind is ToolContentKind.RESOURCE_LINK:
         return _resource_links(payload)
@@ -59,11 +56,9 @@ def _as_bytes(payload: bytes | bytearray | memoryview | str) -> bytes | str:
 def _resource_links(payload: Any) -> list[ToolContentBlock] | str:
     """One ``resource_link`` per mapping in the payload.
 
-    A single mapping and a sequence of them are both accepted — a tool that
-    resolves one document and one that resolves several should not need
-    different plumbing. Tuples count: a selector returning one is producing the
-    right shape, and rejecting it with a message about the wrong shape would
-    read as nonsense.
+    A single mapping and a sequence of them are both accepted, tuples included:
+    a tool resolving one document and one resolving several should not need
+    different plumbing.
     """
     items: Any = [payload] if isinstance(payload, Mapping) else payload
     if not isinstance(items, list | tuple) or not all(isinstance(item, Mapping) for item in items):

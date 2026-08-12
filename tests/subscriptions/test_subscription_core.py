@@ -98,7 +98,7 @@ def test_topics_are_namespaced_so_one_kind_cannot_collide_with_another() -> None
 
 
 def test_resource_topics_are_exact_not_prefixes() -> None:
-    """⚠ A prefix rule would match ``invoices://1`` against ``invoices://11``,
+    """A prefix rule would match ``invoices://1`` against ``invoices://11``,
     and would miss a tenant-scoped scheme entirely. Publishers name the
     collection explicitly instead."""
     assert topic_for_resource("invoices://1") != topic_for_resource("invoices://11")
@@ -225,7 +225,7 @@ def test_a_readable_resource_is_granted() -> None:
 
 
 def test_a_resource_the_caller_cannot_read_is_not_watchable() -> None:
-    """⚠ Otherwise a subscription is a side channel around ``resources/read``:
+    """Otherwise a subscription is a side channel around ``resources/read``:
     a caller denied the body still learns every time it changes, and *when*
     something changes is often the more sensitive signal."""
     server = _server()
@@ -377,6 +377,6 @@ async def test_notify_list_changed_publishes_the_kind_topic() -> None:
 
 
 def test_a_server_gets_no_broker_unless_one_is_named() -> None:
-    """⚠ No default. A quietly-constructed in-process broker would advertise
+    """No default. A quietly-constructed in-process broker would advertise
     support and then deliver nothing as soon as a second worker existed."""
     assert _server().subscription_broker is None
