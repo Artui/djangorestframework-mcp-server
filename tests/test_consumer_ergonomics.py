@@ -40,7 +40,7 @@ def _spec() -> ServiceSpec:
 
 
 class TestAuthorizationServerRoot:
-    """NICE-1 — the issuer is a site root, and copying DOT's own breaks it."""
+    """The issuer is a site root, and copying DOT's own breaks it."""
 
     def test_a_mounted_value_warns(self) -> None:
         with pytest.warns(MountedAuthorizationServerWarning, match="site root"):
@@ -93,7 +93,7 @@ class TestAuthorizationServerRoot:
 
 
 class TestStructuredOutputCouplingAtRegistration:
-    """NICE-4 — a spec-violating pair fails at import, not on first traffic."""
+    """A spec-violating pair fails at import, not on first traffic."""
 
     def _server(self, **config_kwargs: object) -> MCPServer:
         return MCPServer(name="t", config=build_mcp_config(**config_kwargs))
@@ -106,7 +106,7 @@ class TestStructuredOutputCouplingAtRegistration:
             )
 
     def test_a_binding_override_can_make_the_global_pair_legal(self) -> None:
-        """⚠ Why this check cannot live on the global config alone.
+        """Why this check cannot live on the global config alone.
 
         Server-wide "schema on, content off" is legitimate precisely when every
         binding overrides the content back on — so checking the two settings at
@@ -129,7 +129,7 @@ class TestStructuredOutputCouplingAtRegistration:
 
 
 class TestOAuthUrlShadowing:
-    """NICE-2 — DOT 3.4.0 contests paths we serve, and first-match wins."""
+    """DOT 3.4.0 contests paths we serve, and first-match wins."""
 
     @override_settings(ROOT_URLCONF="tests.testapp.urls")
     def test_unmounted_paths_are_not_reported(self) -> None:
@@ -156,7 +156,7 @@ class TestOAuthUrlShadowing:
 
 
 class TestUnguardedToolsAreRefusedByDefault:
-    """NICE-3 — the strict default, and the escape hatch that makes it shippable."""
+    """The strict default, and the escape hatch that makes it shippable."""
 
     def test_the_shipped_default_is_strict(self) -> None:
         """Pinned against the settings file, because the suite opts *out*.
@@ -175,7 +175,7 @@ class TestUnguardedToolsAreRefusedByDefault:
             server.register_service_tool(name="t.open", spec=_spec(), description="d")
 
     def test_the_error_names_the_way_out_not_the_way_in(self) -> None:
-        """⚠ The raise and the warning need *opposite* remedies.
+        """The raise and the warning need *opposite* remedies.
 
         The warning says "set the flag to make this an error". Reusing that text
         on the raise tells you to enable the setting that just fired, which
@@ -204,7 +204,7 @@ class TestUnguardedToolsAreRefusedByDefault:
 
 
 class TestObservability:
-    """NICE-7 — the package logged nothing at all before 0.25.0."""
+    """The package logged nothing at all before 0.25.0."""
 
     def test_a_session_id_is_never_logged_whole(self) -> None:
         full = "s3cr3t-session-identifier-value"
@@ -221,7 +221,7 @@ class TestObservability:
         assert get_logger("rest_framework_mcp.transport.x").name.startswith("rest_framework_mcp")
 
     def test_a_rejected_session_names_its_exact_cause_server_side(self, caplog) -> None:
-        """⭐ The no-oracle rule constrains the response, not the log.
+        """The no-oracle rule constrains the response, not the log.
 
         The wire deliberately merges unknown-id with wrong-principal. An
         operator is not the adversary that protects against, so the log names

@@ -39,9 +39,8 @@ def handle_tools_list(
     if cursor is not None and not isinstance(cursor, str):
         return JsonRpcError(JsonRpcErrorCode.INVALID_PARAMS, "'cursor' must be a string")
 
-    # Per-caller visibility filter: when enabled, drop bindings
-    # the current token can't invoke before paginating, so ``nextCursor``
-    # reflects the visible slice rather than the full registry.
+    # Filtered before paginating, so ``nextCursor`` reflects the visible slice
+    # rather than the full registry.
     bindings = list(context.tools.all())
     if context.config.filter_listings_by_permissions:
         bindings = [
@@ -55,10 +54,9 @@ def handle_tools_list(
 
     tools: list[dict[str, Any]] = []
     for binding in page:
-        # Chain tools advertise their resolved input serializer (explicit or
-        # first-step fallback); selector tools merge filter / ordering /
-        # pagination args into their inputSchema; service tools just expose
-        # the input serializer's schema verbatim.
+        # Chain tools advertise their resolved input serializer; selector tools
+        # merge filter / ordering / pagination args in; service tools expose the
+        # input serializer's schema verbatim.
         if isinstance(binding, ChainToolBinding):
             input_schema = build_chain_tool_input_schema(binding)
         elif isinstance(binding, SelectorToolBinding):
@@ -67,24 +65,16 @@ def handle_tools_list(
                 max_page_size=resolve_bound(binding.max_page_size, context.config.max_page_size),
             )
         else:
-            # ``spec.partial is True`` (sister-repo 0.16) relaxes validation to
-            # partial, dropping ``required``; any registered URL kwargs merge in.
             input_schema = build_service_tool_input_schema(binding)
-        # Stamp ``additionalProperties`` to match what the runtime actually
-        # enforces. A closed schema (``false``) is advertised only when the
-        # dispatch path really rejects unknown keys — ``REJECT`` *and* a
-        # serializer to validate against; a serializer-less binding silently
-        # accepts unknowns even under ``REJECT``, so its schema stays
-        # open. ``build_input_schema`` and ``build_selector_tool_input_schema``
-        # always return a ``"type": "object"`` shape, so this stamps every
-        # emitted schema.
+        # Stamped to match what the runtime actually enforces; every builder
+        # returns a ``"type": "object"`` shape, so this reaches every schema.
         input_schema = dict(input_schema)
         input_schema["additionalProperties"] = not advertises_closed_schema(binding)
         # ``outputSchema`` and ``structuredContent`` are independently
-        # toggleable, but the spec forbids one combination — advertising
-        # the schema while suppressing the content. ``resolve_structured_output``
-        # validates the asymmetric rule and raises ``ImproperlyConfigured``
-        # for the bad combo before we serialize anything.
+        # toggleable, but the spec forbids advertising the schema while
+        # suppressing the content — ``resolve_structured_output`` raises
+        # ``ImproperlyConfigured`` for that combination before anything is
+        # serialized.
         emit_output_schema, _emit_structured_content = resolve_structured_output(
             include_output_schema_override=binding.include_output_schema,
             include_structured_content_override=binding.include_structured_content,
@@ -92,14 +82,10 @@ def handle_tools_list(
             default_output_schema=context.config.include_output_schema,
             default_structured_content=context.config.include_structured_content,
         )
-        # Sister-repo 0.13+: a service tool's response serializer lives
-        # at ``ServiceSpec.output_selector_spec.output_serializer``; a
-        # selector tool's still lives flat on the ``SelectorSpec``; a chain
-        # tool exposes its output step's serializer (``None`` under
-        # ``output_all``).
-        # ``outputSchema`` must match the payload shape the dispatch
-        # pipeline actually emits — a LIST tool returns a bare array
-        # (or the pagination envelope), so its schema is kind-aware.
+        # Each binding kind keeps its response serializer somewhere different.
+        # ``outputSchema`` must match the payload shape the dispatch pipeline
+        # actually emits — a LIST tool returns a bare array or the pagination
+        # envelope — so the selector schema is kind-aware.
         if isinstance(binding, ChainToolBinding):
             output_schema = build_output_schema(binding.output_serializer)
         elif isinstance(binding, SelectorToolBinding):
@@ -114,10 +100,9 @@ def handle_tools_list(
                 if binding.spec.output_selector_spec
                 else None
             )
-        # A media tool has no JSON result to describe, and the binding refuses
-        # ``include_output_schema=True`` alongside one — so the schema is
-        # dropped here rather than advertised over a payload that will arrive
-        # as an image block. Resource links keep theirs: the links are JSON.
+        # A media tool has no JSON result to describe, so the schema is dropped
+        # rather than advertised over a payload arriving as an image block.
+        # Resource links keep theirs: the links are JSON.
         if binding.content_kind in (ToolContentKind.IMAGE, ToolContentKind.AUDIO):
             output_schema = None
         tool = Tool(

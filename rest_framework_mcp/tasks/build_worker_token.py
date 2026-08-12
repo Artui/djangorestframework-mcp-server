@@ -16,19 +16,16 @@ def build_worker_token(record: TaskRecord) -> TokenInfo:
     This turns that back into the ``TokenInfo`` the permission classes expect,
     so the binding's guards run in the worker exactly as they ran inline.
 
-    **The user is re-read from the database, not reconstructed.** Permissions
-    ask real questions of it (``user.has_perm``, ``is_authenticated``, and
-    whatever a project's own permission does), and a task may sit in a queue
-    long enough for the answers to change. Re-reading means a user deactivated
-    or stripped of a permission between the call and the work has that honoured
-    — the point in time that matters for authorization is when the work runs.
+    **The user is re-read from the database, not reconstructed.** A task may sit
+    in a queue long enough for the answers permissions ask of it to change, and
+    the point in time that matters for authorization is when the work runs — so
+    a user deactivated or stripped of a permission in the meantime is honoured.
 
     A user that no longer exists degrades to ``AnonymousUser`` rather than
-    raising: a deleted account should fail the task's permission checks, which
-    is what an anonymous principal does, and it should fail *as a denial* the
-    client can read rather than as a worker crash.
+    raising: a deleted account should fail the task's permission checks, and
+    fail as a denial the client can read rather than as a worker crash.
 
-    ⚠ ``raw`` is ``None`` by construction — see :class:`TaskRecord` for why the
+    ``raw`` is ``None`` by construction — see :class:`TaskRecord` for why the
     backend's opaque payload is not persisted.
     """
     return TokenInfo(

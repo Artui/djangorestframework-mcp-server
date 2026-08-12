@@ -10,17 +10,14 @@ from rest_framework_mcp.output.encode_json import encode_json
 def encode_toon(payload: Any) -> str:
     """Encode ``payload`` as TOON (token-oriented object notation).
 
-    TOON is an optional dependency. If ``python-toon`` is not installed, this
-    encoder issues a warning and falls back to JSON so a tool call never
-    breaks just because the extra is absent. The warning fires every time —
-    silencing it is the consumer's job (``warnings.filterwarnings`` or
-    installing the extra).
-
-    The import goes through ``importlib`` so static analysers (``ty``) don't
-    flag the optional module as unresolved on environments without the
-    ``[toon]`` extra installed.
+    TOON is an optional dependency. Without ``python-toon`` installed this
+    warns and falls back to JSON, so a tool call never breaks because the extra
+    is absent. The warning fires every time — silence it with
+    ``warnings.filterwarnings`` or install the extra.
     """
     try:
+        # Via ``importlib`` so ``ty`` doesn't flag the optional module as
+        # unresolved where the ``[toon]`` extra isn't installed.
         toon = importlib.import_module("toon")
     except ImportError:
         warnings.warn(

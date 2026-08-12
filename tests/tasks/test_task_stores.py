@@ -118,7 +118,7 @@ def test_the_cache_store_holds_a_plain_dict_not_a_pickled_dataclass() -> None:
 
 
 def test_save_renews_the_remaining_lifetime_not_the_whole_ttl() -> None:
-    """⚠ The bug this prevents: a task reporting often would never expire.
+    """The bug this prevents: a task reporting often would never expire.
 
     Expiry is stamped absolutely at creation and carried in the envelope, so a
     later write shortens the cache timeout rather than restarting the clock.
@@ -279,13 +279,13 @@ def _default_of(f: Any) -> Any:
 def test_every_field_of_the_fixture_is_non_default() -> None:
     """The fixture must exercise every field, or the round trip proves nothing.
 
-    ⚠ **This is the half that catches a *new* field.** A field added to
+    **This is the half that catches a *new* field.** A field added to
     ``TaskRecord`` or ``Task`` and not added here would keep its default,
     round-trip vacuously, and leave the codec untested for it — so this asserts
     exhaustiveness directly off ``dataclasses.fields`` rather than trusting the
     fixture to be maintained.
 
-    ⚠ **A missing default is not the same as a default of ``None``, and
+    **A missing default is not the same as a default of ``None``, and
     conflating them put a hole in this check.** An earlier version mapped
     ``MISSING`` onto ``None`` and then skipped every field whose default was
     ``None`` — which is most of ``Task`` and both fields ``progress`` /
@@ -307,7 +307,7 @@ def test_every_field_of_the_fixture_is_non_default() -> None:
 def test_the_cache_codec_preserves_every_field() -> None:
     """Save → load must return a record equal field by field.
 
-    ⚠ **This is the half that catches a *forgotten* field.** ``DjangoCacheTaskStore``
+    **This is the half that catches a *forgotten* field.** ``DjangoCacheTaskStore``
     hand-writes both directions (``{"enqueued": record.enqueued}`` out,
     ``enqueued=bool(raw.get("enqueued"))`` back), so a field added to the record
     and missed in either direction is **silently dropped** — and it is dropped

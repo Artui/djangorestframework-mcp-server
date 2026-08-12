@@ -11,18 +11,15 @@ from rest_framework_mcp.constants import ArgumentBinding, OutputFormat, UnknownA
 class SelectorDefaults:
     """Per-kind defaults for :func:`register_tools` over selector definitions.
 
-    Sister of :class:`ServiceDefaults`. Same conventions:
+    Sister of :class:`ServiceDefaults`, with the same convention: ``None`` is
+    "no override", deferring to the per-definition value or to
+    :meth:`MCPServer.register_selector_tool`'s own default, and a
+    per-definition kwarg always wins on conflict.
 
-    - Every field is ``Optional``.
-    - ``None`` = "no override; use the per-definition or the
-      :meth:`MCPServer.register_selector_tool` default".
-    - Per-definition kwargs always win on conflict.
-
-    Selector-only knobs (``input_serializer``, ``ordering_fields``,
-    ``paginate``) live here too so a project that wants every selector
-    tool to paginate by default can express that in one place. Filtering
-    is not among them — ``filter_set`` is declared on each
-    ``SelectorSpec``, not as a registration default.
+    The selector-only knobs live here too, so a project wanting every selector
+    tool to paginate by default says so once. Filtering is not among them —
+    ``filter_set`` is declared on each ``SelectorSpec``, never as a
+    registration default.
     """
 
     description: str | None = None

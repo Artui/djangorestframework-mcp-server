@@ -6,7 +6,7 @@ exactly like any other choice filter — which means a spec carrying one
 advertises ``ordering`` in the tool's ``inputSchema`` with nothing declared at
 registration.
 
-⚠ That advertisement used to be a lie. ``ordering`` sat in
+That advertisement used to be a lie. ``ordering`` sat in
 ``RESERVED_POST_FETCH_KEYS`` and was stripped from the single mapping that
 served as both the selector's kwarg pool *and* the FilterSet's data, so the
 value never reached the filter and nothing applied it: the model asked for
@@ -127,7 +127,7 @@ def test_the_filters_ordering_is_advertised_with_nothing_declared() -> None:
 
 @pytest.mark.django_db
 def test_an_advertised_ordering_actually_orders_the_rows() -> None:
-    """⭐ The test the wave exists for.
+    """The test the wave exists for.
 
     Before the fix this passed every check except the one that matters: the
     call succeeded, the payload was well-formed, and the rows came back in

@@ -8,16 +8,14 @@ from typing import Any
 class AuthorizationServerMetadata:
     """RFC 8414 OAuth 2.0 Authorization Server Metadata payload.
 
-    Returned by :meth:`MCPAuthBackend.authorization_server_metadata`
-    and serialised by the contrib AS metadata ViewSet. Backends that
-    don't host an AS raise :class:`NotImplementedError` instead of
-    returning this dataclass; the calling ViewSet maps the exception
-    to ``501 Not Implemented``.
+    Returned by :meth:`MCPAuthBackend.authorization_server_metadata` and
+    serialised by the contrib AS metadata ViewSet. A backend that hosts no
+    authorization server raises :class:`NotImplementedError` instead, which
+    that ViewSet maps to ``501 Not Implemented``.
 
-    Field shapes mirror RFC 8414; ``str``-typed endpoints default to
-    ``""`` so the wire shape is always valid JSON even when the
-    configuration is incomplete (callers can populate ``SERVER_INFO``
-    to fill them).
+    Field shapes mirror RFC 8414. The ``str``-typed endpoints default to ``""``
+    so the wire shape is valid JSON even when the configuration is incomplete;
+    populate ``SERVER_INFO`` to fill them.
     """
 
     issuer: str
@@ -36,15 +34,14 @@ class AuthorizationServerMetadata:
     client_id_metadata_document_supported: bool = False
     """Whether the authorization server accepts an HTTPS URL as a ``client_id``.
 
-    The field MCP clients check to decide *how* to register, and the reason it
-    matters here: the registration priority order is pre-registration → CIMD →
-    Dynamic Client Registration, and DCR is deprecated. A server that supports
-    CIMD but stays silent about it sends every client down the deprecated path
-    for no reason.
+    Clients check this to decide how to register: the priority order is
+    pre-registration, then CIMD, then the deprecated Dynamic Client
+    Registration, so a server that supports CIMD but stays silent sends every
+    client down the deprecated path.
 
-    ⚠ Never hardcode this to ``True``. It describes the authorization server,
-    not this package — a backend must source it from whatever the AS actually
-    does, so the advertisement cannot drift from the behaviour."""
+    Never hardcode this to ``True``. It describes the authorization server, not
+    this package, so a backend must source it from what the AS actually does or
+    the advertisement drifts from the behaviour."""
 
     def to_dict(self) -> dict[str, Any]:
         return {

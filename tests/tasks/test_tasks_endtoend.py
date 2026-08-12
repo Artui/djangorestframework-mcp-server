@@ -162,7 +162,7 @@ def test_a_legacy_client_never_gets_a_task(client: Client) -> None:
 
 
 def test_mcp_name_must_carry_the_task_id(client: Client) -> None:
-    """⚠ The extension requires it so a gateway can route a follow-up to the
+    """The extension requires it so a gateway can route a follow-up to the
     instance holding that task's state. Without the mirroring registered, every
     conformant ``tasks/*`` request would fail header validation."""
     task_id = _result(_post(client, "tools/call", {"name": "t.optional", "arguments": {}}))[
@@ -239,7 +239,7 @@ def test_passing_task_store_none_is_not_a_request_for_the_default() -> None:
 
 
 def test_a_required_tool_on_a_server_that_cannot_run_tasks_blames_the_server() -> None:
-    """⚠ ``-32603``, not the capability error. The client's request is fine;
+    """``-32603``, not the capability error. The client's request is fine;
     the tool was declared un-runnable inline with nothing configured to run it
     elsewhere. Blaming the client would send a competent one round a loop it
     cannot win."""

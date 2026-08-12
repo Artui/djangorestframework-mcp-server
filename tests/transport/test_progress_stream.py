@@ -325,7 +325,7 @@ async def test_a_report_with_no_total_omits_the_field() -> None:
 async def test_closing_the_stream_cancels_the_dispatch() -> None:
     """Cancellation-by-disconnect: the client going away *is* the signal.
 
-    ⚠ It cancels the await, not the work — a thread parked in a driver's
+    It cancels the await, not the work — a thread parked in a driver's
     socket read is not interruptible by asyncio, the same caveat the dispatch
     deadline carries.
     """

@@ -5,13 +5,13 @@ The backend suite drives `authenticate` through a `_FakeToken` carrying a
 whether that path is real or fiction, so these tests use a genuine
 `AccessToken` row.
 
-⭐ **DOT 3.4.0 added `resource`**, and this file is how we found out: the
+**DOT 3.4.0 added `resource`**, and this file is how we found out: the
 tripwire below was written predicting exactly that, and it fired on the bump.
 Before 3.4.0 the audience path was unsatisfiable in every stock deployment —
 enforcement could only work against a swapped `ACCESS_TOKEN_MODEL` or a custom
 `audience_getter`. From 3.4.0 the default getter is meaningful out of the box.
 
-⚠ The package supports `django-oauth-toolkit>=2.3`, so both realities are live
+The package supports `django-oauth-toolkit>=2.3`, so both realities are live
 and these tests are version-gated rather than rewritten. Whether
 `ENFORCE_AUDIENCE` should now *default on* is a separate decision — it would be
 breaking for anyone on older DOT.

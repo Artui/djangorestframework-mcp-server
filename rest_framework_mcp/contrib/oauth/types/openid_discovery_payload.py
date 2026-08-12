@@ -12,16 +12,12 @@ from rest_framework_mcp.auth.types.authorization_server_metadata import (
 class OpenIDDiscoveryPayload:
     """OIDC discovery alias payload — extends :class:`AuthorizationServerMetadata`.
 
-    Composes (not subclasses) the AS metadata so the underlying type
-    stays exactly RFC 8414. The OIDC additions (``subject_types_supported``,
-    ``id_token_signing_alg_values_supported``, ``response_modes_supported``)
-    are advertised because some MCP / LLM-host clients probe
-    ``/.well-known/openid-configuration`` first and skip the probe
-    silently if these keys are absent.
-
-    See :class:`OpenIDDiscoveryViewSet` for the rationale on returning
-    OIDC-shaped metadata without implementing an actual ID-token
-    endpoint.
+    Composes rather than subclasses the AS metadata, so the underlying type
+    stays exactly RFC 8414. The OIDC additions are advertised because some MCP
+    hosts probe ``/.well-known/openid-configuration`` first and skip the probe
+    silently when these keys are absent. See :class:`OpenIDDiscoveryViewSet`
+    for why OIDC-shaped metadata is returned with no ID-token endpoint behind
+    it.
     """
 
     base: AuthorizationServerMetadata

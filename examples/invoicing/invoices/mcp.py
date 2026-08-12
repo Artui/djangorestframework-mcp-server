@@ -40,7 +40,7 @@ def build_server() -> MCPServer:
         session_store=InMemorySessionStore(),
     )
 
-    # ⚠ Permissions are **required** since 0.25.0: registering a tool without
+    # Permissions are **required** since 0.25.0: registering a tool without
     # them raises. DRF viewset-level and REST_FRAMEWORK defaults do not reach
     # MCP, so an omission here is an open tool rather than an inherited policy.
     # ``AllowAny`` is the honest choice for a demo — it says "deliberately

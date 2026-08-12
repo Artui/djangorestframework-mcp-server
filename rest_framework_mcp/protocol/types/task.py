@@ -11,23 +11,21 @@ class Task:
     """The wire shape of a task, in every message that carries one.
 
     One type serves three roles the spec names separately — the
-    ``CreateTaskResult`` body, the ``tasks/get`` result, and the
+    ``CreateTaskResult`` body, the ``tasks/get`` result and the
     ``notifications/tasks`` params — because they are the same object with the
-    same fields. The spec splits it into ``WorkingTask`` / ``InputRequiredTask``
-    / ``CompletedTask`` / ``FailedTask`` / ``CancelledTask``, but the split is
-    only *which extra field is present*, and that is a property of
-    :attr:`status`. :meth:`to_dict` emits the right one and refuses the wrong
-    one, which is the part a client can observe.
+    same fields. The spec's ``WorkingTask`` / ``InputRequiredTask`` /
+    ``CompletedTask`` / ``FailedTask`` / ``CancelledTask`` split is only *which
+    extra field is present*, which is a property of :attr:`status`;
+    :meth:`to_dict` emits the right one and refuses the wrong one.
 
-    ⚠ **Timestamps are ISO 8601 strings, stored as strings.** They come from
-    the store and go out verbatim; nothing here parses or compares them. A
-    ``datetime`` field would invite a comparison against ``now()`` somewhere,
-    and TTL expiry belongs to the store — which is the only component that
-    knows what clock its backend keeps.
+    **Timestamps are ISO 8601 strings, stored as strings.** They come from the
+    store and go out verbatim; nothing here parses or compares them. A
+    ``datetime`` would invite a comparison against ``now()``, and TTL expiry
+    belongs to the store — the only component that knows its backend's clock.
 
-    :attr:`ttl_ms` is ``None`` for "no expiry", which is the spec's own
-    encoding (``ttlMs: number | null``) rather than an omission — the field is
-    always present.
+    :attr:`ttl_ms` is ``None`` for "no expiry", the spec's own encoding
+    (``ttlMs: number | null``) rather than an omission: the field is always
+    present.
     """
 
     task_id: str
@@ -44,11 +42,9 @@ class Task:
     def to_dict(self) -> dict[str, Any]:
         """Project to the wire, carrying only the field this status licenses.
 
-        The status-specific field is gated on the status rather than on
-        whether it happens to be set, so a stored record that somehow holds
-        both a ``result`` and an ``error`` cannot emit a shape no variant in
-        the spec describes. The status is the single source of truth for what
-        a client should find.
+        Gated on the status rather than on whether a field happens to be set, so
+        a record holding both a ``result`` and an ``error`` cannot emit a shape
+        no spec variant describes.
         """
         out: dict[str, Any] = {
             "taskId": self.task_id,
@@ -63,9 +59,8 @@ class Task:
             out["statusMessage"] = self.status_message
         if self.status is TaskStatus.COMPLETED:
             # ``{}`` rather than omitted: the spec makes ``result`` mandatory on
-            # a completed task, and a client that unwraps it unconditionally
-            # would break on a missing key in a way it would not on an empty
-            # object.
+            # a completed task, so a client unwrapping it unconditionally would
+            # break on a missing key but not on an empty object.
             out["result"] = self.result if self.result is not None else {}
         elif self.status is TaskStatus.FAILED:
             out["error"] = self.error if self.error is not None else {}

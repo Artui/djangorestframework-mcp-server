@@ -21,21 +21,18 @@ class ResourceBinding(Generic[ResultT]):
     invokes the selector directly via ``resolve_callable_kwargs`` +
     ``run_selector`` — there is no view or viewset in the dispatch path.
 
-    ``output_serializer`` is consulted by ``resources/read`` to render the
-    selector's return value. ``mime_type`` advertises the encoding we will
-    return — usually ``"application/json"``.
+    ``output_serializer`` is what ``resources/read`` renders the selector's
+    return value through, and ``mime_type`` advertises the type that body will
+    carry. ``kwargs_provider`` mirrors ``SelectorSpec.kwargs``: when set, the
+    handler invokes it once per request and merges the returned dict into the
+    kwarg pool, passing a synthesised
+    :class:`~rest_framework_services.OfflineServiceView` whose ``view.kwargs``
+    holds the URI-template variables and whose ``view.action`` is the binding
+    name. ``annotations`` and ``meta`` are emitted verbatim on the listing
+    entry, and ``meta`` also on the ``contents`` block of ``resources/read``.
 
-    ``kwargs_provider`` mirrors ``SelectorSpec.kwargs`` from
-    ``djangorestframework-services >= 0.6``: when set, the handler invokes it
-    once per request and merges the returned dict into the kwarg pool. The
-    provider receives a synthesised
-    :class:`~rest_framework_services.OfflineServiceView` (URI-template
-    variables exposed as ``view.kwargs``, the binding name as
-    ``view.action``).
-
-    The ``Generic[ResultT]`` parameter is purely informational — it lets
-    callers pin the selector's return type for IDE / type-checker help.
-    Defaults to ``Any`` when omitted.
+    The generic parameter is purely informational, letting callers pin the
+    selector's return type for type-checker help.
     """
 
     name: str
@@ -43,63 +40,54 @@ class ResourceBinding(Generic[ResultT]):
     description: str | None
     selector: Callable[..., ResultT]
     kind: SelectorKind
-    """Required, no default. Pulled out of ``SelectorSpec.kind`` by the adapter
-    so the binding doesn't carry a reference to the whole spec. ``LIST`` invokes
-    the output serializer with ``many=True``; ``RETRIEVE`` (the common case for
-    URI-template resources) invokes it with ``many=False``. Resources have no
-    post-fetch pipeline, so both kinds are unconditionally accepted."""
+    """Pulled out of ``SelectorSpec.kind`` by the adapter, so the binding does
+    not carry a reference to the whole spec. ``LIST`` invokes the output
+    serializer with ``many=True``, ``RETRIEVE`` (the common case for
+    URI-template resources) with ``many=False``. Resources have no post-fetch
+    pipeline, so both kinds are accepted unconditionally."""
 
     output_serializer: type | None = None
     mime_type: str = "application/json"
     encoding: ResourceEncoding = ResourceEncoding.JSON
-    """How the selector's value becomes the ``resources/read`` body. ``JSON``
-    (the default) pretty-prints it; ``TEXT`` returns it verbatim, which is what
-    an HTML / Markdown / CSV resource needs. Declared rather than inferred from
-    ``mime_type``, so advertising a new mime type never silently changes how the
-    body is encoded."""
+    """How the selector's value becomes the ``resources/read`` body. Declared
+    rather than inferred from ``mime_type``, so advertising a new mime type
+    never silently changes the encoding. See :class:`ResourceEncoding`."""
 
     permissions: tuple[Any, ...] = ()
     rate_limits: tuple[Any, ...] = ()
     annotations: dict[str, Any] = field(default_factory=dict)
-    # See ``ToolBinding.meta`` — free-form ``_meta`` bundle for this
-    # resource's ``resources/list`` (or ``resources/templates/list``) entry
-    # and for the ``contents`` block ``resources/read`` returns.
+    # Free-form for the reason given on ``ToolBinding.meta``.
     meta: dict[str, Any] = field(default_factory=dict)
     title: str | None = None
     completions: dict[str, Callable[..., Any]] = field(default_factory=dict)
-    """Argument name → completer callable, powering ``completion/complete``.
+    """Argument name to completer callable, powering ``completion/complete``.
 
     A completer is dispatched through ``resolve_callable_kwargs`` against a
     pool of ``value`` (the text typed so far), ``arguments`` (siblings the
     client has already resolved, also spread by name), ``request`` and
-    ``user``. It returns an iterable of suggestions — a list, a generator or
-    a queryset — and the handler slices it to the spec's cap rather than
-    draining it."""
+    ``user``. It returns an iterable of suggestions — a list, a generator or a
+    queryset — which the handler slices to the spec's cap rather than
+    draining."""
 
     cache_ttl_ms: int | UnsetType = UNSET
     """How long a client may cache this resource's body, in milliseconds.
-
-    ``UNSET`` takes the server's ``RESOURCE_CACHE_TTL_MS`` (``0`` by default —
-    live data). Worth setting on anything genuinely static: an interactive view
-    is a document that changes only on deploy, and hosts prefetch views before
-    any tool call, so a zero TTL means fetching the same HTML repeatedly."""
+    ``UNSET`` takes the server's ``RESOURCE_CACHE_TTL_MS``, ``0`` by default
+    because a resource body is live data. Worth setting on anything genuinely
+    static: hosts prefetch interactive views before any tool call, so a zero
+    TTL means fetching the same HTML repeatedly."""
 
     icons: tuple[Icon, ...] = ()
-    """Display icons for this entry, emitted in its listing. Purely
-    presentational — a client renders them; nothing in dispatch reads them."""
+    """Display icons, emitted in this resource's listing entry. Purely
+    presentational; nothing in dispatch reads them."""
 
-    # The signature is intentionally loose — ``Callable[..., Any]`` rather
-    # than ``Callable[[ServiceView, Request], dict]`` — so providers typed
-    # against the upstream ``SelectorSpec.kwargs`` field (which uses generic
-    # ``ExtraT`` bounds) are accepted without contravariance friction.
+    # Loosely typed on purpose, so providers typed against the upstream
+    # ``SelectorSpec.kwargs`` field (which uses generic ``ExtraT`` bounds) are
+    # accepted without contravariance friction.
     kwargs_provider: Callable[..., Any] | None = None
     always_listed: bool = False
-    """Opt this resource back into listings it would otherwise be filtered out
-    of. With ``FILTER_LISTINGS_BY_PERMISSIONS`` enabled, a resource is normally
-    dropped from ``resources/list`` (and ``resources/templates/list`` for
-    templates) if any binding permission denies the caller; ``True`` keeps it
-    visible as a discovery aid. Same semantics as
-    :attr:`ToolBinding.always_listed`."""
+    """Keep this resource in ``resources/list`` (or
+    ``resources/templates/list``) even when ``FILTER_LISTINGS_BY_PERMISSIONS``
+    would drop it — same semantics as :attr:`ToolBinding.always_listed`."""
 
     @property
     def is_template(self) -> bool:

@@ -33,10 +33,8 @@ class AllowAnyBackend:
         )
 
     def authorization_server_metadata(self) -> AuthorizationServerMetadata:
-        # AllowAny doesn't host an authorization server. The
-        # ``rest_framework_mcp.contrib.oauth`` mount uses this signal to
-        # skip the AS-side endpoints, keeping the URL conf consistent with
-        # what the backend can actually serve.
+        # The ``contrib.oauth`` mount reads this exception as "skip the AS-side
+        # endpoints", keeping the URL conf to what the backend can serve.
         raise NotImplementedError(
             "AllowAnyBackend doesn't host an authorization server. "
             "Configure a real auth backend (e.g. DjangoOAuthToolkitBackend) "

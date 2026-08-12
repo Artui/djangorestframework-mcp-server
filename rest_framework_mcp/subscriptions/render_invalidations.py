@@ -15,26 +15,22 @@ def render_invalidations(
 ) -> tuple[str, ...]:
     """Turn a binding's ``invalidates=`` templates into the URIs that changed.
 
-    Templates use the same ``{var}`` syntax as ``uri_template`` on a resource —
-    deliberately, so a consumer writes ``invoices://{pk}`` in both places and
-    the two cannot drift into different dialects.
+    Templates use the same ``{var}`` syntax as ``uri_template`` on a resource,
+    so a consumer writes ``invoices://{pk}`` in both places and the two cannot
+    drift into different dialects.
 
     **Rendered against the result merged with the call's arguments, result
-    winning.** Both halves are needed:
+    winning.** The result is authoritative after a write — a service that
+    reassigns an invoice's number leaves the argument stale — while the
+    arguments are the only source when the result does not carry the key, as a
+    delete returning nothing still has ``{pk}`` in its input.
 
-    - The *result* is authoritative after a write. If a service reassigns an
-      invoice's number, the new one is in the result and the argument is stale.
-    - The *arguments* are the only source for a call whose result does not
-      carry the key — a delete typically returns nothing at all, and ``{pk}``
-      lives solely in the input.
-
-    ⚠ **A template that cannot render is dropped, never raised.** By the time
-    this runs the write has committed; failing the call over a formatting
-    mistake would report a failure for work that succeeded, which is strictly
-    worse than a missed notification (a client that misses one re-reads).
-    Dropping is also silent, which is the trade — the registration-time check
-    is where a typo should be caught, and a template naming a key nothing ever
-    produces is a bug this cannot see.
+    **A template that cannot render is dropped, never raised.** The write has
+    committed by the time this runs, so failing the call over a formatting
+    mistake would report a failure for work that succeeded; a missed
+    notification is recovered by the client's next read. Dropping is silent, so
+    a template naming a key nothing produces is caught by the
+    registration-time check, not here.
 
     Duplicates collapse while order is kept, so declaring both
     ``invoices://{pk}`` and ``invoices://`` publishes two topics and declaring
@@ -58,9 +54,8 @@ def _render(template: str, values: Mapping[str, Any]) -> str | None:
             return None
         value: Any = values[name]
         if value is None:
-            # A present-but-null key is as unusable as a missing one, and
-            # rendering it as the string "None" would publish a topic nobody
-            # could ever have subscribed to.
+            # A present-but-null key is as unusable as a missing one: rendering
+            # it as "None" would publish a topic nobody could subscribe to.
             return None
         out.append(template[last : match.start()])
         out.append(str(value))
@@ -72,11 +67,10 @@ def _render(template: str, values: Mapping[str, Any]) -> str | None:
 def _result_keys(payload: Any) -> dict[str, Any]:
     """The rendered tool result's fields, if it has any addressable ones.
 
-    A tool result is a ``ToolResult`` dict, and the part a template refers to is
-    the payload the service produced — ``structuredContent``. Reaching for it
-    here rather than making callers unwrap keeps ``invalidates=`` written
-    against what the author's service returns, not against the MCP envelope
-    wrapped round it.
+    A template refers to the payload the service produced, so it is read from
+    the tool result's ``structuredContent`` rather than the MCP envelope
+    wrapped round it — ``invalidates=`` is written against what the author's
+    service returns.
 
     A list payload contributes nothing: ``{pk}`` over many rows has no single
     answer, and guessing one would publish a URI for an arbitrary member.

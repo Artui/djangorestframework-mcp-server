@@ -2,21 +2,17 @@
 
 Both sides of one round trip: :func:`resolve_prior_input` before the service
 runs, :func:`ask_for_input` if it raises. Everything protocol-shaped is in
-:mod:`rest_framework_mcp.elicitation`; what lives here is the composition —
-which is tool-shaped, because ``isError`` is the failure channel and only a tool
-result has one.
+:mod:`rest_framework_mcp.elicitation`; the composition lives here because
+``isError`` is the failure channel and only a tool result has one.
 
-⛔ **Service tools only.** Chain and selector tools deliberately do not reach
-this module, and ``AdditionalInputRequired`` from either degrades through the
-existing ``ServiceError`` arm to an ordinary ``isError`` result.
-
-- A **chain** would be the dangerous one. MRTR completes a call by *re-running
-  it from the top*; a chain that asked at step three would, on the retry, run
-  steps one and two a second time. There is no shape of this that is safe
-  without checkpointing the chain, which is the tasks extension's problem, not
-  this one.
-- A **selector** is a read. A read that needs the user to decide something is a
-  tool wearing the wrong registration.
+**Service tools only.** Chain and selector tools deliberately do not reach this
+module, and ``AdditionalInputRequired`` from either degrades through the
+existing ``ServiceError`` arm to an ordinary ``isError`` result. A chain is the
+dangerous one: the exchange completes a call by *re-running it from the top*, so
+a chain that asked at step three would run steps one and two twice on the retry
+— unsafe without checkpointing, which is the tasks extension's problem. A
+selector is a read, and a read that needs the user to decide something is a tool
+wearing the wrong registration.
 """
 
 from __future__ import annotations
@@ -55,12 +51,10 @@ def resolve_prior_input(
     """Fold any earlier round's answers into the arguments this call runs with.
 
     Cheap and unconditional: an ordinary first call carries neither
-    ``inputResponses`` nor ``requestState``, so this returns the arguments it
-    was given with a fingerprint attached and nothing else happens.
-
-    The fingerprint is computed from the arguments **as sent**, before the
-    merge, which is what lets the next round's state bind to a call the client
-    will present again unchanged.
+    ``inputResponses`` nor ``requestState``, so it gets its arguments back with a
+    fingerprint attached. That fingerprint is computed from the arguments **as
+    sent**, before the merge, which is what lets the next round's state bind to a
+    call the client will present again unchanged.
     """
     fingerprint: str = fingerprint_request(
         TOOLS_CALL_METHOD, {"name": tool_name, "arguments": arguments}
@@ -81,11 +75,10 @@ def resolve_prior_input(
             refused_with=answer.action,
         )
 
-    # ⚠ Answers this round are merged over the carried ones, and the carried
-    # ones over the client's arguments — so the most recently confirmed value
-    # wins at every layer. Nothing here trusts ``carried`` on its own: it only
-    # exists because it arrived inside a signature bound to this principal and
-    # this call.
+    # This round's answers merge over the carried ones and those over the
+    # client's arguments, so the most recently confirmed value wins at every
+    # layer. ``carried`` is trusted only because it arrived inside a signature
+    # bound to this principal and this call.
     carried: dict[str, Any] = dict(state.answers) if state else {}
     if answer is not None:
         carried.update(answer.content)
@@ -106,29 +99,24 @@ def ask_for_input(
 
     Three outcomes, and the ordering between them is deliberate:
 
-    1. **A malformed schema is a ``-32603``**, checked before anything else. It
-       is a bug in the service, it is a bug for every caller, and finding out
-       only when a capable client happens to call is how it survives to
-       production.
+    1. **A malformed schema is a ``-32603``**, checked before anything else: it
+       is a bug for every caller, and finding out only when a capable client
+       happens to call is how it survives to production.
     2. **An ``InputRequiredResult``** when this client declared elicitation, the
        service said what it wants, and the round budget is not spent.
     3. **An ordinary ``isError`` result** otherwise, carrying the service's
        message and the shape of what is missing.
 
-    ⭐ (3) is the interesting one, and it is why this does *not* answer a
-    non-declaring client with ``-32021 MissingRequiredClientCapability``. That
-    code is for a capability the server **requires**; this server merely
-    *prefers* one. A legacy client, a client that only does URL-mode
-    elicitation, and a task worker replaying a call with nobody to ask are all
-    served better by being told what is missing than by a protocol error — a
-    model reading ``{"error": {"requestedInput": {"confirmed": ...}}}`` can
-    supply the argument itself on the next call, which is the whole point of the
-    exchange and does not need a dialog to reach.
+    (3) is why a non-declaring client does *not* get ``-32021
+    MissingRequiredClientCapability``: that code is for a capability the server
+    **requires**, and this one merely prefers it. A legacy client, a URL-mode
+    elicitation client and a task worker with nobody to ask are all served
+    better by being told what is missing — a model reading the requested shape
+    can supply the argument itself on the next call.
     """
     if not exc.schema:
-        # A message with no schema is a service saying it needs *something*
-        # without saying what. There is no form to render, so the message alone
-        # is the entire answer.
+        # A message with no schema says *something* is needed without saying
+        # what. There is no form to render, so the message is the whole answer.
         return _degraded(exc)
 
     try:
@@ -157,8 +145,8 @@ def refusal_result(action: ElicitAction) -> dict[str, Any]:
     """The tool result for a user who was asked and did not answer.
 
     Kept apart from the failure above because the two say different things to a
-    model deciding what to do next: an unanswerable question is worth working
-    around, and a declined one is not worth asking twice.
+    model: an unanswerable question is worth working around, a declined one is
+    not worth asking twice.
     """
     declined: bool = action is ElicitAction.DECLINE
     message: str = (

@@ -8,9 +8,9 @@ from typing import Any
 class PromptArgument:
     """One declared input to an MCP prompt.
 
-    Mirrors the spec's ``PromptArgument`` shape: a name plus optional
-    description, with a flag indicating whether the client must supply it.
-    Used in ``prompts/list`` to advertise the prompt's interface.
+    Mirrors the spec's ``PromptArgument``: a name plus optional description,
+    with a flag for whether the client must supply it. Advertised in
+    ``prompts/list``.
     """
 
     name: str

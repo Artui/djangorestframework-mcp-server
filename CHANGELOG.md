@@ -9,7 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [0.32.0] — 2026-08-11
 
-### ⚠ Upgrade notes
+### Upgrade notes
 
 **Two optional extras raise their floors.** `redis` moves to `>=5.0.1` and
 `jwt` to `>=5.3.1`, both from the `.0` of the same minor. Nothing that resolves
@@ -91,7 +91,7 @@ combination that never worked.
 
 ## [0.30.0] — 2026-08-11
 
-### ⚠ Upgrade notes
+### Upgrade notes
 
 **A `FilterSet`'s `OrderingFilter` now owns ordering, and `ordering_fields` is
 deprecated.** Registering both on one tool is refused at construction;
@@ -134,7 +134,7 @@ A spec with no `filter_set` has no other route yet and can keep the old knob.
 
 ## [0.29.0] — 2026-08-11
 
-### ⚠ Upgrade notes
+### Upgrade notes
 
 **`MAX_PAGE_SIZE` now defaults to `100`, down from `500`.** A `paginate=True`
 selector tool that was serving 500-row pages to a model that asked for them now
@@ -155,7 +155,7 @@ binding that needs it.
   and publishing a `maximum` is an invitation to take it, so the larger number
   was the likelier one to be asked for. The two agree now.
 
-  ⚠ **This is not the fix for a page that is too big in bytes.** Rows are a poor
+  **This is not the fix for a page that is too big in bytes.** Rows are a poor
   proxy for payload: a tool with fat serializers can blow a context window at
   ten rows, and 100 does nothing for it. `MAX_RESULT_BYTES` is still the bound
   that counts what the client actually pays.
@@ -185,7 +185,7 @@ binding that needs it.
   `UnguardedToolWarning`; set `True` to refuse") when registration is now
   refused by default and `False` is the migration escape hatch.
 
-  ⚠ **The direction of this one matters.** A reader following the old text
+  **The direction of this one matters.** A reader following the old text
   believed unguarded tools shipped with a warning, when they are refused — so
   the docs described a *laxer* server than the one they had.
 
@@ -210,7 +210,7 @@ binding that needs it.
   its imports resolved against the *installed* packages and its calls bound
   against the real signatures.
 
-  ⭐ **The two checks it now performs are the two ways these docs actually
+  **The two checks it now performs are the two ways these docs actually
   rot.** Resolving imports catches a symbol that moved or vanished, including
   in a dependency; binding calls catches an argument the callee cannot accept —
   including one passed **positionally to a keyword-only parameter**, which
@@ -221,7 +221,7 @@ binding that needs it.
 - **A test asserting every `__all__` name is actually bound**, checked against
   the source rather than the imported module.
 
-  ⚠ **The runtime version of this check does not work, and quietly.** Importing
+  **The runtime version of this check does not work, and quietly.** Importing
   `pkg.thing` binds `thing` as an attribute of `pkg`, so once anything has
   imported the submodule, `hasattr(pkg, "thing")` is `True` while
   `from pkg import thing` hands back a *module* that is not callable. The first
@@ -238,12 +238,12 @@ binding that needs it.
   user's primary key. A backend that resolves a *real* caller to something
   without one — a service-account object, a JWT-claim wrapper, a custom
   principal class — fell through to `"anonymous"` alongside every other such
-  caller. ⛔ **Two distinct authenticated callers on one principal can each
+  caller. **Two distinct authenticated callers on one principal can each
   present the other's session id and be served**, and tasks use the identical
   ownership comparison, so the same merge hands over another caller's task
   results.
 
-  ⚠ **It failed silently and looked like it was working**: every request
+  **It failed silently and looked like it was working**: every request
   succeeded, every session resolved, and the only symptom was that isolation
   was not there. Hence a raise rather than a degrade — a backend hitting this
   is one line from correct. Give the resolved user a `pk`, or return
@@ -255,7 +255,7 @@ binding that needs it.
   the honest answer. What is refused is the *ambiguous* middle: a user object
   declaring neither a primary key nor `is_authenticated is False`.
 
-  ⭐ **Related to the 0.26.0 auth fix by mechanism, not coincidence.** The
+  **Related to the 0.26.0 auth fix by mechanism, not coincidence.** The
   un-awaited coroutine that authenticated every caller also had no `pk` — so
   the same misconfiguration that let everyone in *also* collapsed them onto one
   session namespace. Two findings, one incident.
@@ -268,14 +268,14 @@ binding that needs it.
   `>=0.34.0,<0.35`), which makes this package co-installable with
   `djangorestframework-pydantic-ai` again.
 
-  ⛔ **The two ranges had gone disjoint.** PAI 0.13.0 moved to
+  **The two ranges had gone disjoint.** PAI 0.13.0 moved to
   `drf-services>=0.35` for the `unguarded_specs` predicate while this package
   stayed on `<0.35`, so **every project depending on both was unsatisfiable** —
   `django-pydantic-agent[drf-mcp,spec-tools]` and
   `django-ag-ui[drf-mcp,spec-tools]` could not resolve at all. Nothing was
   wrong with either package; the pair was.
 
-  ⚠ **A pure floor move, with no adaptation.** drf-services 0.35 is additive
+  **A pure floor move, with no adaptation.** drf-services 0.35 is additive
   (`unguarded_specs`, `combine_progress`, a `progress_reporter` spec field and
   the matching view hooks) and this package uses none of it — the full suite is
   green against 0.35 untouched. The window moves rather than widening to
@@ -316,7 +316,7 @@ binding that needs it.
   | `MCPRateLimit.consume` | `retry_after is not None` was `True` → every call denied, with the coroutine object as `retryAfter` |
   | `SessionStore.create` / `owner` / `destroy` on the **sync** transport | A coroutine's `repr` handed out as a session id; ownership matching nothing; a `destroy` discarded |
 
-  ⚠ **The permission sites failed open on ASGI too.** Permissions are reached
+  **The permission sites failed open on ASGI too.** Permissions are reached
   through the aggregate `check_permissions`, which the async transport bridges
   with `acall` — bridging *that* function, not the hooks it calls. So an
   `async def has_permission` was as un-awaited under ASGI as under WSGI. The
@@ -353,7 +353,7 @@ binding that needs it.
   in. A finished task is never rewritten, no `notifications/tasks` is published
   per tick, and a store that is down does not take the operation with it.
 
-  ⚠ The **sync** dispatch path now forwards `context.progress`, which it
+  The **sync** dispatch path now forwards `context.progress`, which it
   previously skipped on the grounds that there was "no stream to report on" —
   true of the connection, false of the worker that runs it.
 
@@ -369,7 +369,7 @@ binding that needs it.
 
 ## [0.25.0] — 2026-08-05
 
-### ⚠ Upgrade notes
+### Upgrade notes
 
 Two behaviour changes need a decision before you deploy.
 
@@ -378,7 +378,7 @@ Two behaviour changes need a decision before you deploy.
    **raises** at registration — which is import time, so it fails the deploy
    rather than a request. Declare permissions, or set
    `REST_FRAMEWORK_MCP['REQUIRE_TOOL_PERMISSIONS'] = False` to migrate
-   gradually. ⚠ If your tests assign `settings.REST_FRAMEWORK_MCP = {...}`, that
+   gradually. If your tests assign `settings.REST_FRAMEWORK_MCP = {...}`, that
    **replaces** the dict rather than merging, so a project-level opt-out
    disappears inside them — add the key to those literals too.
 2. **A request with no `Mcp-Session-Id` now returns `400`, not `404`.** Anything
@@ -392,7 +392,7 @@ Two behaviour changes need a decision before you deploy.
   ignores a stale one a client is still echoing, and answers `405` to the SSE
   `GET` and the session `DELETE`.
 
-  ⚠ **A conformant mode, not a relaxation.** Both legacy revisions say a server
+  **A conformant mode, not a relaxation.** Both legacy revisions say a server
   *"MAY assign a session ID at initialization time"* and make the client's duty
   to echo one conditional on it having arrived, so a server that never assigns
   is never sent one.
@@ -415,7 +415,7 @@ Two behaviour changes need a decision before you deploy.
   unbounded sliding window keeps a *revoked* principal alive for as long as it
   keeps talking (the argument `SUBSCRIPTION_MAX_SECONDS` already makes).
 
-  ⚠ Neither window can promise more than the cache underneath. A Redis
+  Neither window can promise more than the cache underneath. A Redis
   `allkeys-lru` policy evicts session keys before any TTL, indistinguishably
   from expiry.
 
@@ -433,7 +433,7 @@ Two behaviour changes need a decision before you deploy.
   rejections, auth failures and every outbound bound now log at `WARNING`;
   `initialize` and era selection at `INFO`; dispatch timing at `DEBUG`.
 
-  ⭐ Session rejections name **which** condition fired, even though the response
+  Session rejections name **which** condition fired, even though the response
   merges them: the no-oracle rule constrains the wire, and an operator reading
   logs is not the adversary it protects against. Tokens and tool payloads are
   never logged; session ids appear as a short prefix.
@@ -458,7 +458,7 @@ Two behaviour changes need a decision before you deploy.
   error" told you to enable the setting that had just fired.
 
 - **The structured-output coupling is checked at registration**, not on the
-  first `tools/call`. ⚠ Deliberately *not* checked on the global settings pair:
+  first `tools/call`. Deliberately *not* checked on the global settings pair:
   server-wide `INCLUDE_OUTPUT_SCHEMA=True` with `INCLUDE_STRUCTURED_CONTENT=False`
   is legal precisely when every binding overrides the content back on.
 
@@ -475,7 +475,7 @@ Two behaviour changes need a decision before you deploy.
   server dropped it, and says a server requiring a session "SHOULD" answer a
   header-less request with `400 Bad Request`. Both rendered `404`.
 
-  ⚠ The wrong code also routed clients into the wrong compatibility branch:
+  The wrong code also routed clients into the wrong compatibility branch:
   `2025-11-25` lists `400` among the statuses that send a client down the
   legacy-fallback path. Splitting the two leaks nothing — a caller already knows
   whether it sent a header — and unknown-id versus wrong-principal stay merged,
@@ -487,7 +487,7 @@ Two behaviour changes need a decision before you deploy.
 
 - **Requires `djangorestframework-services>=0.33`** (was `>=0.32`).
 
-  ⚠ **Take this one promptly — 0.33.0 closes an authorization bypass that this
+  **Take this one promptly — 0.33.0 closes an authorization bypass that this
   package is the most exposed surface for.** In drf-services 0.32 and earlier a
   spec's nested target resolution (`instance_selector_spec` /
   `collection_selector_spec`) built its kwarg pool without stripping the reserved
@@ -520,7 +520,7 @@ It also closes the gaps the same audit found in the era already being served:
 non-text content, argument completion, icons, streaming progress, and four
 JSON-RPC error codes that did not match the spec.
 
-⚠ **Read *Changed* before upgrading.** The error-code corrections change wire
+**Read *Changed* before upgrading.** The error-code corrections change wire
 values existing clients may be matching on — in particular a permission denial,
 which was being answered with the spec's "resource not found" code.
 
@@ -540,11 +540,11 @@ which was being answered with the spec's "resource not found" code.
   ```
 
   The call answers with `resultType: "input_required"` instead of a result, and
-  the client **retries the original call** carrying the answers. ⚠ That is a
+  the client **retries the original call** carrying the answers. That is a
   *success* with a second legal shape, inside a `200` — a client treating a
   non-`complete` `resultType` as a failure will never retry.
 
-  ⭐ **Nothing is held between the two requests.** This is what `2026-07-28` put
+  **Nothing is held between the two requests.** This is what `2026-07-28` put
   in place of server-initiated requests, so the retry may land on a different
   process entirely. The service is not resumed; it runs again from the top with
   the answer present, which is a reason to raise early and keep `atomic=True`.
@@ -561,7 +561,7 @@ which was being answered with the spec's "resource not found" code.
   itself. Same for a legacy-era client and for a task worker replaying a call
   with nobody to ask.
 
-  ⛔ Service tools only. A chain tool degrades to an ordinary error rather than
+  Service tools only. A chain tool degrades to an ordinary error rather than
   asking, because re-running the call would re-run its earlier steps; a selector
   is a read. `tools/call` only — the spec also permits this on `prompts/get`
   and `resources/read`, which dispatch bare callables with no failure channel.
@@ -588,7 +588,7 @@ which was being answered with the spec's "resource not found" code.
   raised: the write has already committed, and failing the call over a
   formatting mistake would report failure for work that succeeded.
 
-  ⚠ **Published after the transaction commits**, via `transaction.on_commit`.
+  **Published after the transaction commits**, via `transaction.on_commit`.
   Announcing from inside `atomic()` tells a subscriber to re-read something that
   may still roll back — and a wrong notification is worse than a missed one,
   since the next read recovers a miss but not a lie. The async transport routes
@@ -600,7 +600,7 @@ which was being answered with the spec's "resource not found" code.
   accept the kwarg at all (a read changes nothing); a chain fires once after the
   whole chain succeeds rather than per step.
 
-  ⚠ **Its boundary is real and stated in the docs**: it fires for calls that go
+  **Its boundary is real and stated in the docs**: it fires for calls that go
   through this server and nothing else. `MCPServer.notify_resource_updated` is
   the trigger for everything else, which is why it exists rather than being an
   afterthought.
@@ -618,7 +618,7 @@ which was being answered with the spec's "resource not found" code.
   await server.notify_resource_updated(f"invoices://{invoice.pk}")
   ```
 
-  ⚠ **`resources/subscribe` is not the legacy twin of this method — it is
+  **`resources/subscribe` is not the legacy twin of this method — it is
   *replaced* by it.** The GA schema folds resource subscriptions into a
   `resourceSubscriptions` field of the `subscriptions/listen` filter, alongside
   the list-changed kinds, and says so in as many words: *"replaces the former
@@ -639,7 +639,7 @@ which was being answered with the spec's "resource not found" code.
     something changes is often the more sensitive signal. A refused entry is
     dropped from the acknowledgement rather than erroring, which also stops the
     endpoint becoming an oracle for which resources exist.
-  - ⚠ **One occupied ASGI worker per open subscription**, inherent to the wire
+  - **One occupied ASGI worker per open subscription**, inherent to the wire
     format. Bounded by two new settings: `SUBSCRIPTION_MAX_SECONDS` (which is
     also the re-authorization interval, since permissions are checked once when
     a subscription opens) and `MAX_CONCURRENT_SUBSCRIPTIONS` (per worker;
@@ -651,7 +651,7 @@ which was being answered with the spec's "resource not found" code.
     to a task and stops polling `tasks/get`. Every status change pushes
     `notifications/tasks` carrying the *whole* task, identical to what
     `tasks/get` would have returned, so a missed notification costs nothing.
-    Watchable only by the principal that created the task. ⛔ Asking for
+    Watchable only by the principal that created the task. Asking for
     `taskIds` without declaring the tasks extension is a JSON-RPC error rather
     than a quiet omission — the spec's one exception to dropping refused
     entries, and not an oracle, since it turns on what the client declared
@@ -660,7 +660,7 @@ which was being answered with the spec's "resource not found" code.
   `SubscriptionBroker` is a new collaborator rather than a widening of
   `SSEBroker`: that one keys on session with a single subscriber, and both
   assumptions fail here (a notification is addressed to a topic, and several
-  clients legitimately watch the same resource). ⚠ **There is no default
+  clients legitimately watch the same resource). **There is no default
   broker.** A server that quietly got the in-process one would advertise support
   and then silently deliver nothing as soon as a second worker existed;
   `RedisSubscriptionBroker` (in the `[redis]` extra) is the deployable one.
@@ -690,7 +690,7 @@ which was being answered with the spec's "resource not found" code.
   ```
 
   Passing `task_executor=` also builds a `DjangoCacheTaskStore` namespaced to
-  the server; `task_store=` overrides it. ⚠ `InMemoryTaskStore` is for tests and
+  the server; `task_store=` overrides it. `InMemoryTaskStore` is for tests and
   `runserver` only — a task is created on a web worker and finished somewhere
   else, so an in-process store writes the result where the poll cannot see it
   and every poll answers "unknown task".
@@ -712,7 +712,7 @@ which was being answered with the spec's "resource not found" code.
   `ServerCapabilities` — advertised only when the server has both a store and an
   executor, since half the machinery hands out handles nothing will ever run.
 
-  ⚠ **The extension document's error code is not the one emitted.** It prints
+  **The extension document's error code is not the one emitted.** It prints
   `-32003` while annotating it `MISSING_REQUIRED_CLIENT_CAPABILITY` — the
   constant the ratified core schema allocates as **`-32021`**. It is a carry-over
   from when tasks were part of the core protocol, and `-32003` now sits inside
@@ -770,9 +770,9 @@ which was being answered with the spec's "resource not found" code.
   a single JSON object as before. A stream whose only event is the final
   response costs a connection and buys nothing.
 
-  ⭐ **Era-independent** — `_meta.progressToken` sits in the same place in
+  **Era-independent** — `_meta.progressToken` sits in the same place in
   `2025-11-25` and `2026-07-28`, so a legacy client streams on the same terms
-  as a modern one. ⚠ **ASGI only**: a sync WSGI view cannot yield mid-dispatch,
+  as a modern one. **ASGI only**: a sync WSGI view cannot yield mid-dispatch,
   so `server.urls` keeps answering `application/json`, which stays spec-legal.
 
   What the server does with the reports:
@@ -785,11 +785,11 @@ which was being answered with the spec's "resource not found" code.
     dispatch is untouched and the result still arrives.
   - **`meta` rides in the notification's `_meta`**, so `message` stays prose.
   - **Closing the stream cancels the request**, which is what `2026-07-28`
-    means by cancellation-by-disconnect. ⚠ It cancels the await, not the work —
+    means by cancellation-by-disconnect. It cancels the await, not the work —
     a thread parked in a driver's socket read is not interruptible by asyncio,
     the same caveat `DISPATCH_TIMEOUT` carries.
 
-  ⚠ **Permissions are checked before the stream opens.** A streaming response
+  **Permissions are checked before the stream opens.** A streaming response
   commits its status before the handler runs, so a denial found inside could
   only ride as an in-stream error inside a `200` — losing the `403` the
   authorization spec makes normative. The permission stack runs once at the
@@ -808,7 +808,7 @@ which was being answered with the spec's "resource not found" code.
   statelessly under the modern rules; its absence means legacy, which behaves
   exactly as before.
 
-  ⭐ **The `_meta` marker is the discriminator, not the header and not the
+  **The `_meta` marker is the discriminator, not the header and not the
   method.** Legacy clients have sent `MCP-Protocol-Version` since `2025-06-18`,
   and most methods exist in both eras — the per-request metadata is the only
   thing that appears in one era and not the other.
@@ -849,7 +849,7 @@ which was being answered with the spec's "resource not found" code.
   ordinary request. Nothing is negotiated and no state is created, so a client
   may call it, repeat it, cache it, or skip it entirely.
 
-  ⚠ **Answered without a session or a protocol-version header**, alongside
+  **Answered without a session or a protocol-version header**, alongside
   `initialize`. A modern client sends it precisely because it has nothing yet:
   gating discovery behind a session would leave it reachable only by clients
   that did not need it, and requiring a version header would mean naming a
@@ -876,7 +876,7 @@ which was being answered with the spec's "resource not found" code.
   genuinely static: an interactive view changes only on deploy, and hosts
   prefetch views before any tool call.
 
-  ⚠ **`cacheScope` is derived, never configured.** `public` licenses a shared
+  **`cacheScope` is derived, never configured.** `public` licenses a shared
   gateway or proxy to serve one response *across authorization contexts*, so a
   per-caller result labelled `public` is a cross-tenant disclosure with a cache
   in front of it — not the kind of thing a settings knob should be able to get
@@ -926,7 +926,7 @@ which was being answered with the spec's "resource not found" code.
   handler slices to the spec's cap of 100 and reports `hasMore` rather than
   draining it, so a queryset reads 101 rows instead of the table.
 
-  ⚠ **Completion runs the binding's `permissions` and `rate_limits`.** Without
+  **Completion runs the binding's `permissions` and `rate_limits`.** Without
   that, a resource a caller may not read would still answer "which ids exist?"
   one keystroke at a time. A completer keyed to an argument the binding does
   not have is refused at registration — otherwise the failure is an empty
@@ -956,14 +956,14 @@ which was being answered with the spec's "resource not found" code.
   clients are required to send it — an OIDC authorization server derives
   redirect-URI constraints from it, and an omitted value defaults to `web`,
   which conflicts with the `localhost` redirect URIs a desktop or CLI client
-  needs. It was previously dropped in silence. ⚠ This server validates and
+  needs. It was previously dropped in silence. This server validates and
   echoes but does **not** enforce those constraints: it is not acting as an
   OIDC provider, and the spec says non-OIDC servers safely ignore the
   parameter.
 
 ### Changed
 
-- ⚠ **The `djangorestframework-services` floor moves to `>=0.32,<0.33`,** from
+- **The `djangorestframework-services` floor moves to `>=0.32,<0.33`,** from
   `>=0.29.0,<0.30`. Two of the sister releases it crosses are load-bearing here.
 
   **0.30** added the `progress` kwarg-pool seed, without which a service had no
@@ -982,24 +982,24 @@ which was being answered with the spec's "resource not found" code.
   (0.31, in between, adds only a consumer-owned `metadata` mapping on the specs,
   which nothing here reads.)
 
-- ⚠ **`PROTOCOL_VERSIONS` now defaults to `["2026-07-28", "2025-11-25",
+- **`PROTOCOL_VERSIONS` now defaults to `["2026-07-28", "2025-11-25",
   "2025-06-18"]`.** One list across both eras — a version belongs to exactly
   one, and splitting the setting would let a project configure a
   contradiction. `server/discover` reports the whole list; each era validates
   against its own half.
 
-  ⚠ **`initialize` never offers a modern version**, whatever sits at the head
+  **`initialize` never offers a modern version**, whatever sits at the head
   of the list. It is a legacy-era method — it does not exist in `2026-07-28` —
   so answering a handshake with that revision would hand the client a protocol
   whose very next request this transport would refuse.
 
-- ⚠ **`resources/read` answers a missing URI by era**: `-32002` for a legacy
+- **`resources/read` answers a missing URI by era**: `-32002` for a legacy
   caller, `-32602` for a modern one. The only place the two eras disagree on a
   wire value, and it cannot be collapsed — the revision that retired `-32002`
   also told clients to keep *recognising* it, so neither value is safe to send
   to both.
 
-- ⚠ **Breaking: JSON-RPC error codes now match the MCP spec.**
+- **Breaking: JSON-RPC error codes now match the MCP spec.**
 
   | Condition | Was | Now |
   |---|---|---|
@@ -1021,7 +1021,7 @@ which was being answered with the spec's "resource not found" code.
   "not found" and "unknown tool". `JsonRpcErrorCode.TOOL_NOT_FOUND` is removed;
   `RESOURCE_NOT_FOUND` remains, renumbered.
 
-- ⚠ **Capabilities are advertised only when the server can answer them.**
+- **Capabilities are advertised only when the server can answer them.**
   `tools` and `resources` were advertised unconditionally while `prompts` was
   conditional, so a server with no resources still told every client to go and
   call `resources/list`. All four now follow one rule, sourced from the
@@ -1039,7 +1039,7 @@ which was being answered with the spec's "resource not found" code.
   reading as a guard at the registration site — and satisfies the
   unguarded-tool check that would otherwise have warned.
 
-- ⚠ **`permissions=` now rejects entries that cannot gate**, on every
+- **`permissions=` now rejects entries that cannot gate**, on every
   registration method. Security-relevant rather than tidy:
   `permissions="ScopeRequired"` spreads into one entry per character; the tuple
   is non-empty so the unguarded-tool warning stays quiet, and at dispatch every
@@ -1049,7 +1049,7 @@ which was being answered with the spec's "resource not found" code.
 
 ### Fixed
 
-- ⚠ **A permission denial on `resources/read` or `prompts/get` lost its `403`
+- **A permission denial on `resources/read` or `prompts/get` lost its `403`
   when the client asked for progress.** A `progressToken` opened an SSE stream
   for *any* method, but the pre-flight that recovers the normative status could
   only speak for `tools/call` — so those two answered a denial inside a `200`
@@ -1064,7 +1064,7 @@ which was being answered with the spec's "resource not found" code.
   worth doing separately, and `can_report_progress` is where it gets switched
   back on.
 
-- ⚠ **A modern-only `PROTOCOL_VERSIONS` was an unhandled 500.**
+- **A modern-only `PROTOCOL_VERSIONS` was an unhandled 500.**
   `["2026-07-28"]` is a supported configuration and the natural end state once
   legacy is dropped, but two call sites indexed the *legacy* version list for
   their default, and on such a server that list is empty: every `initialize`
@@ -1089,7 +1089,7 @@ which was being answered with the spec's "resource not found" code.
   not of the class, and a service fanning reports across a pool could over-emit
   past `MAX_PROGRESS_NOTIFICATIONS` or slip a non-increasing frame through.
 
-- ⚠ **A permission implementing only `has_permission` hid a binding from
+- **A permission implementing only `has_permission` hid a binding from
   listings but did not gate the call.** `is_binding_listable` duck-types;
   `check_permissions` skipped anything failing
   `isinstance(perm, MCPPermission)` — and because that Protocol is
@@ -1127,7 +1127,7 @@ which was being answered with the spec's "resource not found" code.
   declared. Nothing changes for a modern client, and the registry-presence half
   is untouched — a legacy client is still told it has resources to read.
 
-  ⛔ **`resources/subscribe` is deliberately not implemented**, which is why the
+  **`resources/subscribe` is deliberately not implemented**, which is why the
   fix is the advertisement. It is optional in `2025-11-25` and gone from
   `2026-07-28`, where the schema says `SubscriptionFilter.resourceSubscriptions`
   *"replaces the former `resources/subscribe` RPC"* — and that is implemented.
@@ -1151,7 +1151,7 @@ which was being answered with the spec's "resource not found" code.
 
   - `MAX_RESULT_BYTES` (default 5 MiB, per-tool `max_result_bytes=`) — ceiling
     on one tool result or resource read, measured on the encoded wire payload.
-    ⚠ **Measured on the wire, not on the rendered text**, because a successful
+    **Measured on the wire, not on the rendered text**, because a successful
     result carries the payload *twice* — `structuredContent` plus the spec's
     backwards-compatibility text mirror — so a ceiling counting one copy would
     be wrong by 2× against the client's context window.
@@ -1161,7 +1161,7 @@ which was being answered with the spec's "resource not found" code.
     schema tells a well-behaved model what to ask for, the clamp is what stops
     us trusting it. `limit` previously had a floor (`max(1, …)`) and no ceiling.
   - `DISPATCH_TIMEOUT` (default 60 s, per-tool `dispatch_timeout=`) — wall-clock
-    ceiling on one dispatch. ⚠ **ASGI only** (a sync WSGI view cannot bound its
+    ceiling on one dispatch. **ASGI only** (a sync WSGI view cannot bound its
     own dispatch) and it does **not** reclaim the worker: a thread parked in a
     database driver's socket read is not interruptible by asyncio cancellation.
     It buys a *terminal protocol event* instead of an open request that never
@@ -1212,13 +1212,13 @@ which was being answered with the spec's "resource not found" code.
   A `QueryParam` is **never required** (a read-shaping param the spec runs fine
   without cannot be), and one name cannot be both a `QueryParam` and a
   `UrlKwarg` — that raises at registration, since a value is popped once and
-  routes to one channel. ⚠ A `filter_set` field is **not** a query param:
+  routes to one channel. A `filter_set` field is **not** a query param:
   filter fields already flow through as ordinary arguments, and declaring one
   here would pop it out and silently stop it filtering.
 
 ### Changed
 
-- **⚠ The MCP endpoint's own query string no longer reaches serializers.**
+- **The MCP endpoint's own query string no longer reaches serializers.**
   Behaviour change, and the reason the feature above matters. Every dispatch
   path wraps the real Django `POST` to the MCP endpoint, and nothing replaced
   the wrapped request's `GET` — so whatever query string a client appended to

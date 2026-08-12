@@ -1,34 +1,29 @@
 """Opt-in OAuth endpoint matrix for MCP-friendly client compatibility.
 
-MCP / LLM-host clients in the wild probe several different well-known
-URLs to find an authorization server — RFC 8414 mandates one path, RFC
-9728 another, and OIDC adds a third, while several vendors mount their
-own alias paths. :func:`build_oauth_urlpatterns` produces a Django URL
-pattern list that serves every alias the user is likely to need.
+MCP hosts probe several well-known URLs to find an authorization server: RFC
+8414 mandates one path, RFC 9728 another, OIDC a third, and vendors mount their
+own aliases. :func:`build_oauth_urlpatterns` serves every one of them. The
+aliases are *not* HTTP redirects — they render the same payload from the same
+view, because redirects break clients that follow one and then keep issuing
+requests against the redirected origin.
 
-Aliases are *not* HTTP redirects — they render the same payload from
-the same view. Redirects break clients that follow them once but then
-keep issuing requests against the redirected origin.
-
-Mount the patterns alongside your ``MCPServer.urls`` to expose a
-contiguous set of endpoints:
+Mount the patterns alongside your ``MCPServer.urls``:
 
 .. code-block:: python
 
     urlpatterns = [
         path("mcp/", server.urls),
         *build_oauth_urlpatterns(server=server, include_dcr=True),
-        # ⚠ AFTER ours, not before — see below.
+        # AFTER ours, not before — see below.
         path("oauth/", include("oauth2_provider.urls", namespace="oauth2_provider")),
     ]
 
-⚠ **Order matters against ``oauth2_provider``, and getting it wrong is
-silent.** django-oauth-toolkit 3.4.0 serves its own ``register/`` (RFC 7591)
-and ``.well-known/oauth-authorization-server`` (RFC 8414). Django resolves
-first-match, so mounting DOT's urls first means DOT answers those paths — with
-an issuer of ``<host>/oauth`` rather than the site root, which is separately the
-value that produces ``/oauth/oauth/authorize/`` in the discovery document.
-Nothing raises; clients simply read the wrong metadata.
+**Order matters against ``oauth2_provider``, and getting it wrong is silent.**
+DOT 3.4.0 serves its own ``register/`` and
+``.well-known/oauth-authorization-server``, and Django resolves first-match, so
+mounting DOT's urls first means DOT answers those paths — with an issuer of
+``<host>/oauth`` rather than the site root. Nothing raises; clients read the
+wrong metadata.
 :func:`~rest_framework_mcp.contrib.oauth.check_oauth_url_shadowing` detects it.
 """
 
@@ -69,72 +64,47 @@ def build_oauth_urlpatterns(
 ) -> list[URLPattern]:
     """Return URL patterns for the OAuth endpoint matrix.
 
-    Endpoint matrix when all flags are ``True``:
+    With every flag on, the canonical paths and their aliases are::
 
-    +---------------------------------------------------------+--------------------------------------+
-    | Path                                                    | View                                 |
-    +=========================================================+======================================+
-    | ``/.well-known/oauth-protected-resource``               | ``ProtectedResourceMetadataViewSet``    |
-    +---------------------------------------------------------+--------------------------------------+
-    | ``/.well-known/oauth-protected-resource/mcp``           | alias                                |
-    +---------------------------------------------------------+--------------------------------------+
-    | ``/mcp/.well-known/oauth-protected-resource``           | alias                                |
-    +---------------------------------------------------------+--------------------------------------+
-    | ``/.well-known/oauth-authorization-server``             | ``AuthorizationServerMetadataViewSet``  |
-    +---------------------------------------------------------+--------------------------------------+
-    | ``/.well-known/oauth-authorization-server/oauth``       | alias                                |
-    +---------------------------------------------------------+--------------------------------------+
-    | ``/oauth/.well-known/oauth-authorization-server``       | alias                                |
-    +---------------------------------------------------------+--------------------------------------+
-    | ``/.well-known/openid-configuration``                   | ``OpenIDDiscoveryViewSet``              |
-    +---------------------------------------------------------+--------------------------------------+
-    | ``/.well-known/openid-configuration/oauth``             | alias                                |
-    +---------------------------------------------------------+--------------------------------------+
-    | ``/oauth/register/``                                    | ``DynamicClientRegistrationViewSet``    |
-    +---------------------------------------------------------+--------------------------------------+
+        /.well-known/oauth-protected-resource     ProtectedResourceMetadataViewSet
+          + /.well-known/oauth-protected-resource/mcp
+          + /mcp/.well-known/oauth-protected-resource
+        /.well-known/oauth-authorization-server   AuthorizationServerMetadataViewSet
+          + /.well-known/oauth-authorization-server/oauth
+          + /oauth/.well-known/oauth-authorization-server
+        /.well-known/openid-configuration         OpenIDDiscoveryViewSet
+          + /.well-known/openid-configuration/oauth
+        /oauth/register/                          DynamicClientRegistrationViewSet
 
-    The DOT-provided ``/oauth/authorize/`` and ``/oauth/token/`` views
-    are NOT mounted here — consumers include ``oauth2_provider.urls``
-    separately. The contrib mount focuses on the discovery / DCR
-    surface; the AS endpoints themselves belong to whichever framework
-    actually hosts the AS.
+    DOT's own ``/oauth/authorize/`` and ``/oauth/token/`` are **not** mounted:
+    this covers the discovery and DCR surface, while the AS endpoints belong to
+    whichever framework hosts the authorization server. Every argument is
+    resolved here, when the patterns are built, rather than per request, so two
+    mounts in one project can differ.
 
     Args:
-      server: The :class:`MCPServer` whose ``auth_backend`` should drive
-        all of the discovery payloads. Passed in instead of looked up
-        from settings so multi-server deployments work.
-      include_dcr: Mount ``/oauth/register/``. Default ``False`` because
-        DCR is gated by ``dcr_enabled`` anyway and consumers who don't
-        need it shouldn't even see the URL.
+      server: The :class:`MCPServer` whose ``auth_backend`` drives every
+        discovery payload. A parameter rather than a settings lookup so
+        multi-server deployments work.
+      include_dcr: Mount ``/oauth/register/``. Off by default, so a consumer
+        who does not want DCR never exposes the URL at all.
       include_aliases: Mount the alias URLs alongside the canonical ones.
-        Default ``True`` because clients in the wild use varied paths.
-      include_openid_discovery: Mount the OIDC discovery alias. Default
-        ``True`` for the same reason.
+      include_openid_discovery: Mount the OIDC discovery alias.
       include_authorize: Mount ``/oauth/authorize/`` as a thin DOT
-        :class:`AuthorizationView` subclass with the configured
-        :class:`AuthUserAdapter` hook. Default ``False`` because the
-        consumer's own URL conf typically owns ``/oauth/authorize/`` via
-        ``include('oauth2_provider.urls')``; flip this on when you want
-        the adapter wired and you're not including DOT's urls otherwise.
-        Requires the ``[oauth]`` extra — DOT is imported lazily inside
-        the factory.
-      auth_user_adapter: An :class:`AuthUserAdapter` instance that hydrates
-        ``request.user`` before DOT's ``AuthorizationView`` dispatches.
-        ``None`` (the default) means "no adapter; DOT's own dispatch
-        decides the user" — typically a session-based login redirect.
-        Only used when ``include_authorize`` is on.
-      dcr_enabled: Whether ``/oauth/register/`` accepts registrations.
-        ``None`` takes ``REST_FRAMEWORK_MCP['DCR_ENABLED']`` (default
-        ``False`` — an open DCR endpoint lets anyone create an OAuth
-        client against your authorization server).
-      dcr_initial_access_token: RFC 7591 §3 token a DCR client must
-        present. ``None`` takes ``REST_FRAMEWORK_MCP
-        ['DCR_INITIAL_ACCESS_TOKEN']``, whose own default is ``None`` —
-        meaning no token check.
-
-    Every value is resolved **here**, when the patterns are built, rather than
-    on each request — the same reason ``server`` is a parameter: so two mounts
-    in one project can differ.
+        :class:`AuthorizationView` subclass carrying the
+        ``auth_user_adapter`` hook. Off by default because the consumer's URL
+        conf usually owns that path via ``include('oauth2_provider.urls')``;
+        turn it on to wire the adapter when it does not. Requires the
+        ``[oauth]`` extra.
+      auth_user_adapter: Hydrates ``request.user`` before DOT's
+        ``AuthorizationView`` dispatches. ``None`` leaves the user to DOT's own
+        dispatch, typically a session-based login redirect. Only read when
+        ``include_authorize`` is on.
+      dcr_enabled: Whether ``/oauth/register/`` accepts registrations. ``None``
+        takes ``REST_FRAMEWORK_MCP['DCR_ENABLED']``.
+      dcr_initial_access_token: RFC 7591 §3 token a DCR client must present.
+        ``None`` takes ``REST_FRAMEWORK_MCP['DCR_INITIAL_ACCESS_TOKEN']``,
+        itself ``None``, which means no token check.
     """
     backend = server.auth_backend
     patterns: list[URLPattern] = [

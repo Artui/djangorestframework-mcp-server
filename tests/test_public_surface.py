@@ -10,7 +10,7 @@ file away.
 That happened here: ``check_oauth_url_shadowing`` sat in the OAuth package's
 ``__all__`` with no import beside it.
 
-⭐ **Checked statically, against the source, rather than with ``hasattr`` on the
+**Checked statically, against the source, rather than with ``hasattr`` on the
 imported module** — and the difference is the whole test. Importing
 ``pkg.thing`` binds ``thing`` as an attribute of ``pkg``, so once anything has
 imported the submodule (a sibling, a test, the walk itself), ``hasattr(pkg,

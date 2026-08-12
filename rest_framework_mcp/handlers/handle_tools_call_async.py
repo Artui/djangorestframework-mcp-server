@@ -78,16 +78,12 @@ async def handle_tools_call_async(
     if not isinstance(arguments_raw, dict):
         return JsonRpcError(JsonRpcErrorCode.INVALID_PARAMS, "'arguments' must be an object")
 
-    # See the sync sibling: the task branch sits after argument-shape
-    # validation and before dispatch, and is deliberately *outside* the
-    # deadline — creating a task is a store write and a queue hand-off, not the
-    # work, and timing it out would abandon a task that had already been
-    # durably created.
-    # ⚠ Through the thread-sensitive executor, not called directly. It reads
-    # the cache and runs the binding's permissions, and both reach code Django
-    # marks async-unsafe — a database-backed cache raises outright, and
-    # ``DjangoPermRequired`` runs an ORM query. The same hop
-    # ``completion/complete`` takes, for the same reason.
+    # Placed as in the sync sibling, and deliberately *outside* the deadline:
+    # creating a task is a store write and a queue hand-off, not the work, and
+    # timing it out would abandon a task already durably created. Taken through
+    # the thread-sensitive executor because it reads the cache and runs the
+    # binding's permissions, both of which reach code Django marks async-unsafe
+    # (a database-backed cache raises; ``DjangoPermRequired`` runs a query).
     as_task: dict[str, Any] | JsonRpcError | None = await sync_to_async(
         maybe_create_task, thread_sensitive=True
     )(binding, arguments_raw, context)
@@ -100,10 +96,8 @@ async def handle_tools_call_async(
             resolve_bound(binding.dispatch_timeout, context.config.dispatch_timeout),
         )
     except asyncio.TimeoutError:  # noqa: UP041 — 3.10 keeps this distinct from builtins
-        # A timeout is a tool *execution* failure, not a malformed request, so
-        # it comes back as an ``isError`` result: the model can respond to it
-        # (narrow the query, try a smaller page) where it can only surface a
-        # JSON-RPC error. ⚠ The dispatch itself keeps running — see
+        # A tool *execution* failure, not a malformed request, so an ``isError``
+        # result the model can act on. The dispatch keeps running — see
         # ``run_with_deadline`` — so this ends the client's wait, not the work.
         return build_error_tool_result(
             f"Tool {binding.name!r} exceeded this server's dispatch deadline and was "
@@ -132,13 +126,11 @@ async def _dispatch_tool_call_async(
 
     Split out of :func:`handle_tools_call_async` so one deadline covers the
     whole dispatch — permissions, rate limits, the spec run and rendering — and
-    one size check sees the finished result, whichever of the three paths
-    produced it.
+    one size check sees the finished result, whichever path produced it.
     """
     with span("mcp.tools.call", attributes=_span_attrs(binding.name, context)) as otel_span:
-        # Chain tools run an ordered sequence of specs; read-shaped tools route
-        # through the selector-tool dispatch helper (filter / order / paginate).
-        # Mutation tools fall through to the service-tool path below.
+        # Chain and selector tools have their own dispatch helpers; service
+        # tools fall through to the mutation-shaped path below.
         if isinstance(binding, ChainToolBinding):
             return await dispatch_chain_tool_async(
                 binding, params, arguments_raw, context, otel_span
@@ -184,11 +176,9 @@ async def _dispatch_tool_call_async(
         argument_binding, unknown_arguments = services_dispatch_policies(binding)
         try:
             spec_params, url_kwarg_values = split_url_kwargs(arguments_raw, binding.url_kwargs)
-            # Read-shaping params leave the spec params and land in the
-            # synthetic request's ``GET`` instead. Always passed — an empty
-            # mapping still *replaces* whatever query string the client hung off
-            # the MCP endpoint URL, so ``request.query_params`` is this
-            # package's value rather than the caller's.
+            # ``query_params`` is always passed — an empty mapping still
+            # *replaces* whatever query string the client hung off the MCP
+            # endpoint URL.
             spec_params, query_param_values = split_query_params(spec_params, binding.query_params)
             offline = build_offline_context(
                 context.token.user,
@@ -230,7 +220,7 @@ async def _dispatch_tool_call_async(
                 ),
             ).to_dict()
         except AdditionalInputRequired as exc:
-            # ⚠ Must precede the ``ServiceError`` arm — see the sync sibling.
+            # Must precede the ``ServiceError`` arm — see the sync sibling.
             return ask_for_input(exc, prior, context)
         except ServiceError as exc:
             if context.config.record_service_exceptions:

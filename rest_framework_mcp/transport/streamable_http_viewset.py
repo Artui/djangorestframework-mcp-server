@@ -66,8 +66,7 @@ def _error_response(
     ).to_dict()
     response = JsonResponse(body, status=status)
     if error_hint is not None:
-        # Summarises the body for the many clients that surface only the status
-        # line — see ``MCP_ERROR_HEADER``.
+        # Summarises the body for clients that surface only the status line.
         response[MCP_ERROR_HEADER] = error_hint
     return response
 
@@ -75,17 +74,13 @@ def _error_response(
 def _reject_awaitable_token(result: Any, *, backend: Any) -> Any:
     """Return the token, or refuse an ``authenticate`` that must be awaited.
 
-    ⚠ **This is a security gate, not a type check.** The sync transport cannot
-    await anything, so an ``async def authenticate`` mounted under
-    ``server.urls`` hands back an un-awaited coroutine — and a coroutine object
-    is *truthy*, so every ``token is None`` check downstream passes and every
-    caller is authenticated. ``principal_for_token`` then reads no ``pk`` off
-    it and files the request under the shared ``"anonymous"`` principal. The
-    endpoint is wide open and nothing in the response says so.
-
-    Failing the request loudly is the only safe reading: the caller presented
-    credentials nobody verified. The backend is fine — its *mounting* is wrong,
-    so the message names both ways out.
+    **A security gate, not a type check.** The sync transport cannot await, so
+    an ``async def authenticate`` mounted under ``server.urls`` hands back an
+    un-awaited coroutine — which is *truthy*, so every ``token is None`` check
+    downstream passes and every caller is authenticated under the shared
+    ``"anonymous"`` principal, with nothing in the response saying so. The
+    backend is fine; its *mounting* is wrong, so the message names both ways
+    out.
     """
     return reject_awaitable(
         result,
@@ -104,16 +99,13 @@ def _reject_awaitable_token(result: Any, *, backend: Any) -> Any:
 def _reject_awaitable_session(result: Any, *, store: Any, method: str) -> Any:
     """Return a session-store answer, or refuse one that must be awaited.
 
-    ⚠ **The likeliest instance of this defect class, precisely because async
-    stores are supported.** The *async* transport ``acall``s these methods, so
-    an ``async def owner`` is a correct, documented implementation there — and
-    the same store mounted under ``server.urls`` silently stops working. Unlike
-    the auth and permission sites this one fails *closed* (a coroutine equals
-    no principal, so ownership never matches), but it fails closed
-    incomprehensibly: every request answers "re-initialize", and a session id
-    minted from :meth:`create` is the ``repr`` of a coroutine.
-
-    Naming the mounting is the whole value here — the store is not the bug.
+    An ``async def owner`` is a correct implementation under the async
+    transport, which ``acall``s these methods, and the same store mounted under
+    ``server.urls`` silently stops working. This one fails *closed* — a
+    coroutine matches no principal — but incomprehensibly: every request
+    answers "re-initialize", and a session id minted from :meth:`create` is the
+    ``repr`` of a coroutine. Naming the mounting is the whole value here; the
+    store is not the bug.
     """
     return reject_awaitable(
         result,
@@ -143,35 +135,29 @@ class StreamableHttpViewSet(ViewSet):
     - **DELETE** → terminates the session referenced by ``MCP-Session-Id``.
 
     The transport bypasses DRF's default request lifecycle on purpose:
-    ``authentication_classes`` is empty because :class:`MCPAuthBackend`
-    is the auth layer (DRF's ``SessionAuthentication`` would fight with
-    the bearer-token shape MCP advertises). ``permission_classes`` is
-    :class:`AllowAny` because per-binding permissions live on the
-    registered tool / resource / prompt — the transport itself doesn't
-    gate. Renderers / parsers stay minimal because the JSON-RPC envelope
-    is RFC-defined and we serialise it explicitly via :class:`JsonResponse`.
+    ``authentication_classes`` is empty because :class:`MCPAuthBackend` is the
+    auth layer (DRF's ``SessionAuthentication`` would fight with the
+    bearer-token shape MCP advertises), and ``permission_classes`` is
+    :class:`AllowAny` because per-binding permissions live on the registered
+    tool / resource / prompt.
 
-    The view's collaborators (registries, auth backend, session store) are
-    instance-scoped — passed in via :class:`MCPServer` through ``as_view``.
-    There is no module-level lookup for any of them, which keeps multiple
-    independent servers from interfering with each other in one process.
+    Collaborators (registries, auth backend, session store) are instance-scoped
+    and passed in by :class:`MCPServer` through ``as_view``, never looked up at
+    module level, so independent servers in one process cannot interfere.
     """
 
     authentication_classes: tuple = ()
     permission_classes = (AllowAny,)
     renderer_classes = (JSONRenderer,)
 
-    # ``as_view`` requires kwargs to be existing class attributes;
-    # declaring them as None defaults lets the server pass populated
-    # collaborators in.
+    # ``as_view`` requires kwargs to be existing class attributes, so these are
+    # declared with ``None`` defaults for the server to populate.
     tools: ToolRegistry | None = None
     resources: ResourceRegistry | None = None
     prompts: PromptRegistry | None = None
     auth_backend: MCPAuthBackend | None = None
     session_store: SessionStore | None = None
-    # Supplied by ``MCPServer.as_view(...)``, like every other collaborator —
-    # never looked up from module scope. ``None`` on both means this server
-    # runs no tasks, which is the default and changes nothing.
+    # ``None`` on both means this server runs no tasks.
     task_store: TaskStore | None = None
     task_executor: TaskExecutor | None = None
     # Identity the owning server resolved at construction. Unlike the
@@ -180,8 +166,6 @@ class StreamableHttpViewSet(ViewSet):
     # ``SERVER_INFO``.
     server_info: Implementation | None = None
     instructions: str | None = None
-    # The owning server's resolved scalars, supplied by MCPServer like
-    # every other collaborator — never looked up from settings here.
     config: MCPConfig | None = None
 
     # ----- DRF action methods (mapped via ``as_view({...})``) -----
@@ -215,17 +199,15 @@ class StreamableHttpViewSet(ViewSet):
 
         is_initialize: bool = isinstance(message, JsonRpcRequest) and message.method == "initialize"
         # ``server/discover`` joins ``initialize`` in being answerable without a
-        # session — a client sends it precisely because it has nothing yet. It
-        # does *not* mint one, which is why this is a second flag rather than a
+        # session, but does *not* mint one — hence a second flag rather than a
         # widening of the first.
         is_sessionless: bool = (
             isinstance(message, JsonRpcRequest) and message.method in SESSIONLESS_METHODS
         )
 
-        # ⭐ **The era fork.** A dual-era server picks its behaviour from how the
-        # client opened: per-request ``_meta`` carrying a protocol version means
-        # modern (stateless, header-validated), its absence means legacy
-        # (``initialize`` handshake, sessions). One branch, here, at the edge —
+        # **The era fork.** Per-request ``_meta`` carrying a protocol version
+        # means modern (stateless, header-validated); its absence means legacy
+        # (``initialize`` handshake, sessions). One branch, here at the edge —
         # everything below the transport is era-agnostic by construction.
         metadata: RequestMetadata | None = RequestMetadata.from_params(
             _params_dict(getattr(message, "params", None))
@@ -246,9 +228,9 @@ class StreamableHttpViewSet(ViewSet):
         protocol_version: str = negotiated
 
         # Authentication runs *before* the session lookup: an unauthenticated
-        # caller always sees 401 regardless of session validity, so session
-        # ids cannot be probed via a 404-vs-401 oracle. Origin / size /
-        # protocol-version checks above are not principal-revealing.
+        # caller always sees 401 regardless of session validity, so session ids
+        # cannot be probed through a 404-vs-401 oracle. The checks above are
+        # not principal-revealing.
         token = self._authenticate(http_request)
         if token is None:
             logger.warning("Authentication failed for %s", http_request.path)
@@ -269,11 +251,9 @@ class StreamableHttpViewSet(ViewSet):
             failure = session_gate_failure(session_id, owner_matches=owner_matches)
             if failure is not None:
                 message_text, status, hint = failure
-                # ⭐ Server-side we name the *exact* condition. The response
-                # merges unknown-id with wrong-principal so the gate is not an
-                # ownership oracle, but the operator is not that adversary and
-                # a log line is not the wire. This is the line that ends the
-                # "is it the session or the load balancer?" incident.
+                # The log names the *exact* condition while the response merges
+                # unknown-id with wrong-principal: the gate must not be an
+                # ownership oracle, but a log line is not the wire.
                 logger.warning(
                     "Session rejected: %s (session=%s, principal=%s, method=%s) -> HTTP %s",
                     hint,
@@ -320,11 +300,10 @@ class StreamableHttpViewSet(ViewSet):
         else:
             response_body = JsonRpcResponse(id=message.id, result=result).to_dict()
         # A permission denial is a 403 with a challenge naming the missing
-        # scopes, not a 200 with the error tucked inside. The MCP authorization
+        # scopes, not a 200 with the error tucked inside: the MCP authorization
         # spec's error table makes the status normative, and the challenge is
-        # how a client learns what to ask for instead of retrying the same
-        # token. Every other dispatch outcome — including a tool that failed on
-        # its own terms — stays a 200.
+        # how a client learns what to ask for. Every other dispatch outcome,
+        # including a tool that failed on its own terms, stays a 200.
         denied: bool = is_permission_denial(result)
         http_response = JsonResponse(response_body, status=403 if denied else 200)
         if denied:
@@ -333,9 +312,9 @@ class StreamableHttpViewSet(ViewSet):
             )
 
         if is_initialize and self._sessions_enabled() and not isinstance(result, JsonRpcError):
-            # Assignment is the server's choice ("MAY assign a session ID"), and
-            # the client's duty to echo one is conditional on it arriving. Not
-            # minting is therefore the whole of sessionless mode on this path.
+            # The spec makes assignment the server's choice ("MAY assign a
+            # session ID") and the client's duty to echo one conditional on it
+            # arriving, so not minting is the whole of sessionless mode here.
             new_session: str = _reject_awaitable_session(
                 store.create(principal_id=principal), store=store, method="create"
             )
@@ -347,17 +326,16 @@ class StreamableHttpViewSet(ViewSet):
     ) -> HttpResponse:
         """Serve one request under the stateless (``2026-07-28``) rules.
 
-        Everything the legacy path does with a session is simply absent here:
-        no lookup, no minting, no echo. An ``Mcp-Session-Id`` a legacy-minded
-        client sends anyway is ignored rather than rejected, which is what the
-        spec asks of a modern server receiving older traffic.
+        Everything the legacy path does with a session is absent: no lookup, no
+        minting, no echo. An ``Mcp-Session-Id`` a legacy-minded client sends
+        anyway is ignored rather than rejected, as the spec asks of a modern
+        server receiving older traffic.
 
-        Header validation runs **before** authentication, unlike the session
-        check on the legacy path. A header/body mismatch is a malformed request
-        that reveals nothing about who is asking — and it is the one signal a
-        client uses to tell a modern server from a legacy one, so making it
-        conditional on credentials would break era detection for anonymous
-        probes.
+        Header validation runs **before** authentication, unlike the legacy
+        session check: a header/body mismatch reveals nothing about who is
+        asking, and it is the signal a client uses to tell a modern server from
+        a legacy one, so gating it on credentials would break era detection for
+        anonymous probes.
         """
         config: MCPConfig = self._require_config()
         request_id: Any = getattr(message, "id", None)
@@ -389,13 +367,11 @@ class StreamableHttpViewSet(ViewSet):
             resources=self._require_resources(),
             prompts=self._require_prompts(),
             protocol_version=metadata.protocol_version,
-            # No session exists to name. The field stays on the context because
-            # the legacy path still populates it; modern spans simply omit it.
             session_id=None,
-            # ⚠ Modern path only. The legacy context leaves this empty, which is
-            # correct rather than a gap: a legacy client declared its
-            # capabilities once, at ``initialize``, and the spec forbids relying
-            # on a declaration that did not arrive *with the request*.
+            # Modern path only. The legacy context leaves this empty by design:
+            # a legacy client declared its capabilities once, at
+            # ``initialize``, and the spec forbids relying on a declaration
+            # that did not arrive *with the request*.
             client_capabilities=metadata.client_capabilities,
             server_info=self.server_info,
             instructions=self.instructions,
@@ -425,9 +401,9 @@ class StreamableHttpViewSet(ViewSet):
     def handle_get(self, request: Request) -> HttpResponse:
         """GET action: SSE-from-server isn't implemented in v1; 405 per spec.
 
-        Authentication still runs first so the endpoint never reveals
-        anything (even its 405) to unauthenticated callers — parity with
-        the async sibling's SSE stream.
+        Authentication still runs first, so the endpoint reveals nothing (not
+        even its 405) to unauthenticated callers — parity with the async
+        sibling's SSE stream.
         """
         http_request = request._request  # noqa: SLF001
         guard: HttpResponse | None = self._check_origin(http_request)
@@ -449,9 +425,8 @@ class StreamableHttpViewSet(ViewSet):
         if guard is not None:
             return guard
         if self._modern_era_requested(http_request) or not self._sessions_enabled():
-            # "The server MAY respond to this request with HTTP 405 Method Not
-            # Allowed, indicating that the server does not allow clients to
-            # terminate sessions" — which is exactly true when there are none.
+            # The spec's blessed answer for a server that does not let clients
+            # terminate sessions, which is exactly true when there are none.
             return HttpResponse(status=405)
         token = self._authenticate(http_request)
         if token is None:
@@ -473,11 +448,10 @@ class StreamableHttpViewSet(ViewSet):
         """Whether the caller named a modern revision in its version header.
 
         GET and DELETE carry no body, so the per-request ``_meta`` that decides
-        the era everywhere else is unavailable — the header is the only signal
-        there is. A modern client should never send either verb; answering
-        ``405`` when it does is what the spec asks of a server receiving
-        wrong-era traffic, and it is a clearer diagnostic than silently
-        serving a mechanism the caller's revision removed.
+        the era everywhere else is unavailable and the header is the only
+        signal. A modern client should never send either verb; ``405`` is what
+        the spec asks of a server receiving wrong-era traffic, and it beats
+        silently serving a mechanism the caller's revision removed.
         """
         version: str | None = http_request.headers.get(_VERSION_HEADER)
         return version in MODERN_PROTOCOL_VERSIONS
@@ -552,8 +526,8 @@ def _params_dict(params: Any) -> dict[str, Any] | None:
     return None  # JSON-RPC list params are not used by MCP today.
 
 
-# Action map convenience: pass directly to ``as_view`` so the URL conf
-# stays compact and the canonical mapping lives next to the ViewSet.
+# Passed directly to ``as_view``, so the canonical mapping lives next to the
+# ViewSet rather than in the URL conf.
 STREAMABLE_HTTP_ACTION_MAP: dict[str, str] = {
     "post": "handle_jsonrpc",
     "get": "handle_get",

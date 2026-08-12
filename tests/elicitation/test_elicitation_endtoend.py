@@ -59,7 +59,7 @@ def _result(response: Any) -> dict[str, Any]:
 
 
 def test_the_question_comes_back_inside_an_ordinary_success(client: Client) -> None:
-    """⚠ ``200`` with a ``result``, not an error status and not an ``error``
+    """``200`` with a ``result``, not an error status and not an ``error``
     member. A client that reads the status alone must see nothing unusual."""
     result = _result(_post(client, {"name": TOOL, "arguments": {"count": 400}}))
     assert result["resultType"] == "input_required"
@@ -87,7 +87,7 @@ def test_a_client_can_complete_the_round_trip(client: Client) -> None:
 
 
 def test_the_retry_is_an_independent_request(client: Client) -> None:
-    """⭐ The whole reason MRTR replaced server-initiated requests. Different
+    """The whole reason MRTR replaced server-initiated requests. Different
     JSON-RPC id, no session header, nothing correlating the two but the token
     the client carried — which is what lets the second request land on a
     different process entirely."""

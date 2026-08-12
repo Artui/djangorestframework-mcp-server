@@ -32,7 +32,7 @@ class _Undeclared:
 
 
 def test_an_authenticated_caller_with_no_pk_is_refused() -> None:
-    """⛔ The security content of this function.
+    """The security content of this function.
 
     Sessions and tasks key on the principal id. Two distinct authenticated
     callers resolving to ``"anonymous"`` can each present the other's session id
@@ -62,7 +62,7 @@ def test_a_user_declaring_neither_is_refused_too() -> None:
 
 
 def test_a_deliberately_anonymous_caller_still_shares_the_principal() -> None:
-    """⚠ Not a regression — sharing is correct when nobody was identified.
+    """Not a regression — sharing is correct when nobody was identified.
 
     ``AllowAnyBackend`` mints exactly this, and the docstring has always said
     ownership is only as strong as the backend behind it. The fix separates

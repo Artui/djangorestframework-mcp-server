@@ -33,14 +33,13 @@ async def announce_invalidations_async(
 ) -> None:
     """The async transport's route to the same function.
 
-    ⚠ **``thread_sensitive=True`` is the load-bearing part.** Django connections
+    **``thread_sensitive=True`` is the load-bearing part.** Django connections
     are thread-local, and under ASGI the ORM work ran on a ``sync_to_async``
-    worker while this coroutine resumes on the event loop thread. Announcing
-    from the loop would read a *different* connection, see no open transaction,
-    and publish immediately — announcing a write that has not committed and may
-    roll back, which is the one failure this whole mechanism exists to avoid.
-    The thread-sensitive executor is the same one the dispatch used, so
-    ``on_commit`` attaches to the transaction that actually holds the write.
+    worker while this coroutine resumes on the loop thread. Announcing from the
+    loop would read a *different* connection, see no open transaction, and
+    publish immediately — announcing a write that has not committed and may roll
+    back. The thread-sensitive executor is the one the dispatch used, so
+    ``on_commit`` attaches to the transaction that holds the write.
     """
     await sync_to_async(announce_invalidations, thread_sensitive=True)(
         binding, result, arguments, context
@@ -50,14 +49,12 @@ async def announce_invalidations_async(
 def _uris(binding: Any, result: Any, arguments: Mapping[str, Any]) -> tuple[str, ...]:
     """The URIs to announce, or nothing at all.
 
-    ⚠ **A failed tool announces nothing**, and the check is on ``isError``
-    rather than on the result being present. A ``ServiceError`` produces a
-    perfectly well-formed result — that is the package's whole error contract —
-    so "did it come back" is not the question. Nothing changed, so nothing is
-    published.
+    **A failed tool announces nothing**, and the check is on ``isError`` rather
+    than on the result being present: a ``ServiceError`` produces a well-formed
+    result, so "did it come back" is not the question.
 
-    A binding that declares no templates costs one attribute read; the
-    ``getattr`` default keeps a hand-built binding without the field working.
+    The ``getattr`` default keeps a hand-built binding without the field
+    working.
     """
     templates: tuple[str, ...] = getattr(binding, "invalidates", ())
     if not templates or not isinstance(result, dict) or result.get("isError"):

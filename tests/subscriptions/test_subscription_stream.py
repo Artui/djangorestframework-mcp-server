@@ -45,7 +45,7 @@ def _open(broker: Any, topics: set[str], granted: SubscriptionFilter, **kw: Any)
 
 
 async def test_the_acknowledgement_is_the_first_frame() -> None:
-    """⚠ Normative: no notification may precede it, so it is emitted before the
+    """Normative: no notification may precede it, so it is emitted before the
     queue is read at all — there is no window for an event to overtake it."""
     broker = InMemorySubscriptionBroker()
     gen = _open(broker, {"resource:a"}, SubscriptionFilter(resource_uris=("a",)))
@@ -162,7 +162,7 @@ async def test_a_stream_keeps_serving_notifications_after_a_quiet_spell() -> Non
 
 
 async def test_the_broker_is_released_when_the_client_leaves() -> None:
-    """⚠ Otherwise the broker holds a queue nobody reads — and, for the Redis
+    """Otherwise the broker holds a queue nobody reads — and, for the Redis
     broker, a listener task and its channel subscriptions — for the life of the
     process."""
     broker = InMemorySubscriptionBroker()

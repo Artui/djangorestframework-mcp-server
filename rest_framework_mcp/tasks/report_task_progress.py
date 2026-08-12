@@ -15,41 +15,29 @@ def report_task_progress(store: TaskStore, task_id: str) -> ProgressReporter:
     """A :class:`ProgressReporter` that writes onto the task record.
 
     What ``progress`` resolves to inside a task. The inline MCP path answers a
-    ``progressToken`` with ``notifications/progress`` — but that needs a live
-    connection, and a worker has none. **The task record is the bridge**: the
+    ``progressToken`` with ``notifications/progress``, which needs a live
+    connection a worker does not have, so **the task record is the bridge**: the
     numbers land on the record, the rendered string lands on the wire ``Task``,
-    and a polling client reads both through ``tasks/get``. Push becomes poll;
-    nothing else about the service changes.
+    and a polling client reads both through ``tasks/get``.
 
-    ⭐ **Without this, declaring ``progress`` in a service is live-connection
-    only** — which means the long-running operations most in need of it, the
-    ones promoted to tasks *because* they are long, are exactly the ones it
-    silently did nothing for.
+    **``meta`` is accepted and dropped, deliberately** — a task has no
+    notification to carry it and the protocol ``Task`` has no free-form slot.
+    Signature compatibility is the point: a service written against the Protocol
+    must not have to know which path is executing it.
 
-    ⛔ **``meta`` is accepted and dropped, deliberately.** On the inline path it
-    rides in the notification's ``_meta``; a task has no notification, and the
-    protocol ``Task`` has no free-form slot to put it in. Dropping it beats
-    inventing a place for it in the record that no client could ever read.
-    Signature compatibility is the point — a service written against the
-    Protocol must not have to know which path is executing it.
+    **A terminal task is never rewritten**, by the same one-way rule as
+    :func:`~rest_framework_mcp.tasks.transition_task.transition_task` — a late
+    report from a worker still unwinding would otherwise move ``lastUpdatedAt``
+    on a finished task, and make a cancel look as if it had not taken.
 
-    ⚠ **A terminal task is never rewritten.** A late report from a worker still
-    unwinding after the task completed, failed or was cancelled would otherwise
-    move ``lastUpdatedAt`` on a finished task, and a cancel would look like it
-    had not taken. Same one-way rule as
-    :func:`~rest_framework_mcp.tasks.transition_task.transition_task`, for the
-    same reason.
+    **This does not publish ``notifications/tasks``**, which says the *status
+    changed*: progress is movement inside one status, so publishing per tick
+    would turn a subscription into a firehose about a task that is still,
+    accurately, ``working``.
 
-    ⚠ **This does not publish ``notifications/tasks``.** That notification says
-    *the status changed*, and progress is movement inside one status —
-    publishing per tick would turn a subscription into a firehose describing a
-    task that is still, accurately, ``working``. The client polls; the
-    ``pollIntervalMs`` it was handed is what paces it.
-
-    ⚠ **Failures are swallowed** — an unreachable cache must not take down the
-    operation whose progress it was only describing. This mirrors
-    ``combine_progress``'s per-sink isolation upstream, and matters more here:
-    the sink is network I/O on somebody else's box, called once per tick.
+    **Failures are swallowed**: the sink is network I/O called once per tick,
+    and an unreachable cache must not take down the operation whose progress it
+    was only describing.
     """
 
     def report(
@@ -59,7 +47,7 @@ def report_task_progress(store: TaskStore, task_id: str) -> ProgressReporter:
         message: str | None = None,
         meta: Mapping[str, Any] | None = None,
     ) -> None:
-        del meta  # See the docstring: no slot on the wire, so no place to put it.
+        del meta  # No slot on the wire, so no place to put it.
         try:
             record: TaskRecord | None = store.get(task_id)
             if record is None or record.status.is_terminal:
@@ -93,9 +81,9 @@ def _render_progress(progress: float, total: float | None, message: str | None) 
         (3, None, "Indexing")→ "Indexing (3)"
         (3, None, None)      → "3"
 
-    ``:g`` rather than ``str``: the Protocol types these as ``float``, and
-    ``"3/10"`` is what a human reads where ``"3.0/10.0"`` is what a float
-    repr prints. Genuinely fractional values still render (``2.5``).
+    ``:g`` rather than ``str`` because the Protocol types these as ``float``:
+    a human reads ``"3/10"`` where a float repr prints ``"3.0/10.0"``, and
+    genuinely fractional values still render.
     """
     count: str = f"{progress:g}" if total is None else f"{progress:g}/{total:g}"
     return count if message is None else f"{message} ({count})"

@@ -1,8 +1,6 @@
 """Dispatch for chain tools — run an ordered sequence of specs as one tool.
 
-Flow (sync; the async sibling bridges the whole thing through ``acall``):
-
-.. code-block:: text
+Flow (sync; the async sibling bridges the whole thing through ``acall``)::
 
     auth + rate limit
       → validate(arguments, resolved_input_serializer)   → ctx.args
@@ -10,18 +8,15 @@ Flow (sync; the async sibling bridges the whole thing through ``acall``):
                         → store result under step.alias
         (the loop runs inside transaction.atomic() when binding.atomic)
       → render the output step (or every step, when output_all)
-      → ToolResult
 
-A step raising ``ServiceValidationError`` / ``ServiceError`` is mapped to a
-JSON-RPC error carrying ``failedStep``; under an atomic chain the error also
-rolls back every prior write (the mapped error is re-raised as a private
-abort signal so the surrounding ``transaction.atomic()`` unwinds, then
-returned).
+A step raising ``ServiceValidationError`` / ``ServiceError`` is mapped to an
+error carrying ``failedStep``; under an atomic chain the mapped error is
+re-raised as a private abort signal so the surrounding ``transaction.atomic()``
+unwinds, then returned.
 
-Chains deliberately do **not** run the selector post-fetch pipeline
-(filter / order / paginate) — that's a single selector-tool concern. A
-selector step's result is used as-is (and rendered ``many=True`` for
-``kind=LIST``).
+Chains deliberately do **not** run the selector post-fetch pipeline (filter /
+order / paginate) — that is a selector-tool concern. A selector step's result is
+used as-is, rendered ``many=True`` for ``kind=LIST``.
 """
 
 from __future__ import annotations
@@ -109,10 +104,9 @@ def dispatch_chain_tool(
         context.token.user,
         arguments_raw,
         http_request=context.http_request,
-        # Chain tools have no query-param registration surface (they have no
-        # ``url_kwargs`` either — the two channels stay symmetric), so this is
-        # the empty case: it exists to *replace* the wrapped request's ``GET``,
-        # keeping whatever query string a client appended to the MCP endpoint
+        # Chain tools have no query-param (or URL-kwarg) registration surface,
+        # so this is the empty case: it exists to *replace* the wrapped
+        # request's ``GET``, keeping a query string appended to the MCP endpoint
         # URL out of a serializer that reads ``request.query_params``.
         query_params={},
     ).request
@@ -177,11 +171,10 @@ async def dispatch_chain_tool_async(
 ) -> dict[str, Any] | JsonRpcError:
     """Async sibling — runs the whole sync chain in a worker thread.
 
-    The chain touches the DB (writes, ``transaction.atomic()``), which
-    Django forbids inline in an async context. Bridging the entire sync
-    dispatcher through :func:`acall` keeps the pipeline (and any async
-    service/selector, which ``run_service`` / ``run_selector`` bridge
-    internally) running in a sync-safe thread.
+    The chain writes and opens ``transaction.atomic()``, which Django forbids
+    inline in an async context, so the whole sync dispatcher runs in a sync-safe
+    thread — an async service or selector is bridged inside ``run_service`` /
+    ``run_selector``.
     """
     result: dict[str, Any] | JsonRpcError = await acall(
         dispatch_chain_tool, binding, params, arguments_raw, context, otel_span
@@ -234,10 +227,8 @@ def _run_step(
         else:
             result = _run_selector_step(step.spec, pool)
     except ServiceValidationError as exc:
-        # Tool-level failure -> ``isError`` result carrying ``failedStep``;
-        # the surrounding ``transaction.atomic()`` (when ``binding.atomic``)
-        # still rolls back via ``_ChainAbort``. JSON-RPC errors stay
-        # reserved for protocol faults.
+        # Tool-level failure, so an ``isError`` result carrying ``failedStep``;
+        # an atomic chain still rolls back via ``_ChainAbort``.
         return build_error_tool_result(
             exc.message,
             error_type="validation_error",
@@ -294,17 +285,14 @@ def _render_chain_output(binding: ChainToolBinding, ctx: ChainContext, drf_reque
 def _render_step(step: ChainStep, ctx: ChainContext, drf_request: Any) -> Any:
     """Render one step's stored output through its own spec.
 
-    Only the ``many`` flag and the resolved-data extra's *name* are decided
-    here — a selector step renders its ``kind``, a service step its nested
-    ``output_selector_spec`` — and both are handed to ``render_spec_output``,
-    which owns serializer lookup and the context layering for every transport.
+    Only the ``many`` flag and the extra's *name* are decided here;
+    ``render_spec_output`` owns serializer lookup and context layering.
 
-    The serializer-less short-circuit stays local because it is this
-    transport's own contract: a step with nothing to render contributes ``{}``
-    rather than a ``null`` to the chain's output object, and a raw value passes
-    through uncoerced (``render_spec_output`` would list-coerce a ``many``
-    result, which a chain step never wants — its value may be fed to a later
-    step).
+    The serializer-less short-circuit stays local because it is this transport's
+    own contract: a step with nothing to render contributes ``{}`` rather than a
+    ``null``, and its raw value passes through uncoerced —
+    ``render_spec_output`` would list-coerce a ``many`` result, which a chain
+    step never wants since a later step may consume it.
     """
     result: Any = ctx.outputs[step.alias]
     spec = step.spec

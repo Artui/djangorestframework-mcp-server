@@ -11,41 +11,39 @@ from rest_framework_mcp.protocol.types.task import Task
 class TaskRecord:
     """What a store holds: the wire :class:`Task` plus what a worker needs.
 
-    Deliberately a *superset* rather than a parallel type. The extra fields
-    never reach the client and could not — no task message has a slot for
-    them — but they are the whole reason a task can outlive the request that
-    created it. The worker that finishes it shares nothing with that request
-    except this record.
+    A *superset* rather than a parallel type. The extra fields never reach the
+    client — no task message has a slot for them — but they are why a task can
+    outlive the request that created it: the worker that finishes it shares
+    nothing with that request except this record.
 
-    Three groups:
+    **The scopes are stored, and that is the point.** Without them the worker
+    rebuilds a token that proves nothing, and every ``ScopeRequired`` binding
+    denies the call it had already been authorized for — silently, long after
+    the client was told the work had started.
 
-    - **The call.** :attr:`tool_name` and :attr:`arguments`, replayed verbatim.
-    - **The authorization context.** :attr:`principal_id` (the form
-      :func:`~rest_framework_mcp.auth.principal_for_token.principal_for_token` already
-      produces for sessions), :attr:`user_pk` to rehydrate the user, and
-      :attr:`scopes` / :attr:`audience` to rebuild the ``TokenInfo``.
-    - **Bookkeeping.** :attr:`enqueued`, so a worker cannot be tricked into
-      running the same task twice, and :attr:`progress` / :attr:`total`, which
-      are where a running task's ``progress(...)`` calls land.
+    ``TokenInfo.raw`` is **not** stored: it is backend-defined credential
+    material, and persisting it would put that in a cache with a week-long
+    fallback TTL. A rehydrated token has ``raw=None``, so a permission reaching
+    into it is one that cannot run as a task.
 
-    ⚠ **The scopes are stored, and that is the point.** Without them the worker
-    would rebuild a token that proves nothing, and every ``ScopeRequired``
-    binding would deny the call it had already been authorized for — silently,
-    long after the client was told the work had started. Storing them lets the
-    worker re-run the *same* permission checks the request path ran, which is
-    defence in depth rather than a shortcut around it.
+    **The separation is a security boundary.** :meth:`to_wire` is the only route
+    from a record to a message, which is what stops a principal id or a scope
+    list leaking into a response because a field was added to the wrong
+    dataclass.
 
-    ⛔ ``TokenInfo.raw`` is **not** stored. It is backend-defined and holds
-    whatever the backend felt like keeping — an ``AccessToken`` row, decoded JWT
-    claims — so persisting it would put credential material in a cache with a
-    week-long fallback TTL. A rehydrated token has ``raw=None``; a permission
-    that reaches into it is one that cannot run as a task, which is a fair
-    trade for not writing tokens to the cache.
-
-    ⚠ **The separation is a security boundary, so keep it.** :meth:`to_wire` is
-    the only route from a record to a message, which is what stops a principal
-    id or a scope list leaking into a response because someone added a field to
-    the wrong dataclass.
+    Attributes:
+        task: The wire task — the only part a client ever sees.
+        tool_name: The tool the worker replays, verbatim.
+        arguments: The arguments it replays, verbatim.
+        principal_id: The owner, in the form
+            :func:`~rest_framework_mcp.auth.principal_for_token.principal_for_token`
+            already produces for sessions.
+        user_pk: Rehydrates the user on the worker.
+        scopes: Rebuild the worker's ``TokenInfo`` so its permission checks see
+            what the request path saw.
+        audience: Rebuilds that ``TokenInfo``'s audience.
+        enqueued: Whether the task reached the executor, so a worker cannot be
+            tricked into running it twice.
     """
 
     task: Task
@@ -62,15 +60,10 @@ class TaskRecord:
 
     Written by
     :func:`~rest_framework_mcp.tasks.report_task_progress.report_task_progress`,
-    which is what a task's ``progress`` kwarg-pool seed resolves to. Paired with
-    :attr:`total` when the service supplied one.
-
-    ⚠ **Server-side only, by protocol.** The wire ``Task`` carries
-    ``statusMessage`` and no numeric field, so a polling client only ever sees
-    the *rendered* string these two produce. Keeping the numbers is still worth
-    it: they are what makes the value legible in logs and the admin, and they
-    are the input a future adaptive ``pollIntervalMs`` would need. Rendering is
-    lossy and rendering back is not a thing."""
+    what a task's ``progress`` kwarg-pool seed resolves to. **Server-side only,
+    by protocol**: the wire ``Task`` carries ``statusMessage`` and no numeric
+    field, so a polling client sees only the *rendered* string this and
+    :attr:`total` produce."""
 
     total: float | None = None
     """What :attr:`progress` counts toward, or ``None`` for an open-ended count.
@@ -83,12 +76,12 @@ class TaskRecord:
     matching ``inputRequests`` were.
 
     Accumulated rather than replaced, because the spec lets a client answer a
-    strict subset of what is outstanding and come back for the rest. A worker
+    strict subset of what is outstanding and come back for the rest; a worker
     parked on ``input_required`` reads this to find out what it was told.
 
-    ⚠ Keys are never reused over a task's lifetime — the spec requires it of
-    the server — so a key appearing here is answered for good, and a later
-    request must pick a new one."""
+    The spec requires the server never to reuse a key over a task's lifetime, so
+    a key appearing here is answered for good and a later request picks a new
+    one."""
 
     @property
     def task_id(self) -> str:
@@ -105,8 +98,7 @@ class TaskRecord:
         """Return a copy with fields changed on the embedded :class:`Task`.
 
         Saves every caller a nested ``replace(record, task=replace(record.task,
-        ...))``, which is easy to get wrong as a direct assignment to a frozen
-        field.
+        ...))``.
         """
         return replace(self, task=replace(self.task, **changes))
 

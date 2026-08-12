@@ -13,13 +13,10 @@ class ElicitAnswer:
     action: ElicitAction
 
     content: dict[str, Any] = field(default_factory=dict)
-    """The submitted fields.
-
-    Present only for an accepted **form** — the spec omits it for a decline, a
-    cancel, and for URL mode. Defaulting to empty rather than ``None`` means the
-    merge downstream needs no branch: an accept with nothing in it merges
-    nothing and the service asks again, which is the right outcome for a form
-    the user submitted blank."""
+    """The submitted fields, present only for an accepted **form** — the spec
+    omits it for a decline, a cancel, and for URL mode. Empty rather than
+    ``None`` so the merge downstream needs no branch: a blank submission merges
+    nothing and the service asks again."""
 
 
 __all__ = ["ElicitAnswer"]

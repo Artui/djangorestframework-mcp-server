@@ -49,7 +49,7 @@ def test_a_state_we_minted_comes_back_intact() -> None:
 
 
 def test_the_token_is_opaque_to_the_client_but_not_secret() -> None:
-    """⚠ Signed, not encrypted — worth pinning so nobody later puts a secret in
+    """Signed, not encrypted — worth pinning so nobody later puts a secret in
     an answer. What is inside is the caller's own identity, a digest of the
     caller's own request, and what the user at that client just typed."""
     payload = signing.loads(sign_request_state(_state()), salt=REQUEST_STATE_SALT)
@@ -83,7 +83,7 @@ def test_another_principals_token_is_rejected() -> None:
 
 
 def test_a_token_minted_for_a_different_call_is_rejected() -> None:
-    """⚠ Without this, a confirmation the user gave for a harmless call could be
+    """Without this, a confirmation the user gave for a harmless call could be
     replayed onto a destructive one — same principal, still unexpired, and
     carrying an ``answers`` map the second call would read as consent."""
     assert _verify(sign_request_state(_state(fingerprint="b" * 64))) is None
@@ -109,7 +109,7 @@ def test_anything_that_is_not_a_non_empty_string_is_not_a_token(raw: Any) -> Non
     ],
 )
 def test_a_validly_signed_payload_of_the_wrong_shape_is_rejected(payload: Any) -> None:
-    """⚠ A signature proves the payload came from this server — not from *this
+    """A signature proves the payload came from this server — not from *this
     release* of it. A token minted by an older shape verifies and would
     otherwise be unpacked into nonsense, so the shape is checked too, and a
     stale one costs the client one extra round rather than a compatibility rule

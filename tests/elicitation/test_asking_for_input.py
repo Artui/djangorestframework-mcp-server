@@ -75,7 +75,7 @@ def test_the_service_message_is_carried_verbatim(server: MCPServer) -> None:
 
 
 def test_the_result_is_not_an_error(server: MCPServer) -> None:
-    """⚠ Worth pinning: this is a *successful* result with a different shape,
+    """Worth pinning: this is a *successful* result with a different shape,
     not a failure. A client that treats it as one would never retry."""
     out = _call(server, {"count": 400})
     assert "isError" not in out
@@ -97,7 +97,7 @@ def test_retrying_with_the_answer_completes_the_call(server: MCPServer) -> None:
 
 
 def test_the_answer_reaches_the_service_as_an_ordinary_argument(server: MCPServer) -> None:
-    """⭐ The load-bearing claim of the whole design: the service declared
+    """The load-bearing claim of the whole design: the service declared
     ``confirmed`` as a normal serializer field and read it as one. It has no
     idea a dialog happened."""
     asked = _call(server, {"count": 400})
@@ -149,7 +149,7 @@ def test_a_second_question_is_asked_after_the_first_is_answered(server: MCPServe
 
 
 def test_the_first_answer_survives_the_second_question(server: MCPServer) -> None:
-    """⭐ Why ``requestState`` carries the answers at all. The retry below sends
+    """Why ``requestState`` carries the answers at all. The retry below sends
     only the *reason* — the client has no obligation to resend an earlier
     round's ``inputResponses`` — so without accumulation the service would ask
     for the confirmation a second time, forever."""
@@ -212,7 +212,7 @@ def test_a_declined_question_stops_the_call(server: MCPServer) -> None:
 
 
 def test_a_cancelled_question_is_reported_as_its_own_thing(server: MCPServer) -> None:
-    """⚠ Not the same as a decline, and the difference is worth a client's
+    """Not the same as a decline, and the difference is worth a client's
     attention: nobody decided anything, so retrying is reasonable."""
     out = _call(server, {"count": 400}, inputResponses={ELICITATION_KEY: {"action": "cancel"}})
     error = tool_error(out)
@@ -236,7 +236,7 @@ def test_a_refusal_is_not_re_asked(server: MCPServer) -> None:
 
 
 def test_a_client_that_declared_no_elicitation_is_told_what_is_missing(server: MCPServer) -> None:
-    """⭐ Degrades rather than failing. The spec forbids *asking* such a client;
+    """Degrades rather than failing. The spec forbids *asking* such a client;
     it does not require a protocol error, and an error would throw away the one
     thing a model could act on."""
     out = _call(server, {"count": 400}, ctx={"capabilities": {}})
@@ -271,7 +271,7 @@ def test_a_service_that_cannot_say_what_it_needs_degrades(server: MCPServer) -> 
 
 
 def test_an_unrenderable_schema_is_an_internal_error(server: MCPServer) -> None:
-    """⚠ Loud on purpose, and checked *before* the capability gate — a service
+    """Loud on purpose, and checked *before* the capability gate — a service
     that asks for a nested object is broken for every caller, and finding out
     only when an elicitation-capable client happens to call is how it survives
     to production."""
@@ -322,7 +322,7 @@ def test_the_budget_counts_rounds_not_calls(server: MCPServer) -> None:
 
 @pytest.mark.django_db
 def test_a_chain_tool_degrades_instead_of_asking(server: MCPServer) -> None:
-    """⛔ Deliberate. MRTR finishes a call by re-running it from the top, and a
+    """Deliberate. MRTR finishes a call by re-running it from the top, and a
     chain that asked at step three would re-run steps one and two on the retry.
     The subclassing does the right thing for free: the existing ``ServiceError``
     arm reports it as an ordinary failure."""

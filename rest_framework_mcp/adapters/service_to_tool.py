@@ -57,15 +57,13 @@ def service_spec_to_tool(
 ) -> ToolBinding:
     """Lift a ``ServiceSpec`` into a :class:`ToolBinding`.
 
-    Pure projection — no side effects on the spec or its callable. The
-    handler layer (``handlers/handle_tools_call.py``) is what eventually
-    invokes ``spec.service``.
+    Pure projection — no side effects on the spec or its callable. The handler
+    layer (``handlers/handle_tools_call.py``) is what invokes ``spec.service``.
 
-    ``spec.permission_classes`` (sister-repo 0.12+) is honored: each DRF
-    ``BasePermission`` class is wrapped in :class:`DRFPermissionAdapter` and
-    prepended to the per-binding ``permissions`` tuple. Author-declared
-    contracts on the spec run before transport-level ``MCPPermission``
-    instances, AND-combined.
+    ``spec.permission_classes`` is honoured: each DRF ``BasePermission`` class is
+    wrapped in :class:`DRFPermissionAdapter` and prepended to the per-binding
+    ``permissions`` tuple, so author-declared contracts on the spec run before
+    transport-level ``MCPPermission`` instances, AND-combined.
 
     ``meta`` is the base-protocol ``_meta`` bundle the tool's ``tools/list``
     entry carries. It goes through :func:`merge_meta` so a later

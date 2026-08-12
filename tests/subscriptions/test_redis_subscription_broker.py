@@ -88,7 +88,7 @@ async def test_publishing_to_a_topic_nobody_watches_reports_zero() -> None:
 
 
 async def test_unsubscribing_cancels_the_listener() -> None:
-    """⚠ Without this the task and its channel subscriptions outlive the
+    """Without this the task and its channel subscriptions outlive the
     connection, for the life of the process."""
     client = _client()
     broker = RedisSubscriptionBroker(client)
@@ -155,7 +155,7 @@ async def test_constructing_without_the_extra_is_a_clear_error(monkeypatch: Any)
 
 
 async def test_subscribe_returns_only_once_the_channels_are_live() -> None:
-    """⚠ The race this closes: ``subscribe`` used to register in a background
+    """The race this closes: ``subscribe`` used to register in a background
     task, so the caller emitted "you are subscribed" while publishes were still
     going nowhere — in exactly the multi-process deployment this class exists
     for, where the publisher is another process and waits for nobody."""

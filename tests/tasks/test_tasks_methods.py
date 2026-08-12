@@ -61,7 +61,7 @@ def test_the_refusal_tells_the_client_what_to_declare(server: MCPServer) -> None
 
 
 def test_the_refusal_is_not_the_code_the_extension_document_prints(server: MCPServer) -> None:
-    """⚠ The extension says ``-32003`` while naming the constant the ratified
+    """The extension says ``-32003`` while naming the constant the ratified
     core schema allocates as ``-32021``. It is a stale number from when tasks
     were core, and ``-32003`` now sits in the implementation-defined band the
     core spec promises never to define codes in — and is one of the two codes
@@ -97,7 +97,7 @@ def test_an_unknown_task_is_invalid_params(handler: Any, server: MCPServer) -> N
 def test_another_principals_task_is_indistinguishable_from_a_missing_one(
     handler: Any, server: MCPServer, store: InMemoryTaskStore, executor: RecordingExecutor
 ) -> None:
-    """⚠ The uniformity is the security property. With no listing and no
+    """The uniformity is the security property. With no listing and no
     session to scope by, an error that said "not yours" would confirm which
     ids are real — which is the one thing the id's unguessability protects.
     """
@@ -138,7 +138,7 @@ def test_get_returns_the_task(
 def test_get_is_a_complete_result_not_a_task_result(
     server: MCPServer, store: InMemoryTaskStore, executor: RecordingExecutor
 ) -> None:
-    """⚠ Easy to get backwards. ``resultType: task`` marks the result that
+    """Easy to get backwards. ``resultType: task`` marks the result that
     *hands out* a handle; stamping it here would tell the client it had just
     been given a second task."""
     task: Task = _task(server, store, executor)
@@ -239,7 +239,7 @@ def test_an_unknown_key_is_ignored_rather_than_rejected(
 def test_updating_a_task_that_is_not_awaiting_input_is_refused(
     server: MCPServer, store: InMemoryTaskStore, executor: RecordingExecutor
 ) -> None:
-    """⚠ Not pedantry. A ``working`` task has nothing outstanding, so every
+    """Not pedantry. A ``working`` task has nothing outstanding, so every
     answer would be an unknown key — silently ignored and acknowledged as
     success, indistinguishable from a delivery that worked."""
     task: Task = _task(server, store, executor)

@@ -18,19 +18,14 @@ class ProtectedResourceMetadataViewSet(ViewSet):
     Mounted at ``/.well-known/oauth-protected-resource`` by :class:`MCPServer`.
     Single-action ViewSet — the canonical GET is wired as ``list`` via
     ``ProtectedResourceMetadataViewSet.as_view({"get": "list"}, auth_backend=...)``
-    so the URL conf doesn't need a router.
+    so the URL conf doesn't need a router. The payload comes from the
+    instance-scoped :meth:`MCPAuthBackend.protected_resource_metadata`, so
+    multiple servers in one process advertise different metadata.
 
-    Delegates payload construction to the configured
-    :meth:`MCPAuthBackend.protected_resource_metadata`, which returns a
-    :class:`ProtectedResourceMetadata` dataclass. The backend is
-    instance-scoped — passed in via ``as_view`` — so multiple servers in
-    one process can advertise different metadata.
-
-    DRF's default authentication / permission / throttling layers are
-    disabled (empty lists below): PRM is a public discovery endpoint by
-    design and the MCP transport owns its own auth pipeline through
-    :class:`MCPAuthBackend`. The renderer is pinned to JSON because the
-    payload shape is RFC-defined; content negotiation would be noise.
+    DRF authentication and permissions are deliberately open: PRM is a public
+    discovery endpoint, and the MCP transport owns its own auth pipeline
+    through :class:`MCPAuthBackend`. The renderer is pinned to JSON because
+    the payload shape is RFC-defined.
     """
 
     authentication_classes: tuple = ()  # noqa: RUF012 — DRF class-level config

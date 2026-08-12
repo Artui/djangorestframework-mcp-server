@@ -55,7 +55,7 @@ def test_a_template_with_no_placeholders_is_the_static_case() -> None:
 
 
 def test_an_unfillable_template_is_dropped_not_raised() -> None:
-    """⚠ By now the write has committed. Failing the call over a formatting
+    """By now the write has committed. Failing the call over a formatting
     mistake would report failure for work that succeeded."""
     assert render_invalidations(("invoices://{nope}",), payload={}, arguments={}) == ()
 
@@ -147,7 +147,7 @@ async def test_a_successful_call_announces_both_declared_uris() -> None:
 
 @pytest.mark.django_db(transaction=True)
 async def test_a_failed_tool_announces_nothing() -> None:
-    """⚠ Checked on ``isError``, not on the result being present — a
+    """Checked on ``isError``, not on the result being present — a
     ``ServiceError`` produces a perfectly well-formed result, which is the
     package's whole error contract."""
     broker = InMemorySubscriptionBroker()
@@ -192,7 +192,7 @@ def test_the_sync_path_announces_too() -> None:
 
 @pytest.mark.django_db(transaction=True)
 def test_nothing_is_published_until_the_transaction_commits() -> None:
-    """⚠ The failure this prevents: a subscriber re-reads on the notification
+    """The failure this prevents: a subscriber re-reads on the notification
     and sees the old value, having been told it was new. A missed notification
     is recovered by the next read; a wrong one teaches the client something
     false."""
@@ -227,7 +227,7 @@ def test_a_rolled_back_write_announces_nothing() -> None:
 
 @pytest.mark.django_db(transaction=True)
 def test_the_async_path_announces_on_the_thread_that_did_the_write() -> None:
-    """⚠ The bug this pins. Django connections are thread-local: under ASGI the
+    """The bug this pins. Django connections are thread-local: under ASGI the
     ORM work runs on a ``sync_to_async`` worker while the coroutine resumes on
     the event loop thread. Checking the transaction from the loop reads a
     *different* connection, sees none open, and publishes a write that has not

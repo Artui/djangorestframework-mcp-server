@@ -9,10 +9,10 @@ class ProtectedResourceMetadata:
     """RFC 9728 OAuth 2.0 Protected Resource Metadata payload.
 
     Returned by :meth:`MCPAuthBackend.protected_resource_metadata` and
-    serialised onto the wire by the PRM ViewSet. Keys map 1:1 to the
-    RFC 9728 field names; ``warning`` is the package-local extension
-    that ``AllowAnyBackend`` uses to make dev-mode misconfiguration
-    loud.
+    serialised onto the wire by the PRM ViewSet. Keys map 1:1 to the RFC 9728
+    field names, except ``warning``: a package-local extension serialised as
+    ``_warning``, which ``AllowAnyBackend`` uses to make dev-mode
+    misconfiguration loud in client tooling.
     """
 
     resource: str
@@ -20,9 +20,6 @@ class ProtectedResourceMetadata:
     bearer_methods_supported: list[str] = field(default_factory=lambda: ["header"])
     scopes_supported: list[str] = field(default_factory=list)
     resource_documentation: str | None = None
-    # ``_warning`` is a package-local hint to make dev-mode backends
-    # (``AllowAnyBackend``) detectable in client tooling. Not part of
-    # RFC 9728.
     warning: str | None = None
 
     def to_dict(self) -> dict[str, Any]:

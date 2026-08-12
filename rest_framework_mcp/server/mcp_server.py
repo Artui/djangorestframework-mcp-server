@@ -157,15 +157,10 @@ class MCPServer:
         url_namespace: str = "mcp",
     ) -> None:
         check_removed_settings()
-        # Identity is resolved **once, here** — the settings read is a default
-        # source for the kwargs, not a per-request lookup — so the instance is
-        # the single source of truth on the wire and two servers mounted in one
-        # project introduce themselves differently. ``name=None`` /
-        # ``version=None`` defer to ``SERVER_INFO``, keeping the wire identity
-        # of a project that configures the setting and never passes ``name=``.
-        # ``icons=()`` and ``website_url=None`` mean "unset", so both defer to
-        # ``SERVER_INFO`` exactly as ``name`` / ``version`` / ``title`` do —
-        # passing an empty tuple is not a way to suppress configured icons.
+        # Identity is resolved once, here, so the instance is the single source
+        # of truth on the wire. Every unset kwarg defers to ``SERVER_INFO`` —
+        # including ``icons=()``, which is "unset" and not a way to suppress
+        # configured icons.
         self._server_info: Implementation = build_server_info(
             name=name,
             version=version,
@@ -177,31 +172,23 @@ class MCPServer:
         self.version: str = self._server_info.version
         self.title: str | None = self._server_info.title
         self.description: str | None = description
-        # The scalar settings, snapshotted once. Threaded to the transport and,
-        # via MCPCallContext, to every handler — so nothing reads settings on
-        # the request path, and two servers here can genuinely differ. Override
-        # a field with ``config=build_mcp_config(page_size=500)``.
+        # The scalar settings, snapshotted once and threaded to the transport
+        # and every handler, so nothing reads settings on the request path and
+        # two servers here can genuinely differ.
         self._config: MCPConfig = config if config is not None else build_mcp_config()
         self._url_namespace: str = url_namespace
         self._tools: ToolRegistry = ToolRegistry()
         self._resources: ResourceRegistry = ResourceRegistry()
         self._prompts: PromptRegistry = PromptRegistry()
-        # ``resource_url`` configures the *default* backend. A custom backend
-        # owns its own audience policy (the protocol says nothing about a
-        # resource URL), so there is nowhere to forward this to — rather than
-        # drop it silently and leave audience enforcement quietly unconfigured,
-        # say so.
+        # ``resource_url`` configures the *default* backend; a custom backend
+        # owns its own audience policy, so there is nowhere to forward it to.
+        # Refusing beats leaving audience enforcement quietly unconfigured.
         if resource_url is not None and auth_backend is not None:
             raise ImproperlyConfigured(
                 "Pass resource_url= or auth_backend=, not both — a custom auth "
                 "backend owns its own audience binding. Configure it there, e.g. "
                 f"auth_backend=DjangoOAuthToolkitBackend(resource_url={resource_url!r})."
             )
-        # Collaborators are constructed, never resolved from a dotted path: the
-        # consumer passes an object, or gets the package default built here.
-        # Knowing the concrete class is what lets the session store below be
-        # namespaced, and the resource URL below be handed over — a dotted-path
-        # loader could only call ``cls()``.
         self._auth_backend: MCPAuthBackend = (
             auth_backend
             if auth_backend is not None
@@ -210,53 +197,34 @@ class MCPServer:
         # Namespaced by default: the cache-backed store shares one Django cache
         # across every server in the process, so without this a session minted
         # at ``/public/mcp`` satisfies ``/internal/mcp``'s ownership check and a
-        # DELETE against either destroys the other's session.
-        #
-        # Keyed on ``name`` — the spec's programmatic identifier — and not on
-        # ``url_namespace``, which is a *routing* detail. A server used only
-        # in-process (``acall_tool``, the django-ag-ui bridge) is never mounted,
-        # so its ``url_namespace`` is a meaningless default; keying on it would
-        # collide that server with a mounted one at the default namespace even
-        # though their names differ, and Django's duplicate-namespace check
-        # (urls.W005) cannot see an unmounted server. Keying on identity also
-        # means renaming a URL prefix doesn't silently drop every session.
-        #
-        # A store the consumer builds carries whatever namespace they gave it.
+        # DELETE against either destroys the other's session. Keyed on ``name``,
+        # not ``url_namespace``: a server used only in-process is never mounted,
+        # so its namespace is a meaningless default that would collide it with a
+        # mounted one — and Django's duplicate-namespace check (urls.W005)
+        # cannot see an unmounted server.
         self._session_store: SessionStore = (
             session_store
             if session_store is not None
             else DjangoCacheSessionStore(namespace=self.name)
         )
-        # The broker is only constructed when the consumer hasn't supplied
-        # one — instance state, never module-level. Multi-process deployments
-        # need an out-of-process broker (Redis pub/sub etc.); single-process
-        # SSE works out of the box.
-        # Default to the in-process broker; consumers running multi-worker
-        # ASGI deploy ``RedisSSEBroker`` (or any other ``SSEBroker``-shaped
-        # impl) and pass it explicitly.
+        # Single-process SSE works out of the box; multi-worker ASGI passes a
+        # ``RedisSSEBroker`` (or any other ``SSEBroker``) explicitly.
         self._sse_broker: SSEBroker = sse_broker or InMemorySSEBroker()
-        # Replay buffer is opt-in: ``None`` means no resume support
-        # (existing wire shape, no ``id:`` lines, ``Last-Event-ID``
-        # silently ignored). Set to enable per-session bounded replay.
+        # Opt-in: ``None`` means no resume support — no ``id:`` lines,
+        # ``Last-Event-ID`` silently ignored.
         self._sse_replay_buffer: SSEReplayBuffer | None = sse_replay_buffer
-        # ⚠ Tasks are **off** unless both halves are present, and the store's
-        # default is deliberately not "always build one": a server with a store
-        # but nowhere to run the work would advertise the extension, hand out
-        # handles, and never finish any of them. So the executor is the switch
-        # — supply one and a cache-backed store appears (namespaced like the
-        # session store, for the same reason), supply neither and nothing about
-        # this server changes.
-        #
-        # ``task_store=None`` is distinguishable from "not passed", which is
-        # what ``UNSET`` buys: passing ``None`` alongside an executor is a way
-        # to say "I will wire the store later", not a request for the default.
-        # ⚠ No default is constructed. The in-memory broker works only in a
-        # single process, and a server that quietly got one would advertise
-        # subscription support and then deliver nothing as soon as a second
-        # worker existed — the failure looks exactly like "nothing ever
-        # changed". Subscriptions are opt-in, and opting in means naming the
-        # broker you actually want.
+        # No default broker is constructed. A server that quietly got the
+        # in-memory one would advertise subscription support and then deliver
+        # nothing as soon as a second worker existed, and the failure looks
+        # exactly like "nothing ever changed".
         self._subscription_broker: SubscriptionBroker | None = subscription_broker
+        # The executor is the switch: supply one and a cache-backed store
+        # appears (namespaced like the session store, for the same reason),
+        # supply neither and this server runs no tasks. A store with nowhere to
+        # run the work would advertise the extension, hand out handles and
+        # finish none of them. ``UNSET`` keeps ``task_store=None`` distinct from
+        # "not passed" — that is "I will wire the store later", not a request
+        # for the default.
         self._task_executor: TaskExecutor | None = task_executor
         self._task_store: TaskStore | None
         if not isinstance(task_store, UnsetType):
@@ -301,33 +269,25 @@ class MCPServer:
     ) -> ToolBinding:
         """Register a :class:`ServiceSpec` as an MCP **mutation** tool.
 
-        Mirrors :meth:`register_resource`'s spec-only contract — the unit
-        of registration is a ``ServiceSpec`` from
-        ``djangorestframework-services``. The dispatch pipeline runs
-        ``input_serializer → run_service(atomic) → output_selector? →
-        output_serializer``, so this is the right surface for
-        side-effecting operations (creates, updates, deletes, anything
-        that wants ``transaction.atomic()``).
+        The dispatch pipeline runs ``input_serializer → run_service(atomic) →
+        output_selector? → output_serializer``, so this is the surface for
+        side-effecting operations. For read-shaped ones (list/retrieve with
+        optional filtering / ordering / pagination) use
+        :meth:`register_selector_tool` instead.
 
-        For read-shaped operations (list/retrieve with optional filtering
-        / ordering / pagination) use :meth:`register_selector_tool`
-        instead — selectors return raw querysets and the tool layer owns
-        the post-fetch pipeline.
-
-        ``meta`` is the base protocol's generic ``_meta`` bundle: an
-        open extension namespace emitted verbatim under the ``"_meta"``
-        key of this tool's ``tools/list`` entry (omitted entirely when
-        empty). It is *not* the ``annotations`` hint bundle — those are a
-        closed, spec-defined set of client hints; ``_meta`` is where
-        protocol extensions put their own keys. Passed through as given:
-        this layer neither validates the keys nor reserves any.
+        ``meta`` is the base protocol's generic ``_meta`` bundle, emitted
+        verbatim under the ``"_meta"`` key of this tool's ``tools/list`` entry
+        and omitted when empty. It is *not* the ``annotations`` hint bundle —
+        those are a closed, spec-defined set of client hints, while ``_meta``
+        is where protocol extensions put their own keys. Passed through as
+        given: no key is validated or reserved here.
 
         ``ui`` links this tool to an interactive view registered with
         :meth:`register_ui_resource`, so a host renders the result inline
-        instead of showing raw JSON. The view must already be registered on
-        this server, and the tool must emit ``structuredContent`` — that is
-        what the view renders from — or the link is refused at registration
-        rather than shipping a view that comes up blank.
+        instead of raw JSON. The view must already be registered on this
+        server, and the tool must emit ``structuredContent`` — what the view
+        renders from — or the link is refused at registration rather than
+        shipping a view that comes up blank.
         """
         ui_meta = build_ui_tool_meta(
             name=name,
@@ -371,12 +331,10 @@ class MCPServer:
         check_tool_description_present(
             binding.name, binding.description, require=self._config.require_tool_descriptions
         )
-        # Resolve the structured-output pair eagerly. The combination is fully
-        # known once the binding's overrides meet the server defaults, so the
-        # spec-violating pairing should fail at registration — which is import
-        # time — rather than on the first ``tools/call`` to reach it. Checking
-        # the *globals* alone would be wrong: a server-wide "schema on, content
-        # off" is legal precisely when every binding overrides it back on.
+        # Per binding, and eagerly, so a spec-violating pair fails at import
+        # time rather than on the first ``tools/call``. A server-wide "schema
+        # on, content off" is legal when every binding overrides it back on,
+        # so checking the globals alone would be wrong.
         resolve_structured_output(
             include_output_schema_override=binding.include_output_schema,
             include_structured_content_override=binding.include_structured_content,
@@ -423,9 +381,9 @@ class MCPServer:
     ) -> SelectorToolBinding:
         """Register a :class:`SelectorSpec` as an MCP **read** tool.
 
-        Read-shaped sibling of :meth:`register_service_tool`. The
-        selector returns a raw, unscoped queryset; the tool layer owns
-        the post-fetch pipeline:
+        Read-shaped sibling of :meth:`register_service_tool`. The selector
+        returns a raw, unscoped queryset; the tool layer owns the post-fetch
+        pipeline:
 
         .. code-block:: text
 
@@ -437,27 +395,19 @@ class MCPServer:
                       → output_serializer(many=True)
                       → ToolResult
 
-        Each pipeline knob is optional. A selector tool with no
-        ``spec.filter_set`` / ``ordering_fields`` / ``paginate`` set
-        behaves like a plain RPC read against the selector — same
-        effective contract as a service tool minus the side effects.
+        Each knob is optional; with none of them set the tool is a plain RPC
+        read against the selector.
 
         Filtering is declared on the spec, not here: set
-        ``SelectorSpec.filter_set`` (``djangorestframework-services``
-        0.18+) and both the HTTP and MCP transports honour it. It
-        requires the ``[filter]`` extra (``django-filter``); schema
-        generation surfaces a clear ``ImportError`` if a spec carries a
-        ``filter_set`` without the package installed. ``ordering_fields``
-        / ``paginate`` stay here — they are MCP pipeline mechanics with
-        no spec analogue.
+        ``SelectorSpec.filter_set`` and both the HTTP and MCP transports honour
+        it. It requires the ``[filter]`` extra (``django-filter``), and schema
+        generation raises a clear ``ImportError`` without it. ``ordering_fields``
+        / ``paginate`` stay here, being MCP pipeline mechanics with no spec
+        analogue.
 
-        The selector's shape (``LIST`` vs ``RETRIEVE``) is read from
-        ``spec.kind`` — a required field on ``SelectorSpec`` in
-        ``djangorestframework-services`` 0.13+. ``LIST`` runs the full
-        post-fetch pipeline (``spec.filter_set`` / ``ordering_fields`` /
-        ``paginate``) and renders with ``many=True``; ``RETRIEVE``
-        rejects those pipeline knobs at registration and renders the
-        result with ``many=False``.
+        The shape comes from ``spec.kind``: ``LIST`` runs the full post-fetch
+        pipeline and renders with ``many=True``; ``RETRIEVE`` rejects those
+        knobs at registration and renders with ``many=False``.
 
         ``meta`` is the generic ``_meta`` bundle for this tool's
         ``tools/list`` entry, and ``ui`` links it to an interactive view —
@@ -508,12 +458,10 @@ class MCPServer:
         check_tool_description_present(
             binding.name, binding.description, require=self._config.require_tool_descriptions
         )
-        # Resolve the structured-output pair eagerly. The combination is fully
-        # known once the binding's overrides meet the server defaults, so the
-        # spec-violating pairing should fail at registration — which is import
-        # time — rather than on the first ``tools/call`` to reach it. Checking
-        # the *globals* alone would be wrong: a server-wide "schema on, content
-        # off" is legal precisely when every binding overrides it back on.
+        # Per binding, and eagerly, so a spec-violating pair fails at import
+        # time rather than on the first ``tools/call``. A server-wide "schema
+        # on, content off" is legal when every binding overrides it back on,
+        # so checking the globals alone would be wrong.
         resolve_structured_output(
             include_output_schema_override=binding.include_output_schema,
             include_structured_content_override=binding.include_structured_content,
@@ -543,18 +491,15 @@ class MCPServer:
         A project exposing the same operations over more than one transport
         keeps its spec set in a
         :class:`~rest_framework_services.registry.spec_registry.SpecRegistry`
-        (``djangorestframework-services`` 0.27+) so each transport reads one
-        source instead of enumerating the specs again. This is the MCP end of
-        that: it walks the registry and calls
+        so each transport reads one source. This walks it and calls
         :meth:`register_service_tool` / :meth:`register_selector_tool` per
         entry, discriminating on the spec type.
 
         It is a **source for** this server's own ``ToolRegistry``, not a
-        replacement for it — every tool still lands as a normal binding, and
-        names still share the one tool namespace (a collision raises, as
-        always). The spec registry carries only what is invariant across
-        transports (which spec, its canonical name, its tags); every MCP knob
-        stays here, per tool, via ``overrides``::
+        replacement — every tool lands as a normal binding sharing the one
+        tool namespace (a collision raises, as always). The registry carries
+        only what is invariant across transports; every MCP knob stays here,
+        per tool, via ``overrides``::
 
             server.register_specs(
                 registry.by_tag("public"),
@@ -564,23 +509,17 @@ class MCPServer:
                 },
             )
 
-        ``overrides`` maps a registered name to the keyword arguments handed to
-        that entry's registration method. It stays a plain mapping rather than
-        a dataclass because the two methods take different knobs — a single
-        record would duplicate both signatures and drift from them. The keys
-        are therefore checked against each method's own signature, which means
-        a knob used on the wrong spec kind (``paginate`` on a ``ServiceSpec``)
-        raises :exc:`TypeError` from that method. An ``overrides`` key naming a
-        spec the registry doesn't hold raises :exc:`ValueError` here — that is
-        a typo, not an intentional no-op.
+        Keys are checked against the target method's own signature, so a knob
+        used on the wrong spec kind (``paginate`` on a ``ServiceSpec``) raises
+        :exc:`TypeError` from there. An ``overrides`` key naming a spec the
+        registry doesn't hold raises :exc:`ValueError` here — that is a typo,
+        not an intentional no-op.
 
-        Registration is not transactional: a failure partway leaves the
-        earlier entries registered. That is harmless in the intended use —
-        registration happens at configuration time, so a raise aborts startup
-        anyway.
+        Registration is not transactional: a failure partway leaves the earlier
+        entries registered, which is harmless at configuration time because a
+        raise aborts startup anyway.
 
-        Returns the bindings in registration order, mirroring the per-tool
-        methods that each return theirs.
+        Returns the bindings in registration order.
         """
         override_map = dict(overrides or {})
         unknown = sorted(name for name in override_map if name not in registry)
@@ -640,20 +579,19 @@ class MCPServer:
         wraps a ``ServiceSpec`` (write) or ``SelectorSpec`` (read) and binds
         its result to an alias. A step's ``inputs`` callable reads the
         validated tool arguments (``ctx.args``) and any prior step's output
-        (``ctx[alias]``) to build that step's call kwargs — so one tool call
-        can express ``retrieve x → write y → write z`` with ``z`` derived
-        from both ``x`` and ``y``.
+        (``ctx[alias]``) to build that step's call kwargs, so one tool call can
+        express ``retrieve x → write y → write z``.
 
-        ``atomic=True`` (the default) runs the whole sequence inside one
-        ``transaction.atomic()``: any step raising a
-        ``ServiceError`` / ``ServiceValidationError`` rolls back every prior
-        write and the JSON-RPC error carries ``failedStep``.
+        ``atomic=True`` runs the whole sequence inside one
+        ``transaction.atomic()``: any step raising a ``ServiceError`` /
+        ``ServiceValidationError`` rolls back every prior write and the
+        JSON-RPC error carries ``failedStep``.
 
         The advertised ``inputSchema`` is ``input_serializer`` when set,
-        otherwise the first step's serializer (the first-step fallback). The
-        response is the ``output_alias`` step's rendered output (default: the
-        last step), or ``{alias: rendered}`` for every serializer-bearing
-        step when ``output_all=True``.
+        otherwise the first step's serializer. The response is the
+        ``output_alias`` step's rendered output (default: the last step), or
+        ``{alias: rendered}`` for every serializer-bearing step when
+        ``output_all=True``.
 
         Each step's ``spec.permission_classes`` are AND-combined with the
         chain-level ``permissions`` and evaluated up front — a failing step
@@ -709,12 +647,10 @@ class MCPServer:
         check_tool_description_present(
             binding.name, binding.description, require=self._config.require_tool_descriptions
         )
-        # Resolve the structured-output pair eagerly. The combination is fully
-        # known once the binding's overrides meet the server defaults, so the
-        # spec-violating pairing should fail at registration — which is import
-        # time — rather than on the first ``tools/call`` to reach it. Checking
-        # the *globals* alone would be wrong: a server-wide "schema on, content
-        # off" is legal precisely when every binding overrides it back on.
+        # Per binding, and eagerly, so a spec-violating pair fails at import
+        # time rather than on the first ``tools/call``. A server-wide "schema
+        # on, content off" is legal when every binding overrides it back on,
+        # so checking the globals alone would be wrong.
         resolve_structured_output(
             include_output_schema_override=binding.include_output_schema,
             include_structured_content_override=binding.include_structured_content,
@@ -737,27 +673,24 @@ class MCPServer:
     ) -> ToolResult:
         """Invoke a registered spec-backed tool off the HTTP / JSON-RPC path.
 
-        The blessed, transport-neutral entry point: hand a tool ``name`` and a
-        flat ``arguments`` dict (the role ``request.data`` / query params play on
-        HTTP) plus the acting ``user``, and get back the same :class:`ToolResult`
-        the wire handlers build — without going through JSON-RPC. An in-process
-        consumer (the django-ag-ui bridge, a Pydantic-AI toolset, a management
-        command) calls this instead of re-implementing dispatch.
+        The transport-neutral entry point: hand a tool ``name``, a flat
+        ``arguments`` dict (the role ``request.data`` / query params play on
+        HTTP) and the acting ``user``, and get back the same
+        :class:`ToolResult` the wire handlers build. An in-process consumer
+        calls this instead of re-implementing dispatch.
 
-        Built on the sister repo's ``dispatch_spec`` / ``render_spec_output`` /
-        ``enforce_permissions``, so the spec core (instance resolution, input
-        validation, the service / selector run, the output-selector re-fetch,
-        queryset shaping incl. ``filter_set``, and the retrieve nullability
-        contract) is shared with every other transport rather than reproduced.
-
-        This is the spec core only: it honours the binding's ``argument_binding`` /
-        ``unknown_arguments`` policies and the spec's ``permission_classes``
-        (object-level checks included), but does not layer on the read-shaped
-        transport extras — pagination, ordering, and a selector binding's MCP-only
-        ``input_serializer`` — nor the transport-level MCP permissions / rate
-        limits. For those (and for tool listing), use the full in-process transport
-        surface, :meth:`acall_tool` / :meth:`list_tools`. Chain tools are
-        unsupported — they orchestrate several specs and raise :class:`TypeError`.
+        This is the **spec core only** — instance resolution, input validation,
+        the service / selector run, the output-selector re-fetch, queryset
+        shaping including ``filter_set``, and the retrieve nullability
+        contract, shared with every other transport rather than reproduced. It
+        honours the binding's ``argument_binding`` / ``unknown_arguments``
+        policies and the spec's ``permission_classes`` (object-level checks
+        included), but not the
+        read-shaped transport extras — pagination, ordering, a selector
+        binding's MCP-only ``input_serializer`` — nor the transport-level MCP
+        permissions and rate limits. For those, and for tool listing, use
+        :meth:`acall_tool` / :meth:`list_tools`. Chain tools orchestrate
+        several specs and raise :class:`TypeError` here.
 
         Raises :class:`KeyError` when no tool is registered under ``name``.
         """
@@ -780,22 +713,20 @@ class MCPServer:
     ) -> dict[str, Any] | JsonRpcError:
         """List the tools this server exposes, exactly as the wire would.
 
-        The in-process twin of a ``tools/list`` request: returns one page of the
-        tool catalog with the *same* merged ``inputSchema`` the HTTP transport
+        The in-process twin of a ``tools/list`` request: one page of the tool
+        catalog with the *same* merged ``inputSchema`` the HTTP transport
         advertises (serializer fields plus a selector tool's filter / ordering /
         pagination arguments and the ``additionalProperties`` policy), the same
-        per-caller listing-permission filter (``FILTER_LISTINGS_BY_PERMISSIONS``),
+        per-caller listing-permission filter (``FILTER_LISTINGS_BY_PERMISSIONS``)
         and the same opaque-cursor pagination — pass the returned ``nextCursor``
-        back to fetch the next page. A :class:`JsonRpcError` signals a bad cursor.
+        back for the next page. A :class:`JsonRpcError` signals a bad cursor.
 
         ``scopes`` are the caller's granted scopes; pass them so a
         ``ScopeRequired``-gated tool is visible under
         ``FILTER_LISTINGS_BY_PERMISSIONS`` exactly as it would be on the wire.
 
-        Unlike :meth:`call_tool` (the spec core), this is the full transport
-        surface — the entry point for an in-process consumer (the django-ag-ui
-        bridge, a Pydantic-AI toolset) that must mirror what a remote MCP client
-        would see. Under an event loop use :meth:`alist_tools` — a listing
+        Unlike :meth:`call_tool` (the spec core) this is the full transport
+        surface. Under an event loop use :meth:`alist_tools` — a listing
         permission filter that hits the DB raises ``SynchronousOnlyOperation``
         from a sync call on the loop.
         """
@@ -815,11 +746,10 @@ class MCPServer:
         """Async :meth:`list_tools` — safe to call from an event loop.
 
         Listing itself is pure Python, but the per-caller permission filter
-        (``FILTER_LISTINGS_BY_PERMISSIONS``) may run a DB-backed check (e.g.
-        ``DjangoPermRequired`` → ``user.has_perm``), which raises
-        ``SynchronousOnlyOperation`` when reached synchronously from within an
-        event loop — the exact context an async in-process consumer runs in. The
-        whole sync handler therefore runs in Django's thread-sensitive executor.
+        (``FILTER_LISTINGS_BY_PERMISSIONS``) may run a DB-backed check, which
+        raises ``SynchronousOnlyOperation`` when reached synchronously from
+        within an event loop. The whole sync handler therefore runs in Django's
+        thread-sensitive executor.
         """
         params = {"cursor": cursor} if cursor is not None else None
         context = self._call_context(user=user, request=request, scopes=scopes)
@@ -838,20 +768,18 @@ class MCPServer:
 
         The in-process twin of a ``tools/call`` request: routes through the same
         async handler the wire uses, so the transport-level MCP permissions and
-        rate limits, the selector post-fetch pipeline (filter / order / paginate),
-        a selector binding's MCP-only ``input_serializer``, chain tools, and the
-        output format all apply — everything :meth:`call_tool` (the spec core)
-        deliberately omits. Returns the wire's result payload (a ``dict`` carrying
+        rate limits, the selector post-fetch pipeline (filter / order /
+        paginate), a selector binding's MCP-only ``input_serializer``, chain
+        tools and the output format all apply — everything :meth:`call_tool`
+        omits. Returns the wire's result payload (a ``dict`` carrying
         ``content`` / ``structuredContent`` / ``isError``), or a
         :class:`JsonRpcError` for a protocol fault (unknown tool, malformed
         ``arguments`` shape, denied permission).
 
-        ``arguments`` is the flat dict that ``request.data`` / query params play on
-        HTTP; ``user`` is the acting user and ``request`` the originating Django
-        request when there is one (a minimal request is synthesised otherwise,
-        mirroring :meth:`call_tool`). ``scopes`` are the caller's granted scopes,
-        populating the synthetic token so a ``ScopeRequired``-gated tool is
-        invokable in-process just as it is on the wire.
+        ``request`` is the originating Django request when there is one; a
+        minimal one is synthesised otherwise, mirroring :meth:`call_tool`.
+        ``scopes`` populate the synthetic token so a ``ScopeRequired``-gated
+        tool is invokable in-process just as it is on the wire.
         """
         params = {"name": name, "arguments": arguments or {}}
         return await handle_tools_call_async(
@@ -868,17 +796,11 @@ class MCPServer:
     ) -> MCPCallContext:
         """Build the per-call context the wire handlers thread through.
 
-        Carries the acting ``user`` (as both ``request.user`` and the synthetic
-        :class:`TokenInfo`) plus the server's registries. When ``request`` is
-        ``None`` a minimal :class:`~django.http.HttpRequest` is synthesised
-        bearing the user — the shape ``build_offline_context`` uses for the
-        spec-core path — so permission classes reading ``request.user`` behave as
-        they would on HTTP. The protocol version is the server's first (most
-        preferred) supported version, not a hardcoded literal.
-
-        ``scopes`` populate the synthetic :class:`TokenInfo`, so a scope-gated
-        tool (``ScopeRequired``) is callable and listable in-process the same way
-        it is over the wire; the default (``None``) is an empty scope set.
+        When ``request`` is ``None`` a minimal
+        :class:`~django.http.HttpRequest` is synthesised bearing the user, so
+        permission classes reading ``request.user`` behave as they would on
+        HTTP. The protocol version is the server's first (most preferred)
+        supported version, not a hardcoded literal.
         """
         http_request: HttpRequest = request if request is not None else HttpRequest()
         if request is None:
@@ -915,13 +837,12 @@ class MCPServer:
         returned — the client learns the outcome by polling ``tasks/get``.
 
         Safe to call for an id that is unknown, already claimed or already
-        finished: each is a no-op. That matters because queues deliver at least
-        once, and a retried delivery must not run a mutation twice.
+        finished: each is a no-op. Queues deliver at least once, and a retried
+        delivery must not run a mutation twice.
 
-        Raises if the server has no task store, because a worker calling this
-        on a server that cannot run tasks is a wiring mistake that would
-        otherwise fail as silence — the job would "succeed" and the client
-        would poll a handle forever.
+        Raises when the server has no task store: a worker calling this on a
+        server that cannot run tasks would otherwise fail as silence — the job
+        "succeeds" and the client polls a handle forever.
         """
         store: TaskStore | None = self._task_store
         if store is None:
@@ -935,17 +856,15 @@ class MCPServer:
     def _worker_context(self, record: TaskRecord) -> MCPCallContext:
         """The context a task runs under, off the request path.
 
-        Rebuilt rather than remembered — there is no request left to carry, and
-        a serialised one would be a stale copy of a live object. The identity
-        half comes back out of the record (see ``build_worker_token``); the
-        registries, config and stores come from this server, which is why the
-        factory lives here and not in the task module.
+        Rebuilt rather than remembered: the identity half comes back out of the
+        record (see ``build_worker_token``), the registries, config and stores
+        from this server.
 
-        ``client_capabilities`` is deliberately empty: the worker is not
-        serving a client, and a task must never create another task. An empty
-        declaration makes that structural rather than a rule someone has to
-        remember — ``maybe_create_task`` refuses, so a ``REQUIRED`` binding
-        reached this way fails visibly instead of queueing itself forever.
+        ``client_capabilities`` is deliberately empty. The worker is not
+        serving a client, and a task must never create another task — an empty
+        declaration makes ``maybe_create_task`` refuse, so a ``REQUIRED``
+        binding reached this way fails visibly instead of queueing itself
+        forever.
         """
         http_request = HttpRequest()
         http_request.method = "POST"
@@ -976,17 +895,17 @@ class MCPServer:
 
             await server.notify_resource_updated(f"invoices://{invoice.pk}")
 
-        Returns how many subscribers were reached, which is a diagnostic rather
-        than a guarantee: ``0`` means nobody was listening, which is the
-        ordinary case and not an error. Notifications are best-effort by design
-        — a client that misses one re-reads the resource.
+        Returns how many subscribers were reached — a diagnostic, not a
+        guarantee: ``0`` means nobody was listening, which is the ordinary case
+        and not an error. Notifications are best-effort by design; a client
+        that misses one re-reads the resource.
 
-        ⚠ **A URI, not a template.** Publish the concrete URI that changed, and
-        publish the collection URI too if you want watchers of the collection to
-        hear about it — matching is exact, deliberately (see
+        **A URI, not a template.** Publish the concrete URI that changed, and
+        the collection URI too if watchers of the collection should hear about
+        it — matching is exact, deliberately (see
         :func:`~rest_framework_mcp.subscriptions.utils.topic_for_resource`).
 
-        ⚠ **Publish after the transaction commits.** Inside
+        **Publish after the transaction commits.** Inside
         ``transaction.atomic()`` this announces a change that may still roll
         back, and a subscriber that re-reads immediately sees the old value —
         worse than no notification at all. ``transaction.on_commit`` is the
@@ -1016,10 +935,9 @@ class MCPServer:
     async def _publish(self, topic: str, payload: dict[str, Any]) -> int:
         """Hand a notification to the broker, or drop it if there is none.
 
-        A server with no broker is not misconfigured — it simply does not push —
-        so publishing is a no-op rather than an error. That keeps
-        ``notify_resource_updated`` safe to call unconditionally from a service,
-        which is what makes it usable as the write path's own trigger.
+        A server with no broker simply does not push, so this is a no-op rather
+        than an error — which is what keeps ``notify_resource_updated`` safe to
+        call unconditionally from a service.
         """
         if self._subscription_broker is None:
             return 0
@@ -1059,22 +977,18 @@ class MCPServer:
     ) -> ResourceBinding:
         """Register a :class:`SelectorSpec` as an MCP resource.
 
-        The unit of registration is a spec, mirroring :meth:`register_service_tool`'s
-        :class:`ServiceSpec` requirement. ``selector.selector`` is the
-        callable dispatched at ``resources/read`` time;
-        ``selector.output_serializer`` fills in when the caller didn't pass
-        one explicitly (the explicit ``output_serializer=`` kwarg wins);
-        ``selector.kwargs`` becomes the binding's per-request kwargs
-        provider.
+        ``selector.selector`` is the callable dispatched at ``resources/read``
+        time; ``selector.output_serializer`` fills in when the explicit
+        ``output_serializer=`` kwarg is absent (that kwarg wins);
+        ``selector.kwargs`` becomes the binding's per-request kwargs provider.
 
-        Bare callables are no longer accepted at this surface — wrap them in
-        ``SelectorSpec(selector=fn)``, or use :meth:`resource` (the decorator
-        form), which wraps the function automatically.
+        A bare callable is not accepted here — wrap it in
+        ``SelectorSpec(selector=fn)``, or use the decorator form
+        :meth:`resource`, which wraps it automatically.
 
-        The shape (``LIST`` vs ``RETRIEVE``) is read from
-        ``selector.kind`` and drives the ``many=`` flag on
-        ``output_serializer`` at dispatch. ``RETRIEVE`` is the typical
-        case for a URI-template lookup.
+        The shape comes from ``selector.kind`` and drives the ``many=`` flag on
+        ``output_serializer`` at dispatch; ``RETRIEVE`` is the typical case for
+        a URI-template lookup.
 
         ``meta`` is the generic ``_meta`` bundle (see
         :meth:`register_service_tool`) for this resource's listing entry —
@@ -1083,11 +997,10 @@ class MCPServer:
         returns.
 
         ``encoding`` decides how the selector's value becomes the read body:
-        ``JSON`` (the default) pretty-prints it, ``TEXT`` returns it verbatim.
-        Anything whose ``mime_type`` is not JSON — Markdown, CSV, plain text —
-        wants ``TEXT``, or the document comes back wrapped in a quoted string
-        literal. For an HTML view use :meth:`register_ui_resource`, which sets
-        both.
+        ``JSON`` pretty-prints it, ``TEXT`` returns it verbatim. Anything whose
+        ``mime_type`` is not JSON — Markdown, CSV, plain text — wants ``TEXT``,
+        or the document comes back wrapped in a quoted string literal. For an
+        HTML view use :meth:`register_ui_resource`, which sets both.
         """
         binding = selector_to_resource(
             name=name,
@@ -1137,10 +1050,10 @@ class MCPServer:
         """Register an interactive HTML view (an MCP App) as a resource.
 
         A tool links to the view and a **host** renders it inline in the chat,
-        inside a sandboxed iframe it constructs itself. This server's whole job
-        is to *declare*: serve the document, and describe what it needs in
+        inside a sandboxed iframe it constructs itself. This server only
+        *declares*: it serves the document and describes what it needs in
         ``_meta``. The iframe, the CSP enforcement and the ``ui/*`` postMessage
-        bridge are the host's, and are deliberately not implemented here.
+        bridge belong to the host and are deliberately not implemented here.
 
         Give exactly one content source — ``template_name`` (a Django template,
         the idiomatic choice), ``html`` (a literal document), or ``selector``
@@ -1149,9 +1062,7 @@ class MCPServer:
         **Keep tenant data out of the view.** Hosts may prefetch and cache a
         view before any tool call, so it is a shell that hydrates itself at
         runtime from tool results — which is also why the template renders with
-        no context. This is a house rule rather than a spec rule, and it is the
-        one thing a Django author's instinct gets wrong, because rendering the
-        queryset into the template is normally the right answer.
+        no context.
 
         ``ui=`` is the typed :class:`UIResourceMeta` — CSP origins, browser
         permissions, publisher ``domain``, border preference — which serialises
@@ -1269,16 +1180,14 @@ class MCPServer:
         """Decorator form of :meth:`register_service_tool`.
 
         If ``spec`` is supplied it is used verbatim; otherwise a
-        :class:`ServiceSpec` is constructed from the keyword arguments.
-        The original function is returned unchanged so it remains
-        callable from Python without going through the MCP transport.
+        :class:`ServiceSpec` is constructed from the keyword arguments. The
+        original function is returned unchanged, so it stays callable from
+        Python without going through the MCP transport.
         """
 
         def wrap(fn: Callable[..., Any]) -> Callable[..., Any]:
-            # Sister-repo 0.13+ collapsed the flat output fields under
-            # ``output_selector_spec``. Build the nested spec lazily so a
-            # decorator with no output-side declarations doesn't pay the
-            # cost of an empty RetrieveSelector envelope.
+            # Built only when there is something to put in it, so a decorator
+            # with no output-side declarations carries no empty envelope.
             output_selector_spec: SelectorSpec | None = None
             if output_serializer is not None or output_selector is not None:
                 output_selector_spec = SelectorSpec(
@@ -1356,16 +1265,12 @@ class MCPServer:
         """Decorator form of :meth:`register_selector_tool`.
 
         If ``spec`` is supplied it is used verbatim; otherwise a
-        :class:`SelectorSpec` is constructed from the wrapped function
-        and the keyword arguments. The original function is returned
-        unchanged so it remains callable from Python without going
-        through the MCP transport.
+        :class:`SelectorSpec` is constructed from the wrapped function and the
+        keyword arguments. The original function is returned unchanged, so it
+        stays callable from Python without going through the MCP transport.
 
-        ``kind`` is required when ``spec`` is omitted (the decorator
-        auto-constructs a :class:`SelectorSpec` and the spec's own
-        ``kind`` field is mandatory). When ``spec`` is supplied,
-        ``kind`` is read from ``spec.kind`` and any value passed here
-        is ignored.
+        ``kind`` is required when ``spec`` is omitted; otherwise it comes from
+        ``spec.kind`` and any value passed here is ignored.
         """
 
         def wrap(fn: Callable[..., Any]) -> Callable[..., Any]:
@@ -1439,13 +1344,12 @@ class MCPServer:
         """Decorator form: register the wrapped callable as a resource.
 
         If ``spec`` is supplied it is used verbatim; otherwise a
-        :class:`SelectorSpec` is constructed from the wrapped function and
-        the keyword arguments. The original function is returned unchanged
-        so it remains callable from Python without going through the MCP
-        transport.
+        :class:`SelectorSpec` is constructed from the wrapped function and the
+        keyword arguments. The original function is returned unchanged, so it
+        stays callable from Python without going through the MCP transport.
 
-        ``kind`` is required when ``spec`` is omitted; otherwise it
-        comes from ``spec.kind`` and any value passed here is ignored.
+        ``kind`` is required when ``spec`` is omitted; otherwise it comes from
+        ``spec.kind`` and any value passed here is ignored.
         """
 
         def wrap(fn: Callable[..., Any]) -> Callable[..., Any]:
@@ -1562,33 +1466,26 @@ class MCPServer:
     async def notify(self, session_id: str, payload: Any) -> bool:
         """Push a JSON-RPC payload to a session's open SSE stream.
 
-        Returns ``True`` if a subscriber was present, ``False`` if no client
-        is currently connected. Most callers will fire-and-forget — a missed
-        push is not generally an error, since clients can pull state via
-        ``tools/call`` round-trips. The broker enforces single-subscriber
-        semantics: re-subscribing replaces the old queue silently.
+        Returns ``True`` if a subscriber was present, ``False`` if no client is
+        connected — a missed push is not generally an error, since clients pull
+        state via ``tools/call`` round-trips. The broker enforces one
+        subscriber per session: re-subscribing replaces the old queue silently.
 
-        When a :class:`SSEReplayBuffer` is configured the payload is
-        recorded *before* publishing so that:
+        With a :class:`SSEReplayBuffer` configured the payload is recorded
+        *before* publishing, so the frame carries an event ID the SSE generator
+        emits on the wire (``id: <id>\\ndata: <payload>\\n\\n``) and a later
+        reconnect with ``Last-Event-ID`` drains what it missed before resuming
+        live mode. Without a buffer there are no ``id:`` lines and resume is
+        disabled.
 
-        - The published frame carries an event ID the SSE generator emits
-          on the wire (``id: <id>\\ndata: <payload>\\n\\n``).
-        - A subsequent reconnect with ``Last-Event-ID`` can drain the
-          missed events from the buffer before resuming live mode.
-
-        Without a buffer the wire shape is unchanged (no ``id:`` lines)
-        and resume is disabled.
-
-        Multi-process deployments need an out-of-process broker (e.g. Redis
-        pub/sub) to fan out across worker processes; the in-process broker
-        only sees its own worker.
+        Multi-process deployments need an out-of-process broker to fan out
+        across workers; the in-process broker only sees its own.
         """
         if self._sse_replay_buffer is None:
             return await self._sse_broker.publish(session_id, payload)
         event_id: str = await self._sse_replay_buffer.record(session_id, payload)
-        # Wrap so the SSE response generator can emit ``id:`` alongside
-        # ``data:``. The unwrap happens in ``stream_events``; broker
-        # implementations are agnostic to the wrapper shape.
+        # Wrapped so the generator can emit ``id:`` alongside ``data:``;
+        # unwrapped in ``stream_events``. Brokers never see the wrapper shape.
         return await self._sse_broker.publish(
             session_id,
             {"_mcp_event_id": event_id, "_mcp_payload": payload},
@@ -1627,10 +1524,10 @@ class MCPServer:
         """Async URL patterns for ASGI deployments.
 
         The namespaced triple (like :attr:`urls`), but ``tools/call``,
-        ``resources/read``, and ``prompts/get`` dispatch through async-native
-        runners; sync collaborators (auth backend, session store, custom
-        permissions) are bridged via :func:`asgiref.sync.sync_to_async` so a
-        fully sync stack still works. Async-native backends are detected by
+        ``resources/read`` and ``prompts/get`` dispatch through async-native
+        runners. Sync collaborators (auth backend, session store, custom
+        permissions) are bridged via :func:`asgiref.sync.sync_to_async`, so a
+        fully sync stack still works; async-native ones are detected by
         signature and called directly.
         """
         view = AsyncStreamableHttpViewSet.as_view(
@@ -1668,8 +1565,8 @@ class MCPServer:
 def _template_variables(uri_template: str) -> tuple[str, ...]:
     """The ``{var}`` names in a URI template — a resource's completable arguments.
 
-    Duplicated pattern rather than imported from ``ResourceRegistry``: that
-    one compiles templates to matching regexes, and this only needs the names.
+    Not shared with ``ResourceRegistry``: that one compiles templates to
+    matching regexes, and this only needs the names.
     """
     return tuple(re.findall(r"\{([^}]+)\}", uri_template))
 

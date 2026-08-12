@@ -31,12 +31,10 @@ def handle_resources_read(
 ) -> dict[str, Any] | JsonRpcError:
     """Read a resource (or templated-resource instance) by URI.
 
-    Resolves the URI through the registry, builds a kwarg pool from the
-    template variables and request context, runs the selector via
-    :func:`run_selector` (transparently bridging async selectors), and
-    returns one ``ResourceContents`` block. Output is rendered through
-    ``output_serializer`` if declared, then encoded per the binding's
-    ``encoding`` — see :func:`build_resource_contents`.
+    Resolves the URI through the registry, builds a kwarg pool from the template
+    variables and request context, runs the selector via :func:`run_selector`
+    (which bridges async selectors), and returns one ``ResourceContents`` block
+    rendered and encoded by :func:`build_resource_contents`.
     """
     if not isinstance(params, dict):
         return JsonRpcError(
@@ -51,8 +49,8 @@ def handle_resources_read(
     resolved = context.resources.resolve(uri)
     if resolved is None:
         # ``-32002`` with the URI echoed in ``data`` is the spec's own worked
-        # example for this case, so a client that special-cases resource
-        # not-found finds both halves where it expects them.
+        # example, so a client special-casing resource not-found finds both
+        # halves where it expects them.
         return JsonRpcError(
             resource_not_found_code(context.protocol_version),
             f"Unknown resource: {uri!r}",
@@ -88,10 +86,9 @@ def handle_resources_read(
             context.token.user,
             None,
             http_request=context.http_request,
-            # Resources take the closing of the undeclared channel and nothing
-            # more: a resource URI *is* a locator, so per-call read-shaping
-            # belongs in its URI template (whose variables already route to
-            # ``view.kwargs``) rather than in a second registration knob.
+            # Resources close the undeclared channel and take nothing more: a
+            # resource URI *is* a locator, so per-call read-shaping belongs in
+            # its URI template, whose variables already route to ``view.kwargs``.
             query_params={},
         ).request
 
@@ -100,14 +97,13 @@ def handle_resources_read(
             "user": context.token.user,
             **vars_,
         }
-        # URI-template variables are exposed via ``view.kwargs`` so a provider
-        # (and the output serializer's context) can read them without parsing
-        # the URI again.
+        # URI-template variables ride on ``view.kwargs`` so a provider (and the
+        # output serializer's context) reads them without re-parsing the URI.
         view = OfflineServiceView(request=drf_request, action=binding.name, kwargs=dict(vars_))
         if binding.kwargs_provider is not None:
-            # Per-spec kwargs provider from ``SelectorSpec.kwargs``, invoked
-            # through the keyword pool exactly as drf-services invokes it on the
-            # HTTP path — by name, so ``def kwargs(request): ...`` works here too.
+            # ``SelectorSpec.kwargs``, invoked through the keyword pool exactly
+            # as drf-services invokes it on the HTTP path: by name, so
+            # ``def kwargs(request): ...`` works here too.
             provider_pool: dict[str, Any] = {"view": view, "request": drf_request}
             pool.update(
                 binding.kwargs_provider(
@@ -129,9 +125,8 @@ def handle_resources_read(
             ),
         }
         # Same outbound ceiling as a tool result, different envelope: a resource
-        # read has no ``isError`` shape to carry the explanation, so an
-        # over-ceiling read is a protocol error. The message is identical, and
-        # still names the remedy — a model reading a resource can act on it.
+        # read has no ``isError`` shape to carry the explanation, so this is a
+        # protocol error carrying the same remedy-naming message.
         oversize: str | None = enforce_result_bytes(
             result, context.config.max_result_bytes, label=f"Resource {uri!r}"
         )

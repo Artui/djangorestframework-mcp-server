@@ -14,15 +14,13 @@ from rest_framework_mcp.tasks.types.task_record import TaskRecord
 def declares_tasks_extension(context: MCPCallContext) -> bool:
     """Whether *this request* declared the tasks extension.
 
-    Per request, never remembered — the spec says a server must not answer with
-    a task to a client that did not declare on that request, *"regardless of
-    prior declarations"*, and the stateless revision leaves nowhere to remember
-    one anyway.
+    Per request, never remembered: the spec forbids answering with a task to a
+    client that did not declare on that request, *"regardless of prior
+    declarations"*, and the stateless revision leaves nowhere to remember one.
 
-    A legacy-era request declares nothing (its capabilities arrived once, at
-    ``initialize``, and this field is empty for it), so legacy clients never
-    reach the task path. That falls out of the shape rather than being an era
-    branch, which is why there isn't one.
+    A legacy-era request declares nothing — its capabilities arrived once, at
+    ``initialize`` — so legacy clients never reach the task path without an era
+    branch here.
     """
     extensions: Any = context.client_capabilities.get("extensions")
     return isinstance(extensions, dict) and TASKS_EXTENSION_ID in extensions
@@ -31,23 +29,18 @@ def declares_tasks_extension(context: MCPCallContext) -> bool:
 def missing_capability_error() -> JsonRpcError:
     """The ``-32021`` a non-declaring client gets from anything task-shaped.
 
-    ⚠ **Deliberately not the code the extension document prints.** That text
-    says ``-32003`` while annotating it ``MISSING_REQUIRED_CLIENT_CAPABILITY``
-    — the same constant the ratified core schema allocates as **-32021**. The
-    extension is carrying a number from the era when tasks were part of the
-    core protocol, before the error range was repartitioned; ``-32003`` now
-    sits inside ``-32000..-32019``, which the core spec reserves for
-    implementations and says *"the specification will never define codes in
-    this sub-range"*. Following the extension literally would mean emitting a
-    code that, by the core spec's own rule, means nothing across
-    implementations.
-
-    It would also be actively wrong *here*: ``-32003`` is one of the two codes
-    this package burned when its error numbering was corrected, and a client
-    from an older release still reads it as "not found".
+    **Deliberately not the code the extension document prints.** That text says
+    ``-32003`` while annotating it ``MISSING_REQUIRED_CLIENT_CAPABILITY`` — the
+    same constant the ratified core schema allocates as **-32021**. ``-32003``
+    now sits inside ``-32000..-32019``, which the core spec reserves for
+    implementations, saying *"the specification will never define codes in this
+    sub-range"*; emitting it would mean a code that means nothing across
+    implementations. It is also one of the two codes this package burned when
+    its error numbering was corrected, so an older client reads it as "not
+    found".
 
     ``data.requiredCapabilities`` follows the extension's example shape, which
-    is what a client actually reads to learn what to declare.
+    is what a client reads to learn what to declare.
     """
     return JsonRpcError(
         JsonRpcErrorCode.MISSING_REQUIRED_CLIENT_CAPABILITY,
@@ -62,9 +55,8 @@ def unknown_task_error(task_id: Any) -> JsonRpcError:
     Never existed, expired, or belongs to somebody else — all ``-32602``, all
     with the same message. The uniformity is the security property: with no
     ``tasks/list`` and no session to scope by, an id's unguessability is the
-    containment boundary, and an error that distinguished "not yours" from "not
-    found" would turn any endpoint into an oracle confirming which ids are
-    real.
+    containment boundary, and distinguishing "not yours" from "not found" would
+    make any endpoint an oracle for which ids are real.
     """
     return JsonRpcError(JsonRpcErrorCode.INVALID_PARAMS, f"Unknown task: {task_id!r}")
 
@@ -83,10 +75,9 @@ def resolve_task_id(params: dict[str, Any] | None) -> str | JsonRpcError:
 def owned_by_caller(record: TaskRecord, context: MCPCallContext) -> bool:
     """Whether the calling principal is the one the task was created for.
 
-    The same comparison session ownership makes, against the same derived id.
-    It is a second layer rather than the only one — see
-    :func:`unknown_task_error` — but it is the layer that matters when an id
-    leaks through a log, a proxy or a shared client.
+    The same comparison session ownership makes, against the same derived id. A
+    second layer under :func:`unknown_task_error`, and the one that matters when
+    an id leaks through a log, a proxy or a shared client.
     """
     return record.principal_id == principal_for_token(context.token)
 

@@ -51,7 +51,7 @@ def _create(store: Any, executor: Any, **kwargs: Any) -> Task:
 def test_the_task_is_durable_before_the_executor_is_called(
     store: InMemoryTaskStore, executor: RecordingExecutor
 ) -> None:
-    """⚠ Normative, and the one ordering that actually matters.
+    """Normative, and the one ordering that actually matters.
 
     The spec: a server MUST NOT return a task handle until a ``tasks/get`` for
     that id would resolve. A worker on another machine can pick the task up the
@@ -123,7 +123,7 @@ def test_a_failed_hand_off_leaves_the_task_unclaimable(store: InMemoryTaskStore)
 def test_a_finished_task_cannot_be_reopened(
     store: InMemoryTaskStore, executor: RecordingExecutor
 ) -> None:
-    """⚠ The race this exists for: a cancel landing just after completion.
+    """The race this exists for: a cancel landing just after completion.
 
     Nothing here locks, so the second writer would otherwise win and the client
     would be told its finished work never ran.

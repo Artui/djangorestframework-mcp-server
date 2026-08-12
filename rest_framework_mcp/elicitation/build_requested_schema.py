@@ -18,17 +18,14 @@ def build_requested_schema(schema: Mapping[str, Any]) -> dict[str, Any]:
 
     **Required is inferred from ``default``.** A property that declares one has
     said what to do without an answer; one that has not is something the service
-    is waiting for. That is the only signal available and it matches how the
-    same dict would read as a serializer field.
+    is waiting for.
 
-    ⚠ **Raises rather than shipping a schema the client must refuse.** The
-    subset MCP allows here is narrow — *"only top-level properties, without
-    nesting"*, primitives and enums — and a client that receives anything else
-    is entitled to reject the whole result. Sending it anyway would surface as
-    an unexplained client-side failure a long way from the service that caused
-    it, so an unusable schema fails loudly, at the one moment its author can
-    still be told which property is wrong. It is a programming error in the
-    service, which is what ``ImproperlyConfigured`` is for.
+    **Raises rather than shipping a schema the client must refuse.** The subset
+    MCP allows is narrow — *"only top-level properties, without nesting"*,
+    primitives and enums — and a client receiving anything else may reject the
+    whole result. An unusable schema is a programming error in the service, so
+    it fails loudly here, where its author can still be told which property is
+    wrong.
     """
     properties: dict[str, Any] = {}
     required: list[str] = []
@@ -40,9 +37,8 @@ def build_requested_schema(schema: Mapping[str, Any]) -> dict[str, Any]:
 
     built: dict[str, Any] = {"type": "object", "properties": properties}
     if required:
-        # Omitted rather than sent empty when every property carries a default:
-        # ``required: []`` and no ``required`` mean the same thing, and the
-        # shorter one is what the spec's own examples show.
+        # Omitted rather than sent empty: ``required: []`` and no ``required``
+        # mean the same thing, and the spec's own examples show the shorter one.
         built["required"] = required
     return built
 
@@ -55,10 +51,9 @@ def _reject_unusable(name: str, definition: Any) -> None:
             "instead of a schema object. Each value must be a JSON Schema fragment, "
             'e.g. {"type": "boolean"}.'
         )
-    # ⚠ ``str`` first. JSON Schema lets ``type`` be a *list* of types, which is
-    # both something an author might reasonably write and something that raises
-    # ``TypeError: unhashable`` on the membership test below — a crash where a
-    # refusal was wanted.
+    # ``str`` first: JSON Schema lets ``type`` be a *list*, which an author might
+    # reasonably write and which raises ``TypeError: unhashable`` on the
+    # membership test below — a crash where a refusal was wanted.
     declared: Any = definition.get("type")
     if not isinstance(declared, str):
         declared = None

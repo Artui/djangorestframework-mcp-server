@@ -9,28 +9,24 @@ from rest_framework_mcp.contrib.oauth.types.dynamic_client_registration_request 
     DynamicClientRegistrationRequest,
 )
 
-# RFC 7591 §2 ``token_endpoint_auth_method`` values we accept, mapped to the
-# ``Application.CLIENT_*`` value each one implies. Kept in lockstep with
-# ``AuthorizationServerMetadata.token_endpoint_auth_methods_supported`` — a
-# method we advertise but cannot register is exactly the failure this mapping
-# exists to prevent.
+# RFC 7591 §2 ``token_endpoint_auth_method`` values, mapped to the
+# ``Application.CLIENT_*`` value each implies. Must stay in lockstep with
+# ``AuthorizationServerMetadata.token_endpoint_auth_methods_supported``: a
+# method advertised but not registerable is the failure this prevents.
 #
-# The DOT constants are spelled literally rather than imported: this module has
-# to stay importable without the ``[oauth]`` extra, and these strings are the
-# values DOT persists in the ``client_type`` column, so they are a stable
-# contract rather than an implementation detail. ``test_dcr_serializer`` pins
-# them against ``Application`` so drift fails the suite instead of production.
+# The DOT constants are spelled literally, not imported, so this module stays
+# importable without the ``[oauth]`` extra; the tests pin them against
+# ``Application`` so drift fails the suite instead of production.
 _AUTH_METHOD_CLIENT_TYPES = {
     "client_secret_basic": "confidential",
     "client_secret_post": "confidential",
     "none": "public",
 }
 
-# RFC 7591 §2 ``grant_types`` values, mapped to the ``Application.GRANT_*``
-# value DOT stores in its single-valued ``authorization_grant_type`` column
-# (same literal-vs-import reasoning as above). ``refresh_token`` is
-# deliberately absent: it is a modifier rather than a primary grant — DOT
-# issues refresh tokens off the back of whichever grant is configured — so it
+# RFC 7591 §2 ``grant_types``, mapped to the ``Application.GRANT_*`` value DOT
+# stores in its single-valued ``authorization_grant_type`` column.
+# ``refresh_token`` is absent because it is a modifier rather than a primary
+# grant — DOT issues refresh tokens off whichever grant is configured — so it
 # is filtered out before the remaining entry is resolved.
 _GRANT_TYPE_ALIASES = {
     "authorization_code": "authorization-code",
@@ -41,11 +37,10 @@ _GRANT_TYPE_ALIASES = {
 _GRANT_TYPE_RFC_NAMES = {dot: rfc for rfc, dot in _GRANT_TYPE_ALIASES.items()}
 _REFRESH_TOKEN_GRANT = "refresh_token"
 
-# RFC 7591 §2.1: ``response_types`` is a function of the grant, not an
-# independent choice. It has no DOT column, so it is derived from the resolved
-# grant and echoed — never stored. The client-credentials and password grants
-# use the token endpoint directly and reach the authorization endpoint not at
-# all, hence the empty lists.
+# RFC 7591 §2.1: ``response_types`` is a function of the grant, and has no DOT
+# column, so it is derived from the resolved grant and echoed, never stored.
+# The client-credentials and password grants never reach the authorization
+# endpoint, hence the empty lists.
 _GRANT_RESPONSE_TYPES = {
     "authorization-code": ["code"],
     "implicit": ["token"],
@@ -54,32 +49,22 @@ _GRANT_RESPONSE_TYPES = {
 }
 _RESPONSE_TYPES = sorted({rt for types in _GRANT_RESPONSE_TYPES.values() for rt in types})
 
-# RFC 7591 §2 / OIDC Core §2 ``id_token_signed_response_alg``, restricted to the
-# ``Application.ALGORITHM_TYPES`` DOT can actually sign with. OIDC's ``none``
-# (an unsigned ID token) is deliberately absent: DOT's ``jwk_key`` raises for
-# anything that is not RS256 or HS256, so accepting ``none`` would register a
-# client whose very first ID token is a 500 — the failure this list exists to
-# stop. Whether a listed algorithm is *usable* is a server-configuration and
-# client-type question, resolved in the viewset.
+# RFC 7591 §2 / OIDC Core §2 ``id_token_signed_response_alg``, restricted to
+# what DOT can sign with. OIDC's ``none`` is absent: ``jwk_key`` raises for
+# anything but RS256 or HS256, so accepting it would register a client whose
+# first ID token is a 500. Whether a listed algorithm is *usable* depends on
+# server configuration and client type, and is resolved in the viewset.
 _ID_TOKEN_ALGORITHMS = ["HS256", "RS256"]
 
-# OpenID Connect Dynamic Client Registration 1.0 ``application_type``. The MCP
-# spec makes *sending* this a client MUST — an OIDC authorization server
-# derives redirect-URI constraints from it, and an omitted value defaults to
-# ``web``, which conflicts with the ``localhost`` redirect URIs a desktop or
-# CLI client needs.
-#
-# ⚠ This server validates and echoes the value but does **not** enforce those
-# constraints, because it is not acting as an OIDC provider: the spec says
-# non-OIDC servers safely ignore the parameter, and DOT has no column for it.
-# Rejecting a ``web`` client with a localhost redirect URI here would invent a
-# restriction the underlying authorization server does not apply.
+# OIDC Dynamic Client Registration 1.0 ``application_type``. Validated and
+# echoed but **not** enforced: this server is not an OIDC provider, DOT has no
+# column for it, and rejecting a ``web`` client with a localhost redirect URI
+# would invent a restriction the underlying authorization server never applies.
 _APPLICATION_TYPES = ["native", "web"]
 
-# What a registration that named neither vocabulary gets, and — for the
-# reverse direction — the RFC method to echo back to a caller who spelled its
-# intent DOT's way. RFC 7591 §2 defaults an omitted method to
-# ``client_secret_basic``; a DOT-spelled public registration means ``none``.
+# What a registration naming neither vocabulary gets, and — in reverse — the
+# RFC method echoed back to a caller who spelled its intent DOT's way. RFC 7591
+# §2 defaults an omitted method to ``client_secret_basic``.
 _DEFAULT_AUTH_METHOD = "client_secret_basic"
 _DEFAULT_GRANT_TYPE = "authorization_code"
 _CLIENT_TYPE_AUTH_METHODS = {
@@ -91,37 +76,28 @@ _CLIENT_TYPE_AUTH_METHODS = {
 class DynamicClientRegistrationSerializer(DataclassSerializer):
     """RFC 7591 dynamic client registration request shape.
 
-    Wraps :class:`DynamicClientRegistrationRequest` so the validated
-    payload arrives at :class:`DynamicClientRegistrationViewSet` as a typed
-    dataclass instance (via ``.save()``). Field overrides below replace
-    the dataclass-derived auto-generated fields with shapes that
-    actually validate the wire contract:
+    Wraps :class:`DynamicClientRegistrationRequest` so ``.save()`` hands
+    :class:`DynamicClientRegistrationViewSet` a typed dataclass instance. The
+    field overrides replace the dataclass-derived defaults with shapes that
+    validate the wire contract: ``redirect_uris`` is required, non-empty and
+    URL-valued, and ``application_type`` is checked against OIDC's two values
+    and echoed without imposing the redirect-URI constraints an OIDC provider
+    would derive from it.
 
-    - ``redirect_uris`` is required + non-empty + child is a URL.
-    - ``application_type`` is validated against OIDC's two values and
-      echoed. Clients are required by the MCP spec to send it, so it is
-      accepted rather than dropped — but this server imposes none of the
-      redirect-URI constraints an OIDC provider would derive from it.
-    - ``token_endpoint_auth_method`` / ``grant_types`` are the RFC 7591
-      §2 spellings every interoperable client sends. They are the
-      *primary* inputs: :meth:`validate` translates them into DOT's
-      ``client_type`` / ``authorization_grant_type``.
-    - ``client_type`` / ``authorization_grant_type`` are DOT's
-      non-standard spellings, retained as an escape hatch for callers
-      already speaking DOT. They are ``ChoiceField`` with choices sourced
-      from DOT's ``Application`` model constants at instance
-      construction, so a malformed value is rejected per-field before the
-      request ever reaches the database. The lazy import keeps this
-      module importable without the ``[oauth]`` extra.
+    ``token_endpoint_auth_method`` / ``grant_types`` are the RFC 7591 §2
+    spellings every interoperable client sends, and are the *primary* inputs:
+    :meth:`validate` translates them into DOT's ``client_type`` /
+    ``authorization_grant_type``. Those two remain accepted as an escape hatch
+    for callers already speaking DOT, their choices sourced from
+    ``Application``'s constants at instance construction — so a malformed value
+    is rejected per-field before reaching the database, and the lazy import
+    keeps this module usable without the ``[oauth]`` extra.
 
-    Supplying both spellings is allowed only when they agree; a
-    contradiction is a 400 rather than a silent winner, because either
-    choice would hand back a client that cannot complete the flow it
-    registered for.
-
-    Other RFC 7591 fields are silently ignored — DOT doesn't model them
-    and inventing a richer shape would diverge from the underlying
-    authorization server.
+    Supplying both spellings is allowed only when they agree. A contradiction
+    is a 400 rather than a silent winner, since either choice would hand back a
+    client that cannot complete the flow it registered for. Other RFC 7591
+    fields are ignored: DOT does not model them, and inventing a richer shape
+    would diverge from the underlying authorization server.
     """
 
     class Meta:
@@ -165,23 +141,22 @@ class DynamicClientRegistrationSerializer(DataclassSerializer):
             "`web` for a remotely hosted one. Echoed back; not enforced here."
         ),
     )
-    # Choices populated dynamically in ``__init__`` so test environments
-    # without DOT installed don't break import of this module.
+    # Choices are populated in ``__init__`` so this module imports without DOT.
     client_type = serializers.ChoiceField(choices=[], required=False)
     authorization_grant_type = serializers.ChoiceField(choices=[], required=False)
 
     def __init__(self, *args: Any, **kwargs: Any) -> None:
         super().__init__(*args, **kwargs)
-        # Lazy: only inspect DOT model constants when an instance is
-        # constructed (i.e. on a real request). Keeps the module
-        # importable without the ``[oauth]`` extra installed.
+        # DOT's model constants are read only when an instance is constructed,
+        # i.e. on a real request, keeping the module importable without the
+        # ``[oauth]`` extra.
         try:
             from oauth2_provider.models import Application  # type: ignore[import-not-found]
         except ImportError:  # pragma: no cover - exercised by smoke job w/o DOT
             return
-        # ``self.fields[...]`` returns DRF ``Field``; the concrete subclass
-        # here is ``ChoiceField`` which carries a ``choices`` attribute. ty
-        # can't narrow the dict-indexed lookup, so cast through ``Any``.
+        # ``self.fields[...]`` is typed as DRF ``Field``; the concrete class
+        # here is ``ChoiceField``, which carries ``choices``. ty cannot narrow
+        # a dict-indexed lookup, hence the cast.
         cast(Any, self.fields["client_type"]).choices = [
             (Application.CLIENT_CONFIDENTIAL, Application.CLIENT_CONFIDENTIAL),
             (Application.CLIENT_PUBLIC, Application.CLIENT_PUBLIC),
@@ -199,16 +174,14 @@ class DynamicClientRegistrationSerializer(DataclassSerializer):
     def validate(self, attrs: DynamicClientRegistrationRequest) -> DynamicClientRegistrationRequest:
         """Reconcile the RFC 7591 and DOT spellings, in both directions.
 
-        Every caller downstream reads all four fields already populated
-        and mutually consistent, so nobody has to know which vocabulary
-        the client used, and nobody re-applies defaults.
+        Downstream reads all four fields already populated and mutually
+        consistent, so nobody has to know which vocabulary the client used and
+        nobody re-applies defaults.
 
-        ``attrs`` is the dataclass instance built by
-        ``DataclassSerializer.to_internal_value``; it is mutable precisely
-        so normalisation like this can happen in place. Fields the client
-        omitted carry the dataclass defaults (``""`` / ``[]``), neither of
-        which is an accepted choice, so "empty" unambiguously means "not
-        supplied".
+        ``attrs`` is the dataclass ``DataclassSerializer.to_internal_value``
+        built, mutable precisely so normalisation can happen in place. Omitted
+        fields carry the dataclass defaults (``""`` / ``[]``), neither of which
+        is an accepted choice, so "empty" unambiguously means "not supplied".
         """
         if attrs.token_endpoint_auth_method:
             self._apply(

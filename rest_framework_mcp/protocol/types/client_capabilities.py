@@ -20,12 +20,9 @@ class ClientCapabilities:
     """Protocol extensions the client implements, keyed by extension id — how a
     client says it supports MCP Apps (``io.modelcontextprotocol/ui``).
 
-    **Advertisement is one-directional, client → server**: the spec defines no
-    matching server capability, so nothing is sent back. Parsed here for
-    introspection only. Nothing gates on it — the spec merely *SHOULD*-s a
-    check, and remembering it per session would mean widening the pluggable
-    ``SessionStore`` Protocol, which is a breaking change not worth making for
-    metadata that unsupporting clients are required to ignore anyway."""
+    Parsed for introspection only; nothing gates on it, since the spec merely
+    *SHOULD*-s a check and unsupporting clients are required to ignore what they
+    did not ask for."""
 
     def to_dict(self) -> dict[str, Any]:
         out: dict[str, Any] = {}

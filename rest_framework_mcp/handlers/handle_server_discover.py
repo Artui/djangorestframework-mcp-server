@@ -19,26 +19,22 @@ def handle_server_discover(
     """Report this server's protocol versions, capabilities and identity.
 
     A **MUST**-implement method of the ``2026-07-28`` revision and the request a
-    modern client leads with. It answers what ``initialize`` answered, minus the
-    negotiation: nothing is agreed, no state is created, and a client that
-    already knows what it wants may skip it entirely and handle a version error
-    if it guessed wrong.
+    modern client leads with. It answers what ``initialize`` answered minus the
+    negotiation: nothing is agreed and no state is created.
 
-    ⚠ **Answered in both eras, deliberately** — answering it before the
-    transport fork exists is what lets a modern client probe this server today,
-    and a legacy client that never asks is unaffected.
+    **Answered in both eras, deliberately** — answering before the transport
+    fork exists is what lets a modern client probe this server today, and a
+    legacy client that never asks is unaffected.
 
-    ⚠ **But the capabilities are the caller's, not the server's.** The versions
-    and the identity are properties of the endpoint; two of the capabilities are
-    not, because they can only be *reached* by a modern client — see
+    **The capabilities are the caller's, not the server's.** The versions and
+    identity are properties of the endpoint; two of the capabilities are not,
+    since only a modern client can reach them — see
     :func:`~rest_framework_mcp.handlers.handle_initialize.build_capabilities`.
-    So the era comes from what this caller declared, which for a header-less
-    request is the configured default and therefore modern on a modern-only
-    server.
+    The era therefore comes from what this caller declared, which for a
+    header-less request is the configured default.
 
-    ``params`` is accepted and ignored: the request carries no parameters beyond
-    the standard ``_meta``, whose per-request protocol fields belong to the
-    transport rather than to this handler.
+    ``params`` is accepted and ignored: the request carries nothing beyond the
+    standard ``_meta``, which belongs to the transport.
     """
     server_info: Implementation | None = context.server_info
     if server_info is None:
@@ -53,10 +49,9 @@ def handle_server_discover(
         server_info=server_info,
         instructions=context.instructions,
     ).to_dict()
-    # Cacheable, and ``public`` regardless of the listing filter: nothing here
-    # varies by caller. It is the one catalog result that stays shareable even
-    # when ``FILTER_LISTINGS_BY_PERMISSIONS`` is on, because it reports *which*
-    # capabilities exist rather than which bindings this caller may see.
+    # The one catalog result that stays ``public`` even under
+    # ``FILTER_LISTINGS_BY_PERMISSIONS``: it reports *which* capabilities exist,
+    # not which bindings this caller may see, so nothing varies by caller.
     return {
         **result,
         **catalog_cache_hints(

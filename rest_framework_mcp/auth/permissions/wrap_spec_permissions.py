@@ -15,19 +15,13 @@ def wrap_spec_permissions(
 ) -> tuple[DRFPermissionAdapter, ...]:
     """Project a ``Sequence[type[BasePermission]]`` into wrapped ``MCPPermission`` adapters.
 
-    ``permission_classes`` is the value sister-repo's ``ServiceSpec`` /
-    ``SelectorSpec`` carries — a list of DRF ``BasePermission`` **classes**.
-    Each is wrapped in :class:`DRFPermissionAdapter` so it satisfies the MCP
-    permission Protocol. ``None`` and the empty sequence collapse to an empty
-    tuple (the spec author's "no permission contract" sentinel).
+    Each class is wrapped in :class:`DRFPermissionAdapter` so it satisfies the
+    MCP permission Protocol. ``None`` and the empty sequence collapse to an
+    empty tuple — the spec author's "no permission contract" sentinel.
 
-    Misconfigurations (instances instead of classes; non-``BasePermission``
-    subclasses) fail fast with ``TypeError`` — same posture sister-repo
-    enforces at ``as_view()`` time, surfaced here at registration so the
-    error is visible during development rather than first request.
-
-    ``label`` is the binding name; it's woven into the error message so a
-    developer registering many tools knows which one is misconfigured.
+    Misconfigurations (an instance instead of a class, a non-``BasePermission``
+    subclass) raise ``TypeError`` at registration rather than on first request,
+    naming ``label`` so a project registering many tools knows which one.
     """
     if not permission_classes:
         return ()

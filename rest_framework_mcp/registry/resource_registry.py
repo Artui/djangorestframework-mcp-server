@@ -10,8 +10,8 @@ _TEMPLATE_VAR = re.compile(r"\{([^}]+)\}")
 def _template_to_pattern(uri_template: str) -> re.Pattern[str]:
     """Compile an RFC 6570 (subset) URI template to a regex.
 
-    We only support simple ``{var}`` placeholders — enough for the
-    ``scheme://{lookup}`` shape this package actually emits.
+    Simple ``{var}`` placeholders only — enough for the ``scheme://{lookup}``
+    shape this package emits.
     """
     parts: list[str] = []
     last: int = 0
@@ -24,11 +24,11 @@ def _template_to_pattern(uri_template: str) -> re.Pattern[str]:
 
 
 class ResourceRegistry:
-    """URI / URI-template → :class:`ResourceBinding` lookup.
+    """URI or URI-template to :class:`ResourceBinding` lookup.
 
-    Concrete resources (no template variables) are matched by exact URI;
-    templates are matched by regex derived from the template. ``resolve``
-    returns the binding plus the variable bindings extracted from the URI.
+    Concrete resources are matched by exact URI, templates by a regex derived
+    from the template. :meth:`resolve` returns the binding plus the variables
+    extracted from the URI.
     """
 
     def __init__(self) -> None:
@@ -53,9 +53,8 @@ class ResourceRegistry:
     def by_uri_template(self, uri_template: str) -> ResourceBinding | None:
         """Exact lookup on the registered template string.
 
-        Distinct from :meth:`resolve`, which matches a *concrete* URI against
-        each template's pattern. A caller holding the template itself — the
-        completion API's ``ref/resource``, say — must not go through that:
+        A caller holding the template itself — the completion API's
+        ``ref/resource``, say — must use this rather than :meth:`resolve`:
         ``things://{pk}`` satisfies its own pattern with ``pk="{pk}"``, so
         ``resolve`` would answer, plausibly and wrongly.
         """

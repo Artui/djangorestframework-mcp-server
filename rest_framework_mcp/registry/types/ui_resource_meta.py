@@ -13,19 +13,20 @@ class UIResourceMeta:
     """What a host needs to know to render an interactive view.
 
     Serialises into the resource's ``_meta`` under the Apps extension's key.
-    Typed here, at the registration parameter, rather than in the wire types:
-    ``_meta`` itself is an open namespace shared by every extension, so it
-    stays a free-form dict at the boundary while each extension keeps its own
-    closed shape on the way in.
+    Typed at the registration parameter rather than in the wire types, because
+    ``_meta`` is an open namespace shared by every extension: it stays a
+    free-form dict at the boundary while each extension keeps its own closed
+    shape on the way in.
 
-    - ``csp`` — origins the view needs; see :class:`UICsp`.
-    - ``permissions`` — browser capabilities the view would use. The host
-      decides whether to grant them.
-    - ``domain`` — a stable identity for the view's origin, letting a host
-      group views from the same publisher (e.g. for a single consent prompt)
-      rather than treating every URI as unrelated.
-    - ``prefers_border`` — a rendering hint: the view looks better with the
-      host's chrome around it. A hint, not a requirement.
+    Attributes:
+        csp: Origins the view needs; see :class:`UICsp`.
+        permissions: Browser capabilities the view would use. The host decides
+            whether to grant them.
+        domain: A stable identity for the view's origin, letting a host group
+            views from one publisher — for a single consent prompt, say —
+            rather than treating every URI as unrelated.
+        prefers_border: Rendering hint that the view looks better with the
+            host's chrome around it. A hint, not a requirement.
     """
 
     csp: UICsp | None = None

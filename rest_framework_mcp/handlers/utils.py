@@ -45,25 +45,15 @@ def split_url_kwargs(
 ) -> tuple[dict[str, Any], dict[str, Any]]:
     """Split ``arguments`` into ``(params, url_kwarg_values)``.
 
-    ``url_kwarg_values`` carries each declared :class:`UrlKwarg`'s value — the one
-    the model supplied, else its ``default`` when set, else absent — to seed into
-    ``build_offline_context(kwargs=…)`` / ``OfflineServiceView.kwargs``. ``params``
-    is ``arguments`` with the URL-kwarg names removed, so a value routes **only**
-    through the view kwargs (from where drf-services spreads it, authoritative
-    over params) and never reaches the spec as an ordinary input.
+    Each declared kwarg takes the model's value, else its ``default``, else stays
+    absent; the name is removed from ``params`` so the value routes only through
+    ``view.kwargs`` (authoritative over params) and never also reaches the spec
+    as an ordinary input. Non-mutating.
 
-    A kwarg registered ``required=True`` that the model omitted raises
-    :exc:`ServiceValidationError`, which the handlers already map to an
-    ``isError: true`` validation tool result. Advertising ``required`` in the
-    schema is only a hint — models omit required arguments routinely — so
-    without this the value would simply be missing at dispatch and the spec
-    would fail somewhere less legible. (Registration forbids pairing
-    ``required`` with a ``default``, so a required kwarg is never satisfiable
-    from the declaration itself.)
-
-    Non-mutating. When ``url_kwargs`` is empty the original ``arguments`` dict is
-    returned as ``params`` unchanged (no copy), preserving the pre-feature
-    behaviour exactly.
+    A ``required=True`` kwarg the model omitted raises
+    :exc:`ServiceValidationError` here rather than failing further down:
+    ``required`` in the schema is only a hint, and registration forbids pairing
+    it with a ``default``.
     """
     if not url_kwargs:
         return arguments, {}
@@ -91,24 +81,14 @@ def split_query_params(
 ) -> tuple[dict[str, Any], dict[str, Any]]:
     """Split ``arguments`` into ``(params, query_param_values)``.
 
-    The sibling of :func:`split_url_kwargs`, and simpler: a
-    :class:`QueryParam` carries no ``required`` flag, so there is nothing to
-    raise about. Each declared param takes the value the model supplied, else its
-    ``default`` when set, else stays absent — and its name is removed from
-    ``params`` so the value routes **only** to ``request.query_params`` and never
-    reaches the spec as an ordinary input.
+    The sibling of :func:`split_url_kwargs`, minus the ``required`` flag a
+    :class:`QueryParam` does not carry. Popping the name also keeps a query param
+    out of ``unknown_arguments``.
 
-    That popping is what keeps a query param out of ``unknown_arguments``: by the
-    time the policy runs, the name is gone from the arguments entirely.
-
-    ⚠ A ``filter_set`` field is **not** a query param and must not be declared as
-    one. Filter fields are already generated into the tool schema and flow
-    through as ordinary ``params``, which is where ``dispatch_spec`` reads them
-    (as ``filter_data``); declaring one here would pop it out of the args and it
-    would silently stop filtering.
-
-    Non-mutating. With no declarations the original ``arguments`` dict is
-    returned unchanged (no copy).
+    A ``filter_set`` field is **not** a query param. Filter fields are already in
+    the tool schema and flow through as ordinary ``params``, which is where
+    ``dispatch_spec`` reads them (as ``filter_data``); declaring one here pops it
+    out of the args and it silently stops filtering.
     """
     if not query_params:
         return arguments, {}
@@ -126,10 +106,9 @@ def split_query_params(
 def binding_input_serializer(binding: Any) -> type | None:
     """The serializer a binding actually validates ``arguments`` against.
 
-    A service tool validates against its ``spec.input_serializer``; a selector
-    tool against the MCP-only ``binding.input_serializer``; a chain tool against
-    its ``resolved_input_serializer`` (explicit or first-step fallback). ``None``
-    means the binding has no serializer, so there is nothing to validate against.
+    A service tool uses ``spec.input_serializer``, a selector tool the MCP-only
+    ``binding.input_serializer``, a chain tool its ``resolved_input_serializer``.
+    ``None`` means there is nothing to validate against.
     """
     if isinstance(binding, SelectorToolBinding):
         return binding.input_serializer
@@ -141,15 +120,10 @@ def binding_input_serializer(binding: Any) -> type | None:
 def advertises_closed_schema(binding: Any) -> bool:
     """Whether ``tools/list`` may stamp ``additionalProperties: false`` for ``binding``.
 
-    A closed schema is honest only when the runtime *actually* rejects unknown
-    keys. ``REJECT`` is a silent no-op for a **serializer-less** binding: a
-    service with no ``input_serializer`` is downgraded to IGNORE / PASSTHROUGH by
-    :func:`services_dispatch_policies`, and the read-path validator
-    (:func:`build_validated_input_serializer`) short-circuits before the
-    unknown-key check when there is no serializer. In both cases undeclared keys
-    are accepted, so the advertised schema must stay open. A binding therefore
-    advertises a closed schema only under ``REJECT`` *and* with a serializer to
-    validate against.
+    ``REJECT`` is a silent no-op for a serializer-less binding —
+    :func:`services_dispatch_policies` downgrades it and
+    :func:`build_validated_input_serializer` short-circuits before the
+    unknown-key check — so advertising a closed schema there would be a lie.
     """
     return (
         binding.unknown_arguments is UnknownArguments.REJECT
@@ -160,21 +134,14 @@ def advertises_closed_schema(binding: Any) -> bool:
 def services_dispatch_policies(binding: Any) -> tuple[ArgumentBinding, UnknownArguments]:
     """The ``(argument_binding, unknown_arguments)`` to pass ``dispatch_spec``.
 
-    The binding's enums are drf-services' own (re-exported), so the binding
-    value passes straight through; only the ``unknown_arguments`` choice is
-    refined to preserve MCP's historical behaviour:
-
-    - A **selector** is validated by the MCP layer against its own
-      ``inputSchema`` (the binding's ``input_serializer`` + filter-set fields +
-      post-fetch knobs) *before* dispatch, so the neutral core must not
-      re-reject: its declared set is only the selector signature, which excludes
-      filter / ordering / pagination args. Always ``IGNORE``.
-    - A **service with no ``input_serializer``** has an empty declared set, so
-      MCP's old "unknown-args policy short-circuits, raw args spread when
-      spreading" maps to ``PASSTHROUGH`` under the ``SPREAD_*`` bindings (raw
-      args still reach the callable) and ``IGNORE`` under ``BUNDLE`` (raw args
-      drop, ``data`` stays ``None``) — never a rejection against an empty set.
-    - Otherwise the service binding's own ``unknown_arguments`` carries over.
+    The binding value passes straight through; only ``unknown_arguments`` is
+    refined. A **selector** is already validated by the MCP layer against its own
+    ``inputSchema``, which is wider than the selector signature (filter /
+    ordering / pagination), so the neutral core must not re-reject: always
+    ``IGNORE``. A **service with no ``input_serializer``** has an empty declared
+    set, so rejecting against it is never right — ``PASSTHROUGH`` under the
+    ``SPREAD_*`` bindings (raw args still reach the callable), ``IGNORE`` under
+    ``BUNDLE``. Otherwise the binding's own value carries over.
     """
     argument_binding = binding.argument_binding
     if not isinstance(binding.spec, ServiceSpec):
@@ -195,23 +162,14 @@ def permission_verdict(perm: Any, result: Any, *, method: str, effect: str) -> A
 
     Shared by :func:`check_permissions` and
     :func:`rest_framework_mcp.handlers.is_binding_listable.is_binding_listable`
-    so the two places a consumer-supplied permission is consulted cannot drift
-    on whether ``async def`` is allowed. It is not.
+    so the two places a consumer-supplied permission is consulted cannot drift on
+    whether ``async def`` is allowed. It is not.
 
-    ⚠ **This fails open without the guard, on *both* transports.**
-    :class:`~rest_framework_mcp.auth.permissions.types.mcp_permission.MCPPermission`
-    declares ``has_permission`` as a plain ``def`` returning ``bool``, and
-    nothing awaits it anywhere: the async path reaches these hooks through
-    ``acall(check_permissions, …)``, which bridges *this* function — a sync
-    one — and takes the thread hop, leaving an ``async def has_permission``
-    inside it exactly as un-awaited as on WSGI. A coroutine is truthy, so
-    ``not result`` is ``False`` and the caller is granted.
-
-    ⭐ **Refusing costs nothing, which is what makes it the easy call.** The
-    behaviour it replaces is a silent, total bypass — so refusing is strictly
-    better whether or not async permissions are ever supported, and it does not
-    foreclose supporting them later. A permission that genuinely needs to await
-    can wrap the work in :func:`asgiref.sync.async_to_sync` today.
+    **Without the guard this fails open on both transports.** Nothing awaits
+    these hooks: the async path reaches them through ``acall``, which bridges
+    this sync function, leaving an ``async def has_permission`` as un-awaited as
+    on WSGI — and a coroutine is truthy, so the caller is granted. A permission
+    that must await wraps the work in :func:`asgiref.sync.async_to_sync`.
     """
     return reject_awaitable(
         result,
@@ -232,22 +190,18 @@ def check_permissions(
 ) -> tuple[bool, list[str]]:
     """Return ``(allowed, required_scopes)`` after evaluating every permission.
 
-    Permissions are AND-combined (all must pass). The aggregated
-    ``required_scopes`` from any permission that *would* deny is returned so
-    the transport can surface them in the ``WWW-Authenticate`` header.
+    Permissions are AND-combined. The aggregated ``required_scopes`` from any
+    permission that would deny is returned so the transport can surface them in
+    the ``WWW-Authenticate`` header.
     """
     required: list[str] = []
     allowed: bool = True
     for perm in permissions:
-        # ⚠ **No ``isinstance`` gate here.** This used to skip anything that
-        # failed ``isinstance(perm, MCPPermission)`` — and because the Protocol
-        # is ``runtime_checkable``, that means *every* member, including
-        # ``required_scopes``, which the Protocol itself documents as having an
-        # implied ``[]`` default. A permission implementing only the gate was
-        # therefore honoured by ``is_binding_listable`` (which duck-types) and
-        # silently **skipped** here: the binding vanished from listings while
-        # the call went through. Registration now refuses anything without
-        # ``has_permission``, so there is nothing left to defend against.
+        # Do not gate this loop on ``isinstance(perm, MCPPermission)``: the
+        # Protocol is ``runtime_checkable``, so that demands *every* member
+        # including ``required_scopes``, and a gate-only permission would be
+        # honoured by the duck-typing ``is_binding_listable`` but skipped here —
+        # vanishing from listings while the call goes through.
         verdict = permission_verdict(
             perm,
             perm.has_permission(http_request, token),
@@ -270,17 +224,12 @@ def consume_rate_limits(
     """Run every rate limiter in order, returning the largest retry-after.
 
     Each limiter's ``consume`` updates its quota atomically and returns the
-    suggested retry-after-seconds or ``None`` to allow. The handler stops at
-    the first denial (no point further consuming quota when the call is
-    already going to fail), so listing several limits per binding works as
-    "deny if any of these is exhausted".
+    suggested retry-after-seconds, or ``None`` to allow. The first denial stops
+    the loop, so several limits per binding read as "deny if any is exhausted".
 
-    ⚠ **The one member of the awaitable-in-a-decision family that fails
-    closed** — and it is guarded anyway. A coroutine is not ``None``, so an
-    ``async def consume`` denies every call rather than allowing it, but it
-    denies with the coroutine object standing in for the retry-after seconds:
-    an unserialisable ``retryAfter`` in the error payload and a permanent
-    outage with no legible cause. Refusing at the source names the limiter.
+    An ``async def consume`` is refused rather than run: a coroutine is not
+    ``None``, so it would deny every call with the coroutine object standing in
+    for the retry-after seconds.
     """
     for limiter in rate_limits:
         if not isinstance(limiter, MCPRateLimit):  # defensive — caught at registration
@@ -306,13 +255,10 @@ def consume_rate_limits(
 def effective_rate_limits(binding: Any, context: MCPCallContext) -> tuple[Any, ...]:
     """A tool binding's rate limiters, or none when this dispatch must not charge.
 
-    The one case that returns nothing is a task worker replaying a call whose
-    limits were already consumed when the client made the request. See
-    ``MCPCallContext.enforce_rate_limits`` for why that is charged once at the
-    front rather than once in each place the work happens.
-
-    Only the tool paths consult this — resources, prompts and completions have
-    no task equivalent, so their limiters are always live.
+    Nothing is charged for a task worker replaying a call whose limits the client
+    already consumed; see ``MCPCallContext.enforce_rate_limits``. Only the tool
+    paths consult this — resources, prompts and completions have no task
+    equivalent.
     """
     return binding.rate_limits if context.enforce_rate_limits else ()
 
@@ -328,50 +274,34 @@ def build_validated_input_serializer(
 ) -> tuple[Any, drf_serializers.Serializer | None]:
     """Validate ``arguments``; return ``(validated, bound_serializer)``.
 
-    The validator for the **read-shaped** transport paths (selector tools and
-    chain steps), where the input is a flat, instance-free arg map.
-    Service-tool validation now flows through drf-services' ``dispatch_spec``
-    (instance resolution, ``input_serializer_context``, the bundle/spread
-    pool), so the instance-aware variant lives there.
+    The validator for the read-shaped paths (selector tools and chain steps),
+    where the input is a flat, instance-free arg map. Service-tool validation
+    flows through drf-services' ``dispatch_spec`` instead.
 
-    ``context`` is the serializer context — callers pass the
-    ``base_serializer_context`` baseline, so a validator reading
-    ``self.context["request"]`` (a user-scoped ``PrimaryKeyRelatedField``
-    queryset, an ownership check in ``validate()``) behaves as it does behind a
-    DRF view. Omitted → the serializer is built without a context, as before.
+    Args:
+        arguments: The raw arg map off the wire.
+        input_serializer: A DRF serializer class, a bare ``@dataclass`` (wrapped
+            in a ``DataclassSerializer``), or ``None``.
+        unknown_arguments: What to do with keys outside the declared set.
+            Reserved pool seeds and post-fetch keys are always exempt, and never
+            merged under ``PASSTHROUGH`` — the dispatch pipeline owns them, so a
+            client must not be able to poison them.
+        additional_known_keys: Widens the known set beyond the serializer's own
+            fields; selector tools pass their filter / ordering / pagination keys.
+        partial: Relaxes required-field validation. MCP has no HTTP method to
+            derive partiality from, so the read paths default to full validation.
+        context: Serializer context — callers pass ``base_serializer_context`` so
+            a validator reading ``self.context["request"]`` behaves as it does
+            behind a DRF view.
 
-    ``validated`` is:
-      - the dataclass instance produced by a ``DataclassSerializer`` (when
-        ``input_serializer`` is a bare ``@dataclass`` — auto-wrapped),
-      - the ``validated_data`` dict for a plain DRF ``Serializer``,
-      - ``None`` when ``input_serializer`` is ``None``.
+    Returns:
+        The dataclass instance for a ``DataclassSerializer``, the
+        ``validated_data`` dict for a plain ``Serializer``, or ``None`` for no
+        serializer; paired with the bound serializer.
 
-    Raises :class:`drf_serializers.ValidationError` on invalid input.
-
-    ``partial`` relaxes required-field validation; the read paths default to
-    full validation (``False``).
-
-    ``partial`` mirrors sister-repo 0.16's ``spec.partial``: MCP has no
-    HTTP method to derive partiality from, so ``False`` (full validation)
-    is the default and the spec's explicit flag is the only way to relax
-    it. ``instance`` (when supplied) is the row resolved by
-    ``spec.instance_selector_spec`` — the serializer is constructed
-    DRF-style (``serializer(instance, data=..., partial=...)``) so
-    instance-dependent ``validate()`` / field validators see
-    ``self.instance`` identically over MCP and HTTP.
-
-    ``unknown_arguments`` (default :attr:`UnknownArguments.REJECT`) controls
-    what happens to ``arguments`` keys that aren't part of the binding's
-    declared field set. ``additional_known_keys`` lets the caller widen
-    the "known" set beyond the serializer's own fields — selector tools
-    pass in their filter / ordering / pagination keys here, so they're
-    not seen as "unknown".
-
-    Reserved transport-pool seeds (``request`` / ``user`` / ``data`` /
-    ``instance`` / ``serializer``) and selector-tool post-fetch keys
-    (``ordering`` / ``page`` / ``limit``) are always exempted from the
-    unknown-key check; the dispatch pipeline handles them and they never
-    legitimately reach validation as user-typed args.
+    Raises:
+        drf_serializers.ValidationError: On invalid or, under ``REJECT``,
+            unknown input.
     """
     if input_serializer is None:
         return None, None
@@ -409,13 +339,9 @@ def build_validated_input_serializer(
     serializer.is_valid(raise_exception=True)
     validated: Any = serializer.validated_data
 
-    # ``PASSTHROUGH``: merge truly-unknown user keys onto the validated
-    # dict. Only meaningful when ``validated`` is dict-shaped (plain
-    # ``Serializer`` output); ``DataclassSerializer`` returns a dataclass
-    # instance which isn't a merge target — those bindings get
-    # ``IGNORE``-equivalent behaviour even under ``PASSTHROUGH``.
-    # Reserved keys (pool seeds, post-fetch) are excluded from the merge
-    # so clients can't poison transport-controlled state.
+    # A ``DataclassSerializer`` returns a dataclass instance, which is not a
+    # merge target, so those bindings get IGNORE-equivalent behaviour even under
+    # PASSTHROUGH.
     if unknown_keys and unknown_arguments is UnknownArguments.PASSTHROUGH:
         merge_keys: set[str] = unknown_keys - RESERVED_POOL_SEEDS - RESERVED_POST_FETCH_KEYS
         if isinstance(validated, dict):
@@ -435,9 +361,8 @@ def validate_input_against_serializer(
 ) -> Any:
     """Validate ``arguments`` against ``input_serializer``; return ``validated`` only.
 
-    Thin wrapper over :func:`build_validated_input_serializer` (see there
-    for the full semantics) for callers that don't need the bound
-    serializer — the selector-tool and chain-tool paths.
+    Thin wrapper over :func:`build_validated_input_serializer` (see there for the
+    full semantics) for callers that don't need the bound serializer.
     """
     validated, _serializer = build_validated_input_serializer(
         arguments,
@@ -452,12 +377,10 @@ def validate_input_against_serializer(
 def validation_error_data(detail: Any, value: Any, *, include_value: bool) -> dict[str, Any]:
     """Build the ``data`` payload for a JSON-RPC validation error.
 
-    Always carries the per-field ``detail`` shape that DRF / sister-repo
-    validation produces. When ``include_value`` (the server's
-    ``MCPConfig.include_validation_value``) is True, ``value`` is also echoed back — useful for debugging schema
-    mismatches against opaque client SDKs. Off by default because the value
-    may carry sensitive payloads (PII, secrets) consumers don't want flowing
-    back to the client or appearing in client-side logs.
+    Always carries the per-field ``detail`` shape DRF produces.
+    ``include_value`` (the server's ``MCPConfig.include_validation_value``) also
+    echoes ``value`` back; off by default because it may carry PII or secrets
+    that must not flow back to the client or into client-side logs.
     """
     payload: dict[str, Any] = {"detail": detail}
     if include_value:
@@ -468,15 +391,10 @@ def validation_error_data(detail: Any, value: Any, *, include_value: bool) -> di
 def resolve_bound(override: Any, default: Any) -> Any:
     """Resolve a per-binding outbound bound against the server's default.
 
-    ``UNSET`` means the binding said nothing → take the server's value. Any
-    other value — including ``None``, which means *no ceiling* — is the
-    binding's deliberate answer and wins.
-
-    The three bounds (``max_result_bytes`` / ``max_page_size`` /
-    ``dispatch_timeout``) all need this shape because ``None`` is a meaningful
-    setting for each, so the tri-state ``None``-is-default idiom the
-    ``include_*`` flags use would make "no ceiling for this one tool"
-    inexpressible.
+    ``UNSET`` means the binding said nothing; any other value — including
+    ``None``, meaning *no ceiling* — is the binding's deliberate answer and wins.
+    All three bounds need this shape because a ``None``-is-default idiom would
+    make "no ceiling for this one tool" inexpressible.
     """
     return default if isinstance(override, UnsetType) else override
 
@@ -484,12 +402,10 @@ def resolve_bound(override: Any, default: Any) -> Any:
 def resource_not_found_code(protocol_version: str) -> JsonRpcErrorCode:
     """Which code a missing ``resources/read`` target gets, by era.
 
-    The one place the two eras genuinely disagree on a wire value. ``-32002``
-    is what ``2025-11-25`` names for "Resource not found"; ``2026-07-28``
-    retired it in favour of ``-32602`` while telling clients to keep
-    *recognising* the old one — so a dual-era server has to answer each caller
-    in the vocabulary that caller reads, and neither value is safe to emit to
-    both.
+    The one place the two eras disagree on a wire value. ``2025-11-25`` names
+    ``-32002`` for "Resource not found"; ``2026-07-28`` retired it for
+    ``-32602`` while telling clients to keep *recognising* the old one, so
+    neither value is safe to emit to both.
     """
     if protocol_version in MODERN_PROTOCOL_VERSIONS:
         return JsonRpcErrorCode.INVALID_PARAMS
@@ -499,16 +415,11 @@ def resource_not_found_code(protocol_version: str) -> JsonRpcErrorCode:
 def catalog_cache_hints(*, ttl_ms: int, filtered_by_permissions: bool) -> dict[str, Any]:
     """``ttlMs`` / ``cacheScope`` for a catalog result.
 
-    Covers ``server/discover`` and the four list methods, which the spec makes
-    cacheable and which share one answer: the catalog is fixed for the life of
-    the process, and whether it is *shareable* depends on one thing only.
-
-    ⚠ **``cacheScope`` is derived from ``FILTER_LISTINGS_BY_PERMISSIONS``, not
-    configured.** With filtering on, a listing is a function of the caller's
-    permissions, so labelling it ``public`` would licence a shared proxy to
-    serve one tenant's visible tools to another. With filtering off, every
-    caller gets byte-identical output and ``public`` is both true and useful.
-    Neither is a preference, which is why there is no setting for it.
+    Covers ``server/discover`` and the four list methods. ``cacheScope`` is
+    derived from ``FILTER_LISTINGS_BY_PERMISSIONS``, not configured: with
+    filtering on a listing is a function of the caller's permissions, so
+    ``public`` would licence a shared proxy to serve one tenant's visible tools
+    to another.
     """
     scope = CacheScope.PRIVATE if filtered_by_permissions else CacheScope.PUBLIC
     return {"ttlMs": ttl_ms, "cacheScope": scope.value}
@@ -517,11 +428,9 @@ def catalog_cache_hints(*, ttl_ms: int, filtered_by_permissions: bool) -> dict[s
 def resource_cache_hints(ttl_ms: int) -> dict[str, Any]:
     """``ttlMs`` / ``cacheScope`` for a ``resources/read`` result.
 
-    Always ``private``. A resource body is whatever the binding's selector
-    produced *for this caller* — it ran with their user in the kwarg pool and
-    their permissions already checked — so there is no configuration under
-    which sharing it across authorization contexts is correct. The TTL is the
-    only knob, and it defaults to ``0``.
+    Always ``private``: the body is whatever the binding's selector produced for
+    *this* caller, so sharing it across authorization contexts is never correct.
+    The TTL is the only knob.
     """
     return {"ttlMs": ttl_ms, "cacheScope": CacheScope.PRIVATE.value}
 
@@ -529,13 +438,9 @@ def resource_cache_hints(ttl_ms: int) -> dict[str, Any]:
 def enforce_result_ceiling(result: Any, *, max_result_bytes: int | None, label: str) -> Any:
     """Replace an over-ceiling tool result with an ``isError`` result.
 
-    Applied once per handler, to the finished result, so every dispatch path
-    (service / selector / chain) is covered by one check and the measurement
-    sees what actually goes on the wire.
-
-    A :class:`JsonRpcError` passes through untouched: it is a protocol-level
-    failure whose size is bounded by its own message, and rewriting it as a
-    tool result would change the envelope the client is waiting for.
+    Applied once per handler, to the finished result, so every dispatch path is
+    covered by one check that sees what goes on the wire. A :class:`JsonRpcError`
+    passes through — rewriting it would change the envelope the client awaits.
     """
     if isinstance(result, JsonRpcError):
         return result
@@ -551,16 +456,11 @@ async def run_with_deadline(coro: Awaitable[Any], seconds: float | None) -> Any:
     ``None`` awaits without a deadline, so callers can hand the resolved bound
     straight in.
 
-    ⚠ **This does not stop the work.** ``wait_for`` cancels the *task*, and a
-    task parked in ``sync_to_async`` — which is where every ORM-backed spec
-    spends its time — is waiting on a thread that asyncio cannot interrupt. The
-    thread runs to completion (or until the database ends the query) regardless.
-    What the deadline gives the client is a terminal response instead of an open
-    request that never resolves; pair it with a database statement timeout for
-    the other half.
-
-    ``asyncio.wait_for`` rather than ``asyncio.timeout``: the latter is 3.11+
-    and this package supports 3.10.
+    **This does not stop the work.** ``wait_for`` cancels the *task*, and a task
+    parked in ``sync_to_async`` — where every ORM-backed spec spends its time —
+    waits on a thread asyncio cannot interrupt. The deadline buys the client a
+    terminal response, not a stopped query; pair it with a database statement
+    timeout. ``asyncio.wait_for`` rather than ``asyncio.timeout``, which is 3.11+.
     """
     if seconds is None:
         return await coro

@@ -24,10 +24,8 @@ async def handle_prompts_get_async(
 ) -> dict[str, Any] | JsonRpcError:
     """Async sibling of :func:`handle_prompts_get`.
 
-    The render callable is dispatched via :func:`acall` so genuinely async
-    render functions await directly, while sync ones run in a thread.
-    Validation, normalisation, and permission checks are CPU-only and run
-    inline.
+    The render callable is dispatched via :func:`acall`, so an async render
+    function awaits directly and a sync one runs in a thread.
     """
     if not isinstance(params, dict):
         return JsonRpcError(JsonRpcErrorCode.INVALID_PARAMS, "prompts/get params must be an object")
@@ -85,11 +83,8 @@ async def handle_prompts_get_async(
             context.token.user,
             None,
             http_request=context.http_request,
-            # A prompt renders messages — no queryset, no serializer — so there
-            # is nothing here to read ``request.query_params``. Passed anyway so
-            # the endpoint's own query string can never reach one if that
-            # changes: what the synthetic ``GET`` holds is this package's choice
-            # at every call site, not the client's.
+            # See the sync sibling: nothing here reads ``request.query_params``,
+            # and the empty mapping keeps the endpoint's own out if that changes.
             query_params={},
         ).request
         pool: dict[str, Any] = {

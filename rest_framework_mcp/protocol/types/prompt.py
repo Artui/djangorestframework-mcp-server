@@ -11,9 +11,9 @@ from rest_framework_mcp.protocol.types.prompt_argument import PromptArgument
 class Prompt:
     """An MCP prompt descriptor as returned by ``prompts/list``.
 
-    A prompt is a server-defined template the client invokes by name to get
-    back a sequence of LLM messages. Arguments are filled in at
-    ``prompts/get`` time and threaded into the rendering callable as kwargs.
+    A server-defined template the client invokes by name to get back a sequence
+    of LLM messages. Arguments are filled in at ``prompts/get`` time and
+    threaded into the rendering callable as kwargs.
     """
 
     name: str
@@ -21,14 +21,10 @@ class Prompt:
     title: str | None = None
     arguments: list[PromptArgument] = field(default_factory=list)
     annotations: dict[str, Any] | None = None
-    # Base-protocol ``_meta`` bundle. Free-form dict at this wire boundary
-    # because ``_meta`` is MCP's open extension namespace (see
-    # :class:`~rest_framework_mcp.protocol.types.tool.Tool`).
     meta: dict[str, Any] | None = None
 
     icons: tuple[Icon, ...] = ()
-    """Display icons for this entry. Emitted only when non-empty — the
-    spec makes ``icons`` optional and an empty array carries no meaning."""
+    """Display icons for this entry, emitted only when non-empty."""
 
     def to_dict(self) -> dict[str, Any]:
         out: dict[str, Any] = {"name": self.name}

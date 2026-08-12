@@ -130,7 +130,7 @@ def test_a_permission_implementing_only_the_gate_is_accepted() -> None:
 
 
 def test_a_gate_only_permission_denies_at_dispatch_as_well_as_in_listings() -> None:
-    """⚠ The second bug this closes.
+    """The second bug this closes.
 
     ``is_binding_listable`` duck-types and honoured such a permission, while
     ``check_permissions`` skipped anything failing ``isinstance(...)`` against

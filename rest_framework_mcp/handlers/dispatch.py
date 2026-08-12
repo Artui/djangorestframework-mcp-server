@@ -44,10 +44,9 @@ _HANDLERS: dict[str, _HandlerFn] = {
     "prompts/list": handle_prompts_list,
     "prompts/get": handle_prompts_get,
     "completion/complete": handle_completion_complete,
-    # The tasks extension. Registered unconditionally, like every other method:
-    # a server running no tasks answers them with "unknown task" rather than
-    # "unknown method", which is the more useful thing to tell a client that
-    # holds an id and wants to know whether it is still good.
+    # The tasks extension, registered unconditionally like every other method:
+    # a server running no tasks answers "unknown task" rather than "unknown
+    # method", which is more useful to a client holding an id.
     "tasks/get": handle_tasks_get,
     "tasks/update": handle_tasks_update,
     "tasks/cancel": handle_tasks_cancel,

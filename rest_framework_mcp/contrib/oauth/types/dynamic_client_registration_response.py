@@ -8,28 +8,24 @@ from typing import Any
 class DynamicClientRegistrationResponse:
     """RFC 7591 client information response.
 
-    The wire shape returned by :class:`DynamicClientRegistrationViewSet`
-    on a successful registration.
+    The wire shape :class:`DynamicClientRegistrationViewSet` returns on a
+    successful registration.
 
-    RFC 7591 §3.2.1 lets the authorization server substitute any metadata
-    value it likes, but obliges it to return everything it registered. A
-    substitution the client is never told about is what turns a legal
-    downgrade into an undiagnosable failure: the client goes on behaving
-    as what it asked to be while the token endpoint enforces something
-    else. So every field here is the *resolved* value — what was written
-    — not an echo of what was asked for.
+    RFC 7591 §3.2.1 lets the authorization server substitute any metadata value
+    it likes but obliges it to return everything it registered, so every field
+    here is the *resolved* value rather than an echo of the request: an
+    untold substitution turns a legal downgrade into an undiagnosable failure,
+    with the client behaving as what it asked to be while the token endpoint
+    enforces something else.
 
-    ``client_secret`` is the **plaintext** secret, and it is only present
-    for confidential clients. DOT hashes the column on save, so the value
-    here has to be the one generated before the ``Application`` was
-    written — read it back off the model and you emit the PBKDF2 digest,
-    which no client can authenticate with. A public client
-    (``token_endpoint_auth_method: none``) gets no secret at all, per
-    RFC 7591 §2. ``client_secret_expires_at`` rides along whenever a
-    secret is issued because §3.2.1 makes it REQUIRED in that case; ``0``
-    means "does not expire".
-
-    ``scope`` is optional (only emitted when the request supplied one).
+    ``client_secret`` is the **plaintext** secret and is present only for
+    confidential clients — DOT hashes the column on save, so this has to be the
+    value generated before the ``Application`` was written; read back off the
+    model it would be the PBKDF2 digest, which no client can authenticate with.
+    A public client gets no secret at all, per RFC 7591 §2.
+    ``client_secret_expires_at`` rides along whenever one is issued, §3.2.1
+    making it REQUIRED in that case, with ``0`` meaning "does not expire".
+    ``scope`` is emitted only when the request supplied one.
     """
 
     client_id: str
@@ -60,15 +56,14 @@ class DynamicClientRegistrationResponse:
             "authorization_grant_type": self.authorization_grant_type,
         }
         if self.application_type:
-            # Echoed only when the client sent one. RFC 7591 §3.2.1 asks for
-            # what was *registered*, and this server registers nothing from it
-            # — echoing a default the client never chose would assert a
-            # decision nobody made.
+            # Echoed only when the client sent one: §3.2.1 asks for what was
+            # *registered*, and echoing a default the client never chose would
+            # assert a decision nobody made.
             out["application_type"] = self.application_type
         if self.id_token_signed_response_alg:
-            # Omitted rather than sent empty when the server registered no
-            # signing algorithm: "" is not a value OIDC defines, and claiming
-            # one would promise an ID token that cannot be minted.
+            # Omitted rather than empty when no signing algorithm was
+            # registered: "" is not a value OIDC defines, and claiming one
+            # would promise an ID token that cannot be minted.
             out["id_token_signed_response_alg"] = self.id_token_signed_response_alg
         if self.client_secret is not None:
             out["client_secret"] = self.client_secret

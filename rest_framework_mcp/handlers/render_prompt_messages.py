@@ -8,17 +8,11 @@ from rest_framework_mcp.protocol.types.prompt_message import PromptMessage
 def normalize_render_result(result: Any) -> list[PromptMessage]:
     """Coerce whatever the render callable produced into a list of messages.
 
-    Accepted shapes (most-permissive at the bottom of the chain):
-
-    - ``list[PromptMessage]`` — passed through.
-    - ``list[dict]`` — each dict is treated as a wire-shaped ``PromptMessage``
-      (must already have ``role`` / ``content``).
-    - ``list[str]`` — each string becomes a user text message.
-    - ``str`` — single user text message.
-    - ``PromptMessage`` — wrapped in a list.
-
-    Anything else raises ``TypeError`` so misbehaving render callables fail
-    loudly instead of producing invalid wire payloads.
+    A ``PromptMessage`` is wrapped in a list, a ``str`` becomes one user text
+    message, and a list may mix ``PromptMessage``, ``str``, and wire-shaped
+    dicts carrying ``role`` / ``content``. Anything else raises ``TypeError`` so
+    a misbehaving render callable fails loudly rather than emitting an invalid
+    wire payload.
     """
     if isinstance(result, PromptMessage):
         return [result]

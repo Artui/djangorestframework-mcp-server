@@ -7,11 +7,10 @@ import json
 from typing import Any
 
 
-# ``redis`` is an optional extra. Importing this module without ``redis``
-# installed must not crash the package; the ImportError only fires when a
-# consumer actually constructs a ``RedisSSEBroker``. Resolved via
-# ``importlib`` so the binding is plain ``Any`` (or ``None``) and the type
-# checker doesn't narrow it to the imported class.
+# ``redis`` is an optional extra, so importing this module without it must not
+# crash the package; the ImportError fires only when a consumer constructs a
+# ``RedisSSEBroker``. Resolved through ``importlib`` so the binding stays plain
+# ``Any`` and the type checker cannot narrow it to the imported class.
 def _resolve_async_redis() -> Any:
     try:
         return importlib.import_module("redis.asyncio").Redis
@@ -28,18 +27,13 @@ _DEFAULT_CHANNEL_PREFIX: str = "drf-mcp:sse"
 class RedisSSEBroker:
     """Cross-process SSE broker backed by Redis pub/sub.
 
-    Drop-in replacement for :class:`InMemorySSEBroker` when running
-    multiple ASGI workers behind a load balancer. The streaming GET handler
-    can land on any worker; ``await server.notify(...)`` from a different
-    worker reaches the right session because every worker subscribes to the
-    same Redis channel.
-
-    Each session subscribes to its own Redis channel (``<prefix>:<session_id>``)
-    and runs a background ``asyncio.Task`` that pulls messages off the
-    Redis pub/sub stream and pushes them onto a local
-    :class:`asyncio.Queue` — the same queue shape the SSE response generator
-    expects. JSON encode/decode happens at the broker boundary so app code
-    pushes Python dicts and the streaming generator sees them as dicts too.
+    Drop-in replacement for :class:`InMemorySSEBroker` when running multiple
+    ASGI workers behind a load balancer. The streaming GET handler can land on
+    any worker, and ``await server.notify(...)`` from a different worker still
+    reaches the right session because every worker subscribes to the same Redis
+    channel (``<prefix>:<session_id>``). JSON encode/decode happens at the
+    broker boundary, so app code pushes Python dicts and the streaming
+    generator sees dicts too.
 
     Wire it into :class:`MCPServer`:
 
@@ -54,14 +48,12 @@ class RedisSSEBroker:
 
     Caveats:
 
-    - Same single-subscriber-per-session contract as the in-memory broker
-      (re-subscribing replaces the old subscriber's queue).
-    - Message replay is a separate, opt-in collaborator — pair this with
-      :class:`RedisSSEReplayBuffer` (passed as
-      ``MCPServer(sse_replay_buffer=...)``) for cross-worker
-      ``Last-Event-ID`` resume.
-    - The Redis client's lifecycle is the consumer's responsibility — close
-      it during ASGI lifespan shutdown.
+    - Same single-subscriber-per-session contract as the in-memory broker:
+      re-subscribing replaces the old subscriber's queue.
+    - Replay is a separate, opt-in collaborator — pair this with
+      :class:`RedisSSEReplayBuffer` for cross-worker ``Last-Event-ID`` resume.
+    - The Redis client's lifecycle is the consumer's: close it during ASGI
+      lifespan shutdown.
     """
 
     def __init__(self, client: Any, *, channel_prefix: str = _DEFAULT_CHANNEL_PREFIX) -> None:
@@ -73,7 +65,7 @@ class RedisSSEBroker:
         self._client: Any = client
         self._prefix: str = channel_prefix
         # Per-session listener tasks plus the queues they feed. Re-subscribe
-        # cancels the previous task so we don't leak background coroutines.
+        # cancels the previous task, so background coroutines cannot leak.
         self._tasks: dict[str, asyncio.Task[None]] = {}
         self._queues: dict[str, asyncio.Queue[Any]] = {}
 
@@ -81,16 +73,15 @@ class RedisSSEBroker:
         return f"{self._prefix}:{session_id}"
 
     def subscribe(self, session_id: str) -> asyncio.Queue[Any]:
-        # Cancel any prior listener for this session — re-subscribe replaces
-        # cleanly, mirroring the in-memory broker's contract.
+        # Re-subscribe replaces cleanly, mirroring the in-memory broker.
         existing: asyncio.Task[None] | None = self._tasks.pop(session_id, None)
         if existing is not None:
             existing.cancel()
 
         queue: asyncio.Queue[Any] = asyncio.Queue()
         self._queues[session_id] = queue
-        # The listener task owns the Redis pubsub object; we keep a handle to
-        # it so unsubscribe can cancel cleanly.
+        # The listener task owns the Redis pubsub object; the handle is what
+        # lets unsubscribe cancel it.
         self._tasks[session_id] = asyncio.create_task(self._listen(session_id, queue))
         return queue
 
@@ -106,23 +97,19 @@ class RedisSSEBroker:
     async def publish(self, session_id: str, payload: Any) -> bool:
         """Publish to the session's channel and report whether anyone received it.
 
-        ``redis.publish`` returns the number of subscribers that got the
-        message; we surface ``True`` when at least one listener was attached
-        (typical case), ``False`` otherwise. Note that "0 subscribers" can
-        also mean the streaming task hasn't connected yet — callers that
-        require strict at-least-once delivery should layer their own retry.
+        ``True`` when at least one listener was attached. ``False`` — zero
+        subscribers — can also mean the streaming task has not connected yet,
+        so a caller needing at-least-once delivery layers its own retry.
         """
         message: bytes = json.dumps(payload).encode()
         receivers: int = await self._client.publish(self._channel(session_id), message)
         return receivers > 0
 
     def has_subscriber(self, session_id: str) -> bool:
-        """Local-only check.
+        """Local-only check: whether *this* worker has an active subscriber.
 
-        Reflects whether *this* worker has an active subscriber. Across-
-        process visibility would require an extra Redis round-trip and isn't
-        useful for the typical caller (the streaming generator only cares
-        about its own queue).
+        Cross-process visibility would cost an extra Redis round-trip and buy
+        nothing — the streaming generator only cares about its own queue.
         """
         return session_id in self._queues
 
@@ -137,7 +124,7 @@ class RedisSSEBroker:
             await pubsub.subscribe(self._channel(session_id))
             async for message in pubsub.listen():  # pragma: no branch - loop exits via cancel
                 if message.get("type") != "message":
-                    # ``subscribe`` ack frames and friends are ignored.
+                    # Skips ``subscribe`` ack frames and friends.
                     continue
                 data: Any = message.get("data")
                 if isinstance(
@@ -148,9 +135,8 @@ class RedisSSEBroker:
         except asyncio.CancelledError:
             raise
         finally:
-            # Cleanup is best-effort: the Redis client may already be closed
-            # by the time the listener task is cancelled (especially during
-            # ASGI lifespan shutdown). Either call raising is harmless.
+            # Best-effort: the Redis client may already be closed by the time
+            # the listener is cancelled, especially during lifespan shutdown.
             with contextlib.suppress(Exception):  # pragma: no cover
                 await pubsub.unsubscribe(self._channel(session_id))
             with contextlib.suppress(Exception):  # pragma: no cover

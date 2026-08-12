@@ -15,19 +15,17 @@ from rest_framework_mcp.auth.types.token_info import TokenInfo
 class MCPAuthBackend(Protocol):
     """Pluggable authentication for the MCP transport.
 
-    The transport calls :meth:`authenticate` on every request. A backend that
-    returns ``None`` signals "no valid credentials" — the transport then emits
-    a 401 with ``WWW-Authenticate`` built from
-    :meth:`www_authenticate_challenge`. ``protected_resource_metadata`` powers
-    the ``/.well-known/oauth-protected-resource`` view (RFC 9728) and returns
-    a :class:`ProtectedResourceMetadata` dataclass; the contrib PRM ViewSet
-    calls ``.to_dict()`` for the wire shape.
+    The transport calls :meth:`authenticate` on every request; returning
+    ``None`` signals "no valid credentials" and the transport emits a 401 whose
+    ``WWW-Authenticate`` comes from :meth:`www_authenticate_challenge`.
+    :meth:`protected_resource_metadata` powers the
+    ``/.well-known/oauth-protected-resource`` view (RFC 9728); the PRM ViewSet
+    calls ``.to_dict()`` on the returned dataclass for the wire shape.
 
     :meth:`authorization_server_metadata` is consumed by the optional
-    ``rest_framework_mcp.contrib.oauth`` mount — backends
-    that host an authorization server return an :class:`AuthorizationServerMetadata`
-    dataclass; backends that don't host one raise :class:`NotImplementedError`
-    so the contrib code can skip the AS endpoint matrix cleanly.
+    ``rest_framework_mcp.contrib.oauth`` mount. A backend that hosts no
+    authorization server raises :class:`NotImplementedError` so the contrib
+    code can skip the AS endpoint matrix cleanly.
 
     Backends MUST be safe to instantiate without arguments — settings-driven
     configuration belongs inside the backend's own module.

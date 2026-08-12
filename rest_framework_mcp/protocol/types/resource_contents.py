@@ -16,9 +16,6 @@ class ResourceContents:
     mime_type: str | None = None
     text: str | None = None
     blob: str | None = None
-    # Base-protocol ``_meta`` bundle. Free-form dict at this wire boundary
-    # because ``_meta`` is MCP's open extension namespace (see
-    # :class:`~rest_framework_mcp.protocol.types.tool.Tool`).
     meta: dict[str, Any] | None = None
 
     def to_dict(self) -> dict[str, Any]:

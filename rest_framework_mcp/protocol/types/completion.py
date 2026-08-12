@@ -8,12 +8,13 @@ from typing import Any
 class Completion:
     """The ``completion`` object inside a ``completion/complete`` result.
 
-    ``values`` are suggestions ranked by relevance, capped at
-    ``MAX_COMPLETION_VALUES`` by the spec. ``has_more`` says whether the
-    completer had more to give; ``total`` is the count of all matches and is
-    optional — this package leaves it unset, because knowing it would mean
-    counting every match, which is exactly the work a completer built on a
-    queryset should be allowed to skip.
+    Attributes:
+        values: Suggestions ranked by relevance, capped at
+            ``MAX_COMPLETION_VALUES`` by the spec.
+        total: Count of all matches. Optional, and left unset by this package:
+            knowing it would mean counting every match, which is the work a
+            queryset-backed completer should be allowed to skip.
+        has_more: Whether the completer had more to give.
     """
 
     values: tuple[str, ...] = ()

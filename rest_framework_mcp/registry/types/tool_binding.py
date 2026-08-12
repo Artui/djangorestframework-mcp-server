@@ -22,8 +22,8 @@ from rest_framework_mcp.registry.types.utils import validate_content_kind
 
 InputT = TypeVar("InputT")
 ResultT = TypeVar("ResultT")
-# ``ExtraT`` mirrors the upstream ``ServiceSpec.ExtraT`` bound — providers
-# always return a kwargs dict, never a non-mapping value.
+# Mirrors the upstream ``ServiceSpec.ExtraT`` bound: providers always return a
+# kwargs dict, never a non-mapping value.
 ExtraT = TypeVar("ExtraT", bound=dict[str, Any])
 
 
@@ -31,104 +31,91 @@ ExtraT = TypeVar("ExtraT", bound=dict[str, Any])
 class ToolBinding(Generic[InputT, ResultT, ExtraT]):
     """All wiring for a single MCP tool, derived from a ``ServiceSpec``.
 
-    A tool is the projection of a service callable plus its declared input
-    and output serializers. The MCP server invokes ``spec.service`` directly
-    via ``resolve_callable_kwargs`` + ``run_service`` — there is no view or
-    viewset in the dispatch path.
+    A tool is the projection of a service callable plus its declared input and
+    output serializers. The MCP server invokes ``spec.service`` directly via
+    ``resolve_callable_kwargs`` + ``run_service`` — there is no view or viewset
+    in the dispatch path.
 
-    The ``Generic[InputT, ResultT, ExtraT]`` parameters mirror
-    ``ServiceSpec``'s generics and are purely informational for type
-    checkers. They default to ``Any`` when omitted, so existing call sites
-    keep working unchanged.
+    ``annotations`` and ``meta`` are emitted verbatim on this tool's
+    ``tools/list`` entry, under ``annotations`` and ``_meta`` respectively.
+
+    The generic parameters mirror ``ServiceSpec``'s and are purely
+    informational for type checkers, defaulting to ``Any`` when omitted.
     """
 
     name: str
     description: str | None
     spec: ServiceSpec[InputT, ResultT, ExtraT]
     display_name: str | None = None
-    """Consumer-only label — **never emitted on the MCP wire** (``tools/list``
-    ignores it). Provided so a downstream library can render a richer label
-    than the protocol ``title``. ``None`` means "unset"."""
+    """Consumer-only label, **never emitted on the MCP wire**, so a downstream
+    library can render a richer label than the protocol ``title``."""
 
     display_description: str | None = None
-    """Consumer-only blurb, the sibling of :attr:`display_name` — also never
-    emitted on the MCP wire. Lets a downstream library show more than the
-    protocol ``description``. ``None`` means "unset"."""
+    """Consumer-only blurb, the sibling of :attr:`display_name` and likewise
+    never emitted on the MCP wire."""
     output_format: OutputFormat = OutputFormat.JSON
     permissions: tuple[Any, ...] = ()
     rate_limits: tuple[Any, ...] = ()
     annotations: dict[str, Any] = field(default_factory=dict)
-    # Base-protocol ``_meta`` for this tool's ``tools/list`` entry, emitted
-    # verbatim under the ``"_meta"`` wire key. Stays a free-form dict — and
-    # not a closed dataclass — because ``_meta`` is MCP's open extension
-    # namespace: each extension owns its own top-level key, so the set of
-    # valid keys is unbounded by design. Typed helpers belong *above* this
-    # field (a caller builds a typed object and merges its ``to_dict()`` in
-    # via :func:`~rest_framework_mcp.adapters.utils.merge_meta`), not in
-    # place of it.
+    # A free-form dict rather than a dataclass because ``_meta`` is MCP's open
+    # extension namespace: each extension owns a top-level key, so the valid
+    # key set is unbounded by design. Typed helpers belong *above* this field —
+    # a caller builds a typed object and merges its ``to_dict()`` in via
+    # ``merge_meta`` — not in place of it.
     meta: dict[str, Any] = field(default_factory=dict)
     title: str | None = None
     icons: tuple[Icon, ...] = ()
-    """Display icons for this entry, emitted in its listing. Purely
-    presentational — a client renders them; nothing in dispatch reads them."""
+    """Display icons, emitted in this tool's listing entry. Purely
+    presentational; nothing in dispatch reads them."""
 
     include_structured_content: bool | None = None
-    """Tri-state override for whether this tool's ``tools/call`` response
-    includes a ``structuredContent`` field. ``None`` (the default) defers to the
-    ``INCLUDE_STRUCTURED_CONTENT`` setting; ``True`` / ``False`` force the
-    behaviour regardless of the global."""
+    """Whether this tool's ``tools/call`` response carries
+    ``structuredContent``. ``None`` defers to the
+    ``INCLUDE_STRUCTURED_CONTENT`` setting."""
 
     include_output_schema: bool | None = None
-    """Tri-state override for whether this tool's ``tools/list`` entry carries
-    an ``outputSchema``. ``None`` (the default) defers to the
-    ``INCLUDE_OUTPUT_SCHEMA`` setting; ``True`` / ``False`` force the behaviour
-    regardless of the global.
+    """Whether this tool's ``tools/list`` entry carries an ``outputSchema``.
+    ``None`` defers to the ``INCLUDE_OUTPUT_SCHEMA`` setting.
 
     The MCP spec forbids advertising ``outputSchema`` while suppressing
-    ``structuredContent``, so ``include_output_schema=True`` together with
-    ``include_structured_content=False`` is rejected at construction time."""
+    ``structuredContent``, so ``True`` together with
+    ``include_structured_content=False`` is rejected at construction."""
 
     max_result_bytes: int | None | UnsetType = UNSET
-    """Per-tool override for the outbound result ceiling. ``UNSET`` (the
-    default) defers to the server's ``MAX_RESULT_BYTES``; ``None`` disables the
-    check for this tool; an ``int`` sets its own ceiling.
-
-    ``None`` cannot double as "not supplied" here — disabling the ceiling for
-    one deliberately-large export tool is a real thing to want — which is why
-    this is ``UNSET``-sentinelled rather than tri-state like the fields above."""
+    """Per-tool outbound result ceiling. ``UNSET`` defers to the server's
+    ``MAX_RESULT_BYTES``, ``None`` disables the check for this tool, an ``int``
+    sets its own. Sentinelled rather than tri-state because ``None`` here means
+    "no ceiling", which a deliberately-large export tool genuinely wants."""
 
     dispatch_timeout: float | None | UnsetType = UNSET
-    """Per-tool override for the dispatch deadline, in seconds. ``UNSET``
-    defers to the server's ``DISPATCH_TIMEOUT``; ``None`` disables it for this
-    tool; a number sets its own. ⚠ Async transport only — see
+    """Per-tool dispatch deadline, in seconds. ``UNSET`` defers to the server's
+    ``DISPATCH_TIMEOUT``, ``None`` disables it here. Async transport only — see
     :attr:`~rest_framework_mcp.config.types.mcp_config.MCPConfig.dispatch_timeout`."""
 
     argument_binding: ArgumentBinding = ArgumentBinding.BUNDLE
-    """How MCP ``arguments`` flow into the kwarg pool. Defaults to ``BUNDLE``
-    for service tools: mutation services typically take a single
-    ``input_serializer``-validated ``data`` payload, so spreading the dict as
+    """How MCP ``arguments`` flow into the kwarg pool. ``BUNDLE`` for service
+    tools, because a mutation service typically takes one
+    ``input_serializer``-validated ``data`` payload and spreading the dict as
     top-level kwargs would conflict with that shape."""
 
     unknown_arguments: UnknownArguments = UnknownArguments.REJECT
     """How unknown ``arguments`` keys are handled relative to the binding's
     ``inputSchema``.
 
-    - ``REJECT`` (default) rejects unknown keys with ``-32602`` and advertises
-      ``additionalProperties: false`` — but **only** when there is an
-      ``input_serializer`` to validate against. A serializer-less binding has no
-      declared field set, so ``REJECT`` can't fire and its schema stays open
-      (``additionalProperties: true``).
-    - ``PASSTHROUGH`` advertises ``additionalProperties: true`` and merges
-      unknown keys into the validated payload.
-    - ``IGNORE`` advertises ``additionalProperties: true`` and silently drops
-      them."""
+    - ``REJECT`` (default) answers ``-32602`` and advertises
+      ``additionalProperties: false`` — but **only** with an
+      ``input_serializer`` to validate against. A serializer-less binding has
+      no declared field set, so ``REJECT`` cannot fire and its schema stays
+      open.
+    - ``PASSTHROUGH`` advertises an open schema and merges unknown keys into
+      the validated payload.
+    - ``IGNORE`` advertises an open schema and drops them."""
 
     always_listed: bool = False
-    """Opt this binding back into listings it would otherwise be filtered out
-    of. When ``FILTER_LISTINGS_BY_PERMISSIONS`` is enabled, a binding is
-    normally dropped from ``tools/list`` if any of its ``permissions`` deny the
-    caller; ``True`` keeps it visible — useful as a discovery aid for admin
-    tools the caller can see but not invoke (``tools/call`` still 403s)."""
+    """Keep this binding in ``tools/list`` even when
+    ``FILTER_LISTINGS_BY_PERMISSIONS`` would drop it because its
+    ``permissions`` deny the caller. A discovery aid for tools the caller can
+    see but not invoke — ``tools/call`` still 403s."""
 
     query_params: tuple[QueryParam, ...] = ()
     """Read-shaping params routed to ``request.query_params`` at dispatch.
@@ -136,55 +123,48 @@ class ToolBinding(Generic[InputT, ResultT, ExtraT]):
     Popped from the caller's arguments like a URL kwarg, but landing in the
     synthetic request's ``GET`` rather than ``view.kwargs`` — the channel a
     serializer reads when it branches on the query string. A ``filter_set``
-    field is **not** one of these; see ``split_query_params``."""
+    field is **not** one of these."""
 
     url_kwargs: tuple[UrlKwarg, ...] = ()
     """URL-derived values the model supplies as tool args, seeded into the
-    off-HTTP view's ``kwargs`` rather than reaching the service as ordinary
-    params — from there drf-services spreads them into the dispatch pools, so a
-    scoping ``spec.kwargs`` provider reading ``view.kwargs`` sees them. See
-    :class:`UrlKwarg`. Advertised in the ``inputSchema`` and stripped from the
-    dispatched params."""
+    off-HTTP view's ``kwargs`` instead of reaching the service as ordinary
+    params, so a scoping ``spec.kwargs`` provider reading ``view.kwargs`` sees
+    them. Advertised in the ``inputSchema`` and stripped from the dispatched
+    params. See :class:`UrlKwarg`."""
 
     content_kind: ToolContentKind = ToolContentKind.TEXT
     """What this tool's payload becomes in the result's ``content`` array.
-    ``TEXT`` (the default) renders JSON per :attr:`output_format`; the other
-    kinds project the payload into an image / audio / resource-link block.
-    See :class:`ToolContentKind`."""
+    ``TEXT`` renders JSON per :attr:`output_format`; the other kinds project it
+    into an image / audio / resource-link block. See :class:`ToolContentKind`."""
 
     content_mime_type: str | None = None
     """The media type for an ``IMAGE`` / ``AUDIO`` :attr:`content_kind`.
-    Required for those and meaningless for the rest — a resource link
-    carries its own ``mimeType`` per entry."""
+    Required for those and meaningless for the rest — a resource link carries
+    its own ``mimeType`` per entry."""
 
     task_policy: TaskPolicy = TaskPolicy.FORBIDDEN
     """Whether calling this tool hands back a task handle instead of a result.
-
-    ``FORBIDDEN`` by default, so nothing changes for a tool registered before
-    tasks existed. See :class:`TaskPolicy` — and note that the choice lives
-    here, on the binding, because the extension makes the *server* the sole
-    decider and gives the client no way to ask."""
+    The choice lives on the binding because the extension makes the *server*
+    the sole decider and gives the client no way to ask. See
+    :class:`TaskPolicy`."""
 
     invalidates: tuple[str, ...] = ()
     """URI templates naming the resources a successful call changed.
 
-    Published as ``notifications/resources/updated`` after the transaction
-    commits, so subscribers re-read. Uses the same ``{var}`` syntax as a
-    resource's ``uri_template``, rendered against the result merged with the
-    call's arguments::
+    Published as ``notifications/resources/updated`` once the transaction
+    commits, so subscribers re-read. Same ``{var}`` syntax as a resource's
+    ``uri_template``, rendered against the result merged with the call's
+    arguments::
 
         invalidates=("invoices://{pk}", "invoices://")
 
-    ⚠ **Name the collection too if you want it watched.** Topic matching is
-    exact — a prefix rule would match ``invoices://1`` against ``invoices://11``
-    and miss a tenant-scoped scheme entirely — so a client watching
-    ``invoices://`` hears nothing unless the write says so.
+    **Name the collection too if you want it watched.** Topic matching is
+    exact — a prefix rule would match ``invoices://1`` against
+    ``invoices://11`` and miss a tenant-scoped scheme entirely.
 
-    ⚠ **Its boundary is real:** this fires for calls that go through this
-    server and for nothing else. A management command, a Celery job or an admin
-    edit changes the same rows and publishes nothing, which is why
-    ``MCPServer.notify_resource_updated`` exists rather than being an
-    afterthought."""
+    Only calls that go through this server fire it. A management command, a
+    Celery job or an admin edit changes the same rows and publishes nothing;
+    ``MCPServer.notify_resource_updated`` covers those."""
 
     def __post_init__(self) -> None:
         if self.include_output_schema is True and self.include_structured_content is False:

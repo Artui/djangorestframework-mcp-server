@@ -23,36 +23,27 @@ def build_resource_contents(
 ) -> ResourceContents | JsonRpcError:
     """Render a selector's return value into one ``resources/read`` block.
 
-    Shared by the sync and async read handlers. They are full parallel
-    implementations rather than wrappers, so anything that varies by binding
-    lives here — otherwise the two transports drift and only one of them gets
-    a fix.
+    Shared by the sync and async read handlers, which are full parallel
+    implementations rather than wrappers — so anything that varies by binding
+    lives here, or the two transports drift and only one gets a fix.
 
     Two steps, in order:
 
     1. **Render**, if the binding declares an ``output_serializer`` — with
-       ``many=True`` for a ``LIST`` selector, ``many=False`` otherwise. The
-       serializer gets DRF's baseline context (``request`` / ``format`` /
-       ``view``) built from the ``view`` / ``request`` the handler synthesized,
-       so a field reading ``self.context["request"]`` resolves it here as it
-       would behind a view. A resource binding has no context provider of its
-       own — its selector is a bare callable, not a spec.
+       ``many=True`` for a ``LIST`` selector. The serializer gets DRF's baseline
+       context (``request`` / ``format`` / ``view``) built from the synthesized
+       ``view`` / ``request``, so a field reading ``self.context["request"]``
+       resolves it as it would behind a view. A resource binding has no context
+       provider of its own: its selector is a bare callable, not a spec.
     2. **Encode** per the binding's :class:`ResourceEncoding`. ``JSON``
-       pretty-prints; ``TEXT`` passes the value straight through as the body,
-       which is what an HTML / Markdown / CSV resource needs — JSON-encoding
-       one of those yields a quoted string literal rather than the document.
+       pretty-prints; ``TEXT`` passes the value through verbatim, which is what
+       an HTML / Markdown / CSV resource needs; ``BLOB`` base64-encodes it into
+       the spec's ``blob`` field. ``text`` and ``blob`` are mutually exclusive
+       on a ``contents`` entry, so exactly one is ever set.
 
-    3. **Or encode as a blob**, for ``BLOB``: the value is binary, so it rides
-       the spec's ``blob`` field base64-encoded rather than ``text``. The two
-       are mutually exclusive on a ``contents`` entry — a client reads
-       whichever is present — which is why this returns one or the other and
-       never both.
-
-    A ``TEXT`` or ``BLOB`` binding whose selector returned the wrong Python
-    type is a server misconfiguration that can only surface at read time (the
-    selector's return type isn't knowable at registration). It comes back as a
-    :class:`JsonRpcError` rather than an exception, so the client gets a
-    well-formed error response instead of a transport-level 500.
+    A ``TEXT`` or ``BLOB`` binding whose selector returned the wrong Python type
+    can only surface at read time, so it comes back as a :class:`JsonRpcError`
+    rather than an exception — a well-formed error response instead of a 500.
     """
     payload: Any = raw
     if binding.output_serializer is not None:
