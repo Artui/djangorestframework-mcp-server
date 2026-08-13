@@ -28,14 +28,14 @@ def build_authorize_passthrough_view(adapter: AuthUserAdapter | None) -> Any:
     not hydration is wanted later.
     """
     try:
-        from oauth2_provider.views import AuthorizationView  # type: ignore[import-not-found]
+        from oauth2_provider.views import AuthorizationView
     except ImportError as exc:  # pragma: no cover - exercised by smoke job w/o DOT
         raise ImportError(
             "build_authorize_passthrough_view requires `django-oauth-toolkit`. "
             'Install it via `pip install "djangorestframework-mcp-server[oauth]"`.'
         ) from exc
 
-    class _AuthorizePassthroughView(AuthorizationView):  # type: ignore[misc, valid-type]
+    class _AuthorizePassthroughView(AuthorizationView):
         """DOT ``AuthorizationView`` with a pre-dispatch user-hydration hook.
 
         ``dispatch`` is the injection point because it runs before DOT's

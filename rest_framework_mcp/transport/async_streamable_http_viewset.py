@@ -137,7 +137,7 @@ class AsyncStreamableHttpViewSet(ViewSet):
     config: MCPConfig | None = None
 
     @classonlymethod
-    def as_view(cls, actions: Any = None, **initkwargs: Any) -> Any:  # type: ignore[override]
+    def as_view(cls, actions: Any = None, **initkwargs: Any) -> Any:
         """Wrap DRF's sync ``as_view`` so Django routes the callable as async.
 
         ``ViewSet.as_view`` returns a sync function calling

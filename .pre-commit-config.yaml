@@ -48,6 +48,18 @@ repos:
         types: [text]
         exclude: '^(\.pre-commit-config\.yaml|tests/transport/test_async_streamable_http_view\.py)$'
 
+
+      # Scoped to the package, because that is exactly what ty checks. Under
+      # tests/ no checker reads either pragma, while an editor running mypy or
+      # pyright does honour the mypy one -- rewriting those would turn something
+      # that still works into a no-op everywhere. The lookbehind spares prose
+      # that names the mypy pragma inside backticks.
+      - id: forbid-mypy-type-ignore
+        name: "forbid mypy-style '# type: ignore' (the package type-checks with ty)"
+        entry: '(?<!`)# type:\s*ignore'
+        language: pygrep
+        files: '^rest_framework_mcp/.*\.py$'
+
       # The two excluded tests hold an emoji as data, not decoration: they feed
       # a free-form server name through key hashing and namespacing to prove
       # non-ASCII survives it.

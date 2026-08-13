@@ -151,7 +151,7 @@ class DynamicClientRegistrationSerializer(DataclassSerializer):
         # i.e. on a real request, keeping the module importable without the
         # ``[oauth]`` extra.
         try:
-            from oauth2_provider.models import Application  # type: ignore[import-not-found]
+            from oauth2_provider.models import Application
         except ImportError:  # pragma: no cover - exercised by smoke job w/o DOT
             return
         # ``self.fields[...]`` is typed as DRF ``Field``; the concrete class

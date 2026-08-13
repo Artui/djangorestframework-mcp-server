@@ -37,7 +37,7 @@ class SimpleJWTCookieAdapter:
 
         try:
             from rest_framework_simplejwt.tokens import (
-                AccessToken,  # type: ignore[import-not-found]
+                AccessToken,
             )
         except ImportError as exc:  # pragma: no cover - exercised by smoke job w/o simplejwt
             raise ImportError(
