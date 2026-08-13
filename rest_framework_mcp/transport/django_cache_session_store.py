@@ -60,7 +60,7 @@ class DjangoCacheSessionStore:
     keys must survive backends like memcached, which reject spaces and control
     characters and cap length at 250.
 
-    Constructing the store yourself means you own the namespace::
+    Constructing the store yourself means you own the namespace:
 
         MCPServer(session_store=DjangoCacheSessionStore(namespace="internal"))
     """

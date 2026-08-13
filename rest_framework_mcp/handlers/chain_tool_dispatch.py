@@ -1,6 +1,6 @@
 """Dispatch for chain tools — run an ordered sequence of specs as one tool.
 
-Flow (sync; the async sibling bridges the whole thing through ``acall``)::
+Flow (sync; the async sibling bridges the whole thing through ``acall``):
 
     auth + rate limit
       → validate(arguments, resolved_input_serializer)   → ctx.args

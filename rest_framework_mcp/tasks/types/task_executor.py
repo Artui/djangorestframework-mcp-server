@@ -12,7 +12,7 @@ class TaskExecutor(Protocol):
     keeping the payload out of the queue message stops the queue holding a copy
     of the arguments that can drift from the stored ones or outlive the task.
 
-    A Celery consumer writes::
+    A Celery consumer writes:
 
         @shared_task
         def run_mcp_task(task_id: str) -> None:

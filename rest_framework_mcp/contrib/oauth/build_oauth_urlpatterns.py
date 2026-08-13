@@ -64,7 +64,7 @@ def build_oauth_urlpatterns(
 ) -> list[URLPattern]:
     """Return URL patterns for the OAuth endpoint matrix.
 
-    With every flag on, the canonical paths and their aliases are::
+    With every flag on, the canonical paths and their aliases are:
 
         /.well-known/oauth-protected-resource     ProtectedResourceMetadataViewSet
           + /.well-known/oauth-protected-resource/mcp

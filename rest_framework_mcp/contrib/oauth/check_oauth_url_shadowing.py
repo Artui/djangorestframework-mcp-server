@@ -28,7 +28,7 @@ def check_oauth_url_shadowing(*, warn: bool = True) -> list[str]:
 
     A function rather than a Django system check because ``rest_framework_mcp``
     is a library with no ``AppConfig`` to register one on. Call it from your own
-    check, a startup hook, or a test::
+    check, a startup hook, or a test:
 
         def test_our_oauth_routes_are_not_shadowed():
             assert check_oauth_url_shadowing() == []

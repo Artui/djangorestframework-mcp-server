@@ -2,7 +2,7 @@
 
 **Namespace.** ``rest_framework_mcp.<module>``, via ``getLogger(__name__)`` at
 each site, so a project configures it through Django ``LOGGING`` like any other
-library::
+library:
 
     LOGGING = {
         "loggers": {"rest_framework_mcp": {"level": "INFO", "handlers": ["console"]}},

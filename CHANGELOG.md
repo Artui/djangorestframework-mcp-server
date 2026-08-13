@@ -9,6 +9,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **The reST literal-block marker no longer reaches the page.** Sphinx reads a
+  trailing `::` as "an indented literal block follows" and prints one colon;
+  Markdown has no such rule, so the second colon rendered verbatim. The indented
+  block was already coming out as a code block either way, so this drops the
+  stray character and nothing else. 20 occurrences, the last of the Sphinx
+  markup this package carried.
+
+### Fixed
+
 - **Docstring cross-references now render as links instead of raw markup.** The
   docstrings carried Sphinx roles — ``:class:`~rest_framework_mcp.MCPServer` `` —
   but the docs build is mkdocstrings, which renders docstring bodies as Markdown

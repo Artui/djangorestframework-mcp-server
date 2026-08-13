@@ -111,7 +111,7 @@ class ChainToolBinding:
     Same contract as [`invalidates`][rest_framework_mcp.registry.types.tool_binding.ToolBinding.invalidates]:
     published as ``notifications/resources/updated`` once the transaction
     commits, rendered against the result merged with the call's arguments, and
-    matched exactly — so name the collection too if you want it watched::
+    matched exactly — so name the collection too if you want it watched:
 
         invalidates=("invoices://{pk}", "invoices://")"""
 

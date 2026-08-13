@@ -155,7 +155,7 @@ class ToolBinding(Generic[InputT, ResultT, ExtraT]):
     Published as ``notifications/resources/updated`` once the transaction
     commits, so subscribers re-read. Same ``{var}`` syntax as a resource's
     ``uri_template``, rendered against the result merged with the call's
-    arguments::
+    arguments:
 
         invalidates=("invoices://{pk}", "invoices://")
 

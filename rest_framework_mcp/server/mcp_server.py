@@ -107,7 +107,7 @@ class MCPServer:
     session store — all instance state, no module-level singletons. Two
     parallel registration shapes are supported:
 
-    Imperative::
+    Imperative:
 
         server = MCPServer(name="my-app")
         server.register_service_tool(
@@ -120,7 +120,7 @@ class MCPServer:
             selector=SelectorSpec(selector=get_invoice, output_serializer=InvoiceOutput),
         )
 
-    Declarative::
+    Declarative:
 
         @server.service_tool(name="invoices.create", input_serializer=InvoiceInput)
         def create_invoice(*, data): ...
@@ -499,7 +499,7 @@ class MCPServer:
         replacement — every tool lands as a normal binding sharing the one
         tool namespace (a collision raises, as always). The registry carries
         only what is invariant across transports; every MCP knob stays here,
-        per tool, via ``overrides``::
+        per tool, via ``overrides``:
 
             server.register_specs(
                 registry.by_tag("public"),
@@ -828,7 +828,7 @@ class MCPServer:
         """Execute a queued task. **This is what a worker calls.**
 
         The other end of ``task_executor.enqueue``, and the whole public
-        surface of the worker side::
+        surface of the worker side:
 
             @shared_task
             def run_mcp_task(task_id: str) -> None:
@@ -893,7 +893,7 @@ class MCPServer:
 
         The explicit trigger, and the one that always works. Call it from
         wherever the write actually happens — a management command, a Celery
-        job, a ``save()`` override, a signal handler you wrote yourself::
+        job, a ``save()`` override, a signal handler you wrote yourself:
 
             await server.notify_resource_updated(f"invoices://{invoice.pk}")
 
