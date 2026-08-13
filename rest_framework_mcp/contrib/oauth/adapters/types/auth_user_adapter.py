@@ -17,7 +17,7 @@ class AuthUserAdapter(Protocol):
     consumer's own authentication scheme decides which user the flow should
     attribute the grant to.
 
-    :meth:`hydrate` returns the authenticated user to set on the request before
+    ``hydrate`` returns the authenticated user to set on the request before
     delegating to DOT, or ``None`` to leave ``request.user`` untouched — DOT
     then falls back to its session-based flow, which may redirect to login.
 

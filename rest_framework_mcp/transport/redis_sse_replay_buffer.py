@@ -23,7 +23,7 @@ _DEFAULT_KEY_PREFIX: str = "drf-mcp:sse-replay"
 class RedisSSEReplayBuffer:
     """Cross-process replay buffer backed by Redis Streams.
 
-    Drop-in replacement for :class:`InMemorySSEReplayBuffer` when running
+    Drop-in replacement for [`InMemorySSEReplayBuffer`][rest_framework_mcp.transport.in_memory_sse_replay_buffer.InMemorySSEReplayBuffer] when running
     multiple ASGI workers: a reconnect can land on any worker, and a shared
     Redis Stream replays the same events whichever worker recorded them.
 
@@ -32,7 +32,7 @@ class RedisSSEReplayBuffer:
     ``Last-Event-ID``. ``MAXLEN ~ N`` caps the retained history per session,
     approximately — Redis trims when convenient, which is fine here.
 
-    Wire it into :class:`MCPServer`::
+    Wire it into [`MCPServer`][rest_framework_mcp.server.mcp_server.MCPServer]::
 
         from redis.asyncio import Redis
         from rest_framework_mcp import MCPServer

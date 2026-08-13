@@ -19,22 +19,22 @@ from rest_framework_mcp.registry.types.url_kwarg import UrlKwarg
 
 @dataclass(frozen=True)
 class ToolDefinition:
-    """Declarative description of a single tool, fed to :func:`register_tools`.
+    """Declarative description of a single tool, fed to [`register_tools`][rest_framework_mcp.registry.register_tools.register_tools].
 
     A transport-agnostic container for the kwargs that would otherwise be
-    passed to :meth:`MCPServer.register_service_tool` or
-    :meth:`MCPServer.register_selector_tool`, plus a :class:`ToolKind`
+    passed to [`MCPServer.register_service_tool`][rest_framework_mcp.server.mcp_server.MCPServer.register_service_tool] or
+    [`MCPServer.register_selector_tool`][rest_framework_mcp.server.mcp_server.MCPServer.register_selector_tool], plus a [`ToolKind`][rest_framework_mcp.constants.ToolKind]
     discriminator selecting between them at dispatch time.
 
-    Construct via :meth:`service` / :meth:`selector`, which enforce the
+    Construct via ``service`` / ``selector``, which enforce the
     per-kind kwarg surface; direct construction is available for tests and
     tooling but bypasses that. Filtering is declared on the spec
     (``SelectorSpec.filter_set``), so neither kind carries a ``filter_set``
     kwarg.
 
-    Every per-call kwarg defaults to ``None``, which :func:`register_tools`
-    reads as "no override" — letting a :class:`SelectorDefaults` /
-    :class:`ServiceDefaults` supply the value, and falling back to the
+    Every per-call kwarg defaults to ``None``, which [`register_tools`][rest_framework_mcp.registry.register_tools.register_tools]
+    reads as "no override" — letting a [`SelectorDefaults`][rest_framework_mcp.registry.types.selector_defaults.SelectorDefaults] /
+    [`ServiceDefaults`][rest_framework_mcp.registry.types.service_defaults.ServiceDefaults] supply the value, and falling back to the
     registration method's own default when neither does.
     """
 
@@ -49,7 +49,7 @@ class ToolDefinition:
     the protocol ``title``."""
 
     display_description: str | None = None
-    """Consumer-only blurb, the sibling of :attr:`display_name` and likewise
+    """Consumer-only blurb, the sibling of ``display_name`` and likewise
     never emitted on the MCP wire."""
 
     # Both kinds:
@@ -83,11 +83,11 @@ class ToolDefinition:
 
     url_kwargs: Sequence[UrlKwarg] | None = None
     """URL-derived values the model supplies as tool args, seeded into the
-    off-HTTP ``view.kwargs`` at dispatch. See :class:`UrlKwarg`."""
+    off-HTTP ``view.kwargs`` at dispatch. See [`UrlKwarg`][rest_framework_services.types.url_kwarg.UrlKwarg]."""
 
     query_params: Sequence[QueryParam] | None = None
     """Read-shaping values the model supplies as tool args, seeded into the
-    off-HTTP ``request.query_params`` at dispatch. See :class:`QueryParam`."""
+    off-HTTP ``request.query_params`` at dispatch. See [`QueryParam`][rest_framework_services.types.query_param.QueryParam]."""
 
     @classmethod
     def service(

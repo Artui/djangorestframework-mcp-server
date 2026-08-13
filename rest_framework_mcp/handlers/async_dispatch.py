@@ -22,12 +22,12 @@ async def adispatch(
     params: dict[str, Any] | None,
     context: MCPCallContext,
 ) -> Any | JsonRpcError:
-    """Async sibling of :func:`dispatch`.
+    """Async sibling of ``dispatch``.
 
     Only the I/O-bound handlers (``tools/call``, ``resources/read``,
     ``prompts/get``) have async-native variants; ``completion/complete``
     borrows the executor instead. The rest are CPU-only and run inline through
-    the sync :func:`dispatch` table.
+    the sync ``dispatch`` table.
     """
     if method == "tools/call":
         # Not wrapped: a tool call resolves its own deadline from the binding,

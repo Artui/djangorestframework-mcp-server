@@ -17,7 +17,7 @@ class SubscriptionBroker(Protocol):
     them.
 
     **Topics are opaque strings** built by
-    :mod:`rest_framework_mcp.subscriptions.utils` — a resource URI, a task id, a
+    ``rest_framework_mcp.subscriptions.utils`` — a resource URI, a task id, a
     notification kind. The broker never interprets them, so adding a new
     notification type needs no change here.
 
@@ -26,8 +26,8 @@ class SubscriptionBroker(Protocol):
     it attaches — once per subscription rather than once per delivery, and
     without the broker having to understand principals.
 
-    :meth:`subscribe` returns a queue that receives every payload published to
-    any of ``topics`` until :meth:`unsubscribe`. One queue per subscription, not
+    ``subscribe`` returns a queue that receives every payload published to
+    any of ``topics`` until ``unsubscribe``. One queue per subscription, not
     per topic — a subscription watching five resources reads one stream, which
     is what the wire format wants. It is awaitable because that is load-bearing:
     it must not return until the subscription is genuinely live, or the caller

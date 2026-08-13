@@ -66,7 +66,7 @@ def supported_id_token_algorithms(*, rsa_key_configured: bool) -> list[str]:
     payload. Derived rather than hardcoded: advertising an algorithm the
     registration endpoint cannot provision is what turns a configuration gap
     into a token-endpoint 500. HS256 is absent for the reason given in
-    :func:`resolve_id_token_algorithm`, and the list is empty rather than
+    ``resolve_id_token_algorithm``, and the list is empty rather than
     falsely populated on a server with no RSA key.
     """
     return [RS256] if rsa_key_configured else []

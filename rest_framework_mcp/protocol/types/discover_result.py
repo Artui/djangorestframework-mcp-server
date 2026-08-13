@@ -17,7 +17,7 @@ class DiscoverResult:
     rather than a stateful negotiation, so it can be cached, repeated or
     skipped.
 
-    Two shape differences from :class:`InitializeResult`, neither cosmetic:
+    Two shape differences from [`InitializeResult`][rest_framework_mcp.protocol.types.initialize_result.InitializeResult], neither cosmetic:
 
     - ``supportedVersions`` is a **list**, not a negotiated single version.
       Nothing is agreed here; the client picks one and puts it on subsequent

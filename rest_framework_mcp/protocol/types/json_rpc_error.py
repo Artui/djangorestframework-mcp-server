@@ -9,7 +9,7 @@ class JsonRpcError:
     """JSON-RPC 2.0 error object.
 
     ``code`` is typed as ``int`` so server-defined codes outside the
-    :class:`JsonRpcErrorCode` enum can still be represented faithfully.
+    [`JsonRpcErrorCode`][rest_framework_mcp.constants.JsonRpcErrorCode] enum can still be represented faithfully.
     """
 
     code: int

@@ -10,10 +10,10 @@ class MCPConfig:
     """A server's resolved scalar configuration.
 
     Every field is **already resolved** — there is no "unset" state and no
-    settings lookup left to do. :class:`MCPServer` builds one in ``__init__``
-    (via :func:`~rest_framework_mcp.config.build_mcp_config.build_mcp_config`,
+    settings lookup left to do. [`MCPServer`][rest_framework_mcp.server.mcp_server.MCPServer] builds one in ``__init__``
+    (via ``build_mcp_config``,
     which reads ``REST_FRAMEWORK_MCP``) and threads it to the transport and, on
-    :class:`~rest_framework_mcp.handlers.types.context.MCPCallContext`, to every
+    ``MCPCallContext``, to every
     handler. Read at request time these values could only ever be global; read
     once at construction, each server carries its own.
 
@@ -153,12 +153,12 @@ class MCPConfig:
     def legacy_protocol_versions(self) -> tuple[str, ...]:
         """The configured versions that negotiate through ``initialize``.
 
-        Not interchangeable with :attr:`protocol_versions`. ``initialize``
+        Not interchangeable with ``protocol_versions``. ``initialize``
         falls back to the first *supported* version when a client omits the
         header, and once a modern revision sits at the head of that list the
         fallback would answer a legacy handshake with a version in which the
         handshake does not exist. Legacy negotiation reads this; modern
-        validation reads :attr:`modern_protocol_versions`.
+        validation reads ``modern_protocol_versions``.
         """
         return tuple(v for v in self.protocol_versions if v not in MODERN_PROTOCOL_VERSIONS)
 

@@ -76,7 +76,7 @@ def owned_by_caller(record: TaskRecord, context: MCPCallContext) -> bool:
     """Whether the calling principal is the one the task was created for.
 
     The same comparison session ownership makes, against the same derived id. A
-    second layer under :func:`unknown_task_error`, and the one that matters when
+    second layer under ``unknown_task_error``, and the one that matters when
     an id leaks through a log, a proxy or a shared client.
     """
     return record.principal_id == principal_for_token(context.token)

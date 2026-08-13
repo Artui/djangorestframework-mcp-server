@@ -8,12 +8,12 @@ from typing import Any, Protocol, runtime_checkable
 class SSEBroker(Protocol):
     """Pluggable pub/sub for server-pushed MCP messages.
 
-    The transport calls :meth:`subscribe` when a client opens ``GET /mcp/``,
-    :meth:`publish` from app code pushing a payload to a specific session, and
-    :meth:`unsubscribe` when the streaming generator unwinds.
+    The transport calls ``subscribe`` when a client opens ``GET /mcp/``,
+    ``publish`` from app code pushing a payload to a specific session, and
+    ``unsubscribe`` when the streaming generator unwinds.
 
-    Two implementations ship: :class:`InMemorySSEBroker` (single-process, no
-    infra) and :class:`RedisSSEBroker` (the ``[redis]`` extra), required for
+    Two implementations ship: [`InMemorySSEBroker`][rest_framework_mcp.transport.in_memory_sse_broker.InMemorySSEBroker] (single-process, no
+    infra) and [`RedisSSEBroker`][rest_framework_mcp.transport.redis_sse_broker.RedisSSEBroker] (the ``[redis]`` extra), required for
     multi-worker deployments where any worker can serve the streaming GET.
 
     The contract is deliberately narrow: a session has at most one live

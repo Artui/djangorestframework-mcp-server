@@ -15,7 +15,7 @@ def publish_task_status(broker: SubscriptionBroker | None, record: TaskRecord) -
     identical to what ``tasks/get`` would have returned at that moment, so a
     client that misses one loses nothing and polling stays optional.
 
-    Routed through :func:`publish_after_commit` for the same reason
+    Routed through ``publish_after_commit`` for the same reason
     invalidations are: a task moving to ``completed`` inside a transaction that
     then rolls back would otherwise announce work that did not happen.
 

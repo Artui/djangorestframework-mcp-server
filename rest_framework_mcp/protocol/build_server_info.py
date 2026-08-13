@@ -21,7 +21,7 @@ def build_server_info(
 ) -> Implementation:
     """Resolve a server's wire identity, falling back to the ``SERVER_INFO`` setting.
 
-    Called once per server from :meth:`MCPServer.__init__`, so the settings read
+    Called once per server from ``MCPServer.__init__``, so the settings read
     happens at construction rather than on every ``initialize`` and two servers
     mounted in one project answer with their own names.
 
@@ -32,10 +32,10 @@ def build_server_info(
 
     ``description`` is deliberately settings-only, with no parameter here:
     ``MCPServer`` already spends the name ``description=`` on the ``initialize``
-    ``instructions`` string. :class:`Implementation` documents the distinction.
+    ``instructions`` string. [`Implementation`][rest_framework_mcp.protocol.types.implementation.Implementation] documents the distinction.
 
     ``icons`` arriving from ``SERVER_INFO`` are plain data, so dicts are accepted
-    alongside :class:`Icon` instances and normalised here — ``Icon``'s scheme
+    alongside [`Icon`][rest_framework_mcp.protocol.types.icon.Icon] instances and normalised here — ``Icon``'s scheme
     validation runs whichever form the project used.
     """
     server_info_settings: dict[str, Any] = get_setting("SERVER_INFO")
@@ -56,14 +56,14 @@ def build_server_info(
 
 
 def _coerce_icons(raw: Any) -> tuple[Icon, ...]:
-    """Normalise the ``SERVER_INFO`` representation of ``icons`` into :class:`Icon`s."""
+    """Normalise the ``SERVER_INFO`` representation of ``icons`` into [`Icon`][rest_framework_mcp.protocol.types.icon.Icon]s."""
     if not raw:
         return ()
     return tuple(item if isinstance(item, Icon) else _icon_from_mapping(item) for item in raw)
 
 
 def _icon_from_mapping(item: Any) -> Icon:
-    """Build an :class:`Icon` from settings data, which uses the wire spellings.
+    """Build an [`Icon`][rest_framework_mcp.protocol.types.icon.Icon] from settings data, which uses the wire spellings.
 
     Fields are read by name rather than splatted so ``mimeType`` maps to
     ``mime_type``, and so a stray settings key is an ignored extra rather than a

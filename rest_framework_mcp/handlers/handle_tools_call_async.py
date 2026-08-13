@@ -50,14 +50,14 @@ async def handle_tools_call_async(
     params: dict[str, Any] | None,
     context: MCPCallContext,
 ) -> dict[str, Any] | JsonRpcError:
-    """Async sibling of :func:`handle_tools_call`.
+    """Async sibling of ``handle_tools_call``.
 
-    Service tools dispatch through :func:`~rest_framework_services.adispatch_spec`,
+    Service tools dispatch through ``adispatch_spec``,
     which awaits async-native callables and bridges sync ones (validation,
     instance resolution, the ``enforce_permissions`` guard) off the event loop.
     The transport shell — MCP permissions / rate limits, output format,
     ``structuredContent`` — stays here; output rendering runs through
-    :func:`acall` so a lazy list result is materialised off-loop.
+    ``acall`` so a lazy list result is materialised off-loop.
     """
     if not isinstance(params, dict):
         return JsonRpcError(JsonRpcErrorCode.INVALID_PARAMS, "tools/call params must be an object")
@@ -124,7 +124,7 @@ async def _dispatch_tool_call_async(
 ) -> dict[str, Any] | JsonRpcError:
     """Route a resolved binding to its async dispatch path.
 
-    Split out of :func:`handle_tools_call_async` so one deadline covers the
+    Split out of ``handle_tools_call_async`` so one deadline covers the
     whole dispatch — permissions, rate limits, the spec run and rendering — and
     one size check sees the finished result, whichever path produced it.
     """

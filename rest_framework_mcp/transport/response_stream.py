@@ -145,7 +145,7 @@ async def _run(coro: Awaitable[Any], queue: asyncio.Queue[Any], *, request_id: A
 
 
 class _StreamReporter:
-    """The :class:`ProgressReporter` handed to the dispatched callable.
+    """The ``ProgressReporter`` handed to the dispatched callable.
 
     **Called from a worker thread, not the event loop.** ``adispatch_spec``
     bridges sync services off-loop and ``asyncio.Queue`` is not thread-safe, so

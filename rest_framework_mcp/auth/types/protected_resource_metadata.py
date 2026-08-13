@@ -8,7 +8,7 @@ from typing import Any
 class ProtectedResourceMetadata:
     """RFC 9728 OAuth 2.0 Protected Resource Metadata payload.
 
-    Returned by :meth:`MCPAuthBackend.protected_resource_metadata` and
+    Returned by ``MCPAuthBackend.protected_resource_metadata`` and
     serialised onto the wire by the PRM ViewSet. Keys map 1:1 to the RFC 9728
     field names, except ``warning``: a package-local extension serialised as
     ``_warning``, which ``AllowAnyBackend`` uses to make dev-mode

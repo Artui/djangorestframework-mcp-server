@@ -1,11 +1,11 @@
 # Multi-worker SSE with Redis
 
-The default :class:`InMemorySSEBroker` works for single-process deployments —
+The default [`InMemorySSEBroker`][rest_framework_mcp.transport.in_memory_sse_broker.InMemorySSEBroker] works for single-process deployments —
 one ASGI worker, one event loop, no fan-out concerns. Multi-worker setups
 need an out-of-process broker so any worker can deliver a `notify(...)` to
 whichever worker is holding the streaming GET.
 
-The shipped :class:`RedisSSEBroker` is the production answer.
+The shipped [`RedisSSEBroker`][rest_framework_mcp.transport.redis_sse_broker.RedisSSEBroker] is the production answer.
 
 ## Install
 
@@ -57,7 +57,7 @@ every worker subscribes to the same channel.
   subscriber's task on the original worker eventually unwinds (cancelled by
   `unsubscribe` or by Redis client shutdown).
 - **Replay is opt-in.** Messages published while no subscriber was attached
-  are dropped *unless* you configure an :class:`SSEReplayBuffer` — see
+  are dropped *unless* you configure an [`SSEReplayBuffer`][rest_framework_mcp.transport.types.sse_replay_buffer.SSEReplayBuffer] — see
   the [Last-Event-ID resume recipe](sse-replay-buffer.md).
 - **Channel-prefix isolation.** Pass `channel_prefix="env-staging"` (or
   similar) to keep dev / staging / prod traffic in the same Redis instance
@@ -67,7 +67,7 @@ every worker subscribes to the same channel.
 
 ## Custom brokers
 
-`RedisSSEBroker` is just a class that implements the :class:`SSEBroker`
+`RedisSSEBroker` is just a class that implements the [`SSEBroker`][rest_framework_mcp.transport.types.sse_broker.SSEBroker]
 Protocol (four methods: `subscribe`, `unsubscribe`, `publish`,
 `has_subscriber`). NATS-, Kafka-, RabbitMQ-backed brokers fit the same
 interface — just keep the single-subscriber-per-session contract.

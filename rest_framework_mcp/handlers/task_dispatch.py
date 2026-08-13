@@ -25,7 +25,7 @@ def maybe_create_task(
     the caller runs the tool inline. Anything else is the response.
 
     **Three conditions, and all three must hold**: the binding opts in
-    (:class:`TaskPolicy`), the server can actually run tasks, and the client
+    ([`TaskPolicy`][rest_framework_mcp.constants.TaskPolicy]), the server can actually run tasks, and the client
     declared the extension **on this request**. Each failure answers
     differently. A binding that says no runs inline. A server that cannot run
     tasks runs inline unless the policy is ``REQUIRED``, which makes it a
@@ -42,7 +42,7 @@ def maybe_create_task(
     its permission check fail later, in a worker, where the ``403`` has nowhere
     to go. Rate limits follow the same reasoning but are *consumed* rather than
     tested, so they are charged here and deliberately not charged again in the
-    worker — see ``enforce_rate_limits`` on :class:`MCPCallContext`.
+    worker — see ``enforce_rate_limits`` on ``MCPCallContext``.
     """
     policy: TaskPolicy = getattr(binding, "task_policy", TaskPolicy.FORBIDDEN)
     if policy is TaskPolicy.FORBIDDEN:

@@ -62,9 +62,9 @@ def build_mcp_config(
     input_request_ttl_seconds: int | None = None,
     max_input_rounds: int | None = None,
 ) -> MCPConfig:
-    """Resolve a :class:`MCPConfig` from ``REST_FRAMEWORK_MCP``, applying overrides.
+    """Resolve a ``MCPConfig`` from ``REST_FRAMEWORK_MCP``, applying overrides.
 
-    The single place the scalar settings are read. :class:`MCPServer` calls this
+    The single place the scalar settings are read. [`MCPServer`][rest_framework_mcp.server.mcp_server.MCPServer] calls this
     once in ``__init__``; nothing reads these settings per request, which is what
     lets two servers in one project hold different values.
 
@@ -73,7 +73,7 @@ def build_mcp_config(
 
         MCPServer(name="internal", config=build_mcp_config(page_size=500))
 
-    Use this rather than constructing :class:`MCPConfig` directly — it layers
+    Use this rather than constructing ``MCPConfig`` directly — it layers
     overrides *over* the project's settings instead of discarding them.
     """
     resolved_versions: tuple[str, ...] = tuple(

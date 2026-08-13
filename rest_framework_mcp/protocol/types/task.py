@@ -15,15 +15,15 @@ class Task:
     ``notifications/tasks`` params — because they are the same object with the
     same fields. The spec's ``WorkingTask`` / ``InputRequiredTask`` /
     ``CompletedTask`` / ``FailedTask`` / ``CancelledTask`` split is only *which
-    extra field is present*, which is a property of :attr:`status`;
-    :meth:`to_dict` emits the right one and refuses the wrong one.
+    extra field is present*, which is a property of ``status``;
+    ``to_dict`` emits the right one and refuses the wrong one.
 
     **Timestamps are ISO 8601 strings, stored as strings.** They come from the
     store and go out verbatim; nothing here parses or compares them. A
     ``datetime`` would invite a comparison against ``now()``, and TTL expiry
     belongs to the store — the only component that knows its backend's clock.
 
-    :attr:`ttl_ms` is ``None`` for "no expiry", the spec's own encoding
+    ``ttl_ms`` is ``None`` for "no expiry", the spec's own encoding
     (``ttlMs: number | null``) rather than an omission: the field is always
     present.
     """

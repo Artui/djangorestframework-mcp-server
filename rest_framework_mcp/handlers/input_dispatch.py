@@ -1,8 +1,8 @@
 """The two moments a ``tools/call`` touches the elicitation exchange.
 
-Both sides of one round trip: :func:`resolve_prior_input` before the service
-runs, :func:`ask_for_input` if it raises. Everything protocol-shaped is in
-:mod:`rest_framework_mcp.elicitation`; the composition lives here because
+Both sides of one round trip: ``resolve_prior_input`` before the service
+runs, ``ask_for_input`` if it raises. Everything protocol-shaped is in
+``rest_framework_mcp.elicitation``; the composition lives here because
 ``isError`` is the failure channel and only a tool result has one.
 
 **Service tools only.** Chain and selector tools deliberately do not reach this

@@ -30,12 +30,12 @@ async def handle_resources_read_async(
     params: dict[str, Any] | None,
     context: MCPCallContext,
 ) -> dict[str, Any] | JsonRpcError:
-    """Async sibling of :func:`handle_resources_read`.
+    """Async sibling of ``handle_resources_read``.
 
     Same shape, but nothing that can touch the ORM runs on the event loop: the
-    selector goes through :func:`arun_selector_sync_safe` (async selectors run
+    selector goes through ``arun_selector_sync_safe`` (async selectors run
     native, sync ones are bridged) and the render + encode step through
-    :func:`acall`, because a selector returning a queryset returns it **lazy**
+    ``acall``, because a selector returning a queryset returns it **lazy**
     and the serializer is what evaluates it.
     """
     if not isinstance(params, dict):

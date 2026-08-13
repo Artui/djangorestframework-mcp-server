@@ -33,7 +33,7 @@ class ResolvedInput:
 
     carried: dict[str, Any] = field(default_factory=dict)
     """The accumulated answers on their own, ready to be re-signed into the next
-    round's state. Kept separate from :attr:`arguments` because the state must
+    round's state. Kept separate from ``arguments`` because the state must
     carry only what the *user* supplied, never the client's original
     arguments."""
 

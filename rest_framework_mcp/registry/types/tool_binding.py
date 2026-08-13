@@ -51,7 +51,7 @@ class ToolBinding(Generic[InputT, ResultT, ExtraT]):
     library can render a richer label than the protocol ``title``."""
 
     display_description: str | None = None
-    """Consumer-only blurb, the sibling of :attr:`display_name` and likewise
+    """Consumer-only blurb, the sibling of ``display_name`` and likewise
     never emitted on the MCP wire."""
     output_format: OutputFormat = OutputFormat.JSON
     permissions: tuple[Any, ...] = ()
@@ -90,7 +90,7 @@ class ToolBinding(Generic[InputT, ResultT, ExtraT]):
     dispatch_timeout: float | None | UnsetType = UNSET
     """Per-tool dispatch deadline, in seconds. ``UNSET`` defers to the server's
     ``DISPATCH_TIMEOUT``, ``None`` disables it here. Async transport only — see
-    :attr:`~rest_framework_mcp.config.types.mcp_config.MCPConfig.dispatch_timeout`."""
+    ``dispatch_timeout``."""
 
     argument_binding: ArgumentBinding = ArgumentBinding.BUNDLE
     """How MCP ``arguments`` flow into the kwarg pool. ``BUNDLE`` for service
@@ -130,15 +130,15 @@ class ToolBinding(Generic[InputT, ResultT, ExtraT]):
     off-HTTP view's ``kwargs`` instead of reaching the service as ordinary
     params, so a scoping ``spec.kwargs`` provider reading ``view.kwargs`` sees
     them. Advertised in the ``inputSchema`` and stripped from the dispatched
-    params. See :class:`UrlKwarg`."""
+    params. See [`UrlKwarg`][rest_framework_services.types.url_kwarg.UrlKwarg]."""
 
     content_kind: ToolContentKind = ToolContentKind.TEXT
     """What this tool's payload becomes in the result's ``content`` array.
-    ``TEXT`` renders JSON per :attr:`output_format`; the other kinds project it
-    into an image / audio / resource-link block. See :class:`ToolContentKind`."""
+    ``TEXT`` renders JSON per ``output_format``; the other kinds project it
+    into an image / audio / resource-link block. See [`ToolContentKind`][rest_framework_mcp.constants.ToolContentKind]."""
 
     content_mime_type: str | None = None
-    """The media type for an ``IMAGE`` / ``AUDIO`` :attr:`content_kind`.
+    """The media type for an ``IMAGE`` / ``AUDIO`` ``content_kind``.
     Required for those and meaningless for the rest — a resource link carries
     its own ``mimeType`` per entry."""
 
@@ -146,7 +146,7 @@ class ToolBinding(Generic[InputT, ResultT, ExtraT]):
     """Whether calling this tool hands back a task handle instead of a result.
     The choice lives on the binding because the extension makes the *server*
     the sole decider and gives the client no way to ask. See
-    :class:`TaskPolicy`."""
+    [`TaskPolicy`][rest_framework_mcp.constants.TaskPolicy]."""
 
     invalidates: tuple[str, ...] = ()
     """URI templates naming the resources a successful call changed.

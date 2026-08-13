@@ -9,7 +9,7 @@ from django.core.exceptions import ImproperlyConfigured
 def reject_awaitable(result: Any, *, call: str, remedy: str, hazard: str) -> Any:
     """Return ``result``, or refuse it when nothing on this path will await it.
 
-    The inverse of :func:`rest_framework_mcp._compat.acall.acall`. Wherever a
+    The inverse of ``rest_framework_mcp._compat.acall.acall``. Wherever a
     consumer-supplied callable is invoked from a synchronous path, writing it
     ``async def`` hands back an un-awaited coroutine — and **a coroutine object
     is truthy and is never ``None``**, so every downstream test of the return
@@ -23,7 +23,7 @@ def reject_awaitable(result: Any, *, call: str, remedy: str, hazard: str) -> Any
     loud misconfiguration.
 
     **Detection is on the returned value, not the function.**
-    :func:`inspect.iscoroutinefunction` would miss a plain ``def`` that hands
+    ``inspect.iscoroutinefunction`` would miss a plain ``def`` that hands
     back a coroutine, a future, or any other awaitable — a decorator, a
     ``functools.partial`` over an async callable, an object with ``__await__``.
 

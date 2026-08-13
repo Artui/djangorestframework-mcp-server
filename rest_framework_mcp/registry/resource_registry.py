@@ -24,10 +24,10 @@ def _template_to_pattern(uri_template: str) -> re.Pattern[str]:
 
 
 class ResourceRegistry:
-    """URI or URI-template to :class:`ResourceBinding` lookup.
+    """URI or URI-template to [`ResourceBinding`][rest_framework_mcp.registry.types.resource_binding.ResourceBinding] lookup.
 
     Concrete resources are matched by exact URI, templates by a regex derived
-    from the template. :meth:`resolve` returns the binding plus the variables
+    from the template. ``resolve`` returns the binding plus the variables
     extracted from the URI.
     """
 
@@ -54,7 +54,7 @@ class ResourceRegistry:
         """Exact lookup on the registered template string.
 
         A caller holding the template itself — the completion API's
-        ``ref/resource``, say — must use this rather than :meth:`resolve`:
+        ``ref/resource``, say — must use this rather than ``resolve``:
         ``things://{pk}`` satisfies its own pattern with ``pk="{pk}"``, so
         ``resolve`` would answer, plausibly and wrongly.
         """

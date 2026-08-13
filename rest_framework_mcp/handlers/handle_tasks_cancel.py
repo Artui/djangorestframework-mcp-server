@@ -26,7 +26,7 @@ def handle_tasks_cancel(
     intent". Nothing here reaches into a running worker; it marks the task
     ``cancelled`` so the client stops waiting and a cooperative worker can
     notice. A worker that checks nothing runs to completion, and
-    :func:`transition_task` then refuses to overwrite ``cancelled``, so the
+    ``transition_task`` then refuses to overwrite ``cancelled``, so the
     record does not flip back.
 
     Cancelling an already-terminal task is **not** an error: the transition is

@@ -7,7 +7,7 @@ from dataclasses import dataclass, field
 class DynamicClientRegistrationRequest:
     """RFC 7591 dynamic client registration request payload.
 
-    Mutable, so :class:`DynamicClientRegistrationSerializer` can normalise in
+    Mutable, so [`DynamicClientRegistrationSerializer`][rest_framework_mcp.contrib.oauth.dcr_serializer.DynamicClientRegistrationSerializer] can normalise in
     place; frozen would force a second instance just to change a defaulted
     field.
 

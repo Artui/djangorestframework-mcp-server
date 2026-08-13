@@ -16,7 +16,7 @@ _REMOVED_SETTINGS: dict[str, str] = {
 def check_removed_settings() -> None:
     """Reject removed ``REST_FRAMEWORK_MCP`` keys instead of ignoring them.
 
-    Called from :meth:`MCPServer.__init__`, so a stale settings dict fails when
+    Called from ``MCPServer.__init__``, so a stale settings dict fails when
     the URL conf is imported rather than on some later request. A removed key
     left in place would otherwise be silently dropped, and for ``AUTH_BACKEND``
     that means a project which believes it configured authentication has not —

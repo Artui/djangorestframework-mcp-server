@@ -103,7 +103,7 @@ def _reject_awaitable_session(result: Any, *, store: Any, method: str) -> Any:
     transport, which ``acall``s these methods, and the same store mounted under
     ``server.urls`` silently stops working. This one fails *closed* — a
     coroutine matches no principal — but incomprehensibly: every request
-    answers "re-initialize", and a session id minted from :meth:`create` is the
+    answers "re-initialize", and a session id minted from ``create`` is the
     ``repr`` of a coroutine. Naming the mounting is the whole value here; the
     store is not the bug.
     """
@@ -135,14 +135,14 @@ class StreamableHttpViewSet(ViewSet):
     - **DELETE** → terminates the session referenced by ``MCP-Session-Id``.
 
     The transport bypasses DRF's default request lifecycle on purpose:
-    ``authentication_classes`` is empty because :class:`MCPAuthBackend` is the
+    ``authentication_classes`` is empty because [`MCPAuthBackend`][rest_framework_mcp.auth.types.auth_backend.MCPAuthBackend] is the
     auth layer (DRF's ``SessionAuthentication`` would fight with the
     bearer-token shape MCP advertises), and ``permission_classes`` is
-    :class:`AllowAny` because per-binding permissions live on the registered
+    ``AllowAny`` because per-binding permissions live on the registered
     tool / resource / prompt.
 
     Collaborators (registries, auth backend, session store) are instance-scoped
-    and passed in by :class:`MCPServer` through ``as_view``, never looked up at
+    and passed in by [`MCPServer`][rest_framework_mcp.server.mcp_server.MCPServer] through ``as_view``, never looked up at
     module level, so independent servers in one process cannot interfere.
     """
 

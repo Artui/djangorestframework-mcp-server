@@ -12,7 +12,7 @@ class InMemoryTaskStore:
     somewhere else — the worker writes its result into a dict the web process
     cannot see, and every poll answers "unknown task" until the client gives up.
     It fails silently and looks like a hung job, which is why
-    :class:`DjangoCacheTaskStore` is the default. This class exists so tests and
+    [`DjangoCacheTaskStore`][rest_framework_mcp.tasks.django_cache_task_store.DjangoCacheTaskStore] is the default. This class exists so tests and
     a single-process ``runserver`` can exercise the machinery without a cache.
 
     No expiry: ``ttlMs`` is advisory here, and a process short-lived enough to

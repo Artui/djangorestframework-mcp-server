@@ -23,7 +23,7 @@ from rest_framework_mcp.registry.types.utils import validate_content_kind
 class ChainToolBinding:
     """All wiring for a single MCP tool that runs a **sequence of specs**.
 
-    A chain tool threads a :class:`~rest_framework_mcp.registry.types.chain_context.ChainContext`
+    A chain tool threads a [`ChainContext`][rest_framework_mcp.registry.types.chain_context.ChainContext]
     through its ordered ``steps`` — each step's result is stored under its
     alias and readable by later steps — so one tool call can express
     ``retrieve x → write y → write z`` with ``z`` derived from both ``x`` and
@@ -32,7 +32,7 @@ class ChainToolBinding:
     behaviour.
 
     Fields not listed below mirror
-    :class:`~rest_framework_mcp.registry.types.tool_binding.ToolBinding`.
+    [`ToolBinding`][rest_framework_mcp.registry.types.tool_binding.ToolBinding].
 
     Attributes:
         steps: The ordered steps, run front to back. Non-empty, and aliases
@@ -61,7 +61,7 @@ class ChainToolBinding:
     library can render a richer label than the protocol ``title``."""
 
     display_description: str | None = None
-    """Consumer-only blurb, the sibling of :attr:`display_name` and likewise
+    """Consumer-only blurb, the sibling of ``display_name`` and likewise
     never emitted on the MCP wire."""
     input_serializer: type | None = None
     atomic: bool = True
@@ -90,11 +90,11 @@ class ChainToolBinding:
 
     content_kind: ToolContentKind = ToolContentKind.TEXT
     """What this tool's payload becomes in the result's ``content`` array.
-    ``TEXT`` renders JSON per :attr:`output_format`; the other kinds project it
-    into an image / audio / resource-link block. See :class:`ToolContentKind`."""
+    ``TEXT`` renders JSON per ``output_format``; the other kinds project it
+    into an image / audio / resource-link block. See [`ToolContentKind`][rest_framework_mcp.constants.ToolContentKind]."""
 
     content_mime_type: str | None = None
-    """The media type for an ``IMAGE`` / ``AUDIO`` :attr:`content_kind`.
+    """The media type for an ``IMAGE`` / ``AUDIO`` ``content_kind``.
     Required for those and meaningless for the rest — a resource link carries
     its own ``mimeType`` per entry."""
 
@@ -102,12 +102,12 @@ class ChainToolBinding:
     """Whether calling this tool hands back a task handle instead of a result.
     The choice lives on the binding because the extension makes the *server*
     the sole decider and gives the client no way to ask. See
-    :class:`TaskPolicy`."""
+    [`TaskPolicy`][rest_framework_mcp.constants.TaskPolicy]."""
 
     invalidates: tuple[str, ...] = ()
     """URI templates naming the resources a successful call changed.
 
-    Same contract as :attr:`~rest_framework_mcp.registry.types.tool_binding.ToolBinding.invalidates`:
+    Same contract as [`invalidates`][rest_framework_mcp.registry.types.tool_binding.ToolBinding.invalidates]:
     published as ``notifications/resources/updated`` once the transaction
     commits, rendered against the result merged with the call's arguments, and
     matched exactly — so name the collection too if you want it watched::

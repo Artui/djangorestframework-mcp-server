@@ -27,7 +27,7 @@ _DEFAULT_CHANNEL_PREFIX: str = "drf-mcp:sse"
 class RedisSSEBroker:
     """Cross-process SSE broker backed by Redis pub/sub.
 
-    Drop-in replacement for :class:`InMemorySSEBroker` when running multiple
+    Drop-in replacement for [`InMemorySSEBroker`][rest_framework_mcp.transport.in_memory_sse_broker.InMemorySSEBroker] when running multiple
     ASGI workers behind a load balancer. The streaming GET handler can land on
     any worker, and ``await server.notify(...)`` from a different worker still
     reaches the right session because every worker subscribes to the same Redis
@@ -35,7 +35,7 @@ class RedisSSEBroker:
     broker boundary, so app code pushes Python dicts and the streaming
     generator sees dicts too.
 
-    Wire it into :class:`MCPServer`:
+    Wire it into [`MCPServer`][rest_framework_mcp.server.mcp_server.MCPServer]:
 
     .. code-block:: python
 
@@ -51,7 +51,7 @@ class RedisSSEBroker:
     - Same single-subscriber-per-session contract as the in-memory broker:
       re-subscribing replaces the old subscriber's queue.
     - Replay is a separate, opt-in collaborator — pair this with
-      :class:`RedisSSEReplayBuffer` for cross-worker ``Last-Event-ID`` resume.
+      [`RedisSSEReplayBuffer`][rest_framework_mcp.transport.redis_sse_replay_buffer.RedisSSEReplayBuffer] for cross-worker ``Last-Event-ID`` resume.
     - The Redis client's lifecycle is the consumer's: close it during ASGI
       lifespan shutdown.
     """

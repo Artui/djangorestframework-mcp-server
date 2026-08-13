@@ -2,7 +2,7 @@
 
 MCP hosts probe several well-known URLs to find an authorization server: RFC
 8414 mandates one path, RFC 9728 another, OIDC a third, and vendors mount their
-own aliases. :func:`build_oauth_urlpatterns` serves every one of them. The
+own aliases. [`build_oauth_urlpatterns`][rest_framework_mcp.contrib.oauth.build_oauth_urlpatterns.build_oauth_urlpatterns] serves every one of them. The
 aliases are *not* HTTP redirects — they render the same payload from the same
 view, because redirects break clients that follow one and then keep issuing
 requests against the redirected origin.
@@ -24,7 +24,7 @@ DOT 3.4.0 serves its own ``register/`` and
 mounting DOT's urls first means DOT answers those paths — with an issuer of
 ``<host>/oauth`` rather than the site root. Nothing raises; clients read the
 wrong metadata.
-:func:`~rest_framework_mcp.contrib.oauth.check_oauth_url_shadowing` detects it.
+``check_oauth_url_shadowing`` detects it.
 """
 
 from __future__ import annotations
@@ -83,7 +83,7 @@ def build_oauth_urlpatterns(
     mounts in one project can differ.
 
     Args:
-      server: The :class:`MCPServer` whose ``auth_backend`` drives every
+      server: The [`MCPServer`][rest_framework_mcp.server.mcp_server.MCPServer] whose ``auth_backend`` drives every
         discovery payload. A parameter rather than a settings lookup so
         multi-server deployments work.
       include_dcr: Mount ``/oauth/register/``. Off by default, so a consumer
@@ -91,7 +91,7 @@ def build_oauth_urlpatterns(
       include_aliases: Mount the alias URLs alongside the canonical ones.
       include_openid_discovery: Mount the OIDC discovery alias.
       include_authorize: Mount ``/oauth/authorize/`` as a thin DOT
-        :class:`AuthorizationView` subclass carrying the
+        ``AuthorizationView`` subclass carrying the
         ``auth_user_adapter`` hook. Off by default because the consumer's URL
         conf usually owns that path via ``include('oauth2_provider.urls')``;
         turn it on to wire the adapter when it does not. Requires the

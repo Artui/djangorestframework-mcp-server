@@ -58,9 +58,9 @@ def selector_spec_to_tool(
     dispatch_timeout: float | None | UnsetType = UNSET,
     max_page_size: int | None | UnsetType = UNSET,
 ) -> SelectorToolBinding:
-    """Lift a ``SelectorSpec`` into a :class:`SelectorToolBinding`.
+    """Lift a ``SelectorSpec`` into a [`SelectorToolBinding`][rest_framework_mcp.registry.types.selector_tool_binding.SelectorToolBinding].
 
-    Sister of :func:`service_spec_to_tool` for the read-shaped pipeline. The
+    Sister of ``service_spec_to_tool`` for the read-shaped pipeline. The
     spec must carry a concrete ``selector`` callable, checked here so
     registration fails loudly rather than at first call.
 
@@ -75,7 +75,7 @@ def selector_spec_to_tool(
     binding-level: they are MCP pipeline mechanics with no spec analogue.
 
     ``meta`` is the base-protocol ``_meta`` bundle the tool's ``tools/list``
-    entry carries — see :func:`service_spec_to_tool`.
+    entry carries — see ``service_spec_to_tool``.
     """
     if spec.selector is None:
         raise ValueError(

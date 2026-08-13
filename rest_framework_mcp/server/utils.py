@@ -1,4 +1,4 @@
-"""Internal helpers shared by :class:`MCPServer`'s registration methods."""
+"""Internal helpers shared by [`MCPServer`][rest_framework_mcp.server.mcp_server.MCPServer]'s registration methods."""
 
 from __future__ import annotations
 
@@ -67,7 +67,7 @@ def check_tool_permissions_declared(
 class UndescribedToolWarning(UserWarning):
     """A tool was registered with no description.
 
-    Its own category, matching :class:`UnguardedToolWarning`.
+    Its own category, matching ``UnguardedToolWarning``.
     """
 
 
@@ -98,7 +98,7 @@ def check_tool_description_present(name: str, description: str | None, *, requir
 class UnboundedListWarning(UserWarning):
     """A LIST selector tool was registered without pagination.
 
-    Its own category, matching :class:`UnguardedToolWarning`.
+    Its own category, matching ``UnguardedToolWarning``.
     """
 
 
@@ -197,9 +197,9 @@ def check_permissions_shape(label: str, permissions: Any) -> tuple[Any, ...]:
 
     **Security-relevant.** ``permissions="Scope"`` normalises to
     ``tuple("Scope")`` — five one-character entries. The tuple is non-empty, so
-    :func:`check_tool_permissions_declared` sees a guarded tool and stays quiet;
-    at dispatch, :func:`check_permissions` skips every entry that is not an
-    :class:`MCPPermission`, and the call is **allowed**. A bare string is the
+    ``check_tool_permissions_declared`` sees a guarded tool and stays quiet;
+    at dispatch, ``check_permissions`` skips every entry that is not an
+    [`MCPPermission`][rest_framework_mcp.auth.permissions.types.mcp_permission.MCPPermission], and the call is **allowed**. A bare string is the
     likely way in, being what the permission classes themselves accept, so it
     gets its own message.
 

@@ -40,7 +40,7 @@ def topic_for_task(task_id: str) -> str:
 
     Task ids carry 32 bytes of entropy, so the topic name is unguessable too,
     but that is a property of the id and not a substitute for the ownership
-    check :func:`grant_subscription` makes before attaching: a topic is not an
+    check ``grant_subscription`` makes before attaching: a topic is not an
     authorization boundary.
     """
     return f"task:{task_id}"

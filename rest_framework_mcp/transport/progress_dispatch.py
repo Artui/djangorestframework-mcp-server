@@ -43,7 +43,7 @@ def can_report_progress(method: str, params: Any, context: MCPCallContext) -> bo
     Narrower than "the client asked", and deliberately so. Opening a stream for
     a dispatch that will never report costs a connection, buys nothing, and
     silently gives up the normative ``403``: a ``StreamingHttpResponse`` commits
-    its status before the handler runs, and :func:`preflight_permissions` can
+    its status before the handler runs, and ``preflight_permissions`` can
     only speak for ``tools/call``. So streaming is confined to the paths that
     actually thread a reporter — ``tools/call`` on a service or selector
     binding.
@@ -74,7 +74,7 @@ def preflight_permissions(method: str, params: Any, context: MCPCallContext) -> 
 
     Returns ``None`` when there is nothing to deny: only ``tools/call`` has a
     binding to check here. That narrowness is safe **because**
-    :func:`can_report_progress` refuses to stream anything this cannot speak
+    ``can_report_progress`` refuses to stream anything this cannot speak
     for — changing one without the other reopens the hole.
     """
     if method != "tools/call" or not isinstance(params, dict):

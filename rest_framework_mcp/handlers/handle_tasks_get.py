@@ -25,7 +25,7 @@ def handle_tasks_get(
     server asks for a sane cadence.
 
     The response is the task itself; which extra field it carries follows from
-    the status, and :meth:`Task.to_dict` owns that correspondence, so this
+    the status, and [`Task.to_dict`][rest_framework_mcp.protocol.types.task.Task.to_dict] owns that correspondence, so this
     handler never branches on status.
 
     ``resultType`` is ``"complete"``, not ``"task"``. The distinction is

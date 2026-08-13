@@ -34,7 +34,7 @@ class DjangoOAuthToolkitBackend:
     """Resource-server adapter for ``django-oauth-toolkit`` (DOT).
 
     Validates the bearer token using DOT's own validators, then projects the
-    result into a :class:`TokenInfo`. ``oauth2_provider`` is imported lazily
+    result into a [`TokenInfo`][rest_framework_mcp.auth.types.token_info.TokenInfo]. ``oauth2_provider`` is imported lazily
     inside the method bodies because it is an optional extra
     (``pip install "djangorestframework-mcp-server[oauth]"``): importing this
     module without DOT is fine, and the ``ImportError`` fires only when a
@@ -55,7 +55,7 @@ class DjangoOAuthToolkitBackend:
     - an explicit ``audience_getter=`` reading it from wherever it lives — a
       JWT claim, an upstream gateway header, a related row.
 
-    Turning it on without either raises :class:`ImproperlyConfigured` at
+    Turning it on without either raises ``ImproperlyConfigured`` at
     construction, naming both ways out, instead of 401-ing every request.
 
     **One resource URL per server.** RFC 8707 binds a token to *a* resource,
@@ -191,7 +191,7 @@ class DjangoOAuthToolkitBackend:
 
         DOT is imported here rather than at module scope so this module stays
         importable without the ``[oauth]`` extra; when DOT is absent the
-        token-model check is skipped and :meth:`authenticate` raises its own
+        token-model check is skipped and ``authenticate`` raises its own
         ``ImportError`` instead.
         """
         if self._resource_url is None:
@@ -259,12 +259,12 @@ class DjangoOAuthToolkitBackend:
         it, so passing the value DOT advertises as *its* issuer
         (``<host>/oauth``) publishes ``<host>/oauth/oauth/authorize/`` — three
         404s in a document clients read to find the login flow. That mistake
-        warns at construction; see :class:`MountedAuthorizationServerWarning`.
+        warns at construction; see ``MountedAuthorizationServerWarning``.
 
         Missing values fall through as empty strings / lists so the wire shape
         is always valid JSON; configure ``authorization_servers`` for
         production. ``client_id_metadata_document_supported`` is read from DOT
-        rather than asserted here — see :func:`_cimd_enabled`.
+        rather than asserted here — see ``_cimd_enabled``.
         """
         as_list: list[str] = self._authorization_servers
         issuer: str = as_list[0] if as_list else ""
@@ -315,7 +315,7 @@ def _cimd_enabled() -> bool:
 def _derive_metadata_url(resource_url: str | None) -> str | None:
     """Point a 401 challenge at *this* server's PRM endpoint.
 
-    :class:`MCPServer` mounts the metadata view under its own prefix, so a
+    [`MCPServer`][rest_framework_mcp.server.mcp_server.MCPServer] mounts the metadata view under its own prefix, so a
     server whose canonical URL is ``https://x/internal/mcp/`` serves it at
     ``https://x/internal/mcp/.well-known/oauth-protected-resource``.
     """

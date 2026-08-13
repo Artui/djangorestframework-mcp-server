@@ -31,12 +31,12 @@ class InputRequiredResult:
     capability**: the spec is explicit that a server *MUST NOT* send an
     ``elicitation/create`` to a client that did not declare ``elicitation``. The
     gate is
-    :func:`~rest_framework_mcp.elicitation.can_ask_client.can_ask_client`,
+    ``can_ask_client``,
     consulted before this object is ever built."""
 
     request_state: str | None = None
     """Opaque to the client, signed by us. See
-    :mod:`rest_framework_mcp.elicitation.sign_request_state`."""
+    ``rest_framework_mcp.elicitation.sign_request_state``."""
 
     def __post_init__(self) -> None:
         if not self.input_requests and self.request_state is None:
@@ -49,7 +49,7 @@ class InputRequiredResult:
         """The wire object, ``resultType`` included.
 
         Stamped here rather than left to
-        :class:`~rest_framework_mcp.protocol.types.json_rpc_response.JsonRpcResponse`,
+        [`JsonRpcResponse`][rest_framework_mcp.protocol.types.json_rpc_response.JsonRpcResponse],
         which defaults every result to ``complete`` and steps aside only for one
         that has already named itself.
         """

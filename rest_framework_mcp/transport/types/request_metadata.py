@@ -19,7 +19,7 @@ class RequestMetadata:
     capabilities restated on each request rather than agreed once and
     remembered, so nothing is negotiated and nothing has to be stored.
 
-    :meth:`from_params` doubles as the **era test**, returning ``None`` when
+    ``from_params`` doubles as the **era test**, returning ``None`` when
     the request carries no modern protocol version — a legacy request being
     exactly one that carries none. Deliberately not a test on the
     ``MCP-Protocol-Version`` header (legacy clients have sent one since

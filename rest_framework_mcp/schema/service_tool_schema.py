@@ -11,7 +11,7 @@ def build_service_tool_input_schema(binding: ToolBinding) -> dict[str, Any]:
 
     The shape is ``spec.input_serializer`` verbatim (``spec.partial is True``
     drops ``required``, mirroring the dispatch-time partial-validation
-    contract), plus any registered :class:`UrlKwarg` properties merged in.
+    contract), plus any registered [`UrlKwarg`][rest_framework_services.types.url_kwarg.UrlKwarg] properties merged in.
 
     A ``UrlKwarg(required=True)`` joins ``required`` and ``spec.partial`` does
     **not** relax it: partial validation is about the *payload* the serializer

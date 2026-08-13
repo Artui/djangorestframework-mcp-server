@@ -35,14 +35,14 @@ def build_resource_contents(
        ``view`` / ``request``, so a field reading ``self.context["request"]``
        resolves it as it would behind a view. A resource binding has no context
        provider of its own: its selector is a bare callable, not a spec.
-    2. **Encode** per the binding's :class:`ResourceEncoding`. ``JSON``
+    2. **Encode** per the binding's [`ResourceEncoding`][rest_framework_mcp.constants.ResourceEncoding]. ``JSON``
        pretty-prints; ``TEXT`` passes the value through verbatim, which is what
        an HTML / Markdown / CSV resource needs; ``BLOB`` base64-encodes it into
        the spec's ``blob`` field. ``text`` and ``blob`` are mutually exclusive
        on a ``contents`` entry, so exactly one is ever set.
 
     A ``TEXT`` or ``BLOB`` binding whose selector returned the wrong Python type
-    can only surface at read time, so it comes back as a :class:`JsonRpcError`
+    can only surface at read time, so it comes back as a [`JsonRpcError`][rest_framework_mcp.protocol.types.json_rpc_error.JsonRpcError]
     rather than an exception — a well-formed error response instead of a 500.
     """
     payload: Any = raw

@@ -25,7 +25,7 @@ def handle_completion_complete(
     The interactive-typing surface: a client shows a dropdown as the user fills
     in a prompt argument or a URI-template variable and asks here for
     candidates. Completers are registered per binding, keyed by the argument
-    they complete, and dispatched through :func:`resolve_callable_kwargs`, so
+    they complete, and dispatched through ``resolve_callable_kwargs``, so
     one declares whichever of ``value`` / ``arguments`` / ``request`` / ``user``
     it needs (plus any already-resolved sibling by name) and gets nothing else.
 
@@ -35,7 +35,7 @@ def handle_completion_complete(
     keystroke at a time.
 
     **Completers are sync callables.** Under ASGI this handler runs in Django's
-    thread-sensitive executor (see :func:`adispatch`), so ORM access inside a
+    thread-sensitive executor (see ``adispatch``), so ORM access inside a
     completer is fine — but returning a coroutine is not, since nothing awaits
     it.
 

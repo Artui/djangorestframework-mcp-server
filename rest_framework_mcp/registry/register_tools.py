@@ -1,7 +1,7 @@
-"""Bulk-registration entry point for :class:`ToolDefinition` lists.
+"""Bulk-registration entry point for [`ToolDefinition`][rest_framework_mcp.registry.types.tool_definition.ToolDefinition] lists.
 
-A thin loop over :meth:`MCPServer.register_service_tool` /
-:meth:`MCPServer.register_selector_tool` rather than a parallel registration
+A thin loop over [`MCPServer.register_service_tool`][rest_framework_mcp.server.mcp_server.MCPServer.register_service_tool] /
+[`MCPServer.register_selector_tool`][rest_framework_mcp.server.mcp_server.MCPServer.register_selector_tool] rather than a parallel registration
 engine, so every guarantee of the imperative API applies unchanged. Useful when
 a project has many tools in one family and wants the repetitive defaults in one
 place:
@@ -50,7 +50,7 @@ def register_tools(
     selector_defaults: SelectorDefaults | None = None,
     service_defaults: ServiceDefaults | None = None,
 ) -> list[ToolBinding | SelectorToolBinding]:
-    """Register every :class:`ToolDefinition` against ``server``.
+    """Register every [`ToolDefinition`][rest_framework_mcp.registry.types.tool_definition.ToolDefinition] against ``server``.
 
     Args:
         server: The server to register against.
@@ -66,7 +66,7 @@ def register_tools(
 
     Raises:
         TypeError: The definition's ``kind`` is unrecognised. The discriminator
-            is internal, so this needs direct :class:`ToolDefinition`
+            is internal, so this needs direct [`ToolDefinition`][rest_framework_mcp.registry.types.tool_definition.ToolDefinition]
             construction with an unsupported value.
     """
     selector_defaults_kwargs: dict[str, Any] = _non_none_field_dict(selector_defaults)
@@ -97,8 +97,8 @@ def register_tools(
 def _non_none_field_dict(obj: Any) -> dict[str, Any]:
     """Return the dataclass's non-``None`` fields as a dict, or ``{}`` for ``None``.
 
-    ``None`` is the "no override" sentinel across the :class:`ToolDefinition` /
-    :class:`SelectorDefaults` / :class:`ServiceDefaults` family, and stripping
+    ``None`` is the "no override" sentinel across the [`ToolDefinition`][rest_framework_mcp.registry.types.tool_definition.ToolDefinition] /
+    [`SelectorDefaults`][rest_framework_mcp.registry.types.selector_defaults.SelectorDefaults] / [`ServiceDefaults`][rest_framework_mcp.registry.types.service_defaults.ServiceDefaults] family, and stripping
     it lets the downstream ``register_*_tool`` default apply — passing the
     ``None`` through would mean something else, since several of those kwargs
     are tri-state on the method.

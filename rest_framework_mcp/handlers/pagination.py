@@ -18,7 +18,7 @@ def _encode_cursor(offset: int) -> str:
 def _decode_cursor(cursor: str) -> int:
     """Parse an opaque cursor back into a numeric offset.
 
-    Raises :class:`ValueError` on any malformed input so callers can map to
+    Raises ``ValueError`` on any malformed input so callers can map to
     JSON-RPC ``-32602``.
     """
     padding: str = "=" * (-len(cursor) % 4)

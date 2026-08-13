@@ -9,13 +9,13 @@ from rest_framework_mcp.protocol.types.resource_contents import ResourceContents
 
 @dataclass(frozen=True)
 class ToolContentBlock:
-    """One entry in a :class:`ToolResult`'s ``content`` array.
+    """One entry in a [`ToolResult`][rest_framework_mcp.protocol.types.tool_result.ToolResult]'s ``content`` array.
 
     The spec models content as a five-member union — ``text``, ``image``,
     ``audio``, ``resource_link``, ``resource`` — whose members share no fields
     beyond ``type``, ``annotations`` and ``_meta``. This is one dataclass with
     every member's fields optional rather than five behind a union: ``content``
-    is a wire boundary, the shape is decided by ``type``, and :meth:`to_dict`
+    is a wire boundary, the shape is decided by ``type``, and ``to_dict``
     emits only what is set.
 
     **Construct through the classmethods, not the initialiser.** Each takes
@@ -84,7 +84,7 @@ class ToolContentBlock:
         annotations: dict[str, Any] | None = None,
         meta: dict[str, Any] | None = None,
     ) -> ToolContentBlock:
-        """An audio block — the same contract as :meth:`image`."""
+        """An audio block — the same contract as ``image``."""
         return cls(
             type="audio",
             data=_encode_base64(data),
@@ -131,7 +131,7 @@ class ToolContentBlock:
     ) -> ToolContentBlock:
         """A resource's contents inlined into the result.
 
-        Prefer :meth:`resource_link` unless the client cannot make a second
+        Prefer ``resource_link`` unless the client cannot make a second
         round trip — embedding spends the caller's context on bytes it may not
         need.
         """

@@ -3,7 +3,7 @@
 Drives a ``ServiceSpec`` / ``SelectorSpec`` tool through the sister repo's
 transport-neutral ``dispatch_spec`` + ``render_spec_output`` +
 ``enforce_permissions``, off the HTTP / JSON-RPC path, returning the same
-:class:`ToolResult` the wire handlers build. A programmatic caller — the
+[`ToolResult`][rest_framework_mcp.protocol.types.tool_result.ToolResult] the wire handlers build. A programmatic caller — the
 django-ag-ui bridge, a Pydantic-AI toolset, a management command — gets a tool
 result without reaching into handler internals or re-implementing dispatch.
 
@@ -65,7 +65,7 @@ def call_spec_tool(
     denied permission raises ``PermissionDenied`` and a malformed payload raises
     DRF's ``ValidationError`` — protocol faults the caller maps to its own wire.
     A chain tool orchestrates several specs, has no single dispatch target, and
-    is rejected with :class:`TypeError`.
+    is rejected with ``TypeError``.
     """
     if isinstance(binding, ChainToolBinding):
         raise TypeError(

@@ -59,7 +59,7 @@ def validate_query_params(
 ) -> None:
     """Fail-fast at registration time on a bad ``query_params`` declaration.
 
-    The sibling of :func:`validate_url_kwargs`, delegating the name checks to the
+    The sibling of ``validate_url_kwargs``, delegating the name checks to the
     same shared ``validate_channel_names`` with the same reserved set: a query
     param is popped out of the caller's arguments exactly as a URL kwarg is, so
     the same names are off-limits. ``QueryParam`` carries no ``required`` flag,
@@ -355,9 +355,9 @@ def _accepts_var_keyword(sig: inspect.Signature) -> bool:
 def _serializer_field_names(input_serializer: type) -> Iterable[str]:
     """Best-effort field-name extraction for the kinds of inputs MCP accepts.
 
-    Supports the same shapes :func:`build_input_schema` does: a DRF
+    Supports the same shapes ``build_input_schema`` does: a DRF
     ``Serializer`` subclass (via ``_declared_fields``) or a bare ``@dataclass``
-    (via :func:`dataclasses.fields`). Anything else yields nothing to validate
+    (via ``dataclasses.fields``). Anything else yields nothing to validate
     against, which is preferable to a false positive.
     """
     if isinstance(input_serializer, type) and issubclass(

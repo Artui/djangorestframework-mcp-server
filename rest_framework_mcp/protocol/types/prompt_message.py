@@ -13,7 +13,7 @@ class PromptMessage:
     The spec accepts ``user`` or ``assistant`` for ``role``, and ``content`` is
     one content block — ``text``, ``image``, ``audio`` or an embedded
     ``resource``. It stays a plain dict because that is exactly the wire shape;
-    :meth:`block` is the typed way in and :meth:`text` covers the common case.
+    ``block`` is the typed way in and ``text`` covers the common case.
     """
 
     role: str
@@ -32,7 +32,7 @@ class PromptMessage:
         """Build a turn from any content block.
 
         The spec uses one content vocabulary across tool results and prompt
-        messages, so this reuses :class:`ToolContentBlock` rather than growing a
+        messages, so this reuses [`ToolContentBlock`][rest_framework_mcp.protocol.types.tool_content_block.ToolContentBlock] rather than growing a
         parallel set. ``resource_link`` is the one member prompts do not accept
         — a prompt message embeds content, it does not point at it.
         """

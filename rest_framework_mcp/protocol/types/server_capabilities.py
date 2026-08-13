@@ -11,7 +11,7 @@ class ServerCapabilities:
     Every field defaults to ``None`` and is omitted from the payload when unset,
     because a capability is a promise: a client that sees ``resources`` will
     call ``resources/list``, and one that sees ``completions`` will send
-    ``completion/complete``. :func:`handle_initialize` populates only what this
+    ``completion/complete``. ``handle_initialize`` populates only what this
     server can actually answer.
 
     There is deliberately no ``logging`` field — the ``2026-07-28`` revision
@@ -32,7 +32,7 @@ class ServerCapabilities:
     settings objects; ``{}`` means "supported, nothing to configure", which is
     what every extension here uses.
 
-    Distinct from :attr:`experimental`: that is a free-for-all with no naming
+    Distinct from ``experimental``: that is a free-for-all with no naming
     rules, while extension keys are namespaced identifiers a client matches
     exactly."""
 

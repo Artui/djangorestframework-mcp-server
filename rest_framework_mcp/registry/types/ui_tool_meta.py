@@ -15,7 +15,7 @@ class UIToolMeta:
     host reading ``tools/list`` knows which ``ui://`` resource to fetch and
     which surfaces may call the tool. The view renders from the tool's
     ``structuredContent``, so a linked tool must emit it:
-    :meth:`~rest_framework_mcp.MCPServer.register_service_tool` and friends
+    [`register_service_tool`][rest_framework_mcp.server.mcp_server.MCPServer.register_service_tool] and friends
     refuse a link when it is switched off.
 
     Attributes:

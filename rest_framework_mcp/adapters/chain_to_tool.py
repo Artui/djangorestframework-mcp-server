@@ -47,20 +47,20 @@ def chain_steps_to_tool(
     max_result_bytes: int | None | UnsetType = UNSET,
     dispatch_timeout: float | None | UnsetType = UNSET,
 ) -> ChainToolBinding:
-    """Lift an ordered list of :class:`ChainStep` into a :class:`ChainToolBinding`.
+    """Lift an ordered list of [`ChainStep`][rest_framework_mcp.registry.types.chain_step.ChainStep] into a [`ChainToolBinding`][rest_framework_mcp.registry.types.chain_tool_binding.ChainToolBinding].
 
     Pure projection — no side effects on the specs or their callables. The
     handler layer (``handlers/chain_tool_dispatch.py``) runs the steps.
 
     Each step's ``spec.permission_classes`` is wrapped via
-    :func:`wrap_spec_permissions` and AND-combined with the chain-level
+    ``wrap_spec_permissions`` and AND-combined with the chain-level
     ``permissions``. They are all evaluated up front, which is what makes a
     failing step permission block the whole chain without running any step.
     Structural validation (non-empty, unique aliases, known ``output_alias``,
-    spec types) happens in :meth:`ChainToolBinding.__post_init__`.
+    spec types) happens in ``ChainToolBinding.__post_init__``.
 
     ``meta`` is the base-protocol ``_meta`` bundle the tool's ``tools/list``
-    entry carries — see :func:`service_spec_to_tool`.
+    entry carries — see ``service_spec_to_tool``.
     """
     step_perms: tuple[Any, ...] = ()
     for step in steps:

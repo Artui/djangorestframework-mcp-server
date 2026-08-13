@@ -21,7 +21,7 @@ def fingerprint_request(method: str, payload: Any) -> str:
     would do.
 
     Feed it the arguments **as the client sent them**, never the merged ones —
-    see :attr:`~rest_framework_mcp.elicitation.types.request_state.RequestState.fingerprint`.
+    see ``fingerprint``.
     """
     encoded: str = json.dumps(
         {"method": method, "payload": payload},
