@@ -26,7 +26,9 @@ from rest_framework_mcp.protocol.types.json_rpc_error import JsonRpcError
 
 # Method dispatch table. The values return either:
 #   - a result payload (anything JSON-encodable),
-#   - an [`InitializeResult`][rest_framework_mcp.protocol.types.initialize_result.InitializeResult] (which the dispatcher serialises), or
+#   - an
+#     [`InitializeResult`][rest_framework_mcp.protocol.types.initialize_result.InitializeResult]
+#     (which the dispatcher serialises), or
 #   - a [`JsonRpcError`][rest_framework_mcp.protocol.types.json_rpc_error.JsonRpcError].
 _HandlerFn = Callable[[dict[str, Any] | None, MCPCallContext], Any]
 
@@ -61,9 +63,8 @@ def dispatch(
     """Route a JSON-RPC method to its handler.
 
     Returns the handler's raw return value, except that
-    [`InitializeResult`][rest_framework_mcp.protocol.types.initialize_result.InitializeResult] is converted to its dict form so the transport
-    can serialise uniformly.
-    """
+    [`InitializeResult`][rest_framework_mcp.protocol.types.initialize_result.InitializeResult]
+    is converted to its dict form so the transport can serialise uniformly."""
     handler: _HandlerFn | None = _HANDLERS.get(method)
     if handler is None:
         return JsonRpcError(JsonRpcErrorCode.METHOD_NOT_FOUND, f"Unknown method: {method!r}")

@@ -58,7 +58,8 @@ def selector_spec_to_tool(
     dispatch_timeout: float | None | UnsetType = UNSET,
     max_page_size: int | None | UnsetType = UNSET,
 ) -> SelectorToolBinding:
-    """Lift a ``SelectorSpec`` into a [`SelectorToolBinding`][rest_framework_mcp.registry.types.selector_tool_binding.SelectorToolBinding].
+    """Lift a ``SelectorSpec`` into a
+    [`SelectorToolBinding`][rest_framework_mcp.registry.types.selector_tool_binding.SelectorToolBinding].
 
     Sister of ``service_spec_to_tool`` for the read-shaped pipeline. The
     spec must carry a concrete ``selector`` callable, checked here so

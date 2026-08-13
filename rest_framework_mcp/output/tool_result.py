@@ -41,7 +41,8 @@ def build_tool_result(
     content_mime_type: str | None = None,
     binding_name: str | None = None,
 ) -> ToolResult:
-    """Build a [`ToolResult`][rest_framework_mcp.protocol.types.tool_result.ToolResult] for a successful (or tool-level error) call.
+    """Build a [`ToolResult`][rest_framework_mcp.protocol.types.tool_result.ToolResult]
+    for a successful (or tool-level error) call.
 
     Args:
         payload: The JSON-shaped tool output. Becomes ``structuredContent``

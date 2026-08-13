@@ -1,11 +1,12 @@
 """``call_spec_tool`` — transport-neutral invocation of a spec-backed MCP tool.
 
 Drives a ``ServiceSpec`` / ``SelectorSpec`` tool through the sister repo's
-transport-neutral ``dispatch_spec`` + ``render_spec_output`` +
-``enforce_permissions``, off the HTTP / JSON-RPC path, returning the same
-[`ToolResult`][rest_framework_mcp.protocol.types.tool_result.ToolResult] the wire handlers build. A programmatic caller — the
-django-ag-ui bridge, a Pydantic-AI toolset, a management command — gets a tool
-result without reaching into handler internals or re-implementing dispatch.
+transport-neutral ``dispatch_spec`` + ``render_spec_output`` + ``enforce_permissions``,
+off the HTTP / JSON-RPC path, returning the same
+[`ToolResult`][rest_framework_mcp.protocol.types.tool_result.ToolResult] the wire
+handlers build. A programmatic caller — the django-ag-ui bridge, a Pydantic-AI toolset,
+a management command — gets a tool result without reaching into handler internals or
+re-implementing dispatch.
 
 Deliberately the **spec core**: instance resolution, ``input_serializer``
 validation, the service / selector run, the output-selector re-fetch, queryset

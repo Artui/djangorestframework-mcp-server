@@ -11,9 +11,10 @@ class InMemorySSEBroker:
     the same process publishes to it via ``publish``; the streaming GET
     generator pulls off the queue and emits SSE frames.
 
-    State is instance-scoped, so multiple servers in one process share none of
-    it. Multi-process deployments need an out-of-process backend — see
-    [`RedisSSEBroker`][rest_framework_mcp.transport.redis_sse_broker.RedisSSEBroker] (the ``[redis]`` extra).
+    State is instance-scoped, so multiple servers in one process share none of it.
+    Multi-process deployments need an out-of-process backend — see
+    [`RedisSSEBroker`][rest_framework_mcp.transport.redis_sse_broker.RedisSSEBroker]
+    (the ``[redis]`` extra).
 
     One subscriber per session: re-subscribing replaces the previous queue, and
     the old generator errors out on its next ``await``. There is no replay;

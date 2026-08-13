@@ -14,7 +14,9 @@ def build_error_tool_result(
     error_type: str,
     detail: Mapping[str, Any] | None = None,
 ) -> ToolResult:
-    """Build an ``isError: true`` [`ToolResult`][rest_framework_mcp.protocol.types.tool_result.ToolResult] for a tool-level failure.
+    """Build an ``isError: true``
+    [`ToolResult`][rest_framework_mcp.protocol.types.tool_result.ToolResult] for a
+    tool-level failure.
 
     Per the MCP spec, *execution* failures (business rules, validation of
     well-shaped input, missing rows) come back as tool results the model can

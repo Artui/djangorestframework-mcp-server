@@ -23,8 +23,9 @@ _DEFAULT_KEY_PREFIX: str = "drf-mcp:sse-replay"
 class RedisSSEReplayBuffer:
     """Cross-process replay buffer backed by Redis Streams.
 
-    Drop-in replacement for [`InMemorySSEReplayBuffer`][rest_framework_mcp.transport.in_memory_sse_replay_buffer.InMemorySSEReplayBuffer] when running
-    multiple ASGI workers: a reconnect can land on any worker, and a shared
+    Drop-in replacement for
+    [`InMemorySSEReplayBuffer`][rest_framework_mcp.transport.in_memory_sse_replay_buffer.InMemorySSEReplayBuffer]
+    when running multiple ASGI workers: a reconnect can land on any worker, and a shared
     Redis Stream replays the same events whichever worker recorded them.
 
     Stream IDs are auto-assigned by Redis and monotonic within a session, so

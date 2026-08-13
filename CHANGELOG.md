@@ -22,6 +22,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `UnknownArguments` and `ArgumentBinding` sections; those come from
   drf-services' own docstrings and clear when its fix is released.
 
+- **Docstring code samples are syntax-highlighted again.** Six `.. code-block::`
+  directives had the same problem as the roles: mkdocstrings renders Markdown,
+  so the directive line itself reached the page as a literal paragraph
+  (`<p>.. code-block:: text</p>`) above an unhighlighted block. They are now
+  fenced blocks carrying their language.
+
 ## [0.32.0] — 2026-08-11
 
 ### Upgrade notes

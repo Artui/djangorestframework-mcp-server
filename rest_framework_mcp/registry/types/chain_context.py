@@ -12,9 +12,9 @@ class ChainContext:
     ``inputs`` callable so a step can build its call kwargs from the validated
     tool arguments and any prior step's output:
 
-    .. code-block:: python
-
-        inputs=lambda ctx: {"account_id": ctx["acct"].id, **ctx.args}
+    ```python
+    inputs=lambda ctx: {"account_id": ctx["acct"].id, **ctx.args}
+    ```
 
     ``ctx[alias]`` is the post-output-selector result a prior step stored, and
     raises ``KeyError`` for an alias that has not run — only possible when a

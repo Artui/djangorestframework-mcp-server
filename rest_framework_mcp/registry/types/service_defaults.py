@@ -9,10 +9,13 @@ from rest_framework_mcp.constants import ArgumentBinding, OutputFormat, UnknownA
 
 @dataclass(frozen=True)
 class ServiceDefaults:
-    """Per-kind defaults for [`register_tools`][rest_framework_mcp.registry.register_tools.register_tools] over service definitions.
+    """Per-kind defaults for
+    [`register_tools`][rest_framework_mcp.registry.register_tools.register_tools] over
+    service definitions.
 
-    ``None`` is the "no override" sentinel: only non-``None`` values are
-    applied as defaults to the matching [`MCPServer.register_service_tool`][rest_framework_mcp.server.mcp_server.MCPServer.register_service_tool]
+    ``None`` is the "no override" sentinel: only non-``None`` values are applied as
+    defaults to the matching
+    [`MCPServer.register_service_tool`][rest_framework_mcp.server.mcp_server.MCPServer.register_service_tool]
     call, and a per-definition value always wins.
 
     That includes the tri-state fields, where ``None`` on the registration

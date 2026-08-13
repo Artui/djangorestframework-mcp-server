@@ -10,7 +10,9 @@ from rest_framework_mcp.conf import get_setting
 
 
 class SimpleJWTCookieAdapter:
-    """Reference [`AuthUserAdapter`][rest_framework_mcp.contrib.oauth.adapters.types.auth_user_adapter.AuthUserAdapter] for SimpleJWT cookie-authenticated apps.
+    """Reference
+    [`AuthUserAdapter`][rest_framework_mcp.contrib.oauth.adapters.types.auth_user_adapter.AuthUserAdapter]
+    for SimpleJWT cookie-authenticated apps.
 
     Reads the access-token cookie (``cookie_name=``, defaulting to
     ``REST_FRAMEWORK_MCP['SIMPLEJWT_ACCESS_COOKIE']``), decodes it with

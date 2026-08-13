@@ -30,7 +30,8 @@ class SlidingWindowRateLimit:
     stored in a cache entry, and each call prunes the expired ones and compares
     the live count against ``max_calls``.
 
-    Trade-offs against [`FixedWindowRateLimit`][rest_framework_mcp.auth.rate_limits.fixed_window_rate_limit.FixedWindowRateLimit]:
+    Trade-offs against
+    [`FixedWindowRateLimit`][rest_framework_mcp.auth.rate_limits.fixed_window_rate_limit.FixedWindowRateLimit]:
 
     - **Smoother**: limits the actual rate over the trailing ``per_seconds``,
       not bucketed counts.

@@ -7,9 +7,10 @@ from dataclasses import dataclass, field
 class DynamicClientRegistrationRequest:
     """RFC 7591 dynamic client registration request payload.
 
-    Mutable, so [`DynamicClientRegistrationSerializer`][rest_framework_mcp.contrib.oauth.dcr_serializer.DynamicClientRegistrationSerializer] can normalise in
-    place; frozen would force a second instance just to change a defaulted
-    field.
+    Mutable, so
+    [`DynamicClientRegistrationSerializer`][rest_framework_mcp.contrib.oauth.dcr_serializer.DynamicClientRegistrationSerializer]
+    can normalise in place; frozen would force a second instance just to change a
+    defaulted field.
 
     Two vocabularies land here side by side. ``token_endpoint_auth_method``,
     ``grant_types`` and ``response_types`` are the RFC 7591 §2 fields an

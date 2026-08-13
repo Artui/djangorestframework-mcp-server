@@ -33,8 +33,8 @@ class OpenIDDiscoveryViewSet(ViewSet):
     an ``ImproperlyConfigured`` 500, after logging in and consenting. The list
     is empty when no RSA key is configured.
 
-    A backend that hosts no authorization server raises
-    ``NotImplementedError``, surfaced as ``501`` for parity with
+    A backend that hosts no authorization server raises ``NotImplementedError``,
+    surfaced as ``501`` for parity with
     [`AuthorizationServerMetadataViewSet`][rest_framework_mcp.contrib.oauth.authorization_server_metadata_viewset.AuthorizationServerMetadataViewSet].
     """
 

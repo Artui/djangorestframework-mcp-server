@@ -9,9 +9,10 @@ from rest_framework_mcp.schema.input_schema import build_input_schema
 def build_service_tool_input_schema(binding: ToolBinding) -> dict[str, Any]:
     """Build the JSON Schema for a service tool's ``inputSchema``.
 
-    The shape is ``spec.input_serializer`` verbatim (``spec.partial is True``
-    drops ``required``, mirroring the dispatch-time partial-validation
-    contract), plus any registered [`UrlKwarg`][rest_framework_services.types.url_kwarg.UrlKwarg] properties merged in.
+    The shape is ``spec.input_serializer`` verbatim (``spec.partial is True`` drops
+    ``required``, mirroring the dispatch-time partial-validation contract), plus any
+    registered [`UrlKwarg`][rest_framework_services.types.url_kwarg.UrlKwarg] properties
+    merged in.
 
     A ``UrlKwarg(required=True)`` joins ``required`` and ``spec.partial`` does
     **not** relax it: partial validation is about the *payload* the serializer

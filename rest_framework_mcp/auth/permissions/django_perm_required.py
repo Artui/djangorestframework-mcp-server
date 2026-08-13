@@ -9,10 +9,12 @@ from rest_framework_mcp.auth.types.token_info import TokenInfo
 class DjangoPermRequired:
     """Allow only requests whose user has the given Django permission(s).
 
-    Wraps ``user.has_perm`` from the standard Django auth backend. A token
-    backed by ``AnonymousUser`` is always rejected — that is the point of using
-    this class instead of [`ScopeRequired`][rest_framework_mcp.auth.permissions.scope_required.ScopeRequired]. Takes a list or a bare
-    string, like [`ScopeRequired`][rest_framework_mcp.auth.permissions.scope_required.ScopeRequired].
+    Wraps ``user.has_perm`` from the standard Django auth backend. A token backed by
+    ``AnonymousUser`` is always rejected — that is the point of using this class instead
+    of
+    [`ScopeRequired`][rest_framework_mcp.auth.permissions.scope_required.ScopeRequired].
+    Takes a list or a bare string, like
+    [`ScopeRequired`][rest_framework_mcp.auth.permissions.scope_required.ScopeRequired].
     """
 
     def __init__(self, perm: str | list[str]) -> None:

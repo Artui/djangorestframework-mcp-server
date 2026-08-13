@@ -20,11 +20,11 @@ def check_oauth_url_shadowing(*, warn: bool = True) -> list[str]:
     """Report contested OAuth paths that resolve to something other than ours.
 
     django-oauth-toolkit 3.4.0 serves its own ``register/`` (RFC 7591) and
-    ``.well-known/oauth-authorization-server`` (RFC 8414). Django resolves
-    first-match, so mounting ``include("oauth2_provider.urls")`` *before*
-    [`build_oauth_urlpatterns`][rest_framework_mcp.contrib.oauth.build_oauth_urlpatterns.build_oauth_urlpatterns]'s output makes DOT answer those paths, with
-    an issuer of ``<host>/oauth``. Nothing errors; clients just read the wrong
-    document.
+    ``.well-known/oauth-authorization-server`` (RFC 8414). Django resolves first-match,
+    so mounting ``include("oauth2_provider.urls")`` *before*
+    [`build_oauth_urlpatterns`][rest_framework_mcp.contrib.oauth.build_oauth_urlpatterns.build_oauth_urlpatterns]'s
+    output makes DOT answer those paths, with an issuer of ``<host>/oauth``. Nothing
+    errors; clients just read the wrong document.
 
     A function rather than a Django system check because ``rest_framework_mcp``
     is a library with no ``AppConfig`` to register one on. Call it from your own

@@ -55,15 +55,17 @@ def service_spec_to_tool(
     max_result_bytes: int | None | UnsetType = UNSET,
     dispatch_timeout: float | None | UnsetType = UNSET,
 ) -> ToolBinding:
-    """Lift a ``ServiceSpec`` into a [`ToolBinding`][rest_framework_mcp.registry.types.tool_binding.ToolBinding].
+    """Lift a ``ServiceSpec`` into a
+    [`ToolBinding`][rest_framework_mcp.registry.types.tool_binding.ToolBinding].
 
     Pure projection — no side effects on the spec or its callable. The handler
     layer (``handlers/handle_tools_call.py``) is what invokes ``spec.service``.
 
     ``spec.permission_classes`` is honoured: each DRF ``BasePermission`` class is
-    wrapped in [`DRFPermissionAdapter`][rest_framework_mcp.auth.permissions.drf_permission_adapter.DRFPermissionAdapter] and prepended to the per-binding
-    ``permissions`` tuple, so author-declared contracts on the spec run before
-    transport-level ``MCPPermission`` instances, AND-combined.
+    wrapped in
+    [`DRFPermissionAdapter`][rest_framework_mcp.auth.permissions.drf_permission_adapter.DRFPermissionAdapter]
+    and prepended to the per-binding ``permissions`` tuple, so author-declared contracts
+    on the spec run before transport-level ``MCPPermission`` instances, AND-combined.
 
     ``meta`` is the base-protocol ``_meta`` bundle the tool's ``tools/list``
     entry carries. It goes through ``merge_meta`` so a later

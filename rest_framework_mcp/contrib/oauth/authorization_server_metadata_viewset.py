@@ -15,10 +15,10 @@ from rest_framework_mcp.auth.types.auth_backend import MCPAuthBackend
 class AuthorizationServerMetadataViewSet(ViewSet):
     """RFC 8414 OAuth 2.0 Authorization Server Metadata endpoint.
 
-    Mounted by [`build_oauth_urlpatterns`][rest_framework_mcp.contrib.oauth.build_oauth_urlpatterns.build_oauth_urlpatterns] at
-    ``/.well-known/oauth-authorization-server`` plus aliases, wired as the
-    ``list`` action:
-    ``as_view({"get": "list"}, auth_backend=...)``.
+    Mounted by
+    [`build_oauth_urlpatterns`][rest_framework_mcp.contrib.oauth.build_oauth_urlpatterns.build_oauth_urlpatterns]
+    at ``/.well-known/oauth-authorization-server`` plus aliases, wired as the ``list``
+    action: ``as_view({"get": "list"}, auth_backend=...)``.
 
     The payload comes from
     ``MCPAuthBackend.authorization_server_metadata``. A backend that hosts

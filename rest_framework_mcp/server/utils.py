@@ -1,4 +1,5 @@
-"""Internal helpers shared by [`MCPServer`][rest_framework_mcp.server.mcp_server.MCPServer]'s registration methods."""
+"""Internal helpers shared by
+[`MCPServer`][rest_framework_mcp.server.mcp_server.MCPServer]'s registration methods."""
 
 from __future__ import annotations
 
@@ -195,13 +196,13 @@ def build_ui_tool_meta(
 def check_permissions_shape(label: str, permissions: Any) -> tuple[Any, ...]:
     """Normalise a registration's ``permissions=`` and refuse a shape that lies.
 
-    **Security-relevant.** ``permissions="Scope"`` normalises to
-    ``tuple("Scope")`` — five one-character entries. The tuple is non-empty, so
-    ``check_tool_permissions_declared`` sees a guarded tool and stays quiet;
-    at dispatch, ``check_permissions`` skips every entry that is not an
-    [`MCPPermission`][rest_framework_mcp.auth.permissions.types.mcp_permission.MCPPermission], and the call is **allowed**. A bare string is the
-    likely way in, being what the permission classes themselves accept, so it
-    gets its own message.
+    **Security-relevant.** ``permissions="Scope"`` normalises to ``tuple("Scope")`` —
+    five one-character entries. The tuple is non-empty, so
+    ``check_tool_permissions_declared`` sees a guarded tool and stays quiet; at
+    dispatch, ``check_permissions`` skips every entry that is not an
+    [`MCPPermission`][rest_framework_mcp.auth.permissions.types.mcp_permission.MCPPermission],
+    and the call is **allowed**. A bare string is the likely way in, being what the
+    permission classes themselves accept, so it gets its own message.
 
     Only ``has_permission`` is required, deliberately: ``required_scopes`` has
     an implied ``[]`` default, so a permission implementing the gate and

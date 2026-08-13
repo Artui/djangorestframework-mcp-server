@@ -23,11 +23,11 @@ def handle_prompts_get(
 ) -> dict[str, Any] | JsonRpcError:
     """Render a registered prompt for the supplied arguments.
 
-    Checks that required arguments are present, runs the binding's permission
-    stack, then dispatches the render callable via
-    ``resolve_callable_kwargs`` so it can declare any subset of ``request``
-    / ``user`` plus its per-prompt arguments. Whatever it returns is normalised
-    into a list of [`PromptMessage`][rest_framework_mcp.protocol.types.prompt_message.PromptMessage].
+    Checks that required arguments are present, runs the binding's permission stack,
+    then dispatches the render callable via ``resolve_callable_kwargs`` so it can
+    declare any subset of ``request`` / ``user`` plus its per-prompt arguments. Whatever
+    it returns is normalised into a list of
+    [`PromptMessage`][rest_framework_mcp.protocol.types.prompt_message.PromptMessage].
     """
     if not isinstance(params, dict):
         return JsonRpcError(JsonRpcErrorCode.INVALID_PARAMS, "prompts/get params must be an object")

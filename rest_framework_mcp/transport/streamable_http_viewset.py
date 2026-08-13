@@ -135,16 +135,16 @@ class StreamableHttpViewSet(ViewSet):
     - **DELETE** → terminates the session referenced by ``MCP-Session-Id``.
 
     The transport bypasses DRF's default request lifecycle on purpose:
-    ``authentication_classes`` is empty because [`MCPAuthBackend`][rest_framework_mcp.auth.types.auth_backend.MCPAuthBackend] is the
-    auth layer (DRF's ``SessionAuthentication`` would fight with the
-    bearer-token shape MCP advertises), and ``permission_classes`` is
-    ``AllowAny`` because per-binding permissions live on the registered
-    tool / resource / prompt.
+    ``authentication_classes`` is empty because
+    [`MCPAuthBackend`][rest_framework_mcp.auth.types.auth_backend.MCPAuthBackend] is the
+    auth layer (DRF's ``SessionAuthentication`` would fight with the bearer-token shape
+    MCP advertises), and ``permission_classes`` is ``AllowAny`` because per-binding
+    permissions live on the registered tool / resource / prompt.
 
-    Collaborators (registries, auth backend, session store) are instance-scoped
-    and passed in by [`MCPServer`][rest_framework_mcp.server.mcp_server.MCPServer] through ``as_view``, never looked up at
-    module level, so independent servers in one process cannot interfere.
-    """
+    Collaborators (registries, auth backend, session store) are instance-scoped and
+    passed in by [`MCPServer`][rest_framework_mcp.server.mcp_server.MCPServer] through
+    ``as_view``, never looked up at module level, so independent servers in one process
+    cannot interfere."""
 
     authentication_classes: tuple = ()
     permission_classes = (AllowAny,)

@@ -9,12 +9,16 @@ from rest_framework_mcp.constants import ArgumentBinding, OutputFormat, UnknownA
 
 @dataclass(frozen=True)
 class SelectorDefaults:
-    """Per-kind defaults for [`register_tools`][rest_framework_mcp.registry.register_tools.register_tools] over selector definitions.
+    """Per-kind defaults for
+    [`register_tools`][rest_framework_mcp.registry.register_tools.register_tools] over
+    selector definitions.
 
-    Sister of [`ServiceDefaults`][rest_framework_mcp.registry.types.service_defaults.ServiceDefaults], with the same convention: ``None`` is
-    "no override", deferring to the per-definition value or to
-    [`MCPServer.register_selector_tool`][rest_framework_mcp.server.mcp_server.MCPServer.register_selector_tool]'s own default, and a
-    per-definition kwarg always wins on conflict.
+    Sister of
+    [`ServiceDefaults`][rest_framework_mcp.registry.types.service_defaults.ServiceDefaults],
+    with the same convention: ``None`` is "no override", deferring to the per-definition
+    value or to
+    [`MCPServer.register_selector_tool`][rest_framework_mcp.server.mcp_server.MCPServer.register_selector_tool]'s
+    own default, and a per-definition kwarg always wins on conflict.
 
     The selector-only knobs live here too, so a project wanting every selector
     tool to paginate by default says so once. Filtering is not among them —

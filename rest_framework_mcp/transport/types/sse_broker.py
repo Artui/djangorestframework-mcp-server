@@ -12,9 +12,12 @@ class SSEBroker(Protocol):
     ``publish`` from app code pushing a payload to a specific session, and
     ``unsubscribe`` when the streaming generator unwinds.
 
-    Two implementations ship: [`InMemorySSEBroker`][rest_framework_mcp.transport.in_memory_sse_broker.InMemorySSEBroker] (single-process, no
-    infra) and [`RedisSSEBroker`][rest_framework_mcp.transport.redis_sse_broker.RedisSSEBroker] (the ``[redis]`` extra), required for
-    multi-worker deployments where any worker can serve the streaming GET.
+    Two implementations ship:
+    [`InMemorySSEBroker`][rest_framework_mcp.transport.in_memory_sse_broker.InMemorySSEBroker]
+    (single-process, no infra) and
+    [`RedisSSEBroker`][rest_framework_mcp.transport.redis_sse_broker.RedisSSEBroker]
+    (the ``[redis]`` extra), required for multi-worker deployments where any worker can
+    serve the streaming GET.
 
     The contract is deliberately narrow: a session has at most one live
     subscriber, and ``publish`` returns ``True`` if a delivery was attempted,

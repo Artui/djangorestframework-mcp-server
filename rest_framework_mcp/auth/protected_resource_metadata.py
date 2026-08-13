@@ -15,18 +15,18 @@ from rest_framework_mcp.auth.types.auth_backend import MCPAuthBackend
 class ProtectedResourceMetadataViewSet(ViewSet):
     """RFC 9728 OAuth 2.0 Protected Resource Metadata endpoint.
 
-    Mounted at ``/.well-known/oauth-protected-resource`` by [`MCPServer`][rest_framework_mcp.server.mcp_server.MCPServer].
-    Single-action ViewSet — the canonical GET is wired as ``list`` via
-    ``ProtectedResourceMetadataViewSet.as_view({"get": "list"}, auth_backend=...)``
-    so the URL conf doesn't need a router. The payload comes from the
-    instance-scoped ``MCPAuthBackend.protected_resource_metadata``, so
-    multiple servers in one process advertise different metadata.
+    Mounted at ``/.well-known/oauth-protected-resource`` by
+    [`MCPServer`][rest_framework_mcp.server.mcp_server.MCPServer]. Single-action ViewSet
+    — the canonical GET is wired as ``list`` via
+    ``ProtectedResourceMetadataViewSet.as_view({"get": "list"}, auth_backend=...)`` so
+    the URL conf doesn't need a router. The payload comes from the instance-scoped
+    ``MCPAuthBackend.protected_resource_metadata``, so multiple servers in one process
+    advertise different metadata.
 
-    DRF authentication and permissions are deliberately open: PRM is a public
-    discovery endpoint, and the MCP transport owns its own auth pipeline
-    through [`MCPAuthBackend`][rest_framework_mcp.auth.types.auth_backend.MCPAuthBackend]. The renderer is pinned to JSON because
-    the payload shape is RFC-defined.
-    """
+    DRF authentication and permissions are deliberately open: PRM is a public discovery
+    endpoint, and the MCP transport owns its own auth pipeline through
+    [`MCPAuthBackend`][rest_framework_mcp.auth.types.auth_backend.MCPAuthBackend]. The
+    renderer is pinned to JSON because the payload shape is RFC-defined."""
 
     authentication_classes: tuple = ()  # noqa: RUF012 — DRF class-level config
     permission_classes = (AllowAny,)

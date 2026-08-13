@@ -8,8 +8,9 @@ from typing import Any
 class DynamicClientRegistrationResponse:
     """RFC 7591 client information response.
 
-    The wire shape [`DynamicClientRegistrationViewSet`][rest_framework_mcp.contrib.oauth.dynamic_client_registration_viewset.DynamicClientRegistrationViewSet] returns on a
-    successful registration.
+    The wire shape
+    [`DynamicClientRegistrationViewSet`][rest_framework_mcp.contrib.oauth.dynamic_client_registration_viewset.DynamicClientRegistrationViewSet]
+    returns on a successful registration.
 
     RFC 7591 §3.2.1 lets the authorization server substitute any metadata value
     it likes but obliges it to return everything it registered, so every field

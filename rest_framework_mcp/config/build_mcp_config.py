@@ -64,9 +64,10 @@ def build_mcp_config(
 ) -> MCPConfig:
     """Resolve a ``MCPConfig`` from ``REST_FRAMEWORK_MCP``, applying overrides.
 
-    The single place the scalar settings are read. [`MCPServer`][rest_framework_mcp.server.mcp_server.MCPServer] calls this
-    once in ``__init__``; nothing reads these settings per request, which is what
-    lets two servers in one project hold different values.
+    The single place the scalar settings are read.
+    [`MCPServer`][rest_framework_mcp.server.mcp_server.MCPServer] calls this once in
+    ``__init__``; nothing reads these settings per request, which is what lets two
+    servers in one project hold different values.
 
     Every argument is ``None`` by default, meaning "take it from settings". Pass
     one to override just that field for this server::

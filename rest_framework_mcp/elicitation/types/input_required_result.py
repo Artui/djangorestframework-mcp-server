@@ -50,9 +50,8 @@ class InputRequiredResult:
 
         Stamped here rather than left to
         [`JsonRpcResponse`][rest_framework_mcp.protocol.types.json_rpc_response.JsonRpcResponse],
-        which defaults every result to ``complete`` and steps aside only for one
-        that has already named itself.
-        """
+        which defaults every result to ``complete`` and steps aside only for one that
+        has already named itself."""
         out: dict[str, Any] = {"resultType": ResultType.INPUT_REQUIRED.value}
         if self.input_requests:
             out["inputRequests"] = {

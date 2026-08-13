@@ -32,7 +32,8 @@ def selector_to_resource(
     meta: dict[str, Any] | None = None,
     always_listed: bool = False,
 ) -> ResourceBinding:
-    """Lift a ``SelectorSpec`` into a [`ResourceBinding`][rest_framework_mcp.registry.types.resource_binding.ResourceBinding].
+    """Lift a ``SelectorSpec`` into a
+    [`ResourceBinding`][rest_framework_mcp.registry.types.resource_binding.ResourceBinding].
 
     Mirrors ``service_spec_to_tool`` — the unit of registration is always a
     spec from ``djangorestframework-services``. ``.selector`` must be set (there

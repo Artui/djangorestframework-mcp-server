@@ -76,12 +76,14 @@ _CLIENT_TYPE_AUTH_METHODS = {
 class DynamicClientRegistrationSerializer(DataclassSerializer):
     """RFC 7591 dynamic client registration request shape.
 
-    Wraps [`DynamicClientRegistrationRequest`][rest_framework_mcp.contrib.oauth.types.dynamic_client_registration_request.DynamicClientRegistrationRequest] so ``.save()`` hands
-    [`DynamicClientRegistrationViewSet`][rest_framework_mcp.contrib.oauth.dynamic_client_registration_viewset.DynamicClientRegistrationViewSet] a typed dataclass instance. The
-    field overrides replace the dataclass-derived defaults with shapes that
-    validate the wire contract: ``redirect_uris`` is required, non-empty and
-    URL-valued, and ``application_type`` is checked against OIDC's two values
-    and echoed without imposing the redirect-URI constraints an OIDC provider
+    Wraps
+    [`DynamicClientRegistrationRequest`][rest_framework_mcp.contrib.oauth.types.dynamic_client_registration_request.DynamicClientRegistrationRequest]
+    so ``.save()`` hands
+    [`DynamicClientRegistrationViewSet`][rest_framework_mcp.contrib.oauth.dynamic_client_registration_viewset.DynamicClientRegistrationViewSet]
+    a typed dataclass instance. The field overrides replace the dataclass-derived
+    defaults with shapes that validate the wire contract: ``redirect_uris`` is required,
+    non-empty and URL-valued, and ``application_type`` is checked against OIDC's two
+    values and echoed without imposing the redirect-URI constraints an OIDC provider
     would derive from it.
 
     ``token_endpoint_auth_method`` / ``grant_types`` are the RFC 7591 §2

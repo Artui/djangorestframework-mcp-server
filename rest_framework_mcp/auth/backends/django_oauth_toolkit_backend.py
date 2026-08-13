@@ -33,12 +33,12 @@ def _default_audience_getter(token: Any) -> str | None:
 class DjangoOAuthToolkitBackend:
     """Resource-server adapter for ``django-oauth-toolkit`` (DOT).
 
-    Validates the bearer token using DOT's own validators, then projects the
-    result into a [`TokenInfo`][rest_framework_mcp.auth.types.token_info.TokenInfo]. ``oauth2_provider`` is imported lazily
-    inside the method bodies because it is an optional extra
-    (``pip install "djangorestframework-mcp-server[oauth]"``): importing this
-    module without DOT is fine, and the ``ImportError`` fires only when a
-    request actually reaches authentication.
+    Validates the bearer token using DOT's own validators, then projects the result into
+    a [`TokenInfo`][rest_framework_mcp.auth.types.token_info.TokenInfo].
+    ``oauth2_provider`` is imported lazily inside the method bodies because it is an
+    optional extra (``pip install "djangorestframework-mcp-server[oauth]"``): importing
+    this module without DOT is fine, and the ``ImportError`` fires only when a request
+    actually reaches authentication.
 
     Audience enforcement (RFC 8707) is controlled by ``enforce_audience``,
     **not** by ``resource_url``. ``resource_url`` is the identity this server
@@ -315,10 +315,10 @@ def _cimd_enabled() -> bool:
 def _derive_metadata_url(resource_url: str | None) -> str | None:
     """Point a 401 challenge at *this* server's PRM endpoint.
 
-    [`MCPServer`][rest_framework_mcp.server.mcp_server.MCPServer] mounts the metadata view under its own prefix, so a
-    server whose canonical URL is ``https://x/internal/mcp/`` serves it at
-    ``https://x/internal/mcp/.well-known/oauth-protected-resource``.
-    """
+    [`MCPServer`][rest_framework_mcp.server.mcp_server.MCPServer] mounts the metadata
+    view under its own prefix, so a server whose canonical URL is
+    ``https://x/internal/mcp/`` serves it at
+    ``https://x/internal/mcp/.well-known/oauth-protected-resource``."""
     if not resource_url:
         return None
     return f"{resource_url.rstrip('/')}/.well-known/oauth-protected-resource"

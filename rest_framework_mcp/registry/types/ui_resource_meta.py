@@ -19,7 +19,8 @@ class UIResourceMeta:
     shape on the way in.
 
     Attributes:
-        csp: Origins the view needs; see [`UICsp`][rest_framework_mcp.registry.types.ui_csp.UICsp].
+        csp: Origins the view needs; see
+            [`UICsp`][rest_framework_mcp.registry.types.ui_csp.UICsp].
         permissions: Browser capabilities the view would use. The host decides
             whether to grant them.
         domain: A stable identity for the view's origin, letting a host group

@@ -12,12 +12,13 @@ from rest_framework_mcp.protocol.types.prompt_argument import PromptArgument
 class PromptBinding:
     """All wiring for a single MCP prompt.
 
-    A prompt is a server-defined message template the client invokes by name.
-    The ``render`` callable receives the client-supplied arguments as kwargs
-    and returns a list of [`PromptMessage`][rest_framework_mcp.protocol.types.prompt_message.PromptMessage] instances, a list of strings
-    (each becoming a user text message), a single string, or a coroutine
-    yielding any of those. The handler normalises whichever shape arrives into
-    the spec's ``messages`` list at dispatch time.
+    A prompt is a server-defined message template the client invokes by name. The
+    ``render`` callable receives the client-supplied arguments as kwargs and returns a
+    list of
+    [`PromptMessage`][rest_framework_mcp.protocol.types.prompt_message.PromptMessage]
+    instances, a list of strings (each becoming a user text message), a single string,
+    or a coroutine yielding any of those. The handler normalises whichever shape arrives
+    into the spec's ``messages`` list at dispatch time.
 
     ``annotations`` and ``meta`` are emitted verbatim on this prompt's
     ``prompts/list`` entry, under ``annotations`` and ``_meta`` respectively.
@@ -48,8 +49,8 @@ class PromptBinding:
     presentational; nothing in dispatch reads them."""
 
     always_listed: bool = False
-    """Keep this prompt in ``prompts/list`` even when
-    ``FILTER_LISTINGS_BY_PERMISSIONS`` would hide it — same semantics as
+    """Keep this prompt in ``prompts/list`` even when ``FILTER_LISTINGS_BY_PERMISSIONS``
+    would hide it — same semantics as
     [`ToolBinding.always_listed`][rest_framework_mcp.registry.types.tool_binding.ToolBinding.always_listed]."""
 
 

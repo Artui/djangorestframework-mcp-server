@@ -12,7 +12,8 @@ from rest_framework_mcp.registry.types.chain_context import ChainContext
 
 @dataclass(frozen=True)
 class ChainStep:
-    """One step in a [`ChainToolBinding`][rest_framework_mcp.registry.types.chain_tool_binding.ChainToolBinding].
+    """One step in a
+    [`ChainToolBinding`][rest_framework_mcp.registry.types.chain_tool_binding.ChainToolBinding].
 
     A step wraps a single ``ServiceSpec`` (a write) or ``SelectorSpec`` (a
     read) and binds its output to ``alias`` so later steps can read it via
@@ -24,7 +25,8 @@ class ChainStep:
 
     Attributes:
         alias: The name this step's result is stored under in the
-            [`ChainContext`][rest_framework_mcp.registry.types.chain_context.ChainContext]. Must be unique within the chain.
+            [`ChainContext`][rest_framework_mcp.registry.types.chain_context.ChainContext].
+            Must be unique within the chain.
         spec: The ``ServiceSpec`` or ``SelectorSpec`` this step runs.
         inputs: ``(ctx) -> Mapping`` returning the kwargs merged into the
             step's call pool alongside ``request`` / ``user``;
