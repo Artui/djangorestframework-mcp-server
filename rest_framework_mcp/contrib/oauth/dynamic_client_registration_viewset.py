@@ -90,14 +90,14 @@ class DynamicClientRegistrationViewSet(ViewSet):
             )
 
         try:
-            from oauth2_provider.generators import (  # type: ignore[import-not-found]
+            from oauth2_provider.generators import (
                 generate_client_secret,
             )
-            from oauth2_provider.models import Application  # type: ignore[import-not-found]
-            from oauth2_provider.scopes import (  # type: ignore[import-not-found]
+            from oauth2_provider.models import Application
+            from oauth2_provider.scopes import (
                 get_scopes_backend,
             )
-            from oauth2_provider.settings import (  # type: ignore[import-not-found]
+            from oauth2_provider.settings import (
                 oauth2_settings,
             )
         except ImportError as exc:  # pragma: no cover - exercised by smoke job w/o DOT

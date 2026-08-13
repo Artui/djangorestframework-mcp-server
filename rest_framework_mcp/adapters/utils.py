@@ -363,7 +363,7 @@ def _serializer_field_names(input_serializer: type) -> Iterable[str]:
     if isinstance(input_serializer, type) and issubclass(
         input_serializer, drf_serializers.Serializer
     ):
-        return tuple(input_serializer._declared_fields.keys())  # type: ignore[attr-defined]
+        return tuple(input_serializer._declared_fields.keys())
     if isinstance(input_serializer, type) and dataclasses.is_dataclass(input_serializer):
         return tuple(f.name for f in dataclasses.fields(input_serializer))
     return ()

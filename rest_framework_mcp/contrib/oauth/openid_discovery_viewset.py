@@ -72,7 +72,7 @@ class OpenIDDiscoveryViewSet(ViewSet):
         reports no signable algorithm rather than guessing for it.
         """
         try:
-            from oauth2_provider.settings import (  # type: ignore[import-not-found]
+            from oauth2_provider.settings import (
                 oauth2_settings,
             )
         except ImportError:  # pragma: no cover - exercised by smoke job w/o DOT

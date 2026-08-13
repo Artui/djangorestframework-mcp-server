@@ -164,7 +164,7 @@ class DjangoOAuthToolkitBackend:
 
         validator = OAuth2Validator()
         try:
-            token = validator._load_access_token(access_token)  # type: ignore[attr-defined]
+            token = validator._load_access_token(access_token)
         except Exception:
             return None
         if token is None or not token.is_valid():
@@ -205,7 +205,7 @@ class DjangoOAuthToolkitBackend:
         if has_custom_getter:
             return
         try:
-            from oauth2_provider.models import (  # type: ignore[import-not-found]
+            from oauth2_provider.models import (
                 get_access_token_model,
             )
         except ImportError:  # pragma: no cover - exercised by smoke job w/o DOT
@@ -304,7 +304,7 @@ def _cimd_enabled() -> bool:
     authorization server.
     """
     try:
-        from oauth2_provider.settings import (  # type: ignore[import-not-found]
+        from oauth2_provider.settings import (
             oauth2_settings,
         )
     except ImportError:  # pragma: no cover - exercised by the smoke job w/o DOT
