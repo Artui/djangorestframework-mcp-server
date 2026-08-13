@@ -9,7 +9,7 @@ from rest_framework_mcp.auth.types.token_info import TokenInfo
 class ScopeRequired:
     """Allow only requests whose token carries every listed OAuth scope.
 
-    Takes a list, or a bare string for the single-scope case::
+    Takes a list, or a bare string for the single-scope case:
 
         ScopeRequired(["invoices:read", "invoices:write"])
         ScopeRequired("invoices:write")

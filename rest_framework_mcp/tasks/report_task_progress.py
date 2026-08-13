@@ -74,7 +74,7 @@ def _render_progress(progress: float, total: float | None, message: str | None) 
 
     The wire ``Task`` has ``statusMessage`` and no numeric field, so this is the
     only channel to the client and it is a string. Four shapes, by what the
-    service supplied::
+    service supplied:
 
         (3, 10, "Indexing")  → "Indexing (3/10)"
         (3, 10, None)        → "3/10"

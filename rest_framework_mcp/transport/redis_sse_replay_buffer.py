@@ -33,7 +33,7 @@ class RedisSSEReplayBuffer:
     ``Last-Event-ID``. ``MAXLEN ~ N`` caps the retained history per session,
     approximately — Redis trims when convenient, which is fine here.
 
-    Wire it into [`MCPServer`][rest_framework_mcp.server.mcp_server.MCPServer]::
+    Wire it into [`MCPServer`][rest_framework_mcp.server.mcp_server.MCPServer]:
 
         from redis.asyncio import Redis
         from rest_framework_mcp import MCPServer

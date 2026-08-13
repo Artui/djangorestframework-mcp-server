@@ -70,7 +70,7 @@ def build_mcp_config(
     servers in one project hold different values.
 
     Every argument is ``None`` by default, meaning "take it from settings". Pass
-    one to override just that field for this server::
+    one to override just that field for this server:
 
         MCPServer(name="internal", config=build_mcp_config(page_size=500))
 

@@ -23,7 +23,7 @@ def build_error_tool_result(
     read and self-correct from; JSON-RPC protocol errors are reserved for faults
     in the call itself — malformed params shape, unknown tool, auth, rate limits.
 
-    The payload is rendered as JSON text in ``content[0]``::
+    The payload is rendered as JSON text in ``content[0]``:
 
         {"error": {"type": "service_error", "message": "...", "detail": {...}}}
 

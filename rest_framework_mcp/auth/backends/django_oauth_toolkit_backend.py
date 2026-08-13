@@ -63,7 +63,7 @@ class DjangoOAuthToolkitBackend:
     being replayed against another: two servers sharing a single URL would let
     a token minted for ``/public/mcp`` satisfy ``/internal/mcp``. Hence
     ``resource_url`` is per-backend and the ``RESOURCE_URL`` setting is only
-    its default::
+    its default:
 
         MCPServer(
             name="internal",
