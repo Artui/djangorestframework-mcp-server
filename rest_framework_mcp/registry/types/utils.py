@@ -1,7 +1,7 @@
 """Shared validation for the three tool bindings.
 
 In a sibling ``utils.py`` rather than its own leaf module because it is
-internal infrastructure for :mod:`registry.types`, not part of the exported
+internal infrastructure for ``registry.types``, not part of the exported
 type surface.
 """
 

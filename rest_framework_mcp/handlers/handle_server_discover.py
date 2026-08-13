@@ -29,7 +29,7 @@ def handle_server_discover(
     **The capabilities are the caller's, not the server's.** The versions and
     identity are properties of the endpoint; two of the capabilities are not,
     since only a modern client can reach them — see
-    :func:`~rest_framework_mcp.handlers.handle_initialize.build_capabilities`.
+    ``build_capabilities``.
     The era therefore comes from what this caller declared, which for a
     header-less request is the configured default.
 

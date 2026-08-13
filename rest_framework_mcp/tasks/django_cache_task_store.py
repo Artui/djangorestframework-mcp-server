@@ -24,9 +24,9 @@ class DjangoCacheTaskStore:
     Cross-process, which for tasks is not a nice-to-have: the web worker that
     creates a task and the worker that finishes it are different processes, so
     a store they do not share cannot work at all (see
-    :class:`InMemoryTaskStore`).
+    [`InMemoryTaskStore`][rest_framework_mcp.tasks.in_memory_task_store.InMemoryTaskStore]).
 
-    **Namespacing** follows :class:`DjangoCacheSessionStore` exactly — the
+    **Namespacing** follows [`DjangoCacheSessionStore`][rest_framework_mcp.transport.django_cache_session_store.DjangoCacheSessionStore] exactly — the
     server's ``name``, hashed into the key prefix, so two servers in one project
     cannot read or overwrite each other's tasks. The digest is for key hygiene
     (``name`` is free-form; memcached rejects spaces and caps length), not
@@ -38,8 +38,8 @@ class DjangoCacheTaskStore:
     unreadable exactly when a worker tries to finish it. Plain dicts also keep
     the store usable under a JSON-serialising backend.
 
-    **Expiry** is absolute, stamped once at :meth:`create` from ``ttlMs`` and
-    carried in the envelope, so :meth:`save` renews the cache timeout to the
+    **Expiry** is absolute, stamped once at ``create`` from ``ttlMs`` and
+    carried in the envelope, so ``save`` renews the cache timeout to the
     *remaining* lifetime rather than restarting the clock — otherwise a task
     reporting progress often would never expire.
     """

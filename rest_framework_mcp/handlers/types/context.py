@@ -37,9 +37,9 @@ class MCPCallContext:
 
     server_info: Implementation | None = None
     """The owning server's identity, echoed by ``initialize``. Instance state,
-    resolved once in :meth:`MCPServer.__init__`, so two servers mounted in one
+    resolved once in ``MCPServer.__init__``, so two servers mounted in one
     project introduce themselves differently. ``None`` only for a context built
-    without an :class:`~rest_framework_mcp.server.mcp_server.MCPServer`, in which
+    without an [`MCPServer`][rest_framework_mcp.server.mcp_server.MCPServer], in which
     case ``initialize`` falls back to the ``SERVER_INFO`` setting."""
 
     instructions: str | None = None
@@ -73,7 +73,7 @@ class MCPCallContext:
     a task handle, and treats every task id as unknown."""
 
     task_executor: TaskExecutor | None = None
-    """Where a newly created task is handed off. Paired with :attr:`tasks` — one
+    """Where a newly created task is handed off. Paired with ``tasks`` — one
     without the other cannot run a task, so the extension stays unavailable
     unless the server has both."""
 
@@ -95,14 +95,14 @@ class MCPCallContext:
 
     config: MCPConfig = field(default_factory=build_mcp_config)
     """The owning server's resolved scalars, snapshotted in
-    :meth:`MCPServer.__init__`. Handlers read these instead of calling
+    ``MCPServer.__init__``. Handlers read these instead of calling
     ``get_setting``, which could only ever be global — two servers in one
     project could not otherwise differ on any of them.
 
     The default builds a config from settings for a context constructed without
     a server (a hand-wired viewset, or a test driving a handler directly), which
     does make the *default* a settings read at construction time; a context
-    built by :class:`MCPServer` never takes that path."""
+    built by [`MCPServer`][rest_framework_mcp.server.mcp_server.MCPServer] never takes that path."""
 
 
 __all__ = ["MCPCallContext"]

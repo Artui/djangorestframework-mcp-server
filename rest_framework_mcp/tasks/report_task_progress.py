@@ -12,7 +12,7 @@ from rest_framework_mcp.tasks.utils import now_iso
 
 
 def report_task_progress(store: TaskStore, task_id: str) -> ProgressReporter:
-    """A :class:`ProgressReporter` that writes onto the task record.
+    """A ``ProgressReporter`` that writes onto the task record.
 
     What ``progress`` resolves to inside a task. The inline MCP path answers a
     ``progressToken`` with ``notifications/progress``, which needs a live
@@ -26,7 +26,7 @@ def report_task_progress(store: TaskStore, task_id: str) -> ProgressReporter:
     must not have to know which path is executing it.
 
     **A terminal task is never rewritten**, by the same one-way rule as
-    :func:`~rest_framework_mcp.tasks.transition_task.transition_task` — a late
+    ``transition_task`` — a late
     report from a worker still unwinding would otherwise move ``lastUpdatedAt``
     on a finished task, and make a cancel look as if it had not taken.
 

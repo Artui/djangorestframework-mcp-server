@@ -53,7 +53,7 @@ def handle_tools_call(
     """Invoke a registered tool by name.
 
     Service tools dispatch through drf-services' transport-neutral
-    :func:`~rest_framework_services.dispatch_spec`: it owns instance resolution,
+    ``dispatch_spec``: it owns instance resolution,
     ``input_serializer`` validation, the kwarg pool (per the binding's
     ``argument_binding`` / ``unknown_arguments`` policies), the service run, and
     the output-selector re-fetch. This layer keeps only the transport shell —
@@ -110,7 +110,7 @@ def _dispatch_tool_call(
 ) -> dict[str, Any] | JsonRpcError:
     """Route a resolved binding to its dispatch path and return the raw result.
 
-    Split out of :func:`handle_tools_call` so the size ceiling wraps every
+    Split out of ``handle_tools_call`` so the size ceiling wraps every
     return — including the ones the chain and selector helpers make — at a
     single point. The async sibling splits the same way, plus the deadline.
     """

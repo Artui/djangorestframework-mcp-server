@@ -97,16 +97,16 @@ def _error_response(
 
 
 class AsyncStreamableHttpViewSet(ViewSet):
-    """Async sibling of :class:`StreamableHttpViewSet` for ASGI deployments.
+    """Async sibling of ``StreamableHttpViewSet`` for ASGI deployments.
 
     Wire behaviour matches the sync ViewSet for POST and DELETE — same headers,
     same status codes, same JSON-RPC shapes — and the reasoning behind the
     shared checks lives there. The async path additionally serves
-    server-initiated SSE on GET when an :class:`SSEBroker` is wired in; without
+    server-initiated SSE on GET when an [`SSEBroker`][rest_framework_mcp.transport.types.sse_broker.SSEBroker] is wired in; without
     one, GET returns 405, which the spec allows when there is nothing to push.
 
     Sync collaborators (auth backend, session store, permissions) are bridged
-    through :func:`asgiref.sync.sync_to_async`, so a fully sync stack still
+    through ``asgiref.sync.sync_to_async``, so a fully sync stack still
     works under ASGI.
     """
 
@@ -177,7 +177,7 @@ class AsyncStreamableHttpViewSet(ViewSet):
     async def dispatch(  # ty: ignore[invalid-method-override]
         self, request: Any, *args: Any, **kwargs: Any
     ) -> HttpResponseBase:
-        """Async-aware mirror of :meth:`rest_framework.views.APIView.dispatch`.
+        """Async-aware mirror of ``rest_framework.views.APIView.dispatch``.
 
         DRF's stock ``dispatch`` is sync: it passes whatever the handler
         returns to ``finalize_response``, which ``isinstance``-checks against

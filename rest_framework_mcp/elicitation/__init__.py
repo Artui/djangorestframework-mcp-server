@@ -8,15 +8,15 @@ carrying the answers. Two independent requests, nothing held in between.
 
 What the pieces here do, in the order a call meets them:
 
-1. :func:`~rest_framework_mcp.elicitation.read_elicit_answer.read_elicit_answer`
-   and :func:`~rest_framework_mcp.elicitation.verify_request_state.verify_request_state`
+1. ``read_elicit_answer``
+   and ``verify_request_state``
    recover what an earlier round established, if this is a retry.
 2. The service runs, and may raise ``AdditionalInputRequired``.
-3. :func:`~rest_framework_mcp.elicitation.can_ask_client.can_ask_client` decides
+3. ``can_ask_client`` decides
    whether this client can be asked at all, and
-   :func:`~rest_framework_mcp.elicitation.build_requested_schema.build_requested_schema`
+   ``build_requested_schema``
    turns the service's declaration into the form.
-4. :func:`~rest_framework_mcp.elicitation.sign_request_state.sign_request_state`
+4. ``sign_request_state``
    seals what the next round will need to trust.
 
 **The service's involvement is one ``raise``.** It never holds a callback and is

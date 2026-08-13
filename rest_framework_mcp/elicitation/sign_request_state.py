@@ -7,11 +7,11 @@ from rest_framework_mcp.elicitation.types.request_state import RequestState
 
 
 def sign_request_state(state: RequestState) -> str:
-    """Serialise and HMAC a :class:`RequestState` into the wire ``requestState``.
+    """Serialise and HMAC a ``RequestState`` into the wire ``requestState``.
 
     ``django.core.signing`` rather than a hand-rolled HMAC: it carries the
     timestamp
-    :func:`~rest_framework_mcp.elicitation.verify_request_state.verify_request_state`
+    ``verify_request_state``
     checks the age against, it honours ``SECRET_KEY_FALLBACKS`` so a key rotation
     does not invalidate every form a user is part-way through answering, and its
     compression keeps a multi-round token small.

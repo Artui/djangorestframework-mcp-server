@@ -8,9 +8,9 @@ from typing import Any
 class AuthorizationServerMetadata:
     """RFC 8414 OAuth 2.0 Authorization Server Metadata payload.
 
-    Returned by :meth:`MCPAuthBackend.authorization_server_metadata` and
+    Returned by ``MCPAuthBackend.authorization_server_metadata`` and
     serialised by the contrib AS metadata ViewSet. A backend that hosts no
-    authorization server raises :class:`NotImplementedError` instead, which
+    authorization server raises ``NotImplementedError`` instead, which
     that ViewSet maps to ``501 Not Implemented``.
 
     Field shapes mirror RFC 8414. The ``str``-typed endpoints default to ``""``

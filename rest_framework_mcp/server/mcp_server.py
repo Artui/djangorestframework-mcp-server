@@ -267,13 +267,13 @@ class MCPServer:
         max_result_bytes: int | None | UnsetType = UNSET,
         dispatch_timeout: float | None | UnsetType = UNSET,
     ) -> ToolBinding:
-        """Register a :class:`ServiceSpec` as an MCP **mutation** tool.
+        """Register a ``ServiceSpec`` as an MCP **mutation** tool.
 
         The dispatch pipeline runs ``input_serializer → run_service(atomic) →
         output_selector? → output_serializer``, so this is the surface for
         side-effecting operations. For read-shaped ones (list/retrieve with
         optional filtering / ordering / pagination) use
-        :meth:`register_selector_tool` instead.
+        ``register_selector_tool`` instead.
 
         ``meta`` is the base protocol's generic ``_meta`` bundle, emitted
         verbatim under the ``"_meta"`` key of this tool's ``tools/list`` entry
@@ -283,7 +283,7 @@ class MCPServer:
         given: no key is validated or reserved here.
 
         ``ui`` links this tool to an interactive view registered with
-        :meth:`register_ui_resource`, so a host renders the result inline
+        ``register_ui_resource``, so a host renders the result inline
         instead of raw JSON. The view must already be registered on this
         server, and the tool must emit ``structuredContent`` — what the view
         renders from — or the link is refused at registration rather than
@@ -379,9 +379,9 @@ class MCPServer:
         dispatch_timeout: float | None | UnsetType = UNSET,
         max_page_size: int | None | UnsetType = UNSET,
     ) -> SelectorToolBinding:
-        """Register a :class:`SelectorSpec` as an MCP **read** tool.
+        """Register a ``SelectorSpec`` as an MCP **read** tool.
 
-        Read-shaped sibling of :meth:`register_service_tool`. The selector
+        Read-shaped sibling of ``register_service_tool``. The selector
         returns a raw, unscoped queryset; the tool layer owns the post-fetch
         pipeline:
 
@@ -411,7 +411,7 @@ class MCPServer:
 
         ``meta`` is the generic ``_meta`` bundle for this tool's
         ``tools/list`` entry, and ``ui`` links it to an interactive view —
-        both as on :meth:`register_service_tool`.
+        both as on ``register_service_tool``.
         """
         ui_meta = build_ui_tool_meta(
             name=name,
@@ -490,9 +490,9 @@ class MCPServer:
 
         A project exposing the same operations over more than one transport
         keeps its spec set in a
-        :class:`~rest_framework_services.registry.spec_registry.SpecRegistry`
+        ``SpecRegistry``
         so each transport reads one source. This walks it and calls
-        :meth:`register_service_tool` / :meth:`register_selector_tool` per
+        ``register_service_tool`` / ``register_selector_tool`` per
         entry, discriminating on the spec type.
 
         It is a **source for** this server's own ``ToolRegistry``, not a
@@ -511,8 +511,8 @@ class MCPServer:
 
         Keys are checked against the target method's own signature, so a knob
         used on the wrong spec kind (``paginate`` on a ``ServiceSpec``) raises
-        :exc:`TypeError` from there. An ``overrides`` key naming a spec the
-        registry doesn't hold raises :exc:`ValueError` here — that is a typo,
+        ``TypeError`` from there. An ``overrides`` key naming a spec the
+        registry doesn't hold raises ``ValueError`` here — that is a typo,
         not an intentional no-op.
 
         Registration is not transactional: a failure partway leaves the earlier
@@ -575,7 +575,7 @@ class MCPServer:
     ) -> ChainToolBinding:
         """Register an ordered sequence of specs as a single MCP tool.
 
-        Each :class:`~rest_framework_mcp.registry.types.chain_step.ChainStep`
+        Each [`ChainStep`][rest_framework_mcp.registry.types.chain_step.ChainStep]
         wraps a ``ServiceSpec`` (write) or ``SelectorSpec`` (read) and binds
         its result to an alias. A step's ``inputs`` callable reads the
         validated tool arguments (``ctx.args``) and any prior step's output
@@ -599,11 +599,11 @@ class MCPServer:
 
         Chains deliberately do not run the selector post-fetch pipeline
         (filter / order / paginate); for that, expose the selector as its
-        own :meth:`register_selector_tool`.
+        own ``register_selector_tool``.
 
         ``meta`` is the generic ``_meta`` bundle for this tool's
         ``tools/list`` entry, and ``ui`` links it to an interactive view —
-        both as on :meth:`register_service_tool`.
+        both as on ``register_service_tool``.
         """
         ui_meta = build_ui_tool_meta(
             name=name,
@@ -676,7 +676,7 @@ class MCPServer:
         The transport-neutral entry point: hand a tool ``name``, a flat
         ``arguments`` dict (the role ``request.data`` / query params play on
         HTTP) and the acting ``user``, and get back the same
-        :class:`ToolResult` the wire handlers build. An in-process consumer
+        [`ToolResult`][rest_framework_mcp.protocol.types.tool_result.ToolResult] the wire handlers build. An in-process consumer
         calls this instead of re-implementing dispatch.
 
         This is the **spec core only** — instance resolution, input validation,
@@ -689,10 +689,10 @@ class MCPServer:
         read-shaped transport extras — pagination, ordering, a selector
         binding's MCP-only ``input_serializer`` — nor the transport-level MCP
         permissions and rate limits. For those, and for tool listing, use
-        :meth:`acall_tool` / :meth:`list_tools`. Chain tools orchestrate
-        several specs and raise :class:`TypeError` here.
+        ``acall_tool`` / ``list_tools``. Chain tools orchestrate
+        several specs and raise ``TypeError`` here.
 
-        Raises :class:`KeyError` when no tool is registered under ``name``.
+        Raises ``KeyError`` when no tool is registered under ``name``.
         """
         binding = self._tools.get(name)
         if binding is None:
@@ -719,14 +719,14 @@ class MCPServer:
         pagination arguments and the ``additionalProperties`` policy), the same
         per-caller listing-permission filter (``FILTER_LISTINGS_BY_PERMISSIONS``)
         and the same opaque-cursor pagination — pass the returned ``nextCursor``
-        back for the next page. A :class:`JsonRpcError` signals a bad cursor.
+        back for the next page. A [`JsonRpcError`][rest_framework_mcp.protocol.types.json_rpc_error.JsonRpcError] signals a bad cursor.
 
         ``scopes`` are the caller's granted scopes; pass them so a
         ``ScopeRequired``-gated tool is visible under
         ``FILTER_LISTINGS_BY_PERMISSIONS`` exactly as it would be on the wire.
 
-        Unlike :meth:`call_tool` (the spec core) this is the full transport
-        surface. Under an event loop use :meth:`alist_tools` — a listing
+        Unlike ``call_tool`` (the spec core) this is the full transport
+        surface. Under an event loop use ``alist_tools`` — a listing
         permission filter that hits the DB raises ``SynchronousOnlyOperation``
         from a sync call on the loop.
         """
@@ -743,7 +743,7 @@ class MCPServer:
         request: Any = None,
         scopes: Sequence[str] | None = None,
     ) -> dict[str, Any] | JsonRpcError:
-        """Async :meth:`list_tools` — safe to call from an event loop.
+        """Async ``list_tools`` — safe to call from an event loop.
 
         Listing itself is pure Python, but the per-caller permission filter
         (``FILTER_LISTINGS_BY_PERMISSIONS``) may run a DB-backed check, which
@@ -770,14 +770,14 @@ class MCPServer:
         async handler the wire uses, so the transport-level MCP permissions and
         rate limits, the selector post-fetch pipeline (filter / order /
         paginate), a selector binding's MCP-only ``input_serializer``, chain
-        tools and the output format all apply — everything :meth:`call_tool`
+        tools and the output format all apply — everything ``call_tool``
         omits. Returns the wire's result payload (a ``dict`` carrying
         ``content`` / ``structuredContent`` / ``isError``), or a
-        :class:`JsonRpcError` for a protocol fault (unknown tool, malformed
+        [`JsonRpcError`][rest_framework_mcp.protocol.types.json_rpc_error.JsonRpcError] for a protocol fault (unknown tool, malformed
         ``arguments`` shape, denied permission).
 
         ``request`` is the originating Django request when there is one; a
-        minimal one is synthesised otherwise, mirroring :meth:`call_tool`.
+        minimal one is synthesised otherwise, mirroring ``call_tool``.
         ``scopes`` populate the synthetic token so a ``ScopeRequired``-gated
         tool is invokable in-process just as it is on the wire.
         """
@@ -797,7 +797,7 @@ class MCPServer:
         """Build the per-call context the wire handlers thread through.
 
         When ``request`` is ``None`` a minimal
-        :class:`~django.http.HttpRequest` is synthesised bearing the user, so
+        ``HttpRequest`` is synthesised bearing the user, so
         permission classes reading ``request.user`` behave as they would on
         HTTP. The protocol version is the server's first (most preferred)
         supported version, not a hardcoded literal.
@@ -903,7 +903,7 @@ class MCPServer:
         **A URI, not a template.** Publish the concrete URI that changed, and
         the collection URI too if watchers of the collection should hear about
         it — matching is exact, deliberately (see
-        :func:`~rest_framework_mcp.subscriptions.utils.topic_for_resource`).
+        [`topic_for_resource`][rest_framework_mcp.subscriptions.utils.topic_for_resource]).
 
         **Publish after the transaction commits.** Inside
         ``transaction.atomic()`` this announces a change that may still roll
@@ -975,7 +975,7 @@ class MCPServer:
         cache_ttl_ms: int | UnsetType = UNSET,
         completions: dict[str, Callable[..., Any]] | None = None,
     ) -> ResourceBinding:
-        """Register a :class:`SelectorSpec` as an MCP resource.
+        """Register a ``SelectorSpec`` as an MCP resource.
 
         ``selector.selector`` is the callable dispatched at ``resources/read``
         time; ``selector.output_serializer`` fills in when the explicit
@@ -984,14 +984,14 @@ class MCPServer:
 
         A bare callable is not accepted here — wrap it in
         ``SelectorSpec(selector=fn)``, or use the decorator form
-        :meth:`resource`, which wraps it automatically.
+        ``resource``, which wraps it automatically.
 
         The shape comes from ``selector.kind`` and drives the ``many=`` flag on
         ``output_serializer`` at dispatch; ``RETRIEVE`` is the typical case for
         a URI-template lookup.
 
         ``meta`` is the generic ``_meta`` bundle (see
-        :meth:`register_service_tool`) for this resource's listing entry —
+        ``register_service_tool``) for this resource's listing entry —
         ``resources/list`` for a concrete URI, ``resources/templates/list``
         for a template — and for the ``contents`` block ``resources/read``
         returns.
@@ -1000,7 +1000,7 @@ class MCPServer:
         ``JSON`` pretty-prints it, ``TEXT`` returns it verbatim. Anything whose
         ``mime_type`` is not JSON — Markdown, CSV, plain text — wants ``TEXT``,
         or the document comes back wrapped in a quoted string literal. For an
-        HTML view use :meth:`register_ui_resource`, which sets both.
+        HTML view use ``register_ui_resource``, which sets both.
         """
         binding = selector_to_resource(
             name=name,
@@ -1064,13 +1064,13 @@ class MCPServer:
         runtime from tool results — which is also why the template renders with
         no context.
 
-        ``ui=`` is the typed :class:`UIResourceMeta` — CSP origins, browser
+        ``ui=`` is the typed [`UIResourceMeta`][rest_framework_mcp.registry.types.ui_resource_meta.UIResourceMeta] — CSP origins, browser
         permissions, publisher ``domain``, border preference — which serialises
         into ``_meta`` under the extension's key. ``meta=`` remains available
         for *other* extensions; passing both ``ui=`` and that same key inside
         ``meta=`` raises, rather than letting one silently win.
 
-        The result is an ordinary :class:`ResourceBinding`, so it shares one
+        The result is an ordinary [`ResourceBinding`][rest_framework_mcp.registry.types.resource_binding.ResourceBinding], so it shares one
         URI namespace with data resources (a collision raises as always),
         appears in ``resources/list``, and honours ``permissions`` /
         ``always_listed``. Views default to **unguarded** — the MCP session is
@@ -1117,11 +1117,11 @@ class MCPServer:
 
         ``render`` receives the prompt arguments as kwargs (plus ``request``
         and ``user`` if it declares them) and returns either a string, a
-        list of strings, a list of :class:`PromptMessage`, or a coroutine
+        list of strings, a list of [`PromptMessage`][rest_framework_mcp.protocol.types.prompt_message.PromptMessage], or a coroutine
         yielding any of those — the dispatch layer normalises the result.
 
         ``meta`` is the generic ``_meta`` bundle for this prompt's
-        ``prompts/list`` entry — see :meth:`register_service_tool`.
+        ``prompts/list`` entry — see ``register_service_tool``.
         """
         binding = PromptBinding(
             name=name,
@@ -1177,10 +1177,10 @@ class MCPServer:
         url_kwargs: tuple[UrlKwarg, ...] = (),
         query_params: tuple[QueryParam, ...] = (),
     ) -> Callable[[Callable[..., Any]], Callable[..., Any]]:
-        """Decorator form of :meth:`register_service_tool`.
+        """Decorator form of ``register_service_tool``.
 
         If ``spec`` is supplied it is used verbatim; otherwise a
-        :class:`ServiceSpec` is constructed from the keyword arguments. The
+        ``ServiceSpec`` is constructed from the keyword arguments. The
         original function is returned unchanged, so it stays callable from
         Python without going through the MCP transport.
         """
@@ -1262,10 +1262,10 @@ class MCPServer:
         url_kwargs: tuple[UrlKwarg, ...] = (),
         query_params: tuple[QueryParam, ...] = (),
     ) -> Callable[[Callable[..., Any]], Callable[..., Any]]:
-        """Decorator form of :meth:`register_selector_tool`.
+        """Decorator form of ``register_selector_tool``.
 
         If ``spec`` is supplied it is used verbatim; otherwise a
-        :class:`SelectorSpec` is constructed from the wrapped function and the
+        ``SelectorSpec`` is constructed from the wrapped function and the
         keyword arguments. The original function is returned unchanged, so it
         stays callable from Python without going through the MCP transport.
 
@@ -1344,7 +1344,7 @@ class MCPServer:
         """Decorator form: register the wrapped callable as a resource.
 
         If ``spec`` is supplied it is used verbatim; otherwise a
-        :class:`SelectorSpec` is constructed from the wrapped function and the
+        ``SelectorSpec`` is constructed from the wrapped function and the
         keyword arguments. The original function is returned unchanged, so it
         stays callable from Python without going through the MCP transport.
 
@@ -1471,7 +1471,7 @@ class MCPServer:
         state via ``tools/call`` round-trips. The broker enforces one
         subscriber per session: re-subscribing replaces the old queue silently.
 
-        With a :class:`SSEReplayBuffer` configured the payload is recorded
+        With a [`SSEReplayBuffer`][rest_framework_mcp.transport.types.sse_replay_buffer.SSEReplayBuffer] configured the payload is recorded
         *before* publishing, so the frame carries an event ID the SSE generator
         emits on the wire (``id: <id>\\ndata: <payload>\\n\\n``) and a later
         reconnect with ``Last-Event-ID`` drains what it missed before resuming
@@ -1500,7 +1500,7 @@ class MCPServer:
         Returns the namespaced ``(patterns, app_name, namespace)`` triple
         ``path()`` mounts directly — ``path("mcp/", server.urls)``, the
         ``admin.site.urls`` idiom — so the endpoints reverse within the
-        namespace (``reverse("mcp:endpoint")``). Use :attr:`async_urls` instead
+        namespace (``reverse("mcp:endpoint")``). Use ``async_urls`` instead
         when running under ASGI to get non-blocking dispatch for the I/O-bound
         handlers.
         """
@@ -1523,10 +1523,10 @@ class MCPServer:
     def async_urls(self) -> tuple[list[URLPattern], str, str]:
         """Async URL patterns for ASGI deployments.
 
-        The namespaced triple (like :attr:`urls`), but ``tools/call``,
+        The namespaced triple (like ``urls``), but ``tools/call``,
         ``resources/read`` and ``prompts/get`` dispatch through async-native
         runners. Sync collaborators (auth backend, session store, custom
-        permissions) are bridged via :func:`asgiref.sync.sync_to_async`, so a
+        permissions) are bridged via ``asgiref.sync.sync_to_async``, so a
         fully sync stack still works; async-native ones are detected by
         signature and called directly.
         """

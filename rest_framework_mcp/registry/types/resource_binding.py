@@ -26,7 +26,7 @@ class ResourceBinding(Generic[ResultT]):
     carry. ``kwargs_provider`` mirrors ``SelectorSpec.kwargs``: when set, the
     handler invokes it once per request and merges the returned dict into the
     kwarg pool, passing a synthesised
-    :class:`~rest_framework_services.OfflineServiceView` whose ``view.kwargs``
+    ``OfflineServiceView`` whose ``view.kwargs``
     holds the URI-template variables and whose ``view.action`` is the binding
     name. ``annotations`` and ``meta`` are emitted verbatim on the listing
     entry, and ``meta`` also on the ``contents`` block of ``resources/read``.
@@ -51,7 +51,7 @@ class ResourceBinding(Generic[ResultT]):
     encoding: ResourceEncoding = ResourceEncoding.JSON
     """How the selector's value becomes the ``resources/read`` body. Declared
     rather than inferred from ``mime_type``, so advertising a new mime type
-    never silently changes the encoding. See :class:`ResourceEncoding`."""
+    never silently changes the encoding. See [`ResourceEncoding`][rest_framework_mcp.constants.ResourceEncoding]."""
 
     permissions: tuple[Any, ...] = ()
     rate_limits: tuple[Any, ...] = ()
@@ -87,7 +87,7 @@ class ResourceBinding(Generic[ResultT]):
     always_listed: bool = False
     """Keep this resource in ``resources/list`` (or
     ``resources/templates/list``) even when ``FILTER_LISTINGS_BY_PERMISSIONS``
-    would drop it — same semantics as :attr:`ToolBinding.always_listed`."""
+    would drop it — same semantics as [`ToolBinding.always_listed`][rest_framework_mcp.registry.types.tool_binding.ToolBinding.always_listed]."""
 
     @property
     def is_template(self) -> bool:

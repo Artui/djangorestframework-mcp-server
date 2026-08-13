@@ -58,7 +58,7 @@ async def stream_events(
     With a ``replay_buffer``, every event recorded after ``last_event_id`` is
     replayed on open as ``id: <id>\\ndata: <payload>\\n\\n`` frames before live
     mode begins, and live frames arrive wrapped as ``{"_mcp_event_id",
-    "_mcp_payload"}`` (see :meth:`MCPServer.notify`), unpacked here so the wire
+    "_mcp_payload"}`` (see [`MCPServer.notify`][rest_framework_mcp.server.mcp_server.MCPServer.notify]), unpacked here so the wire
     stays SSE-shaped. Without one, no ``id:`` lines are emitted and
     ``last_event_id`` is ignored.
     """

@@ -11,7 +11,7 @@ async def acall(fn: Callable[..., Any], *args: Any, **kwargs: Any) -> Any:
     """Invoke ``fn`` from async code regardless of whether it's async or sync.
 
     Async callables are awaited directly; sync ones are dispatched to a thread
-    via :func:`asgiref.sync.sync_to_async` so they don't block the event loop.
+    via ``asgiref.sync.sync_to_async`` so they don't block the event loop.
     The bridge the async transport uses for collaborators (the auth backend,
     the session store) that are not required to be async-native.
 
@@ -22,7 +22,7 @@ async def acall(fn: Callable[..., Any], *args: Any, **kwargs: Any) -> Any:
     a consumer's ``async def has_permission`` inside it is still never awaited,
     which fails open. Those hooks are **synchronous by contract on both
     transports** and are guarded by
-    :func:`rest_framework_mcp._compat.reject_awaitable.reject_awaitable` rather
+    ``rest_framework_mcp._compat.reject_awaitable.reject_awaitable`` rather
     than bridged here.
     """
     if inspect.iscoroutinefunction(fn):

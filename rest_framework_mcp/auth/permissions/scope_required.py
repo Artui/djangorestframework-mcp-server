@@ -18,7 +18,7 @@ class ScopeRequired:
     ``list(scopes)`` would silently turn ``ScopeRequired("mcp:admin")`` into
     nine one-character scopes: nothing fails at registration, and the
     misconfiguration surfaces much later as a permission that can never be
-    satisfied and a nonsense challenge. :class:`DjangoPermRequired` takes a
+    satisfied and a nonsense challenge. [`DjangoPermRequired`][rest_framework_mcp.auth.permissions.django_perm_required.DjangoPermRequired] takes a
     bare string too, so the siblings agree.
     """
 

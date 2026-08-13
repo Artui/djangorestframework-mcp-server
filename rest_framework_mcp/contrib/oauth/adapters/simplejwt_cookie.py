@@ -10,16 +10,16 @@ from rest_framework_mcp.conf import get_setting
 
 
 class SimpleJWTCookieAdapter:
-    """Reference :class:`AuthUserAdapter` for SimpleJWT cookie-authenticated apps.
+    """Reference [`AuthUserAdapter`][rest_framework_mcp.contrib.oauth.adapters.types.auth_user_adapter.AuthUserAdapter] for SimpleJWT cookie-authenticated apps.
 
     Reads the access-token cookie (``cookie_name=``, defaulting to
     ``REST_FRAMEWORK_MCP['SIMPLEJWT_ACCESS_COOKIE']``), decodes it with
-    :class:`rest_framework_simplejwt.tokens.AccessToken` and looks the user up
+    ``rest_framework_simplejwt.tokens.AccessToken`` and looks the user up
     by primary key. Every failure mode — no cookie, malformed or expired
     token, unknown user — returns ``None``, so DOT's view falls back to its
     session-based flow.
 
-    ``rest_framework_simplejwt`` is imported lazily inside :meth:`hydrate`, so
+    ``rest_framework_simplejwt`` is imported lazily inside ``hydrate``, so
     this module stays importable without the ``[jwt]`` extra and a consumer
     who configures the adapter without it gets a clear ``ImportError`` at first
     request rather than at import.

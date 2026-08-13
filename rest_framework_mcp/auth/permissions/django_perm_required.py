@@ -11,8 +11,8 @@ class DjangoPermRequired:
 
     Wraps ``user.has_perm`` from the standard Django auth backend. A token
     backed by ``AnonymousUser`` is always rejected — that is the point of using
-    this class instead of :class:`ScopeRequired`. Takes a list or a bare
-    string, like :class:`ScopeRequired`.
+    this class instead of [`ScopeRequired`][rest_framework_mcp.auth.permissions.scope_required.ScopeRequired]. Takes a list or a bare
+    string, like [`ScopeRequired`][rest_framework_mcp.auth.permissions.scope_required.ScopeRequired].
     """
 
     def __init__(self, perm: str | list[str]) -> None:

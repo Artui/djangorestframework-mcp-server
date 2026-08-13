@@ -133,7 +133,7 @@ async def dispatch_selector_tool_async(
     context: MCPCallContext,
     otel_span: Any,
 ) -> dict[str, Any] | JsonRpcError:
-    """Async sibling — bridges sync collaborators via :func:`acall`."""
+    """Async sibling — bridges sync collaborators via ``acall``."""
     early = await acall(_check_auth_and_rate_limits, binding, context)
     if early is not None:
         return early
@@ -489,7 +489,7 @@ def _slice_for_pagination(
     ``hasNext`` are computed from the clamped ``limit``, so a model that asked
     for 500 rows and got 100 is told there are more pages.
 
-    The shape is discriminated with :func:`is_queryset`, **not**
+    The shape is discriminated with ``is_queryset``, **not**
     ``hasattr(qs, "count")``: ``list`` / ``tuple`` expose ``.count`` too, but it
     is ``.count(value)`` and needs an argument, which turned a list-returning
     paginated selector into an opaque ``count() takes exactly one argument``.

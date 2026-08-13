@@ -11,13 +11,13 @@ class RequestState:
     The spec calls ``requestState`` *"an opaque blob"* the client "must not
     interpret in any way", so its contents are ours to choose and the choice is
     the security design. Three of these four fields exist only to be verified;
-    only :attr:`answers` carries anything forward.
+    only ``answers`` carries anything forward.
 
     **It travels through the client, so it is attacker-controlled input.** The
     spec requires integrity protection whenever the state influences
     authorization, resource access or business logic — which it does here, since
-    :attr:`answers` becomes tool arguments. Signing is in
-    :mod:`rest_framework_mcp.elicitation.sign_request_state`.
+    ``answers`` becomes tool arguments. Signing is in
+    ``rest_framework_mcp.elicitation.sign_request_state``.
     """
 
     principal: str

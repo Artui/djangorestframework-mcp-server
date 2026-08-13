@@ -25,7 +25,7 @@ def build_worker_token(record: TaskRecord) -> TokenInfo:
     raising: a deleted account should fail the task's permission checks, and
     fail as a denial the client can read rather than as a worker crash.
 
-    ``raw`` is ``None`` by construction — see :class:`TaskRecord` for why the
+    ``raw`` is ``None`` by construction — see [`TaskRecord`][rest_framework_mcp.tasks.types.task_record.TaskRecord] for why the
     backend's opaque payload is not persisted.
     """
     return TokenInfo(

@@ -32,9 +32,9 @@ def handle_resources_read(
     """Read a resource (or templated-resource instance) by URI.
 
     Resolves the URI through the registry, builds a kwarg pool from the template
-    variables and request context, runs the selector via :func:`run_selector`
+    variables and request context, runs the selector via ``run_selector``
     (which bridges async selectors), and returns one ``ResourceContents`` block
-    rendered and encoded by :func:`build_resource_contents`.
+    rendered and encoded by ``build_resource_contents``.
     """
     if not isinstance(params, dict):
         return JsonRpcError(

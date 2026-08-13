@@ -18,14 +18,14 @@ def build_content_blocks(
     Returns the blocks, or an **explanatory message** when the payload does not
     match the kind the binding declared — a message rather than a response, so
     each caller wraps it in the envelope it is already building (as with
-    :func:`enforce_result_bytes`).
+    ``enforce_result_bytes``).
 
     A mismatch is a server-side mistake that can only be caught here, since a
     callable's return type is not knowable at registration. It surfaces as a
     tool-level error rather than an exception so the client still gets a
     well-formed response.
 
-    ``TEXT`` never reaches this function; :func:`build_tool_result` handles it
+    ``TEXT`` never reaches this function; [`build_tool_result`][rest_framework_mcp.output.tool_result.build_tool_result] handles it
     directly, along with the ``OutputFormat`` rendering only text blocks have.
     """
     if content_kind is ToolContentKind.RESOURCE_LINK:

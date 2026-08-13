@@ -16,10 +16,10 @@ class Implementation:
         name: *"Intended for programmatic or logical use"* — the stable
             identifier. What distinguishes two servers to a client, and what
             server-scoped state keys off. Not interchangeable with
-            :attr:`title`; the split is the spec's own.
+            ``title``; the split is the spec's own.
         version: The implementation's version string.
         title: *"Intended for UI and end-user contexts"* — the human-readable
-            label. Clients fall back to :attr:`name` when absent.
+            label. Clients fall back to ``name`` when absent.
         description: UI copy a client shows next to the server's name in a
             connection list. **Not** the ``initialize`` ``instructions``
             string, which tells the *model* how to use this server and is

@@ -22,7 +22,7 @@ from rest_framework_mcp.contrib.oauth.adapters.types.auth_user_adapter import Au
 def build_authorize_passthrough_view(adapter: AuthUserAdapter | None) -> Any:
     """Return a ``View`` callable suitable for ``urlpatterns``.
 
-    Builds DOT's :class:`AuthorizationView` subclass with the adapter baked in
+    Builds DOT's ``AuthorizationView`` subclass with the adapter baked in
     and calls ``.as_view()``. A ``None`` adapter makes the passthrough
     functionally identical to DOT's own view, so it is safe to mount whether or
     not hydration is wanted later.

@@ -9,7 +9,7 @@ from rest_framework_mcp.protocol.types.task import Task
 
 @dataclass(frozen=True)
 class TaskRecord:
-    """What a store holds: the wire :class:`Task` plus what a worker needs.
+    """What a store holds: the wire [`Task`][rest_framework_mcp.protocol.types.task.Task] plus what a worker needs.
 
     A *superset* rather than a parallel type. The extra fields never reach the
     client — no task message has a slot for them — but they are why a task can
@@ -26,7 +26,7 @@ class TaskRecord:
     fallback TTL. A rehydrated token has ``raw=None``, so a permission reaching
     into it is one that cannot run as a task.
 
-    **The separation is a security boundary.** :meth:`to_wire` is the only route
+    **The separation is a security boundary.** ``to_wire`` is the only route
     from a record to a message, which is what stops a principal id or a scope
     list leaking into a response because a field was added to the wrong
     dataclass.
@@ -36,7 +36,7 @@ class TaskRecord:
         tool_name: The tool the worker replays, verbatim.
         arguments: The arguments it replays, verbatim.
         principal_id: The owner, in the form
-            :func:`~rest_framework_mcp.auth.principal_for_token.principal_for_token`
+            ``principal_for_token``
             already produces for sessions.
         user_pk: Rehydrates the user on the worker.
         scopes: Rebuild the worker's ``TokenInfo`` so its permission checks see
@@ -59,14 +59,14 @@ class TaskRecord:
     """How far along the running task said it was, or ``None`` if it never said.
 
     Written by
-    :func:`~rest_framework_mcp.tasks.report_task_progress.report_task_progress`,
+    ``report_task_progress``,
     what a task's ``progress`` kwarg-pool seed resolves to. **Server-side only,
     by protocol**: the wire ``Task`` carries ``statusMessage`` and no numeric
     field, so a polling client sees only the *rendered* string this and
-    :attr:`total` produce."""
+    ``total`` produce."""
 
     total: float | None = None
-    """What :attr:`progress` counts toward, or ``None`` for an open-ended count.
+    """What ``progress`` counts toward, or ``None`` for an open-ended count.
 
     ``None`` is the ordinary case for work that cannot say how much there is —
     the reporter renders a bare count rather than inventing a denominator."""
@@ -95,7 +95,7 @@ class TaskRecord:
         return self.task
 
     def with_task(self, **changes: Any) -> TaskRecord:
-        """Return a copy with fields changed on the embedded :class:`Task`.
+        """Return a copy with fields changed on the embedded [`Task`][rest_framework_mcp.protocol.types.task.Task].
 
         Saves every caller a nested ``replace(record, task=replace(record.task,
         ...))``.

@@ -47,7 +47,7 @@ class JsonRpcErrorCode(IntEnum):
     "Resource not found", and the ``2026-07-28`` revision singles it out as the
     one legacy code clients should keep recognising, so a spec-following client
     reads it as a missing resource whatever a server spends it on. It belongs
-    to :attr:`RESOURCE_NOT_FOUND` and nothing else.
+    to ``RESOURCE_NOT_FOUND`` and nothing else.
 
     ``-32003`` and ``-32004`` are **burned** rather than reused: they were this
     package's own not-found codes before the wire values were aligned with the
@@ -116,13 +116,13 @@ class OutputFormat(str, Enum):
 
 
 class ToolKind(Enum):
-    """Discriminator for :class:`ToolDefinition` and the
-    :func:`register_tools` dispatch table.
+    """Discriminator for [`ToolDefinition`][rest_framework_mcp.registry.types.tool_definition.ToolDefinition] and the
+    [`register_tools`][rest_framework_mcp.registry.register_tools.register_tools] dispatch table.
 
     Internal-only — never appears on the wire. ``SERVICE`` maps to
-    :meth:`MCPServer.register_service_tool`, ``SELECTOR`` to
-    :meth:`MCPServer.register_selector_tool`. Prefer
-    :meth:`ToolDefinition.service` / :meth:`ToolDefinition.selector` over
+    [`MCPServer.register_service_tool`][rest_framework_mcp.server.mcp_server.MCPServer.register_service_tool], ``SELECTOR`` to
+    [`MCPServer.register_selector_tool`][rest_framework_mcp.server.mcp_server.MCPServer.register_selector_tool]. Prefer
+    [`ToolDefinition.service`][rest_framework_mcp.registry.types.tool_definition.ToolDefinition.service] / [`ToolDefinition.selector`][rest_framework_mcp.registry.types.tool_definition.ToolDefinition.selector] over
     passing this kwarg by hand — those are the typed entry points.
     """
 
@@ -248,7 +248,7 @@ class ResultType(str, Enum):
     COMPLETE = "complete"
     INPUT_REQUIRED = "input_required"
     TASK = "task"
-    """A durable handle instead of the result — see :mod:`rest_framework_mcp.tasks`.
+    """A durable handle instead of the result — see ``rest_framework_mcp.tasks``.
 
     The spec types ``ResultType`` as ``"complete" | "input_required" | string``,
     the open tail being how extensions add their own. Servers **MUST NOT** set
@@ -285,7 +285,7 @@ completer may return more; the handler slices to this and sets ``hasMore``."""
 
 
 class IconTheme(str, Enum):
-    """Which background an :class:`~rest_framework_mcp.protocol.types.icon.Icon`
+    """Which background an [`Icon`][rest_framework_mcp.protocol.types.icon.Icon]
     was designed for.
 
     Omitting the theme (``None``) tells the client the icon works on either,
@@ -330,13 +330,13 @@ class ToolContentKind(str, Enum):
     """What a tool's rendered payload becomes in the result's ``content`` array.
 
     Declared per binding rather than sniffed from the payload, for the same
-    reason as :class:`ResourceEncoding`: a base64 ``str`` and a text body are
+    reason as [`ResourceEncoding`][rest_framework_mcp.constants.ResourceEncoding]: a base64 ``str`` and a text body are
     indistinguishable by inspection.
 
     Embedded (``resource``) blocks have no kind here on purpose — inlining
     contents means producing them, which ``resources/read`` already does, so a
     tool returns a ``RESOURCE_LINK`` and lets the client decide whether to
-    spend context on the body. :meth:`ToolContentBlock.embedded_resource`
+    spend context on the body. [`ToolContentBlock.embedded_resource`][rest_framework_mcp.protocol.types.tool_content_block.ToolContentBlock.embedded_resource]
     remains available for a caller building blocks by hand.
 
     Attributes:
@@ -478,7 +478,7 @@ server has no prompts, rather than waiting indefinitely for it."""
 TASKS_EXTENSION_ID: str = "io.modelcontextprotocol/tasks"
 """Identifier for the tasks extension, in both directions.
 
-Unlike :data:`UI_EXTENSION_ID` this one is symmetric: the client declares it
+Unlike ``UI_EXTENSION_ID`` this one is symmetric: the client declares it
 under ``clientCapabilities.extensions`` on **every** request and the server
 under ``capabilities.extensions`` in ``server/discover``, with an empty settings
 object each way. The client's declaration is per request, and a server **MUST
@@ -608,7 +608,7 @@ UI_EXTENSION_ID: str = "io.modelcontextprotocol/ui"
 
 Client to server only: it arrives under ``capabilities.extensions`` in the
 ``initialize`` request and the spec defines no matching server-side capability.
-Parsed for introspection; nothing gates on it (see :class:`UIVisibility`).
+Parsed for introspection; nothing gates on it (see [`UIVisibility`][rest_framework_mcp.constants.UIVisibility]).
 """
 
 

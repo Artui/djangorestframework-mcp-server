@@ -7,6 +7,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- **Docstring cross-references now render as links instead of raw markup.** The
+  docstrings carried Sphinx roles — ``:class:`~rest_framework_mcp.MCPServer` `` —
+  but the docs build is mkdocstrings, which renders docstring bodies as Markdown
+  and has no such syntax, so all 389 reached the published page verbatim,
+  `:class:` prefix and Sphinx's abbreviating `~` included. Five of them were in
+  the narrative recipe pages rather than docstrings. They are now mkdocstrings
+  autorefs links; references to symbols the reference does not render, and to
+  third-party symbols, became plain code spans.
+
+  The reference still shows raw roles inside the `QueryParam`, `UrlKwarg`,
+  `UnknownArguments` and `ArgumentBinding` sections; those come from
+  drf-services' own docstrings and clear when its fix is released.
+
 ## [0.32.0] — 2026-08-11
 
 ### Upgrade notes

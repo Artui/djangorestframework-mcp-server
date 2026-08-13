@@ -37,9 +37,9 @@ def ui_view_to_resource(
     meta: dict[str, Any] | None = None,
     always_listed: bool = False,
 ) -> ResourceBinding:
-    """Lift an interactive HTML view into a :class:`ResourceBinding`.
+    """Lift an interactive HTML view into a [`ResourceBinding`][rest_framework_mcp.registry.types.resource_binding.ResourceBinding].
 
-    The sibling of :func:`selector_to_resource` for the MCP Apps extension.
+    The sibling of ``selector_to_resource`` for the MCP Apps extension.
     A view is an ordinary resource with three things fixed: the Apps mime
     type, ``TEXT`` body encoding (JSON-encoding HTML would return a quoted
     string literal, not a document), and a ``_meta`` bundle under the Apps key.

@@ -26,8 +26,8 @@ from rest_framework_mcp.protocol.types.json_rpc_error import JsonRpcError
 
 # Method dispatch table. The values return either:
 #   - a result payload (anything JSON-encodable),
-#   - an :class:`InitializeResult` (which the dispatcher serialises), or
-#   - a :class:`JsonRpcError`.
+#   - an [`InitializeResult`][rest_framework_mcp.protocol.types.initialize_result.InitializeResult] (which the dispatcher serialises), or
+#   - a [`JsonRpcError`][rest_framework_mcp.protocol.types.json_rpc_error.JsonRpcError].
 _HandlerFn = Callable[[dict[str, Any] | None, MCPCallContext], Any]
 
 _HANDLERS: dict[str, _HandlerFn] = {
@@ -61,7 +61,7 @@ def dispatch(
     """Route a JSON-RPC method to its handler.
 
     Returns the handler's raw return value, except that
-    :class:`InitializeResult` is converted to its dict form so the transport
+    [`InitializeResult`][rest_framework_mcp.protocol.types.initialize_result.InitializeResult] is converted to its dict form so the transport
     can serialise uniformly.
     """
     handler: _HandlerFn | None = _HANDLERS.get(method)

@@ -36,7 +36,7 @@ class DjangoCacheSessionStore:
 
     **Two windows, both configurable** (``SESSION_TTL_SECONDS`` /
     ``SESSION_MAX_AGE_SECONDS``, or the constructor arguments here). The TTL is
-    an **idle** window that restarts on every successful :meth:`owner` read, so
+    an **idle** window that restarts on every successful ``owner`` read, so
     a session in continuous use never lapses; the max age is the **absolute**
     ceiling that stops a sliding window outliving a revoked principal.
 
@@ -50,7 +50,7 @@ class DjangoCacheSessionStore:
     older versions wrote — is honoured and rewritten in the current shape, so
     an upgrade does not log every current holder out.
 
-    **Namespacing.** An instance built by :class:`MCPServer` keys its entries
+    **Namespacing.** An instance built by [`MCPServer`][rest_framework_mcp.server.mcp_server.MCPServer] keys its entries
     under the server's ``name``, so two servers in one project cannot see each
     other's sessions. Without it they share one flat key space over the same
     Django cache: a session minted at one satisfies the other's ownership
@@ -101,7 +101,7 @@ class DjangoCacheSessionStore:
         """Whether a key is present — deliberately *not* ``owner() is not None``.
 
         A value this store cannot read is present but ownerless, and the gate
-        keys on :meth:`owner`. Reading through ``owner`` here would also
+        keys on ``owner``. Reading through ``owner`` here would also
         refresh the idle window, making a liveness probe extend what it probes.
         """
         return cache.get(self._key(session_id)) is not None

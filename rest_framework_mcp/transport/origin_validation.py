@@ -10,7 +10,7 @@ def is_origin_allowed(origin: str | None, allowed_origins: Sequence[str]) -> boo
     every request, to mitigate DNS-rebinding attacks. An empty allowlist
     refuses every cross-origin request, which is the safest default.
 
-    The allowlist comes from the owning server's :class:`MCPConfig` rather than
+    The allowlist comes from the owning server's ``MCPConfig`` rather than
     settings, so two servers in one project can accept different origins.
 
     A missing or empty ``Origin`` is treated as same-origin and accepted,

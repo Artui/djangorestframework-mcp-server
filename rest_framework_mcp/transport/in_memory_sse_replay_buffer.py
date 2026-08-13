@@ -8,7 +8,7 @@ from typing import Any
 class InMemorySSEReplayBuffer:
     """In-process bounded replay buffer for SSE event resume.
 
-    Each session holds its own :class:`collections.deque` capped at
+    Each session holds its own ``collections.deque`` capped at
     ``max_events``, evicting the oldest event when a new one arrives. Event IDs
     are zero-padded monotonic integers per session, string-valued because the
     SSE wire format is string-only and clients echo them back verbatim via
@@ -16,7 +16,7 @@ class InMemorySSEReplayBuffer:
 
     **Single-process** ASGI deployments only: a resume can land on a different
     worker than the one that recorded the events, so multi-worker deployments
-    need :class:`RedisSSEReplayBuffer`. State is instance-scoped, so multiple
+    need [`RedisSSEReplayBuffer`][rest_framework_mcp.transport.redis_sse_replay_buffer.RedisSSEReplayBuffer]. State is instance-scoped, so multiple
     servers in one process share no replay history.
     """
 

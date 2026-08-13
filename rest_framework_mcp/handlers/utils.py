@@ -51,7 +51,7 @@ def split_url_kwargs(
     as an ordinary input. Non-mutating.
 
     A ``required=True`` kwarg the model omitted raises
-    :exc:`ServiceValidationError` here rather than failing further down:
+    ``ServiceValidationError`` here rather than failing further down:
     ``required`` in the schema is only a hint, and registration forbids pairing
     it with a ``default``.
     """
@@ -81,8 +81,8 @@ def split_query_params(
 ) -> tuple[dict[str, Any], dict[str, Any]]:
     """Split ``arguments`` into ``(params, query_param_values)``.
 
-    The sibling of :func:`split_url_kwargs`, minus the ``required`` flag a
-    :class:`QueryParam` does not carry. Popping the name also keeps a query param
+    The sibling of ``split_url_kwargs``, minus the ``required`` flag a
+    [`QueryParam`][rest_framework_services.types.query_param.QueryParam] does not carry. Popping the name also keeps a query param
     out of ``unknown_arguments``.
 
     A ``filter_set`` field is **not** a query param. Filter fields are already in
@@ -121,8 +121,8 @@ def advertises_closed_schema(binding: Any) -> bool:
     """Whether ``tools/list`` may stamp ``additionalProperties: false`` for ``binding``.
 
     ``REJECT`` is a silent no-op for a serializer-less binding —
-    :func:`services_dispatch_policies` downgrades it and
-    :func:`build_validated_input_serializer` short-circuits before the
+    ``services_dispatch_policies`` downgrades it and
+    ``build_validated_input_serializer`` short-circuits before the
     unknown-key check — so advertising a closed schema there would be a lie.
     """
     return (
@@ -160,8 +160,8 @@ def services_dispatch_policies(binding: Any) -> tuple[ArgumentBinding, UnknownAr
 def permission_verdict(perm: Any, result: Any, *, method: str, effect: str) -> Any:
     """A permission hook's answer, refusing one that must be awaited.
 
-    Shared by :func:`check_permissions` and
-    :func:`rest_framework_mcp.handlers.is_binding_listable.is_binding_listable`
+    Shared by ``check_permissions`` and
+    ``rest_framework_mcp.handlers.is_binding_listable.is_binding_listable``
     so the two places a consumer-supplied permission is consulted cannot drift on
     whether ``async def`` is allowed. It is not.
 
@@ -169,7 +169,7 @@ def permission_verdict(perm: Any, result: Any, *, method: str, effect: str) -> A
     these hooks: the async path reaches them through ``acall``, which bridges
     this sync function, leaving an ``async def has_permission`` as un-awaited as
     on WSGI — and a coroutine is truthy, so the caller is granted. A permission
-    that must await wraps the work in :func:`asgiref.sync.async_to_sync`.
+    that must await wraps the work in ``asgiref.sync.async_to_sync``.
     """
     return reject_awaitable(
         result,
@@ -361,7 +361,7 @@ def validate_input_against_serializer(
 ) -> Any:
     """Validate ``arguments`` against ``input_serializer``; return ``validated`` only.
 
-    Thin wrapper over :func:`build_validated_input_serializer` (see there for the
+    Thin wrapper over ``build_validated_input_serializer`` (see there for the
     full semantics) for callers that don't need the bound serializer.
     """
     validated, _serializer = build_validated_input_serializer(
@@ -439,7 +439,7 @@ def enforce_result_ceiling(result: Any, *, max_result_bytes: int | None, label: 
     """Replace an over-ceiling tool result with an ``isError`` result.
 
     Applied once per handler, to the finished result, so every dispatch path is
-    covered by one check that sees what goes on the wire. A :class:`JsonRpcError`
+    covered by one check that sees what goes on the wire. A [`JsonRpcError`][rest_framework_mcp.protocol.types.json_rpc_error.JsonRpcError]
     passes through — rewriting it would change the envelope the client awaits.
     """
     if isinstance(result, JsonRpcError):
@@ -451,7 +451,7 @@ def enforce_result_ceiling(result: Any, *, max_result_bytes: int | None, label: 
 
 
 async def run_with_deadline(coro: Awaitable[Any], seconds: float | None) -> Any:
-    """Await ``coro``, raising :class:`asyncio.TimeoutError` past ``seconds``.
+    """Await ``coro``, raising ``asyncio.TimeoutError`` past ``seconds``.
 
     ``None`` awaits without a deadline, so callers can hand the resolved bound
     straight in.

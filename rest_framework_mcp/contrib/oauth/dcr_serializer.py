@@ -76,8 +76,8 @@ _CLIENT_TYPE_AUTH_METHODS = {
 class DynamicClientRegistrationSerializer(DataclassSerializer):
     """RFC 7591 dynamic client registration request shape.
 
-    Wraps :class:`DynamicClientRegistrationRequest` so ``.save()`` hands
-    :class:`DynamicClientRegistrationViewSet` a typed dataclass instance. The
+    Wraps [`DynamicClientRegistrationRequest`][rest_framework_mcp.contrib.oauth.types.dynamic_client_registration_request.DynamicClientRegistrationRequest] so ``.save()`` hands
+    [`DynamicClientRegistrationViewSet`][rest_framework_mcp.contrib.oauth.dynamic_client_registration_viewset.DynamicClientRegistrationViewSet] a typed dataclass instance. The
     field overrides replace the dataclass-derived defaults with shapes that
     validate the wire contract: ``redirect_uris`` is required, non-empty and
     URL-valued, and ``application_type`` is checked against OIDC's two values
@@ -86,7 +86,7 @@ class DynamicClientRegistrationSerializer(DataclassSerializer):
 
     ``token_endpoint_auth_method`` / ``grant_types`` are the RFC 7591 §2
     spellings every interoperable client sends, and are the *primary* inputs:
-    :meth:`validate` translates them into DOT's ``client_type`` /
+    ``validate`` translates them into DOT's ``client_type`` /
     ``authorization_grant_type``. Those two remain accepted as an escape hatch
     for callers already speaking DOT, their choices sourced from
     ``Application``'s constants at instance construction — so a malformed value

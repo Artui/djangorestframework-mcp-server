@@ -32,9 +32,9 @@ def selector_to_resource(
     meta: dict[str, Any] | None = None,
     always_listed: bool = False,
 ) -> ResourceBinding:
-    """Lift a :class:`SelectorSpec` into a :class:`ResourceBinding`.
+    """Lift a ``SelectorSpec`` into a [`ResourceBinding`][rest_framework_mcp.registry.types.resource_binding.ResourceBinding].
 
-    Mirrors :func:`service_spec_to_tool` — the unit of registration is always a
+    Mirrors ``service_spec_to_tool`` — the unit of registration is always a
     spec from ``djangorestframework-services``. ``.selector`` must be set (there
     is nothing to dispatch to otherwise), ``.output_serializer`` fills in when
     the caller passed none, and ``.kwargs`` becomes the binding's per-request
@@ -43,7 +43,7 @@ def selector_to_resource(
 
     ``meta`` is the base-protocol ``_meta`` bundle the resource's listing
     entry and its ``resources/read`` contents block carry — see
-    :func:`~rest_framework_mcp.adapters.service_to_tool.service_spec_to_tool`.
+    ``service_spec_to_tool``.
     """
     if not isinstance(selector, SelectorSpec):
         raise TypeError(

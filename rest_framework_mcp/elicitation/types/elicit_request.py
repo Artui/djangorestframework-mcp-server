@@ -24,7 +24,7 @@ class ElicitRequest:
 
     requested_schema: dict[str, Any]
     """The restricted JSON Schema describing the fields to collect. Built by
-    :func:`~rest_framework_mcp.elicitation.build_requested_schema.build_requested_schema`,
+    ``build_requested_schema``,
     which also rejects a shape the client would have to refuse."""
 
     def to_dict(self) -> dict[str, Any]:

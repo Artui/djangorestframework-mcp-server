@@ -22,9 +22,9 @@ async def handle_prompts_get_async(
     params: dict[str, Any] | None,
     context: MCPCallContext,
 ) -> dict[str, Any] | JsonRpcError:
-    """Async sibling of :func:`handle_prompts_get`.
+    """Async sibling of ``handle_prompts_get``.
 
-    The render callable is dispatched via :func:`acall`, so an async render
+    The render callable is dispatched via ``acall``, so an async render
     function awaits directly and a sync one runs in a thread.
     """
     if not isinstance(params, dict):

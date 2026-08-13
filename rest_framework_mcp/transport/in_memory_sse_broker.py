@@ -7,13 +7,13 @@ from typing import Any
 class InMemorySSEBroker:
     """In-process per-session pub/sub for server-pushed MCP messages.
 
-    Each subscribed session gets a private :class:`asyncio.Queue`. App code in
-    the same process publishes to it via :meth:`publish`; the streaming GET
+    Each subscribed session gets a private ``asyncio.Queue``. App code in
+    the same process publishes to it via ``publish``; the streaming GET
     generator pulls off the queue and emits SSE frames.
 
     State is instance-scoped, so multiple servers in one process share none of
     it. Multi-process deployments need an out-of-process backend — see
-    :class:`RedisSSEBroker` (the ``[redis]`` extra).
+    [`RedisSSEBroker`][rest_framework_mcp.transport.redis_sse_broker.RedisSSEBroker] (the ``[redis]`` extra).
 
     One subscriber per session: re-subscribing replaces the previous queue, and
     the old generator errors out on its next ``await``. There is no replay;

@@ -10,18 +10,18 @@ from rest_framework_mcp.auth.types.token_info import TokenInfo
 
 
 class DRFPermissionAdapter:
-    """Bridge a DRF ``BasePermission`` class into the :class:`MCPPermission` Protocol.
+    """Bridge a DRF ``BasePermission`` class into the [`MCPPermission`][rest_framework_mcp.auth.permissions.types.mcp_permission.MCPPermission] Protocol.
 
     ``ServiceSpec`` / ``SelectorSpec`` carry ``permission_classes`` as DRF
     ``BasePermission`` *classes*, and the MCP transport doesn't go through DRF
     views, so each class is wrapped here at registration time and instantiated
     once — mirroring what a DRF view's ``get_permissions`` does.
 
-    The DRF instance receives a synthesised :class:`rest_framework.request.Request`
+    The DRF instance receives a synthesised ``rest_framework.request.Request``
     with ``user`` set to ``token.user`` and a lightweight view stand-in
     sufficient for the DRF permission contract (``request``, ``action``). The
     HTTP method on the underlying ``HttpRequest`` is left untouched — unlike
-    :func:`~rest_framework_services.build_offline_context`, which forces
+    ``build_offline_context``, which forces
     ``POST`` for mutation dispatch — because permission evaluation is
     method-agnostic.
     """
@@ -63,7 +63,7 @@ class _PermissionView:
 
 
 def _wrap_request(http_request: HttpRequest, *, user: Any) -> Request:
-    """Wrap an :class:`HttpRequest` as a DRF :class:`Request` with the supplied user.
+    """Wrap an ``HttpRequest`` as a DRF ``Request`` with the supplied user.
 
     ``Request(http_request)`` is the canonical DRF upgrade path; ``.user`` is
     set explicitly so MCP-supplied auth state flows through without DRF

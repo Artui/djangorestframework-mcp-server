@@ -15,7 +15,7 @@ def wrap_spec_permissions(
 ) -> tuple[DRFPermissionAdapter, ...]:
     """Project a ``Sequence[type[BasePermission]]`` into wrapped ``MCPPermission`` adapters.
 
-    Each class is wrapped in :class:`DRFPermissionAdapter` so it satisfies the
+    Each class is wrapped in [`DRFPermissionAdapter`][rest_framework_mcp.auth.permissions.drf_permission_adapter.DRFPermissionAdapter] so it satisfies the
     MCP permission Protocol. ``None`` and the empty sequence collapse to an
     empty tuple — the spec author's "no permission contract" sentinel.
 

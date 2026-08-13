@@ -4,9 +4,9 @@ from rest_framework_mcp.registry.types.prompt_binding import PromptBinding
 
 
 class PromptRegistry:
-    """Name to :class:`PromptBinding` lookup.
+    """Name to [`PromptBinding`][rest_framework_mcp.registry.types.prompt_binding.PromptBinding] lookup.
 
-    Mirrors :class:`ToolRegistry`: names are unique and a duplicate raises at
+    Mirrors [`ToolRegistry`][rest_framework_mcp.registry.tool_registry.ToolRegistry]: names are unique and a duplicate raises at
     registration.
     """
 

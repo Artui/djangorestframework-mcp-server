@@ -8,7 +8,7 @@ from typing import Any
 class ChainContext:
     """The accumulating context a chain tool threads through its steps.
 
-    Passed to each :class:`~rest_framework_mcp.registry.types.chain_step.ChainStep`'s
+    Passed to each [`ChainStep`][rest_framework_mcp.registry.types.chain_step.ChainStep]'s
     ``inputs`` callable so a step can build its call kwargs from the validated
     tool arguments and any prior step's output:
 

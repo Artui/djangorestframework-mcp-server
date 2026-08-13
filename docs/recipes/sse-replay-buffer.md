@@ -4,7 +4,7 @@ The MCP transport supports the standard SSE
 [`Last-Event-ID`](https://html.spec.whatwg.org/multipage/server-sent-events.html#last-event-id)
 header so clients that drop a streaming connection can reconnect and
 receive the events they missed. This is **opt-in**: pass an
-:class:`SSEReplayBuffer` to `MCPServer(sse_replay_buffer=...)` and every
+[`SSEReplayBuffer`][rest_framework_mcp.transport.types.sse_replay_buffer.SSEReplayBuffer] to `MCPServer(sse_replay_buffer=...)` and every
 event published via `await server.notify(...)` is recorded with a
 monotonic ID before fan-out, then replayed on the client's next GET if it
 arrives carrying `Last-Event-ID`.

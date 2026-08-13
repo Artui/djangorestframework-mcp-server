@@ -34,8 +34,8 @@ class OpenIDDiscoveryViewSet(ViewSet):
     is empty when no RSA key is configured.
 
     A backend that hosts no authorization server raises
-    :class:`NotImplementedError`, surfaced as ``501`` for parity with
-    :class:`AuthorizationServerMetadataViewSet`.
+    ``NotImplementedError``, surfaced as ``501`` for parity with
+    [`AuthorizationServerMetadataViewSet`][rest_framework_mcp.contrib.oauth.authorization_server_metadata_viewset.AuthorizationServerMetadataViewSet].
     """
 
     authentication_classes: tuple = ()  # noqa: RUF012 — DRF class-level config

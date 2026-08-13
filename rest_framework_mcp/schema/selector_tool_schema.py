@@ -20,7 +20,7 @@ def build_selector_tool_input_schema(
        ``**extras: Unpack[TypedDict]`` expanded into one property per key, its
        required keys populating ``required``, the ``request`` / ``user`` /
        ``view`` transport seeds skipped) plus the ``filter_set`` fields, via
-       drf-services' :func:`spec_to_json_schema`. This is the *same* reflection
+       drf-services' ``spec_to_json_schema``. This is the *same* reflection
        the Pydantic-AI ``SpecToolset`` consumes, so both transports advertise
        the same shape: a nested route's ``parent_pk`` read from ``extras`` is
        discoverable without an explicit ``UrlKwarg``, and a ``FilterSet``'s
@@ -37,7 +37,7 @@ def build_selector_tool_input_schema(
     4. **``paginate=True``** — adds optional ``page`` and ``limit`` positive
        integers. ``limit`` carries a ``maximum`` when ``max_page_size`` is
        supplied, so the model sees the ceiling dispatch will clamp to.
-    5. **``url_kwargs``** — each registered :class:`UrlKwarg`'s advertised
+    5. **``url_kwargs``** — each registered [`UrlKwarg`][rest_framework_services.types.url_kwarg.UrlKwarg]'s advertised
        schema, winning over a reflected key of the same name.
 
     Args:
