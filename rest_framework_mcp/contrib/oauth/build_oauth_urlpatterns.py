@@ -1,22 +1,22 @@
 """Opt-in OAuth endpoint matrix for MCP-friendly client compatibility.
 
-MCP hosts probe several well-known URLs to find an authorization server: RFC
-8414 mandates one path, RFC 9728 another, OIDC a third, and vendors mount their
-own aliases. [`build_oauth_urlpatterns`][rest_framework_mcp.contrib.oauth.build_oauth_urlpatterns.build_oauth_urlpatterns] serves every one of them. The
-aliases are *not* HTTP redirects — they render the same payload from the same
-view, because redirects break clients that follow one and then keep issuing
-requests against the redirected origin.
+MCP hosts probe several well-known URLs to find an authorization server: RFC 8414
+mandates one path, RFC 9728 another, OIDC a third, and vendors mount their own aliases.
+[`build_oauth_urlpatterns`][rest_framework_mcp.contrib.oauth.build_oauth_urlpatterns.build_oauth_urlpatterns]
+serves every one of them. The aliases are *not* HTTP redirects — they render the same
+payload from the same view, because redirects break clients that follow one and then
+keep issuing requests against the redirected origin.
 
 Mount the patterns alongside your ``MCPServer.urls``:
 
-.. code-block:: python
-
-    urlpatterns = [
-        path("mcp/", server.urls),
-        *build_oauth_urlpatterns(server=server, include_dcr=True),
-        # AFTER ours, not before — see below.
-        path("oauth/", include("oauth2_provider.urls", namespace="oauth2_provider")),
-    ]
+```python
+urlpatterns = [
+    path("mcp/", server.urls),
+    *build_oauth_urlpatterns(server=server, include_dcr=True),
+    # AFTER ours, not before — see below.
+    path("oauth/", include("oauth2_provider.urls", namespace="oauth2_provider")),
+]
+```
 
 **Order matters against ``oauth2_provider``, and getting it wrong is silent.**
 DOT 3.4.0 serves its own ``register/`` and
@@ -83,8 +83,8 @@ def build_oauth_urlpatterns(
     mounts in one project can differ.
 
     Args:
-      server: The [`MCPServer`][rest_framework_mcp.server.mcp_server.MCPServer] whose ``auth_backend`` drives every
-        discovery payload. A parameter rather than a settings lookup so
+      server: The [`MCPServer`][rest_framework_mcp.server.mcp_server.MCPServer]
+        whose ``auth_backend`` drives every discovery payload. A parameter rather than a settings lookup so
         multi-server deployments work.
       include_dcr: Mount ``/oauth/register/``. Off by default, so a consumer
         who does not want DCR never exposes the URL at all.

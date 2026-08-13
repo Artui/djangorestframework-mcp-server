@@ -116,15 +116,21 @@ class OutputFormat(str, Enum):
 
 
 class ToolKind(Enum):
-    """Discriminator for [`ToolDefinition`][rest_framework_mcp.registry.types.tool_definition.ToolDefinition] and the
-    [`register_tools`][rest_framework_mcp.registry.register_tools.register_tools] dispatch table.
+    """Discriminator for
+    [`ToolDefinition`][rest_framework_mcp.registry.types.tool_definition.ToolDefinition]
+    and the
+    [`register_tools`][rest_framework_mcp.registry.register_tools.register_tools]
+    dispatch table.
 
     Internal-only — never appears on the wire. ``SERVICE`` maps to
-    [`MCPServer.register_service_tool`][rest_framework_mcp.server.mcp_server.MCPServer.register_service_tool], ``SELECTOR`` to
-    [`MCPServer.register_selector_tool`][rest_framework_mcp.server.mcp_server.MCPServer.register_selector_tool]. Prefer
-    [`ToolDefinition.service`][rest_framework_mcp.registry.types.tool_definition.ToolDefinition.service] / [`ToolDefinition.selector`][rest_framework_mcp.registry.types.tool_definition.ToolDefinition.selector] over
-    passing this kwarg by hand — those are the typed entry points.
-    """
+    [`MCPServer.register_service_tool`][rest_framework_mcp.server.mcp_server.MCPServer.register_service_tool],
+    ``SELECTOR`` to
+    [`MCPServer.register_selector_tool`][rest_framework_mcp.server.mcp_server.MCPServer.register_selector_tool].
+    Prefer
+    [`ToolDefinition.service`][rest_framework_mcp.registry.types.tool_definition.ToolDefinition.service]
+    /
+    [`ToolDefinition.selector`][rest_framework_mcp.registry.types.tool_definition.ToolDefinition.selector]
+    over passing this kwarg by hand — those are the typed entry points."""
 
     SERVICE = "service"
     SELECTOR = "selector"
@@ -329,14 +335,14 @@ class ResourceEncoding(str, Enum):
 class ToolContentKind(str, Enum):
     """What a tool's rendered payload becomes in the result's ``content`` array.
 
-    Declared per binding rather than sniffed from the payload, for the same
-    reason as [`ResourceEncoding`][rest_framework_mcp.constants.ResourceEncoding]: a base64 ``str`` and a text body are
-    indistinguishable by inspection.
+    Declared per binding rather than sniffed from the payload, for the same reason as
+    [`ResourceEncoding`][rest_framework_mcp.constants.ResourceEncoding]: a base64
+    ``str`` and a text body are indistinguishable by inspection.
 
-    Embedded (``resource``) blocks have no kind here on purpose — inlining
-    contents means producing them, which ``resources/read`` already does, so a
-    tool returns a ``RESOURCE_LINK`` and lets the client decide whether to
-    spend context on the body. [`ToolContentBlock.embedded_resource`][rest_framework_mcp.protocol.types.tool_content_block.ToolContentBlock.embedded_resource]
+    Embedded (``resource``) blocks have no kind here on purpose — inlining contents
+    means producing them, which ``resources/read`` already does, so a tool returns a
+    ``RESOURCE_LINK`` and lets the client decide whether to spend context on the body.
+    [`ToolContentBlock.embedded_resource`][rest_framework_mcp.protocol.types.tool_content_block.ToolContentBlock.embedded_resource]
     remains available for a caller building blocks by hand.
 
     Attributes:
@@ -607,9 +613,9 @@ UI_EXTENSION_ID: str = "io.modelcontextprotocol/ui"
 """Identifier a client uses to advertise MCP Apps support.
 
 Client to server only: it arrives under ``capabilities.extensions`` in the
-``initialize`` request and the spec defines no matching server-side capability.
-Parsed for introspection; nothing gates on it (see [`UIVisibility`][rest_framework_mcp.constants.UIVisibility]).
-"""
+``initialize`` request and the spec defines no matching server-side capability. Parsed
+for introspection; nothing gates on it (see
+[`UIVisibility`][rest_framework_mcp.constants.UIVisibility]). """
 
 
 __all__ = [

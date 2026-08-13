@@ -29,8 +29,9 @@ _DEFAULT_CHANNEL_PREFIX: str = "drf-mcp:sub"
 class RedisSubscriptionBroker:
     """Cross-process topic fan-out over Redis pub/sub. **The deployable one.**
 
-    [`InMemorySubscriptionBroker`][rest_framework_mcp.subscriptions.in_memory_subscription_broker.InMemorySubscriptionBroker] delivers to nobody once the publisher
-    and the subscriber's stream land on different workers, and does so
+    [`InMemorySubscriptionBroker`][rest_framework_mcp.subscriptions.in_memory_subscription_broker.InMemorySubscriptionBroker]
+    delivers to nobody once the publisher and the subscriber's stream land on
+    different workers, and does so
     silently, so anything past one worker wants this::
 
         from redis.asyncio import Redis

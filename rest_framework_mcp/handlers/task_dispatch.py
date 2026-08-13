@@ -25,16 +25,15 @@ def maybe_create_task(
     the caller runs the tool inline. Anything else is the response.
 
     **Three conditions, and all three must hold**: the binding opts in
-    ([`TaskPolicy`][rest_framework_mcp.constants.TaskPolicy]), the server can actually run tasks, and the client
-    declared the extension **on this request**. Each failure answers
-    differently. A binding that says no runs inline. A server that cannot run
+    ([`TaskPolicy`][rest_framework_mcp.constants.TaskPolicy]), the server can actually
+    run tasks, and the client declared the extension **on this request**. Each failure
+    answers differently. A binding that says no runs inline. A server that cannot run
     tasks runs inline unless the policy is ``REQUIRED``, which makes it a
-    misconfiguration on this side — ``-32603``, because blaming the client's
-    request for a missing executor sends a competent client round a loop it
-    cannot win. A client that did not declare runs inline unless the policy is
-    ``REQUIRED``, which is exactly the ``-32021`` case the spec describes as a
-    server *"unable to service a request ... without returning
-    CreateTaskResult"*.
+    misconfiguration on this side — ``-32603``, because blaming the client's request for
+    a missing executor sends a competent client round a loop it cannot win. A client
+    that did not declare runs inline unless the policy is ``REQUIRED``, which is exactly
+    the ``-32021`` case the spec describes as a server *"unable to service a request ...
+    without returning CreateTaskResult"*.
 
     **Permissions are checked here, before anything is created.** A task is
     durable queued work carrying the caller's authorization context; creating

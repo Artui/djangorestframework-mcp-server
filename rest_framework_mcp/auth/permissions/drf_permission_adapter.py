@@ -10,7 +10,9 @@ from rest_framework_mcp.auth.types.token_info import TokenInfo
 
 
 class DRFPermissionAdapter:
-    """Bridge a DRF ``BasePermission`` class into the [`MCPPermission`][rest_framework_mcp.auth.permissions.types.mcp_permission.MCPPermission] Protocol.
+    """Bridge a DRF ``BasePermission`` class into the
+    [`MCPPermission`][rest_framework_mcp.auth.permissions.types.mcp_permission.MCPPermission]
+    Protocol.
 
     ``ServiceSpec`` / ``SelectorSpec`` carry ``permission_classes`` as DRF
     ``BasePermission`` *classes*, and the MCP transport doesn't go through DRF

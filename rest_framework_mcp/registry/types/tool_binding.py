@@ -133,9 +133,10 @@ class ToolBinding(Generic[InputT, ResultT, ExtraT]):
     params. See [`UrlKwarg`][rest_framework_services.types.url_kwarg.UrlKwarg]."""
 
     content_kind: ToolContentKind = ToolContentKind.TEXT
-    """What this tool's payload becomes in the result's ``content`` array.
-    ``TEXT`` renders JSON per ``output_format``; the other kinds project it
-    into an image / audio / resource-link block. See [`ToolContentKind`][rest_framework_mcp.constants.ToolContentKind]."""
+    """What this tool's payload becomes in the result's ``content`` array. ``TEXT``
+    renders JSON per ``output_format``; the other kinds project it into an image / audio
+    / resource-link block. See
+    [`ToolContentKind`][rest_framework_mcp.constants.ToolContentKind]."""
 
     content_mime_type: str | None = None
     """The media type for an ``IMAGE`` / ``AUDIO`` ``content_kind``.

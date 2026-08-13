@@ -24,7 +24,9 @@ def _template_to_pattern(uri_template: str) -> re.Pattern[str]:
 
 
 class ResourceRegistry:
-    """URI or URI-template to [`ResourceBinding`][rest_framework_mcp.registry.types.resource_binding.ResourceBinding] lookup.
+    """URI or URI-template to
+    [`ResourceBinding`][rest_framework_mcp.registry.types.resource_binding.ResourceBinding]
+    lookup.
 
     Concrete resources are matched by exact URI, templates by a regex derived
     from the template. ``resolve`` returns the binding plus the variables

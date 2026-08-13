@@ -23,13 +23,13 @@ from rest_framework_mcp.registry.types.utils import validate_content_kind
 class ChainToolBinding:
     """All wiring for a single MCP tool that runs a **sequence of specs**.
 
-    A chain tool threads a [`ChainContext`][rest_framework_mcp.registry.types.chain_context.ChainContext]
-    through its ordered ``steps`` — each step's result is stored under its
-    alias and readable by later steps — so one tool call can express
-    ``retrieve x → write y → write z`` with ``z`` derived from both ``x`` and
-    ``y``. Sequencing is a transport concern owned by the MCP layer; the steps
-    themselves are ordinary ``ServiceSpec`` / ``SelectorSpec`` units of API
-    behaviour.
+    A chain tool threads a
+    [`ChainContext`][rest_framework_mcp.registry.types.chain_context.ChainContext]
+    through its ordered ``steps`` — each step's result is stored under its alias and
+    readable by later steps — so one tool call can express ``retrieve x → write y →
+    write z`` with ``z`` derived from both ``x`` and ``y``. Sequencing is a transport
+    concern owned by the MCP layer; the steps themselves are ordinary ``ServiceSpec`` /
+    ``SelectorSpec`` units of API behaviour.
 
     Fields not listed below mirror
     [`ToolBinding`][rest_framework_mcp.registry.types.tool_binding.ToolBinding].
@@ -89,9 +89,10 @@ class ChainToolBinding:
     always_listed: bool = False
 
     content_kind: ToolContentKind = ToolContentKind.TEXT
-    """What this tool's payload becomes in the result's ``content`` array.
-    ``TEXT`` renders JSON per ``output_format``; the other kinds project it
-    into an image / audio / resource-link block. See [`ToolContentKind`][rest_framework_mcp.constants.ToolContentKind]."""
+    """What this tool's payload becomes in the result's ``content`` array. ``TEXT``
+    renders JSON per ``output_format``; the other kinds project it into an image / audio
+    / resource-link block. See
+    [`ToolContentKind`][rest_framework_mcp.constants.ToolContentKind]."""
 
     content_mime_type: str | None = None
     """The media type for an ``IMAGE`` / ``AUDIO`` ``content_kind``.

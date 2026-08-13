@@ -30,13 +30,15 @@ def build_server_info(
     default — absent means absent, and the client falls back to ``name`` per the
     spec.
 
-    ``description`` is deliberately settings-only, with no parameter here:
-    ``MCPServer`` already spends the name ``description=`` on the ``initialize``
-    ``instructions`` string. [`Implementation`][rest_framework_mcp.protocol.types.implementation.Implementation] documents the distinction.
+    ``description`` is deliberately settings-only, with no parameter here: ``MCPServer``
+    already spends the name ``description=`` on the ``initialize`` ``instructions``
+    string.
+    [`Implementation`][rest_framework_mcp.protocol.types.implementation.Implementation]
+    documents the distinction.
 
     ``icons`` arriving from ``SERVER_INFO`` are plain data, so dicts are accepted
-    alongside [`Icon`][rest_framework_mcp.protocol.types.icon.Icon] instances and normalised here — ``Icon``'s scheme
-    validation runs whichever form the project used.
+    alongside [`Icon`][rest_framework_mcp.protocol.types.icon.Icon] instances and
+    normalised here — ``Icon``'s scheme validation runs whichever form the project used.
     """
     server_info_settings: dict[str, Any] = get_setting("SERVER_INFO")
     return Implementation(
@@ -56,14 +58,16 @@ def build_server_info(
 
 
 def _coerce_icons(raw: Any) -> tuple[Icon, ...]:
-    """Normalise the ``SERVER_INFO`` representation of ``icons`` into [`Icon`][rest_framework_mcp.protocol.types.icon.Icon]s."""
+    """Normalise the ``SERVER_INFO`` representation of ``icons`` into
+    [`Icon`][rest_framework_mcp.protocol.types.icon.Icon]s."""
     if not raw:
         return ()
     return tuple(item if isinstance(item, Icon) else _icon_from_mapping(item) for item in raw)
 
 
 def _icon_from_mapping(item: Any) -> Icon:
-    """Build an [`Icon`][rest_framework_mcp.protocol.types.icon.Icon] from settings data, which uses the wire spellings.
+    """Build an [`Icon`][rest_framework_mcp.protocol.types.icon.Icon] from settings
+    data, which uses the wire spellings.
 
     Fields are read by name rather than splatted so ``mimeType`` maps to
     ``mime_type``, and so a stray settings key is an ignored extra rather than a

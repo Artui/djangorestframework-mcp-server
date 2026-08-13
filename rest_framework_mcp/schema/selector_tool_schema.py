@@ -37,7 +37,8 @@ def build_selector_tool_input_schema(
     4. **``paginate=True``** — adds optional ``page`` and ``limit`` positive
        integers. ``limit`` carries a ``maximum`` when ``max_page_size`` is
        supplied, so the model sees the ceiling dispatch will clamp to.
-    5. **``url_kwargs``** — each registered [`UrlKwarg`][rest_framework_services.types.url_kwarg.UrlKwarg]'s advertised
+    5. **``url_kwargs``** — each registered
+       [`UrlKwarg`][rest_framework_services.types.url_kwarg.UrlKwarg]'s advertised
        schema, winning over a reflected key of the same name.
 
     Args:

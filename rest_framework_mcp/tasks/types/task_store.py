@@ -9,11 +9,13 @@ from rest_framework_mcp.tasks.types.task_record import TaskRecord
 class TaskStore(Protocol):
     """Pluggable persistence for tasks, mirroring ``SessionStore``.
 
-    **Unlike ``SessionStore``, an in-process implementation is not deployable.**
-    A session only has to be recognised by the process that minted it, while a
-    task is created by a web worker and finished by a *different* process. So
-    [`InMemoryTaskStore`][rest_framework_mcp.tasks.in_memory_task_store.InMemoryTaskStore] is a development and test convenience, and
-    [`DjangoCacheTaskStore`][rest_framework_mcp.tasks.django_cache_task_store.DjangoCacheTaskStore] is the default.
+    **Unlike ``SessionStore``, an in-process implementation is not deployable.** A
+    session only has to be recognised by the process that minted it, while a task is
+    created by a web worker and finished by a *different* process. So
+    [`InMemoryTaskStore`][rest_framework_mcp.tasks.in_memory_task_store.InMemoryTaskStore]
+    is a development and test convenience, and
+    [`DjangoCacheTaskStore`][rest_framework_mcp.tasks.django_cache_task_store.DjangoCacheTaskStore]
+    is the default.
 
     Four operations, no more:
 

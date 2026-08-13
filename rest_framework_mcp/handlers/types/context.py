@@ -99,10 +99,11 @@ class MCPCallContext:
     ``get_setting``, which could only ever be global — two servers in one
     project could not otherwise differ on any of them.
 
-    The default builds a config from settings for a context constructed without
-    a server (a hand-wired viewset, or a test driving a handler directly), which
-    does make the *default* a settings read at construction time; a context
-    built by [`MCPServer`][rest_framework_mcp.server.mcp_server.MCPServer] never takes that path."""
+    The default builds a config from settings for a context constructed without a server
+    (a hand-wired viewset, or a test driving a handler directly), which does make the
+    *default* a settings read at construction time; a context built by
+    [`MCPServer`][rest_framework_mcp.server.mcp_server.MCPServer] never takes that
+    path."""
 
 
 __all__ = ["MCPCallContext"]

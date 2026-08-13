@@ -31,11 +31,11 @@ class PromptMessage:
     def block(cls, role: str, block: ToolContentBlock) -> PromptMessage:
         """Build a turn from any content block.
 
-        The spec uses one content vocabulary across tool results and prompt
-        messages, so this reuses [`ToolContentBlock`][rest_framework_mcp.protocol.types.tool_content_block.ToolContentBlock] rather than growing a
-        parallel set. ``resource_link`` is the one member prompts do not accept
-        — a prompt message embeds content, it does not point at it.
-        """
+        The spec uses one content vocabulary across tool results and prompt messages, so
+        this reuses
+        [`ToolContentBlock`][rest_framework_mcp.protocol.types.tool_content_block.ToolContentBlock]
+        rather than growing a parallel set. ``resource_link`` is the one member prompts
+        do not accept — a prompt message embeds content, it does not point at it."""
         return cls(role=role, content=block.to_dict())
 
 

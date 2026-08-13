@@ -47,7 +47,9 @@ def chain_steps_to_tool(
     max_result_bytes: int | None | UnsetType = UNSET,
     dispatch_timeout: float | None | UnsetType = UNSET,
 ) -> ChainToolBinding:
-    """Lift an ordered list of [`ChainStep`][rest_framework_mcp.registry.types.chain_step.ChainStep] into a [`ChainToolBinding`][rest_framework_mcp.registry.types.chain_tool_binding.ChainToolBinding].
+    """Lift an ordered list of
+    [`ChainStep`][rest_framework_mcp.registry.types.chain_step.ChainStep] into a
+    [`ChainToolBinding`][rest_framework_mcp.registry.types.chain_tool_binding.ChainToolBinding].
 
     Pure projection — no side effects on the specs or their callables. The
     handler layer (``handlers/chain_tool_dispatch.py``) runs the steps.

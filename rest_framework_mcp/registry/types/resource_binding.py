@@ -49,9 +49,10 @@ class ResourceBinding(Generic[ResultT]):
     output_serializer: type | None = None
     mime_type: str = "application/json"
     encoding: ResourceEncoding = ResourceEncoding.JSON
-    """How the selector's value becomes the ``resources/read`` body. Declared
-    rather than inferred from ``mime_type``, so advertising a new mime type
-    never silently changes the encoding. See [`ResourceEncoding`][rest_framework_mcp.constants.ResourceEncoding]."""
+    """How the selector's value becomes the ``resources/read`` body. Declared rather
+    than inferred from ``mime_type``, so advertising a new mime type never silently
+    changes the encoding. See
+    [`ResourceEncoding`][rest_framework_mcp.constants.ResourceEncoding]."""
 
     permissions: tuple[Any, ...] = ()
     rate_limits: tuple[Any, ...] = ()
@@ -85,9 +86,9 @@ class ResourceBinding(Generic[ResultT]):
     # accepted without contravariance friction.
     kwargs_provider: Callable[..., Any] | None = None
     always_listed: bool = False
-    """Keep this resource in ``resources/list`` (or
-    ``resources/templates/list``) even when ``FILTER_LISTINGS_BY_PERMISSIONS``
-    would drop it — same semantics as [`ToolBinding.always_listed`][rest_framework_mcp.registry.types.tool_binding.ToolBinding.always_listed]."""
+    """Keep this resource in ``resources/list`` (or ``resources/templates/list``) even
+    when ``FILTER_LISTINGS_BY_PERMISSIONS`` would drop it — same semantics as
+    [`ToolBinding.always_listed`][rest_framework_mcp.registry.types.tool_binding.ToolBinding.always_listed]."""
 
     @property
     def is_template(self) -> bool:

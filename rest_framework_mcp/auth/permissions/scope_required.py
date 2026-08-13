@@ -15,12 +15,12 @@ class ScopeRequired:
         ScopeRequired("invoices:write")
 
     **The bare string is not sugar — it closes a trap.** Normalising with
-    ``list(scopes)`` would silently turn ``ScopeRequired("mcp:admin")`` into
-    nine one-character scopes: nothing fails at registration, and the
-    misconfiguration surfaces much later as a permission that can never be
-    satisfied and a nonsense challenge. [`DjangoPermRequired`][rest_framework_mcp.auth.permissions.django_perm_required.DjangoPermRequired] takes a
-    bare string too, so the siblings agree.
-    """
+    ``list(scopes)`` would silently turn ``ScopeRequired("mcp:admin")`` into nine
+    one-character scopes: nothing fails at registration, and the misconfiguration
+    surfaces much later as a permission that can never be satisfied and a nonsense
+    challenge.
+    [`DjangoPermRequired`][rest_framework_mcp.auth.permissions.django_perm_required.DjangoPermRequired]
+    takes a bare string too, so the siblings agree."""
 
     def __init__(self, scopes: str | list[str]) -> None:
         resolved: list[str] = [scopes] if isinstance(scopes, str) else list(scopes)

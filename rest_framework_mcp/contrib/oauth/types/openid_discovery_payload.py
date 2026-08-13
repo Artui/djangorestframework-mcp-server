@@ -10,15 +10,15 @@ from rest_framework_mcp.auth.types.authorization_server_metadata import (
 
 @dataclass(frozen=True)
 class OpenIDDiscoveryPayload:
-    """OIDC discovery alias payload — extends [`AuthorizationServerMetadata`][rest_framework_mcp.auth.types.authorization_server_metadata.AuthorizationServerMetadata].
+    """OIDC discovery alias payload — extends
+    [`AuthorizationServerMetadata`][rest_framework_mcp.auth.types.authorization_server_metadata.AuthorizationServerMetadata].
 
-    Composes rather than subclasses the AS metadata, so the underlying type
-    stays exactly RFC 8414. The OIDC additions are advertised because some MCP
-    hosts probe ``/.well-known/openid-configuration`` first and skip the probe
-    silently when these keys are absent. See [`OpenIDDiscoveryViewSet`][rest_framework_mcp.contrib.oauth.openid_discovery_viewset.OpenIDDiscoveryViewSet]
-    for why OIDC-shaped metadata is returned with no ID-token endpoint behind
-    it.
-    """
+    Composes rather than subclasses the AS metadata, so the underlying type stays
+    exactly RFC 8414. The OIDC additions are advertised because some MCP hosts probe
+    ``/.well-known/openid-configuration`` first and skip the probe silently when these
+    keys are absent. See
+    [`OpenIDDiscoveryViewSet`][rest_framework_mcp.contrib.oauth.openid_discovery_viewset.OpenIDDiscoveryViewSet]
+    for why OIDC-shaped metadata is returned with no ID-token endpoint behind it."""
 
     base: AuthorizationServerMetadata
     subject_types_supported: list[str] = field(default_factory=lambda: ["public"])

@@ -12,9 +12,10 @@ class MCPPermission(Protocol):
     """Per-tool / per-resource gate evaluated after authentication.
 
     The transport pulls authenticated state from the request as a
-    [`TokenInfo`][rest_framework_mcp.auth.types.token_info.TokenInfo] and asks each permission whether the call may proceed.
-    Returning ``False`` becomes a 403 + ``WWW-Authenticate``; raising lets the
-    permission supply a richer payload via the JSON-RPC error path.
+    [`TokenInfo`][rest_framework_mcp.auth.types.token_info.TokenInfo] and asks each
+    permission whether the call may proceed. Returning ``False`` becomes a 403 +
+    ``WWW-Authenticate``; raising lets the permission supply a richer payload via the
+    JSON-RPC error path.
 
     Permissions MUST be cheap to construct — they are instantiated per binding
     at discovery time — and side-effect free at evaluation.

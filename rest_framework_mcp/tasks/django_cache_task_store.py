@@ -26,11 +26,11 @@ class DjangoCacheTaskStore:
     a store they do not share cannot work at all (see
     [`InMemoryTaskStore`][rest_framework_mcp.tasks.in_memory_task_store.InMemoryTaskStore]).
 
-    **Namespacing** follows [`DjangoCacheSessionStore`][rest_framework_mcp.transport.django_cache_session_store.DjangoCacheSessionStore] exactly — the
-    server's ``name``, hashed into the key prefix, so two servers in one project
-    cannot read or overwrite each other's tasks. The digest is for key hygiene
-    (``name`` is free-form; memcached rejects spaces and caps length), not
-    secrecy.
+    **Namespacing** follows
+    [`DjangoCacheSessionStore`][rest_framework_mcp.transport.django_cache_session_store.DjangoCacheSessionStore]
+    exactly — the server's ``name``, hashed into the key prefix, so two servers in one
+    project cannot read or overwrite each other's tasks. The digest is for key hygiene
+    (``name`` is free-form; memcached rejects spaces and caps length), not secrecy.
 
     **Records are serialised to plain dicts rather than pickled.** The cache
     holds them across a deploy, and a pickled dataclass is a version of this

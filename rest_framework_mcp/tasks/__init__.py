@@ -1,11 +1,12 @@
 """Durable handles for work that outlives the request that asked for it.
 
 The ``io.modelcontextprotocol/tasks`` extension. A task-eligible tool answers
-``tools/call`` with a handle instead of a result; the work happens in a queue
-worker, and the client polls ``tasks/get`` until the status is terminal. The
-seam is deliberately narrow — [`TaskExecutor`][rest_framework_mcp.tasks.types.task_executor.TaskExecutor] has one method taking one
-string — so Celery, RQ, Dramatiq or a thread pool all satisfy it and none of
-them is imported here.
+``tools/call`` with a handle instead of a result; the work happens in a queue worker,
+and the client polls ``tasks/get`` until the status is terminal. The seam is
+deliberately narrow —
+[`TaskExecutor`][rest_framework_mcp.tasks.types.task_executor.TaskExecutor] has one
+method taking one string — so Celery, RQ, Dramatiq or a thread pool all satisfy it and
+none of them is imported here.
 
 **``create_task`` and ``run_task`` are deliberately not re-exported here**, for
 a structural reason: ``MCPCallContext`` declares a ``TaskStore``, so importing

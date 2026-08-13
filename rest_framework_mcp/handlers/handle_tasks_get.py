@@ -24,9 +24,9 @@ def handle_tasks_get(
     blocks until terminal, and ``pollIntervalMs`` on the record is how the
     server asks for a sane cadence.
 
-    The response is the task itself; which extra field it carries follows from
-    the status, and [`Task.to_dict`][rest_framework_mcp.protocol.types.task.Task.to_dict] owns that correspondence, so this
-    handler never branches on status.
+    The response is the task itself; which extra field it carries follows from the
+    status, and [`Task.to_dict`][rest_framework_mcp.protocol.types.task.Task.to_dict]
+    owns that correspondence, so this handler never branches on status.
 
     ``resultType`` is ``"complete"``, not ``"task"``. The distinction is
     normative and easy to get backwards: ``"task"`` marks *the result that hands

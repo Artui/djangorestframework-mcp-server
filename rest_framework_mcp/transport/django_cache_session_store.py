@@ -50,14 +50,15 @@ class DjangoCacheSessionStore:
     older versions wrote — is honoured and rewritten in the current shape, so
     an upgrade does not log every current holder out.
 
-    **Namespacing.** An instance built by [`MCPServer`][rest_framework_mcp.server.mcp_server.MCPServer] keys its entries
-    under the server's ``name``, so two servers in one project cannot see each
-    other's sessions. Without it they share one flat key space over the same
-    Django cache: a session minted at one satisfies the other's ownership
-    check, and a ``DELETE`` against either destroys the other's session. The
-    namespace is **hashed** into the key (``drf-mcp:session:<digest>:<token>``)
-    because ``name`` is free-form while cache keys must survive backends like
-    memcached, which reject spaces and control characters and cap length at 250.
+    **Namespacing.** An instance built by
+    [`MCPServer`][rest_framework_mcp.server.mcp_server.MCPServer] keys its entries under
+    the server's ``name``, so two servers in one project cannot see each other's
+    sessions. Without it they share one flat key space over the same Django cache: a
+    session minted at one satisfies the other's ownership check, and a ``DELETE``
+    against either destroys the other's session. The namespace is **hashed** into the
+    key (``drf-mcp:session:<digest>:<token>``) because ``name`` is free-form while cache
+    keys must survive backends like memcached, which reject spaces and control
+    characters and cap length at 250.
 
     Constructing the store yourself means you own the namespace::
 

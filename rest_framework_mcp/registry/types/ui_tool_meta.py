@@ -11,12 +11,12 @@ from rest_framework_mcp.constants import UIVisibility
 class UIToolMeta:
     """Links a tool to the interactive view that renders its result.
 
-    Serialises into the tool's ``_meta`` under the Apps extension's key, so a
-    host reading ``tools/list`` knows which ``ui://`` resource to fetch and
-    which surfaces may call the tool. The view renders from the tool's
-    ``structuredContent``, so a linked tool must emit it:
-    [`register_service_tool`][rest_framework_mcp.server.mcp_server.MCPServer.register_service_tool] and friends
-    refuse a link when it is switched off.
+    Serialises into the tool's ``_meta`` under the Apps extension's key, so a host
+    reading ``tools/list`` knows which ``ui://`` resource to fetch and which surfaces
+    may call the tool. The view renders from the tool's ``structuredContent``, so a
+    linked tool must emit it:
+    [`register_service_tool`][rest_framework_mcp.server.mcp_server.MCPServer.register_service_tool]
+    and friends refuse a link when it is switched off.
 
     Attributes:
         resource_uri: The ``ui://`` URI of a view registered on this same

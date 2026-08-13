@@ -30,20 +30,21 @@ ExtraT = TypeVar("ExtraT", bound=dict[str, Any])
 class SelectorToolBinding(Generic[ResultT, ExtraT]):
     """All wiring for a single MCP **read-shaped** tool, from a ``SelectorSpec``.
 
-    The read-shaped mirror of [`ToolBinding`][rest_framework_mcp.registry.types.tool_binding.ToolBinding]. Selectors return raw,
-    unscoped data and the tool layer owns every shape decision, chosen by
-    ``kind``.
+    The read-shaped mirror of
+    [`ToolBinding`][rest_framework_mcp.registry.types.tool_binding.ToolBinding].
+    Selectors return raw, unscoped data and the tool layer owns every shape decision,
+    chosen by ``kind``.
 
     ``kind=LIST`` runs the full pipeline:
 
-    .. code-block:: text
-
-        arguments → validate(merged inputSchema) → run_selector
-                  → FilterSet(data=...).qs    (if ``filter_set`` set)
-                  → order_by(...)             (if ``ordering_fields`` set)
-                  → paginate                  (if ``paginate=True``)
-                  → output_serializer(many=True)
-                  → ToolResult
+    ```text
+    arguments → validate(merged inputSchema) → run_selector
+              → FilterSet(data=...).qs    (if ``filter_set`` set)
+              → order_by(...)             (if ``ordering_fields`` set)
+              → paginate                  (if ``paginate=True``)
+              → output_serializer(many=True)
+              → ToolResult
+    ```
 
     With none of the three set it behaves as a plain RPC read, rendering the
     selector's return value verbatim.
@@ -147,8 +148,8 @@ class SelectorToolBinding(Generic[ResultT, ExtraT]):
     merges them into the validated payload, ``IGNORE`` drops them."""
 
     always_listed: bool = False
-    """Keep this binding in ``tools/list`` even when
-    ``FILTER_LISTINGS_BY_PERMISSIONS`` would drop it — same semantics as
+    """Keep this binding in ``tools/list`` even when ``FILTER_LISTINGS_BY_PERMISSIONS``
+    would drop it — same semantics as
     [`ToolBinding.always_listed`][rest_framework_mcp.registry.types.tool_binding.ToolBinding.always_listed]."""
 
     query_params: tuple[QueryParam, ...] = ()
@@ -160,15 +161,17 @@ class SelectorToolBinding(Generic[ResultT, ExtraT]):
     field is **not** one of these."""
 
     url_kwargs: tuple[UrlKwarg, ...] = ()
-    """URL-derived values the model supplies as tool args, seeded into the
-    off-HTTP view's ``kwargs`` instead of reaching the selector as ordinary
-    params. Advertised in the ``inputSchema``, exempt from the unknown-argument
-    check, and stripped from the dispatched params. See [`UrlKwarg`][rest_framework_services.types.url_kwarg.UrlKwarg]."""
+    """URL-derived values the model supplies as tool args, seeded into the off-HTTP
+    view's ``kwargs`` instead of reaching the selector as ordinary params. Advertised in
+    the ``inputSchema``, exempt from the unknown-argument check, and stripped from the
+    dispatched params. See
+    [`UrlKwarg`][rest_framework_services.types.url_kwarg.UrlKwarg]."""
 
     content_kind: ToolContentKind = ToolContentKind.TEXT
-    """What this tool's payload becomes in the result's ``content`` array.
-    ``TEXT`` renders JSON per ``output_format``; the other kinds project it
-    into an image / audio / resource-link block. See [`ToolContentKind`][rest_framework_mcp.constants.ToolContentKind]."""
+    """What this tool's payload becomes in the result's ``content`` array. ``TEXT``
+    renders JSON per ``output_format``; the other kinds project it into an image / audio
+    / resource-link block. See
+    [`ToolContentKind`][rest_framework_mcp.constants.ToolContentKind]."""
 
     content_mime_type: str | None = None
     """The media type for an ``IMAGE`` / ``AUDIO`` ``content_kind``.

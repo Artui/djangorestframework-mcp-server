@@ -82,8 +82,8 @@ def split_query_params(
     """Split ``arguments`` into ``(params, query_param_values)``.
 
     The sibling of ``split_url_kwargs``, minus the ``required`` flag a
-    [`QueryParam`][rest_framework_services.types.query_param.QueryParam] does not carry. Popping the name also keeps a query param
-    out of ``unknown_arguments``.
+    [`QueryParam`][rest_framework_services.types.query_param.QueryParam] does not carry.
+    Popping the name also keeps a query param out of ``unknown_arguments``.
 
     A ``filter_set`` field is **not** a query param. Filter fields are already in
     the tool schema and flow through as ordinary ``params``, which is where
@@ -438,10 +438,10 @@ def resource_cache_hints(ttl_ms: int) -> dict[str, Any]:
 def enforce_result_ceiling(result: Any, *, max_result_bytes: int | None, label: str) -> Any:
     """Replace an over-ceiling tool result with an ``isError`` result.
 
-    Applied once per handler, to the finished result, so every dispatch path is
-    covered by one check that sees what goes on the wire. A [`JsonRpcError`][rest_framework_mcp.protocol.types.json_rpc_error.JsonRpcError]
-    passes through — rewriting it would change the envelope the client awaits.
-    """
+    Applied once per handler, to the finished result, so every dispatch path is covered
+    by one check that sees what goes on the wire. A
+    [`JsonRpcError`][rest_framework_mcp.protocol.types.json_rpc_error.JsonRpcError]
+    passes through — rewriting it would change the envelope the client awaits."""
     if isinstance(result, JsonRpcError):
         return result
     message: str | None = enforce_result_bytes(result, max_result_bytes, label=label)

@@ -385,15 +385,15 @@ class MCPServer:
         returns a raw, unscoped queryset; the tool layer owns the post-fetch
         pipeline:
 
-        .. code-block:: text
-
-            arguments → validate(merged inputSchema)
-                      → run_selector
-                      → FilterSet(data=...).qs    (if spec.filter_set set)
-                      → order_by(...)             (if ordering_fields set)
-                      → paginate                  (if paginate=True)
-                      → output_serializer(many=True)
-                      → ToolResult
+        ```text
+        arguments → validate(merged inputSchema)
+                  → run_selector
+                  → FilterSet(data=...).qs    (if spec.filter_set set)
+                  → order_by(...)             (if ordering_fields set)
+                  → paginate                  (if paginate=True)
+                  → output_serializer(many=True)
+                  → ToolResult
+        ```
 
         Each knob is optional; with none of them set the tool is a plain RPC
         read against the selector.
@@ -673,11 +673,12 @@ class MCPServer:
     ) -> ToolResult:
         """Invoke a registered spec-backed tool off the HTTP / JSON-RPC path.
 
-        The transport-neutral entry point: hand a tool ``name``, a flat
-        ``arguments`` dict (the role ``request.data`` / query params play on
-        HTTP) and the acting ``user``, and get back the same
-        [`ToolResult`][rest_framework_mcp.protocol.types.tool_result.ToolResult] the wire handlers build. An in-process consumer
-        calls this instead of re-implementing dispatch.
+        The transport-neutral entry point: hand a tool ``name``, a flat ``arguments``
+        dict (the role ``request.data`` / query params play on HTTP) and the acting
+        ``user``, and get back the same
+        [`ToolResult`][rest_framework_mcp.protocol.types.tool_result.ToolResult] the
+        wire handlers build. An in-process consumer calls this instead of
+        re-implementing dispatch.
 
         This is the **spec core only** — instance resolution, input validation,
         the service / selector run, the output-selector re-fetch, queryset
@@ -713,13 +714,14 @@ class MCPServer:
     ) -> dict[str, Any] | JsonRpcError:
         """List the tools this server exposes, exactly as the wire would.
 
-        The in-process twin of a ``tools/list`` request: one page of the tool
-        catalog with the *same* merged ``inputSchema`` the HTTP transport
-        advertises (serializer fields plus a selector tool's filter / ordering /
-        pagination arguments and the ``additionalProperties`` policy), the same
-        per-caller listing-permission filter (``FILTER_LISTINGS_BY_PERMISSIONS``)
-        and the same opaque-cursor pagination — pass the returned ``nextCursor``
-        back for the next page. A [`JsonRpcError`][rest_framework_mcp.protocol.types.json_rpc_error.JsonRpcError] signals a bad cursor.
+        The in-process twin of a ``tools/list`` request: one page of the tool catalog
+        with the *same* merged ``inputSchema`` the HTTP transport advertises (serializer
+        fields plus a selector tool's filter / ordering / pagination arguments and the
+        ``additionalProperties`` policy), the same per-caller listing-permission filter
+        (``FILTER_LISTINGS_BY_PERMISSIONS``) and the same opaque-cursor pagination —
+        pass the returned ``nextCursor`` back for the next page. A
+        [`JsonRpcError`][rest_framework_mcp.protocol.types.json_rpc_error.JsonRpcError]
+        signals a bad cursor.
 
         ``scopes`` are the caller's granted scopes; pass them so a
         ``ScopeRequired``-gated tool is visible under
@@ -766,15 +768,15 @@ class MCPServer:
     ) -> dict[str, Any] | JsonRpcError:
         """Invoke a tool off the HTTP path with full transport semantics (async).
 
-        The in-process twin of a ``tools/call`` request: routes through the same
-        async handler the wire uses, so the transport-level MCP permissions and
-        rate limits, the selector post-fetch pipeline (filter / order /
-        paginate), a selector binding's MCP-only ``input_serializer``, chain
-        tools and the output format all apply — everything ``call_tool``
-        omits. Returns the wire's result payload (a ``dict`` carrying
-        ``content`` / ``structuredContent`` / ``isError``), or a
-        [`JsonRpcError`][rest_framework_mcp.protocol.types.json_rpc_error.JsonRpcError] for a protocol fault (unknown tool, malformed
-        ``arguments`` shape, denied permission).
+        The in-process twin of a ``tools/call`` request: routes through the same async
+        handler the wire uses, so the transport-level MCP permissions and rate limits,
+        the selector post-fetch pipeline (filter / order / paginate), a selector
+        binding's MCP-only ``input_serializer``, chain tools and the output format all
+        apply — everything ``call_tool`` omits. Returns the wire's result payload (a
+        ``dict`` carrying ``content`` / ``structuredContent`` / ``isError``), or a
+        [`JsonRpcError`][rest_framework_mcp.protocol.types.json_rpc_error.JsonRpcError]
+        for a protocol fault (unknown tool, malformed ``arguments`` shape, denied
+        permission).
 
         ``request`` is the originating Django request when there is one; a
         minimal one is synthesised otherwise, mirroring ``call_tool``.
@@ -1064,18 +1066,19 @@ class MCPServer:
         runtime from tool results — which is also why the template renders with
         no context.
 
-        ``ui=`` is the typed [`UIResourceMeta`][rest_framework_mcp.registry.types.ui_resource_meta.UIResourceMeta] — CSP origins, browser
-        permissions, publisher ``domain``, border preference — which serialises
-        into ``_meta`` under the extension's key. ``meta=`` remains available
-        for *other* extensions; passing both ``ui=`` and that same key inside
+        ``ui=`` is the typed
+        [`UIResourceMeta`][rest_framework_mcp.registry.types.ui_resource_meta.UIResourceMeta]
+        — CSP origins, browser permissions, publisher ``domain``, border preference —
+        which serialises into ``_meta`` under the extension's key. ``meta=`` remains
+        available for *other* extensions; passing both ``ui=`` and that same key inside
         ``meta=`` raises, rather than letting one silently win.
 
-        The result is an ordinary [`ResourceBinding`][rest_framework_mcp.registry.types.resource_binding.ResourceBinding], so it shares one
-        URI namespace with data resources (a collision raises as always),
-        appears in ``resources/list``, and honours ``permissions`` /
-        ``always_listed``. Views default to **unguarded** — the MCP session is
-        already authenticated and a view is a static asset, not tenant data.
-        """
+        The result is an ordinary
+        [`ResourceBinding`][rest_framework_mcp.registry.types.resource_binding.ResourceBinding],
+        so it shares one URI namespace with data resources (a collision raises as
+        always), appears in ``resources/list``, and honours ``permissions`` /
+        ``always_listed``. Views default to **unguarded** — the MCP session is already
+        authenticated and a view is a static asset, not tenant data."""
         binding = ui_view_to_resource(
             name=name,
             uri=uri,
@@ -1115,10 +1118,11 @@ class MCPServer:
     ) -> PromptBinding:
         """Register a render callable as an MCP prompt.
 
-        ``render`` receives the prompt arguments as kwargs (plus ``request``
-        and ``user`` if it declares them) and returns either a string, a
-        list of strings, a list of [`PromptMessage`][rest_framework_mcp.protocol.types.prompt_message.PromptMessage], or a coroutine
-        yielding any of those — the dispatch layer normalises the result.
+        ``render`` receives the prompt arguments as kwargs (plus ``request`` and
+        ``user`` if it declares them) and returns either a string, a list of strings, a
+        list of
+        [`PromptMessage`][rest_framework_mcp.protocol.types.prompt_message.PromptMessage],
+        or a coroutine yielding any of those — the dispatch layer normalises the result.
 
         ``meta`` is the generic ``_meta`` bundle for this prompt's
         ``prompts/list`` entry — see ``register_service_tool``.
@@ -1471,12 +1475,13 @@ class MCPServer:
         state via ``tools/call`` round-trips. The broker enforces one
         subscriber per session: re-subscribing replaces the old queue silently.
 
-        With a [`SSEReplayBuffer`][rest_framework_mcp.transport.types.sse_replay_buffer.SSEReplayBuffer] configured the payload is recorded
-        *before* publishing, so the frame carries an event ID the SSE generator
-        emits on the wire (``id: <id>\\ndata: <payload>\\n\\n``) and a later
-        reconnect with ``Last-Event-ID`` drains what it missed before resuming
-        live mode. Without a buffer there are no ``id:`` lines and resume is
-        disabled.
+        With a
+        [`SSEReplayBuffer`][rest_framework_mcp.transport.types.sse_replay_buffer.SSEReplayBuffer]
+        configured the payload is recorded *before* publishing, so the frame carries an
+        event ID the SSE generator emits on the wire (``id: <id>\\ndata:
+        <payload>\\n\\n``) and a later reconnect with ``Last-Event-ID`` drains what it
+        missed before resuming live mode. Without a buffer there are no ``id:`` lines
+        and resume is disabled.
 
         Multi-process deployments need an out-of-process broker to fan out
         across workers; the in-process broker only sees its own.

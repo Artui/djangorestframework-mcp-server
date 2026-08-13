@@ -9,7 +9,9 @@ from rest_framework_mcp.protocol.types.resource_contents import ResourceContents
 
 @dataclass(frozen=True)
 class ToolContentBlock:
-    """One entry in a [`ToolResult`][rest_framework_mcp.protocol.types.tool_result.ToolResult]'s ``content`` array.
+    """One entry in a
+    [`ToolResult`][rest_framework_mcp.protocol.types.tool_result.ToolResult]'s
+    ``content`` array.
 
     The spec models content as a five-member union — ``text``, ``image``,
     ``audio``, ``resource_link``, ``resource`` — whose members share no fields

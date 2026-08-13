@@ -9,12 +9,11 @@ from rest_framework_mcp.constants import MODERN_PROTOCOL_VERSIONS, OutputFormat
 class MCPConfig:
     """A server's resolved scalar configuration.
 
-    Every field is **already resolved** — there is no "unset" state and no
-    settings lookup left to do. [`MCPServer`][rest_framework_mcp.server.mcp_server.MCPServer] builds one in ``__init__``
-    (via ``build_mcp_config``,
-    which reads ``REST_FRAMEWORK_MCP``) and threads it to the transport and, on
-    ``MCPCallContext``, to every
-    handler. Read at request time these values could only ever be global; read
+    Every field is **already resolved** — there is no "unset" state and no settings
+    lookup left to do. [`MCPServer`][rest_framework_mcp.server.mcp_server.MCPServer]
+    builds one in ``__init__`` (via ``build_mcp_config``, which reads
+    ``REST_FRAMEWORK_MCP``) and threads it to the transport and, on ``MCPCallContext``,
+    to every handler. Read at request time these values could only ever be global; read
     once at construction, each server carries its own.
 
     Do **not** construct this directly to override a field — there are no
