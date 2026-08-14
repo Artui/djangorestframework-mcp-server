@@ -42,6 +42,14 @@ plugins:
   - mkdocstrings:
       handlers:
         python:
+          # This package re-exports drf-services types, and their docstrings link
+          # to drf-services' own symbols. Those links resolve in that project's
+          # inventory, not ours, so without this the strict build aborts on
+          # cross-reference targets it cannot find -- and a reader following one
+          # would have nowhere to land. Importing the inventory makes them point
+          # at the upstream page they mean.
+          inventories:
+            - https://artui.github.io/djangorestframework-services/objects.inv
           options:
             docstring_style: google
             show_root_heading: true
