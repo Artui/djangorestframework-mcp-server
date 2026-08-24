@@ -7,32 +7,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-### Added
-
-- **A recipe for driving this server from a Pydantic-AI agent**, and a scheduled
-  job that keeps it honest. `MCPToolset("https://…/mcp/")` is a one-liner against
-  the Streamable-HTTP endpoint, and the page names the choice it implies: an
-  agent running inside the same Django process wants
-  `djangorestframework-pydantic-ai`'s in-process `SpecToolset` instead, over the
-  same specs and the same reflection, with no socket in the path.
-
-  The claim worth writing down is about elicitation. This server asks its
-  question the way the current spec revision does — the question rides in a
-  `tools/call` result and the client retries the original call — and that is a
-  different mechanism from the server-initiated request the older revisions
-  used. **A current client implements it**: with the client stack that resolves
-  to the 2.x MCP SDK, a service raising `AdditionalInputRequired` reaches the
-  agent's `elicitation_handler`, and the answer completes the original call with
-  the retry, the accumulated state and the second round trip staying inside the
-  toolset. On the client stack that resolves to the 1.x SDK the call degrades to
-  an error result naming the missing input, as documented, and the handler is
-  never invoked. Both pairings are asserted by `scripts/interop_pydantic_ai.py`
-  in the weekly `upstream drift` workflow, against a real socket rather than a
-  fixture: a foreign client reading the wire is the only thing that can catch us
-  reading our own spec generously.
-
-  Consumers on that client should expect a `UserWarning` saying the handler
-  "will never be called". It is wrong here, and the recipe says so and why.
+## [0.32.1] — 2026-08-24
 
 ### Fixed
 
@@ -42,8 +17,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   block was already coming out as a code block either way, so this drops the
   stray character and nothing else. 20 occurrences, the last of the Sphinx
   markup this package carried.
-
-### Fixed
 
 - **Docstring cross-references now render as links instead of raw markup.** The
   docstrings carried Sphinx roles — ``:class:`~rest_framework_mcp.MCPServer` `` —
@@ -73,6 +46,33 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `manage.py runserver` loads. The invoicing example gains the `wsgi.py` its
   README's `runserver` line always implied; the job-status example is ASGI by
   design and drops the setting instead.
+
+### Documentation
+
+- **A recipe for driving this server from a Pydantic-AI agent**, and a scheduled
+  job that keeps it honest. `MCPToolset("https://…/mcp/")` is a one-liner against
+  the Streamable-HTTP endpoint, and the page names the choice it implies: an
+  agent running inside the same Django process wants
+  `djangorestframework-pydantic-ai`'s in-process `SpecToolset` instead, over the
+  same specs and the same reflection, with no socket in the path.
+
+  The claim worth writing down is about elicitation. This server asks its
+  question the way the current spec revision does — the question rides in a
+  `tools/call` result and the client retries the original call — and that is a
+  different mechanism from the server-initiated request the older revisions
+  used. **A current client implements it**: with the client stack that resolves
+  to the 2.x MCP SDK, a service raising `AdditionalInputRequired` reaches the
+  agent's `elicitation_handler`, and the answer completes the original call with
+  the retry, the accumulated state and the second round trip staying inside the
+  toolset. On the client stack that resolves to the 1.x SDK the call degrades to
+  an error result naming the missing input, as documented, and the handler is
+  never invoked. Both pairings are asserted by `scripts/interop_pydantic_ai.py`
+  in the weekly `upstream drift` workflow, against a real socket rather than a
+  fixture: a foreign client reading the wire is the only thing that can catch us
+  reading our own spec generously.
+
+  Consumers on that client should expect a `UserWarning` saying the handler
+  "will never be called". It is wrong here, and the recipe says so and why.
 
 ## [0.32.0] — 2026-08-11
 
@@ -3399,7 +3399,8 @@ Pinned to `djangorestframework-services==0.6.0`.
 - 100% line + branch coverage enforced by pytest (**451 tests** at
   release).
 
-[Unreleased]: https://github.com/Artui/djangorestframework-mcp-server/compare/v0.32.0...HEAD
+[Unreleased]: https://github.com/Artui/djangorestframework-mcp-server/compare/v0.32.1...HEAD
+[0.32.1]: https://github.com/Artui/djangorestframework-mcp-server/compare/v0.32.0...v0.32.1
 [0.32.0]: https://github.com/Artui/djangorestframework-mcp-server/compare/v0.31.0...v0.32.0
 [0.31.0]: https://github.com/Artui/djangorestframework-mcp-server/compare/v0.30.0...v0.31.0
 [0.30.0]: https://github.com/Artui/djangorestframework-mcp-server/compare/v0.29.0...v0.30.0
