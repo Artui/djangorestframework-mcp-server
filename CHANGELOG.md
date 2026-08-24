@@ -7,6 +7,33 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- **A recipe for driving this server from a Pydantic-AI agent**, and a scheduled
+  job that keeps it honest. `MCPToolset("https://…/mcp/")` is a one-liner against
+  the Streamable-HTTP endpoint, and the page names the choice it implies: an
+  agent running inside the same Django process wants
+  `djangorestframework-pydantic-ai`'s in-process `SpecToolset` instead, over the
+  same specs and the same reflection, with no socket in the path.
+
+  The claim worth writing down is about elicitation. This server asks its
+  question the way the current spec revision does — the question rides in a
+  `tools/call` result and the client retries the original call — and that is a
+  different mechanism from the server-initiated request the older revisions
+  used. **A current client implements it**: with the client stack that resolves
+  to the 2.x MCP SDK, a service raising `AdditionalInputRequired` reaches the
+  agent's `elicitation_handler`, and the answer completes the original call with
+  the retry, the accumulated state and the second round trip staying inside the
+  toolset. On the client stack that resolves to the 1.x SDK the call degrades to
+  an error result naming the missing input, as documented, and the handler is
+  never invoked. Both pairings are asserted by `scripts/interop_pydantic_ai.py`
+  in the weekly `upstream drift` workflow, against a real socket rather than a
+  fixture: a foreign client reading the wire is the only thing that can catch us
+  reading our own spec generously.
+
+  Consumers on that client should expect a `UserWarning` saying the handler
+  "will never be called". It is wrong here, and the recipe says so and why.
+
 ### Fixed
 
 - **The reST literal-block marker no longer reaches the page.** Sphinx reads a
@@ -36,6 +63,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   so the directive line itself reached the page as a literal paragraph
   (`<p>.. code-block:: text</p>`) above an unhighlighted block. They are now
   fenced blocks carrying their language.
+
+- **Neither worked example could be started.** Both mounted the server by
+  passing `server.urls` to `include()`, and that property returns the namespaced
+  `(patterns, app_name, namespace)` triple `path()` takes directly — the
+  `admin.site.urls` idiom — so Django refused the URL conf outright with
+  "Passing a 3-tuple to include() is not supported". Both settings modules also
+  named a `WSGI_APPLICATION` module that was never written, which is what
+  `manage.py runserver` loads. The invoicing example gains the `wsgi.py` its
+  README's `runserver` line always implied; the job-status example is ASGI by
+  design and drops the setting instead.
 
 ## [0.32.0] — 2026-08-11
 

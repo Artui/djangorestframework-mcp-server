@@ -26,7 +26,8 @@ invoicing/
 │   ├── __init__.py
 │   ├── settings.py
 │   ├── urls.py
-│   └── asgi.py
+│   ├── asgi.py
+│   └── wsgi.py
 └── invoices/                ← single Django app
     ├── __init__.py
     ├── apps.py

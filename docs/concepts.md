@@ -469,6 +469,13 @@ result = server.call_tool("invoices.create", {"number": "A-1"}, user=request.use
 result.structured_content  # the rendered payload
 ```
 
+An agent is the common case, and it has a shorter path still: this package's
+sister repo,
+[`djangorestframework-pydantic-ai`](https://artui.github.io/djangorestframework-pydantic-ai/),
+exposes the same specs to a `pydantic_ai.Agent` directly. See
+[Connect a Pydantic-AI agent](recipes/pydantic-ai-client.md) for that choice and
+for driving this server over the wire instead.
+
 It is built on `djangorestframework-services`' transport-neutral
 `dispatch_spec` / `render_spec_output` / `enforce_permissions`, so the
 spec-execution core (instance resolution, input validation, the
@@ -1220,6 +1227,10 @@ result carrying the service's message **and the schema**:
 A model reading that can simply pass `confirmed: true` on its next call, which
 is the same outcome by a shorter route. This is what a legacy-era client sees, a
 URL-only client, and a task worker replaying a call with nobody at the other end.
+
+Which of the two a real client gets is decided by its MCP SDK, not by anything
+you configure — [Connect a Pydantic-AI agent](recipes/pydantic-ai-client.md)
+names the versions where the question is asked and where it degrades.
 
 ### Boundaries
 

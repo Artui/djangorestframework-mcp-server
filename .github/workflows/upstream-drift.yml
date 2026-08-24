@@ -161,3 +161,81 @@ jobs:
                 title, body, labels: ["upstream-drift"],
               });
             }
+
+  pydantic-ai-interop:
+    name: pydantic-ai client interop
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: astral-sh/setup-uv@v7
+        with:
+          enable-cache: false
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.14"
+
+      # Both halves of the elicitation exchange are asserted against our own
+      # reading of the spec everywhere else in this repo. This is the one job
+      # where a foreign client reads it instead, which is the only way to learn
+      # that it reads it differently. The script works out which protocol era
+      # the installed client speaks and asserts the behaviour documented for
+      # that era, so it measures the pairing rather than a version number.
+      #
+      # Two installs because they resolve to different eras, and the docs make
+      # a claim about each. Released first: it is what a consumer following the
+      # recipe gets today.
+      - name: Released client stack
+        run: |
+          uv venv --python 3.14 .venv-released
+          uv pip install --python .venv-released/bin/python -e . "pydantic-ai-slim[mcp]"
+          uv pip list --python .venv-released/bin/python | grep -Ei "fastmcp|^mcp|pydantic-ai"
+          .venv-released/bin/python scripts/interop_pydantic_ai.py
+
+      # `httpx<1` is not the client's constraint, it is the resolver's: with
+      # prereleases allowed it otherwise picks an httpx 1.0 dev build that
+      # pydantic-ai cannot import. Drop both flags once FastMCP 4 is released.
+      - name: Prerelease client stack
+        run: |
+          uv venv --python 3.14 .venv-prerelease
+          uv pip install --python .venv-prerelease/bin/python --prerelease=allow \
+            -e . "pydantic-ai-slim[mcp]" "httpx<1"
+          uv pip list --python .venv-prerelease/bin/python | grep -Ei "fastmcp|^mcp|pydantic-ai"
+          .venv-prerelease/bin/python scripts/interop_pydantic_ai.py
+
+      - name: Open or update an issue on failure
+        if: failure()
+        uses: actions/github-script@v9
+        with:
+          script: |
+            const title = "upstream drift: the Pydantic-AI interop probe is failing";
+            const body = [
+              "The weekly interop probe failed. A released client stack no longer",
+              "behaves the way `docs/recipes/pydantic-ai-client.md` says it does.",
+              "",
+              `Run: ${context.serverUrl}/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}`,
+              "",
+              "The step that failed names the resolved client versions, and the",
+              "assertion names which claim broke. Two failures are expected and",
+              "wanted rather than bugs to route around:",
+              "",
+              "- **FastMCP 4 released** — the prerelease step's `--prerelease=allow`",
+              "  and `httpx<1` can go, and the released step now speaks the modern era.",
+              "- **The client changed how it handles the question-in-a-result shape**",
+              "  — fix the recipe first, then decide whether this server should move.",
+            ].join("\n");
+            const existing = await github.rest.issues.listForRepo({
+              owner: context.repo.owner, repo: context.repo.repo,
+              state: "open", labels: "upstream-drift",
+            });
+            const match = existing.data.find((issue) => issue.title === title);
+            if (match) {
+              await github.rest.issues.createComment({
+                owner: context.repo.owner, repo: context.repo.repo,
+                issue_number: match.number, body,
+              });
+            } else {
+              await github.rest.issues.create({
+                owner: context.repo.owner, repo: context.repo.repo,
+                title, body, labels: ["upstream-drift"],
+              });
+            }

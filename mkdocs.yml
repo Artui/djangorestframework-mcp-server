@@ -105,6 +105,7 @@ nav:
       - Chain specs into one tool: recipes/chain-tools.md
       - Render a DRF list as an interactive table: recipes/interactive-view.md
       - Register tools from a spec registry: recipes/register-from-spec-registry.md
+      - Connect a Pydantic-AI agent: recipes/pydantic-ai-client.md
       - Migrate from fastapi-mcp / hand-rolled: recipes/migrating.md
   - Reference:
       - reference/index.md
