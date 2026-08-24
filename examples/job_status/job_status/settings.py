@@ -22,7 +22,6 @@ MIDDLEWARE: list[str] = [
 ]
 
 ROOT_URLCONF: str = "job_status.urls"
-WSGI_APPLICATION: str = "job_status.wsgi.application"
 ASGI_APPLICATION: str = "job_status.asgi.application"
 
 DATABASES: dict[str, dict[str, str]] = {

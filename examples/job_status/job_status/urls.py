@@ -2,11 +2,12 @@
 
 from __future__ import annotations
 
-from django.urls import include, path
+from django.urls import path
 from jobs.mcp import build_server
 
 server = build_server()
 
 urlpatterns = [
-    path("mcp/", include(server.async_urls)),
+    # The namespaced triple mounts directly; see the invoicing example.
+    path("mcp/", server.async_urls),
 ]
