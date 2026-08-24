@@ -43,8 +43,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   stray character and nothing else. 20 occurrences, the last of the Sphinx
   markup this package carried.
 
-### Fixed
-
 - **Docstring cross-references now render as links instead of raw markup.** The
   docstrings carried Sphinx roles — ``:class:`~rest_framework_mcp.MCPServer` `` —
   but the docs build is mkdocstrings, which renders docstring bodies as Markdown
