@@ -548,6 +548,8 @@
       
         
       
+        
+      
     
     
     
@@ -983,6 +985,34 @@
     
   
     Register tools from a spec registry
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../recipes/pydantic-ai-client/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Connect a Pydantic-AI agent
   
 
     
@@ -3493,9 +3523,8 @@
         <p>Stamped into the result object as <code>resultType</code>.</p>
 <p>Every result carries it from <code>2026-07-28</code> onward, so it is applied here —
 the one place a handler's return value becomes wire JSON — rather than in
-each of the nine handlers, where the tenth would eventually be forgotten.
-A handler that has already set the field wins, which is what leaves room
-for a non-<code>complete</code> result to be built where it is produced.</p>
+each handler. A result that has already named itself wins, which leaves room
+for a non-<code>complete</code> one to be built where it is produced.</p>
 
     </div>
 
@@ -3533,7 +3562,8 @@ for a non-<code>complete</code> result to be built where it is produced.</p>
 
         <p>JSON-RPC 2.0 error object.</p>
 <p><code>code</code> is typed as <code>int</code> so server-defined codes outside the
-:class:<code>JsonRpcErrorCode</code> enum can still be represented faithfully.</p>
+<a class="autorefs autorefs-internal" title="JsonRpcErrorCode" href="#rest_framework_mcp.constants.JsonRpcErrorCode"><code>JsonRpcErrorCode</code></a> enum can still
+be represented faithfully.</p>
 
 
 
@@ -3582,24 +3612,21 @@ for a non-<code>complete</code> result to be built where it is produced.</p>
 
 
         <p>JSON-RPC 2.0 standard error codes plus MCP-specific reservations.</p>
-<p>The standard codes (-32700 through -32600 and -32603) are defined by
-JSON-RPC. MCP then partitions the server-error range: <code>-32000..-32019</code>
-is implementation-defined, <code>-32020..-32099</code> is reserved for the spec
-itself. Everything we allocate below sits in the implementation-defined
-half — with one exception, and it is the important one.</p>
-<p>⚠ <strong><code>-32002</code> is not ours to allocate.</strong> The MCP resources spec names it
-for "Resource not found", and the <code>2026-07-28</code> revision singles it out
-as the one legacy code clients should keep recognising. A server that
-spends it on something else is not merely unconventional: a spec-following
-client reads that error as a missing resource. It therefore belongs to
-:attr:<code>RESOURCE_NOT_FOUND</code> here and nothing else.</p>
-<p>Two codes are <strong>burned</strong> rather than reused. <code>-32003</code> and <code>-32004</code>
-were this package's own not-found codes before the wire values were
-aligned with the spec; a client written against an older release still
-reads them as "resource/prompt not found" and "unknown tool". Re-issuing
-either for a different condition would silently mislead exactly the
-clients that took the trouble to special-case them, so the next
-implementation-defined code allocated is <code>-32006</code>.</p>
+<p>JSON-RPC defines -32700 through -32600 and -32603. MCP then partitions the
+server-error range: <code>-32000..-32019</code> is implementation-defined,
+<code>-32020..-32099</code> is reserved for the spec itself, and everything
+allocated here sits in the implementation-defined half — with one
+exception.</p>
+<p><strong><code>-32002</code> is not ours to allocate.</strong> The resources spec names it for
+"Resource not found", and the <code>2026-07-28</code> revision singles it out as the
+one legacy code clients should keep recognising, so a spec-following client
+reads it as a missing resource whatever a server spends it on. It belongs
+to <code>RESOURCE_NOT_FOUND</code> and nothing else.</p>
+<p><code>-32003</code> and <code>-32004</code> are <strong>burned</strong> rather than reused: they were this
+package's own not-found codes before the wire values were aligned with the
+spec, so an older client still reads them as "resource/prompt not found"
+and "unknown tool". The next implementation-defined code allocated is
+<code>-32006</code>.</p>
 
 
 
@@ -3676,19 +3703,72 @@ should translate that to a JSON-RPC <code>-32600</code> (Invalid Request) error.
 <p>Icons are pure display metadata: a client shows them beside a tool,
 resource, prompt or the server itself. This package only <em>emits</em> them —
 fetching, sanitising and rendering are the client's problem, and the spec
-puts a long list of MUSTs on the consumer side (scheme allowlists, SSRF
-defence, SVG sanitisation, magic-byte sniffing) precisely because icon
-bytes are untrusted input.</p>
-<p><code>src</code> is a URI pointing at the image. <code>mime_type</code> overrides the type
-the source serves (useful when it serves a generic
-<code>application/octet-stream</code>). <code>sizes</code> are WxH strings — <code>("48x48",)</code>,
-or <code>("any",)</code> for a scalable format like SVG. <code>theme</code> says which
-background the icon was drawn for; omit it when the icon works on both.</p>
-<p>⚠ <strong><code>src</code> must be <code>https:</code> or <code>data:</code>.</strong> That is not a style
-preference: the spec requires clients to <em>reject</em> icon URIs on any other
-scheme, so an <code>http:</code> or <code>file:</code> icon is not a slightly-worse icon,
-it is an icon that will never render. Rejecting it at registration turns
-a silent no-op into a startup error naming the fix.</p>
+puts a long list of MUSTs on the consumer side precisely because icon bytes
+are untrusted input.</p>
+
+
+<p><span class="doc-section-title">Attributes:</span></p>
+    <table>
+      <thead>
+        <tr>
+          <th>Name</th>
+          <th>Type</th>
+          <th>Description</th>
+        </tr>
+      </thead>
+      <tbody>
+          <tr class="doc-section-item">
+            <td><code><span title="rest_framework_mcp.protocol.types.icon.Icon.src">src</span></code></td>
+            <td>
+                  <code><span title="str">str</span></code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>URI pointing at the image. Must be <code>https:</code> or <code>data:</code> — the
+spec requires clients to <em>reject</em> any other scheme, so an <code>http:</code>
+or <code>file:</code> icon would never render. Rejected at construction, so
+the failure is a startup error rather than a silent no-op.</p>
+              </div>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td><code><span title="rest_framework_mcp.protocol.types.icon.Icon.mime_type">mime_type</span></code></td>
+            <td>
+                  <code><span title="str">str</span> | None</code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Overrides the type the source serves, for a source that
+serves a generic <code>application/octet-stream</code>.</p>
+              </div>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td><code><span title="rest_framework_mcp.protocol.types.icon.Icon.sizes">sizes</span></code></td>
+            <td>
+                  <code><span title="tuple">tuple</span>[<span title="str">str</span>, ...]</code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>WxH strings — <code>("48x48",)</code>, or <code>("any",)</code> for a scalable
+format like SVG.</p>
+              </div>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td><code><span title="rest_framework_mcp.protocol.types.icon.Icon.theme">theme</span></code></td>
+            <td>
+                  <code><a class="autorefs autorefs-internal" title="IconTheme (rest_framework_mcp.constants.IconTheme)" href="#rest_framework_mcp.constants.IconTheme">IconTheme</a> | None</code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Which background the icon was drawn for. Omit when it works on
+both.</p>
+              </div>
+            </td>
+          </tr>
+      </tbody>
+    </table>
 
 
 
@@ -3736,11 +3816,16 @@ a silent no-op into a startup error naming the fix.</p>
 
 
 
-        <p>Which background an :class:<code>~rest_framework_mcp.protocol.types.icon.Icon</code>
+        <p>Which background an <a class="autorefs autorefs-internal" title="Icon
+
+
+  
+      dataclass
+  " href="#rest_framework_mcp.protocol.types.icon.Icon"><code>Icon</code></a>
 was designed for.</p>
 <p>Omitting the theme (<code>None</code>) tells the client the icon works on either,
-which is the right answer for most artwork. Declare it only when you are
-shipping a light/dark pair.</p>
+which is right for most artwork. Declare it only when shipping a
+light/dark pair.</p>
 
 
 
@@ -3790,16 +3875,46 @@ shipping a light/dark pair.</p>
 
 
         <p>The discriminator every result carries from <code>2026-07-28</code> onward.</p>
-<p>A <strong>MUST</strong> for servers implementing that revision, and harmless before it:
+<p>A <strong>MUST</strong> for servers implementing that revision and harmless before it —
 a legacy result object is an open shape, and a client on an older revision
-is told to read an absent <code>resultType</code> as <code>complete</code>. So this is
-emitted unconditionally rather than era-branched — one less thing for the
-transport fork to have to get right.</p>
-<p><code>INPUT_REQUIRED</code> is the other value the spec defines: a result that asks
-the client for input and expects the original request to be retried with
-the answers. Nothing here produces one yet — it is the shape elicitation
-will take when it lands — but the vocabulary is the spec's, not ours, so
-both members live here.</p>
+reads an absent <code>resultType</code> as <code>complete</code> — so it is emitted
+unconditionally rather than era-branched.</p>
+
+
+<p><span class="doc-section-title">Attributes:</span></p>
+    <table>
+      <thead>
+        <tr>
+          <th>Name</th>
+          <th>Type</th>
+          <th>Description</th>
+        </tr>
+      </thead>
+      <tbody>
+          <tr class="doc-section-item">
+            <td><code><span title="rest_framework_mcp.constants.ResultType.COMPLETE">COMPLETE</span></code></td>
+            <td>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>The result is the answer.</p>
+              </div>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td><code><span title="rest_framework_mcp.constants.ResultType.INPUT_REQUIRED">INPUT_REQUIRED</span></code></td>
+            <td>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>The result asks the client for input and expects the
+original request to be retried with the answers. Nothing here
+produces one yet; the vocabulary is the spec's.</p>
+              </div>
+            </td>
+          </tr>
+      </tbody>
+    </table>
 
 
 
@@ -3838,13 +3953,12 @@ both members live here.</p>
 
     <div class="doc doc-contents ">
 
-        <p>A durable handle instead of the result — see :mod:<code>rest_framework_mcp.tasks</code>.</p>
+        <p>A durable handle instead of the result — see <code>rest_framework_mcp.tasks</code>.</p>
 <p>The spec types <code>ResultType</code> as <code>"complete" | "input_required" | string</code>,
-the open tail being how extensions add their own; <code>"task"</code> is the tasks
-extension's. Servers <strong>MUST NOT</strong> set it on any result other than a
-<code>CreateTaskResult</code>, which is why nothing stamps it centrally the way
-<code>COMPLETE</code> is stamped — the task handler sets it explicitly and no other
-handler can reach it.</p>
+the open tail being how extensions add their own. Servers <strong>MUST NOT</strong> set
+this on any result other than a <code>CreateTaskResult</code>, which is why nothing
+stamps it centrally the way <code>COMPLETE</code> is stamped — the task handler sets
+it explicitly and no other handler can reach it.</p>
 
     </div>
 
@@ -3879,14 +3993,13 @@ handler can reach it.</p>
 
 
         <p>How widely a cacheable result may be reused, per <code>Cache-Control</code>.</p>
-<p>⚠ <strong>Derived, never configured.</strong> <code>PUBLIC</code> licenses any intermediary — a
-shared gateway, a caching proxy — to serve this response <em>across
-authorization contexts</em>. A result that varies by caller and is labelled
-<code>PUBLIC</code> is a cross-tenant disclosure with a cache in front of it, which
-is precisely the kind of mistake a settings knob invites. The handlers work
-it out from what actually shaped the response instead: a permission-filtered
-listing is <code>PRIVATE</code>, an unfiltered one is <code>PUBLIC</code>, and a resource body
-a selector produced for this caller is always <code>PRIVATE</code>.</p>
+<p><strong>Derived, never configured.</strong> <code>PUBLIC</code> licenses any intermediary to
+serve the response <em>across authorization contexts</em>, so a result that varies
+by caller and is labelled <code>PUBLIC</code> is a cross-tenant disclosure with a
+cache in front of it — precisely the mistake a settings knob would invite.
+The handlers work it out from what shaped the response: a
+permission-filtered listing is <code>PRIVATE</code>, an unfiltered one <code>PUBLIC</code>,
+and a resource body always <code>PRIVATE</code>.</p>
 
 
 
@@ -3939,20 +4052,24 @@ a selector produced for this caller is always <code>PRIVATE</code>.</p>
 
         <p>The server's response to a <code>server/discover</code> request.</p>
 <p><code>server/discover</code> is the <code>2026-07-28</code> revision's replacement for the
-<code>initialize</code> handshake: same three answers — which protocol versions,
-which capabilities, who is this — but as an ordinary request rather than a
-stateful negotiation, so it can be cached, repeated, or skipped entirely.</p>
-<p>Two shape differences from :class:<code>InitializeResult</code> are worth noticing,
-because they are not cosmetic:</p>
+<code>initialize</code> handshake: the same three answers, but as an ordinary request
+rather than a stateful negotiation, so it can be cached, repeated or
+skipped.</p>
+<p>Two shape differences from
+<a class="autorefs autorefs-internal" title="InitializeResult
+
+
+  
+      dataclass
+  " href="#rest_framework_mcp.protocol.types.initialize_result.InitializeResult"><code>InitializeResult</code></a>,
+neither cosmetic:</p>
 <ul>
 <li><code>supportedVersions</code> is a <strong>list</strong>, not a negotiated single version.
   Nothing is agreed here; the client picks one and puts it on subsequent
   requests.</li>
-<li><code>serverInfo</code> moves into <code>_meta</code> under a reserved key. The spec is
-  pointed about why: it is self-reported, unverified, and clients
-  <strong>SHOULD NOT</strong> change behaviour or make security decisions from it — so
-  it lives in the metadata namespace rather than looking like protocol
-  state.</li>
+<li><code>serverInfo</code> moves into <code>_meta</code> under a reserved key, because it is
+  self-reported and unverified and clients <strong>SHOULD NOT</strong> change behaviour
+  or make security decisions from it.</li>
 </ul>
 
 
@@ -4004,22 +4121,100 @@ because they are not cosmetic:</p>
 
 
         <p>Identifies an MCP client or server: name + version, with an optional title.</p>
-<p>Mirrors the spec's <code>Implementation extends BaseMetadata, Icons</code>. The two
-labels are <strong>not</strong> interchangeable, and the split is the spec's own:</p>
-<ul>
-<li>:attr:<code>name</code> is <em>"intended for programmatic or logical use"</em> — the stable
-  identifier. This is what distinguishes two servers to a client, and what
-  server-scoped state keys off.</li>
-<li>:attr:<code>title</code> is <em>"intended for UI and end-user contexts"</em> — the
-  human-readable label. Optional; clients fall back to <code>name</code> when absent.</li>
-</ul>
-<p>⚠ :attr:<code>description</code> is <strong>not</strong> the <code>instructions</code> string the server
-sends in its <code>initialize</code> result, though both are prose about the server.
-<code>instructions</code> tells the <em>model</em> how to use this server and is consumed
-as context; <code>description</code> is UI copy a client shows next to the server's
-name in a connection list. <code>MCPServer(description=...)</code> sets the former —
-the latter comes from the <code>SERVER_INFO</code> setting, which is the one place
-the two cannot be confused for each other.</p>
+<p>Mirrors the spec's <code>Implementation extends BaseMetadata, Icons</code>.</p>
+
+
+<p><span class="doc-section-title">Attributes:</span></p>
+    <table>
+      <thead>
+        <tr>
+          <th>Name</th>
+          <th>Type</th>
+          <th>Description</th>
+        </tr>
+      </thead>
+      <tbody>
+          <tr class="doc-section-item">
+            <td><code><span title="rest_framework_mcp.protocol.types.implementation.Implementation.name">name</span></code></td>
+            <td>
+                  <code><span title="str">str</span></code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p><em>"Intended for programmatic or logical use"</em> — the stable
+identifier. What distinguishes two servers to a client, and what
+server-scoped state keys off. Not interchangeable with
+<code>title</code>; the split is the spec's own.</p>
+              </div>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td><code><span title="rest_framework_mcp.protocol.types.implementation.Implementation.version">version</span></code></td>
+            <td>
+                  <code><span title="str">str</span></code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>The implementation's version string.</p>
+              </div>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td><code><span title="rest_framework_mcp.protocol.types.implementation.Implementation.title">title</span></code></td>
+            <td>
+                  <code><span title="str">str</span> | None</code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p><em>"Intended for UI and end-user contexts"</em> — the human-readable
+label. Clients fall back to <code>name</code> when absent.</p>
+              </div>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td><code><span title="rest_framework_mcp.protocol.types.implementation.Implementation.description">description</span></code></td>
+            <td>
+                  <code><span title="str">str</span> | None</code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>UI copy a client shows next to the server's name in a
+connection list. <strong>Not</strong> the <code>initialize</code> <code>instructions</code>
+string, which tells the <em>model</em> how to use this server and is
+consumed as context. <code>MCPServer(description=...)</code> sets
+<code>instructions</code>; this comes from the <code>SERVER_INFO</code> setting.</p>
+              </div>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td><code><span title="rest_framework_mcp.protocol.types.implementation.Implementation.website_url">website_url</span></code></td>
+            <td>
+                  <code><span title="str">str</span> | None</code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>A link a client can offer alongside the name.</p>
+              </div>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td><code><span title="rest_framework_mcp.protocol.types.implementation.Implementation.icons">icons</span></code></td>
+            <td>
+                  <code><span title="tuple">tuple</span>[<a class="autorefs autorefs-internal" title="Icon
+
+
+  
+      dataclass
+   (rest_framework_mcp.protocol.types.icon.Icon)" href="#rest_framework_mcp.protocol.types.icon.Icon">Icon</a>, ...]</code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Display icons, emitted only when non-empty.</p>
+              </div>
+            </td>
+          </tr>
+      </tbody>
+    </table>
 
 
 
@@ -4112,12 +4307,9 @@ future capability sub-keys. We round-trip them verbatim.</p>
 
         <p>Protocol extensions the client implements, keyed by extension id — how a
 client says it supports MCP Apps (<code>io.modelcontextprotocol/ui</code>).</p>
-<p><strong>Advertisement is one-directional, client → server</strong>: the spec defines no
-matching server capability, so nothing is sent back. Parsed here for
-introspection only. Nothing gates on it — the spec merely <em>SHOULD</em>-s a
-check, and remembering it per session would mean widening the pluggable
-<code>SessionStore</code> Protocol, which is a breaking change not worth making for
-metadata that unsupporting clients are required to ignore anyway.</p>
+<p>Parsed for introspection only; nothing gates on it, since the spec merely
+<em>SHOULD</em>-s a check and unsupporting clients are required to ignore what they
+did not ask for.</p>
 
     </div>
 
@@ -4154,17 +4346,13 @@ metadata that unsupporting clients are required to ignore anyway.</p>
 
 
         <p>Capability bundle the server advertises in the <code>initialize</code> response.</p>
-<p>Every field defaults to <code>None</code> and is omitted from the payload when
-unset, because a capability is a promise: a client that sees <code>resources</code>
-will call <code>resources/list</code>, and one that sees <code>completions</code> will send
-<code>completion/complete</code>. :func:<code>handle_initialize</code> populates only what this
-server can actually answer — <code>tools</code> and <code>resources</code> used to default to
-<code>{}</code> here, which advertised both on a server that had neither.</p>
-<p>⛔ There is no <code>logging</code> field. One existed, unpopulated, until the
-<code>2026-07-28</code> revision <strong>deprecated</strong> the logging utility outright — after
-which an empty slot could only serve as an invitation to fill it in.
-<code>experimental</code> stays: it is the spec's own escape hatch and carries no
-such trap.</p>
+<p>Every field defaults to <code>None</code> and is omitted from the payload when unset,
+because a capability is a promise: a client that sees <code>resources</code> will
+call <code>resources/list</code>, and one that sees <code>completions</code> will send
+<code>completion/complete</code>. <code>handle_initialize</code> populates only what this
+server can actually answer.</p>
+<p>There is deliberately no <code>logging</code> field — the <code>2026-07-28</code> revision
+<strong>deprecated</strong> the logging utility outright.</p>
 
 
 
@@ -4205,13 +4393,12 @@ such trap.</p>
 
         <p>Extensions this server supports, keyed by identifier.</p>
 <p>First-class in the <code>2026-07-28</code> schema and the counterpart to the
-per-request <code>clientCapabilities.extensions</code> — the two sides of the only
-negotiation the stateless revision still has. Values are per-extension
+per-request <code>clientCapabilities.extensions</code>. Values are per-extension
 settings objects; <code>{}</code> means "supported, nothing to configure", which is
 what every extension here uses.</p>
-<p>Distinct from :attr:<code>experimental</code> despite the family resemblance:
-<code>experimental</code> is a free-for-all with no naming rules, while extension
-keys are namespaced identifiers a client matches exactly.</p>
+<p>Distinct from <code>experimental</code>: that is a free-for-all with no naming
+rules, while extension keys are namespaced identifiers a client matches
+exactly.</p>
 
     </div>
 
@@ -4350,12 +4537,13 @@ keys are namespaced identifiers a client matches exactly.</p>
 
         <p>An MCP tool descriptor as returned by <code>tools/list</code>.</p>
 <p><code>input_schema</code> and <code>output_schema</code> are JSON Schema documents.
-<code>annotations</code> carries the MCP ToolAnnotations hint bundle (e.g.
-<code>readOnlyHint</code>, <code>destructiveHint</code>).</p>
-<p><code>meta</code> is the base-protocol <code>_meta</code> bundle — distinct from the
-<code>annotations</code> hint bundle above, which is a closed, spec-defined set
-of client hints. <code>_meta</code> is where protocol <em>extensions</em> put their
-keys.</p>
+<code>annotations</code> carries the MCP ToolAnnotations hint bundle
+(<code>readOnlyHint</code>, <code>destructiveHint</code>), a closed spec-defined set.</p>
+<p><code>meta</code> is the base-protocol <code>_meta</code> bundle, emitted under <code>"_meta"</code>.
+It stays a free-form dict at this wire boundary rather than a closed
+dataclass because <code>_meta</code> is MCP's open extension namespace — any
+extension may add its own key. The same holds for every <code>meta</code> field on
+the other wire types here.</p>
 
 
 
@@ -4394,8 +4582,7 @@ keys.</p>
 
     <div class="doc doc-contents ">
 
-        <p>Display icons for this entry. Emitted only when non-empty — the
-spec makes <code>icons</code> optional and an empty array carries no meaning.</p>
+        <p>Display icons for this entry, emitted only when non-empty.</p>
 
     </div>
 
@@ -4431,25 +4618,28 @@ spec makes <code>icons</code> optional and an empty array carries no meaning.</p
 
 
 
-        <p>One entry in a :class:<code>ToolResult</code>'s <code>content</code> array.</p>
+        <p>One entry in a
+<a class="autorefs autorefs-internal" title="ToolResult
+
+
+  
+      dataclass
+  " href="#rest_framework_mcp.protocol.types.tool_result.ToolResult"><code>ToolResult</code></a>'s
+<code>content</code> array.</p>
 <p>The spec models content as a five-member union — <code>text</code>, <code>image</code>,
 <code>audio</code>, <code>resource_link</code>, <code>resource</code> — whose members share no fields
 beyond <code>type</code>, <code>annotations</code> and <code>_meta</code>. This is one dataclass with
-every member's fields optional rather than five dataclasses behind a union,
-because <code>content</code> is a wire boundary: the shape is decided by <code>type</code>,
-:meth:<code>to_dict</code> emits only what is set, and a union type would buy nothing
-a reader of the JSON can see.</p>
-<p><strong>Construct through the classmethods, not the initialiser.</strong> Each one takes
+every member's fields optional rather than five behind a union: <code>content</code>
+is a wire boundary, the shape is decided by <code>type</code>, and <code>to_dict</code>
+emits only what is set.</p>
+<p><strong>Construct through the classmethods, not the initialiser.</strong> Each takes
 exactly the fields its block type requires, which is where the spec's rules
 live — an image without a <code>mimeType</code> or a <code>resource_link</code> without a
-<code>uri</code> is not a block a client can do anything with, and the constructors
-make those unrepresentable rather than merely discouraged. (Same reasoning
-as :meth:<code>ToolDefinition.service</code> / :meth:<code>ToolDefinition.selector</code>.) Two
-are named around a field they would otherwise shadow — <code>text_block</code> and
-<code>embedded_resource</code>, for the <code>text</code> and <code>resource</code> fields.</p>
+<code>uri</code> is not a block a client can use, and the constructors make those
+unrepresentable. <code>text_block</code> and <code>embedded_resource</code> are named around
+the <code>text</code> and <code>resource</code> fields they would otherwise shadow.</p>
 <p><code>annotations</code> carry <code>audience</code> / <code>priority</code> / <code>lastModified</code> — the
-identical bundle resources use, which is the spec's own choice and the
-reason it stays a free-form dict here.</p>
+identical bundle resources use, which is why it stays a free-form dict.</p>
 
 
 
@@ -4525,7 +4715,7 @@ reason it stays a free-form dict here.</p>
     <div class="doc doc-contents ">
 
         <p>An image block. <code>data</code> may be raw bytes or an existing base64 string.</p>
-<p><code>mime_type</code> is required by the spec, not merely recommended: a client
+<p><code>mime_type</code> is required by the spec, not merely recommended — a client
 has no other way to know how to decode the bytes.</p>
 
 
@@ -4556,7 +4746,7 @@ has no other way to know how to decode the bytes.</p>
 
     <div class="doc doc-contents ">
 
-        <p>An audio block — the same contract as :meth:<code>image</code>.</p>
+        <p>An audio block — the same contract as <code>image</code>.</p>
 
 
     </div>
@@ -4589,11 +4779,10 @@ has no other way to know how to decode the bytes.</p>
     <div class="doc doc-contents ">
 
         <p>A pointer to a resource the client can read separately.</p>
-<p>⭐ The cheapest way for a tool here to return something large or
-non-JSON: the URI is one this server's own <code>resources/read</code> already
-serves, so no bytes ride on the tool-result path and the client fetches
-only what it decides it wants. The spec notes a linked resource need
-not appear in <code>resources/list</code>.</p>
+<p>The cheapest way to return something large or non-JSON: the URI is one
+this server's own <code>resources/read</code> already serves, so no bytes ride on
+the tool-result path. Per the spec a linked resource need not appear in
+<code>resources/list</code>.</p>
 
 
     </div>
@@ -4623,9 +4812,9 @@ not appear in <code>resources/list</code>.</p>
     <div class="doc doc-contents ">
 
         <p>A resource's contents inlined into the result.</p>
-<p>Prefer :meth:<code>resource_link</code> unless the client genuinely cannot make a
-second round trip — embedding spends the caller's context on bytes it
-may not need.</p>
+<p>Prefer <code>resource_link</code> unless the client cannot make a second
+round trip — embedding spends the caller's context on bytes it may not
+need.</p>
 
 
     </div>
@@ -4658,29 +4847,80 @@ may not need.</p>
 
 
         <p>What a tool's rendered payload becomes in the result's <code>content</code> array.</p>
-<p>Declared per binding rather than sniffed from the payload, for the same
-reason as :class:<code>ResourceEncoding</code>: a base64 <code>str</code> and a text body are
-indistinguishable by inspection, so guessing would silently change
-behaviour for a tool that already returns one.</p>
-<ul>
-<li><code>TEXT</code>: the payload is rendered per the binding's <code>OutputFormat</code> into
-  one text block, and mirrored in <code>structuredContent</code>. The default, and
-  what every JSON-shaped tool wants.</li>
-<li><code>IMAGE</code> / <code>AUDIO</code>: the payload is the media itself — <code>bytes</code>, or a
-  <code>str</code> already in base64. ⚠ These carry <strong>no</strong> <code>structuredContent</code>:
-  binary is not JSON, and advertising an <code>outputSchema</code> over it would
-  describe a shape that never arrives.</li>
-<li><code>RESOURCE_LINK</code>: the payload names resources rather than containing
-  them — one mapping with <code>uri</code> / <code>name</code> (plus optional <code>description</code>
-  / <code>mimeType</code>), or a list of them. <code>structuredContent</code> is kept, since
-  the links <em>are</em> JSON, so the model sees both projections.</li>
-</ul>
-<p>Embedded (<code>resource</code>) blocks have no kind here on purpose. Inlining
-contents means producing them, which is what <code>resources/read</code> already
-does — a tool that wants to hand over a resource returns a
-<code>RESOURCE_LINK</code> and lets the client decide whether to spend context on
-the body. :meth:<code>ToolContentBlock.embedded_resource</code> remains available for
-a caller building blocks by hand.</p>
+<p>Declared per binding rather than sniffed from the payload, for the same reason as
+<a class="autorefs autorefs-internal" title="ResourceEncoding" href="../registries/#rest_framework_mcp.constants.ResourceEncoding"><code>ResourceEncoding</code></a>: a base64
+<code>str</code> and a text body are indistinguishable by inspection.</p>
+<p>Embedded (<code>resource</code>) blocks have no kind here on purpose — inlining contents
+means producing them, which <code>resources/read</code> already does, so a tool returns a
+<code>RESOURCE_LINK</code> and lets the client decide whether to spend context on the body.
+<a class="autorefs autorefs-internal" title="embedded_resource
+
+
+  
+      classmethod
+  " href="#rest_framework_mcp.protocol.types.tool_content_block.ToolContentBlock.embedded_resource"><code>ToolContentBlock.embedded_resource</code></a>
+remains available for a caller building blocks by hand.</p>
+
+
+<p><span class="doc-section-title">Attributes:</span></p>
+    <table>
+      <thead>
+        <tr>
+          <th>Name</th>
+          <th>Type</th>
+          <th>Description</th>
+        </tr>
+      </thead>
+      <tbody>
+          <tr class="doc-section-item">
+            <td><code><span title="rest_framework_mcp.constants.ToolContentKind.TEXT">TEXT</span></code></td>
+            <td>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>One text block rendered per the binding's <code>OutputFormat</code>,
+mirrored in <code>structuredContent</code>. The default.</p>
+              </div>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td><code><span title="rest_framework_mcp.constants.ToolContentKind.IMAGE">IMAGE</span></code></td>
+            <td>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>The payload is the media itself — <code>bytes</code>, or a <code>str</code>
+already in base64. Carries <strong>no</strong> <code>structuredContent</code>: binary is
+not JSON, and an <code>outputSchema</code> over it would describe a shape
+that never arrives.</p>
+              </div>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td><code><span title="rest_framework_mcp.constants.ToolContentKind.AUDIO">AUDIO</span></code></td>
+            <td>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>As <code>IMAGE</code>.</p>
+              </div>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td><code><span title="rest_framework_mcp.constants.ToolContentKind.RESOURCE_LINK">RESOURCE_LINK</span></code></td>
+            <td>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>The payload names resources rather than containing them
+— one mapping with <code>uri</code> / <code>name</code> (plus optional
+<code>description</code> / <code>mimeType</code>), or a list of them.
+<code>structuredContent</code> is kept, since the links <em>are</em> JSON.</p>
+              </div>
+            </td>
+          </tr>
+      </tbody>
+    </table>
 
 
 
@@ -4731,14 +4971,75 @@ a caller building blocks by hand.</p>
 
 
         <p>The result of a successful <code>tools/call</code>.</p>
-<p><code>structured_content</code> is always JSON-shaped (clients parse it directly);
-<code>content</code> is the human-readable / token-efficient projection that the
-encoder produces (JSON or TOON, etc.).</p>
-<p><code>is_error</code> is <code>True</code> when the tool itself reported failure — it is
-distinct from a JSON-RPC protocol error: the JSON-RPC envelope is still
-a successful response, the failure detail lives inside the result.</p>
-<p><code>meta</code> is the base-protocol <code>_meta</code> bundle on the <em>result envelope</em>
-— per-call, unlike the static <code>_meta</code> a <code>tools/list</code> entry carries.</p>
+
+
+<p><span class="doc-section-title">Attributes:</span></p>
+    <table>
+      <thead>
+        <tr>
+          <th>Name</th>
+          <th>Type</th>
+          <th>Description</th>
+        </tr>
+      </thead>
+      <tbody>
+          <tr class="doc-section-item">
+            <td><code><span title="rest_framework_mcp.protocol.types.tool_result.ToolResult.content">content</span></code></td>
+            <td>
+                  <code><span title="list">list</span>[<a class="autorefs autorefs-internal" title="ToolContentBlock
+
+
+  
+      dataclass
+   (rest_framework_mcp.protocol.types.tool_content_block.ToolContentBlock)" href="#rest_framework_mcp.protocol.types.tool_content_block.ToolContentBlock">ToolContentBlock</a>]</code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>The human-readable / token-efficient projection the encoder
+produces (JSON, TOON, or a media block).</p>
+              </div>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td><code><span title="rest_framework_mcp.protocol.types.tool_result.ToolResult.structured_content">structured_content</span></code></td>
+            <td>
+                  <code><span title="typing.Any">Any</span></code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>The same answer JSON-shaped, for clients to parse
+directly.</p>
+              </div>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td><code><span title="rest_framework_mcp.protocol.types.tool_result.ToolResult.is_error">is_error</span></code></td>
+            <td>
+                  <code><span title="bool">bool</span></code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p><code>True</code> when the tool itself reported failure. Distinct from
+a JSON-RPC protocol error — the envelope is still a successful
+response and the failure detail lives inside the result.</p>
+              </div>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td><code><span title="rest_framework_mcp.protocol.types.tool_result.ToolResult.meta">meta</span></code></td>
+            <td>
+                  <code><span title="dict">dict</span>[<span title="str">str</span>, <span title="typing.Any">Any</span>] | None</code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>The base-protocol <code>_meta</code> bundle on the <em>result envelope</em>, so
+per-call, unlike the static <code>_meta</code> a <code>tools/list</code> entry
+carries.</p>
+              </div>
+            </td>
+          </tr>
+      </tbody>
+    </table>
 
 
 
@@ -4830,8 +5131,7 @@ advertises how the contents will be encoded by <code>resources/read</code>.</p>
 
     <div class="doc doc-contents ">
 
-        <p>Display icons for this entry. Emitted only when non-empty — the
-spec makes <code>icons</code> optional and an empty array carries no meaning.</p>
+        <p>Display icons for this entry, emitted only when non-empty.</p>
 
     </div>
 
@@ -4868,7 +5168,7 @@ spec makes <code>icons</code> optional and an empty array carries no meaning.</p
 
 
         <p>A parameterised resource address (RFC 6570 URI Template).</p>
-<p>Returned by <code>resources/templates/list</code>. Clients fill in template
+<p>Returned by <code>resources/templates/list</code>. Clients fill in the template
 variables and call <code>resources/read</code> with the resulting URI.</p>
 
 
@@ -4908,8 +5208,7 @@ variables and call <code>resources/read</code> with the resulting URI.</p>
 
     <div class="doc doc-contents ">
 
-        <p>Display icons for this entry. Emitted only when non-empty — the
-spec makes <code>icons</code> optional and an empty array carries no meaning.</p>
+        <p>Display icons for this entry, emitted only when non-empty.</p>
 
     </div>
 
@@ -4999,9 +5298,9 @@ encoded per the MCP spec.</p>
 
 
         <p>An MCP prompt descriptor as returned by <code>prompts/list</code>.</p>
-<p>A prompt is a server-defined template the client invokes by name to get
-back a sequence of LLM messages. Arguments are filled in at
-<code>prompts/get</code> time and threaded into the rendering callable as kwargs.</p>
+<p>A server-defined template the client invokes by name to get back a sequence
+of LLM messages. Arguments are filled in at <code>prompts/get</code> time and
+threaded into the rendering callable as kwargs.</p>
 
 
 
@@ -5040,8 +5339,7 @@ back a sequence of LLM messages. Arguments are filled in at
 
     <div class="doc doc-contents ">
 
-        <p>Display icons for this entry. Emitted only when non-empty — the
-spec makes <code>icons</code> optional and an empty array carries no meaning.</p>
+        <p>Display icons for this entry, emitted only when non-empty.</p>
 
     </div>
 
@@ -5078,9 +5376,9 @@ spec makes <code>icons</code> optional and an empty array carries no meaning.</p
 
 
         <p>One declared input to an MCP prompt.</p>
-<p>Mirrors the spec's <code>PromptArgument</code> shape: a name plus optional
-description, with a flag indicating whether the client must supply it.
-Used in <code>prompts/list</code> to advertise the prompt's interface.</p>
+<p>Mirrors the spec's <code>PromptArgument</code>: a name plus optional description,
+with a flag for whether the client must supply it. Advertised in
+<code>prompts/list</code>.</p>
 
 
 
@@ -5131,11 +5429,10 @@ Used in <code>prompts/list</code> to advertise the prompt's interface.</p>
 
 
         <p>One conversation turn returned by <code>prompts/get</code>.</p>
-<p>The MCP spec accepts <code>user</code> or <code>assistant</code> for <code>role</code>, and a message's
-<code>content</code> is one content block — <code>text</code>, <code>image</code>, <code>audio</code> or an
-embedded <code>resource</code>. <code>content</code> stays a plain dict because that is
-exactly the wire shape; :meth:<code>block</code> is the typed way in, and
-:meth:<code>text</code> remains for the overwhelmingly common case.</p>
+<p>The spec accepts <code>user</code> or <code>assistant</code> for <code>role</code>, and <code>content</code> is
+one content block — <code>text</code>, <code>image</code>, <code>audio</code> or an embedded
+<code>resource</code>. It stays a plain dict because that is exactly the wire shape;
+<code>block</code> is the typed way in and <code>text</code> covers the common case.</p>
 
 
 
@@ -5200,11 +5497,16 @@ exactly the wire shape; :meth:<code>block</code> is the typed way in, and
     <div class="doc doc-contents ">
 
         <p>Build a turn from any content block.</p>
-<p>The spec uses one content vocabulary across tool results and prompt
-messages, so this reuses :class:<code>ToolContentBlock</code> and its typed
-constructors rather than growing a parallel set. <code>resource_link</code> is
-the one member prompts do not accept — a prompt message embeds
-content, it does not point at it.</p>
+<p>The spec uses one content vocabulary across tool results and prompt messages, so
+this reuses
+<a class="autorefs autorefs-internal" title="ToolContentBlock
+
+
+  
+      dataclass
+  " href="#rest_framework_mcp.protocol.types.tool_content_block.ToolContentBlock"><code>ToolContentBlock</code></a>
+rather than growing a parallel set. <code>resource_link</code> is the one member prompts
+do not accept — a prompt message embeds content, it does not point at it.</p>
 
 
     </div>
@@ -5239,8 +5541,8 @@ content, it does not point at it.</p>
 
 
         <p>Result envelope returned by <code>prompts/get</code>.</p>
-<p><code>description</code> is optional — the spec uses it to surface the prompt's
-purpose to the client UI alongside the rendered messages.</p>
+<p><code>description</code> surfaces the prompt's purpose to the client UI alongside
+the rendered messages.</p>
 
 
 
@@ -5292,12 +5594,56 @@ purpose to the client UI alongside the rendered messages.</p>
 
 
         <p>The <code>completion</code> object inside a <code>completion/complete</code> result.</p>
-<p><code>values</code> are suggestions ranked by relevance, capped at
-<code>MAX_COMPLETION_VALUES</code> by the spec. <code>has_more</code> says whether the
-completer had more to give; <code>total</code> is the count of all matches and is
-optional — this package leaves it unset, because knowing it would mean
-counting every match, which is exactly the work a completer built on a
-queryset should be allowed to skip.</p>
+
+
+<p><span class="doc-section-title">Attributes:</span></p>
+    <table>
+      <thead>
+        <tr>
+          <th>Name</th>
+          <th>Type</th>
+          <th>Description</th>
+        </tr>
+      </thead>
+      <tbody>
+          <tr class="doc-section-item">
+            <td><code><span title="rest_framework_mcp.protocol.types.completion.Completion.values">values</span></code></td>
+            <td>
+                  <code><span title="tuple">tuple</span>[<span title="str">str</span>, ...]</code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Suggestions ranked by relevance, capped at
+<code>MAX_COMPLETION_VALUES</code> by the spec.</p>
+              </div>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td><code><span title="rest_framework_mcp.protocol.types.completion.Completion.total">total</span></code></td>
+            <td>
+                  <code><span title="int">int</span> | None</code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Count of all matches. Optional, and left unset by this package:
+knowing it would mean counting every match, which is the work a
+queryset-backed completer should be allowed to skip.</p>
+              </div>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td><code><span title="rest_framework_mcp.protocol.types.completion.Completion.has_more">has_more</span></code></td>
+            <td>
+                  <code><span title="bool">bool</span></code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Whether the completer had more to give.</p>
+              </div>
+            </td>
+          </tr>
+      </tbody>
+    </table>
 
 
 
@@ -5353,13 +5699,12 @@ for how to wire one up.</p>
         <p>What a subscription asked for, and what the server agreed to.</p>
 <p>One type for both directions, because they are the same shape: the client
 sends a filter on <code>subscriptions/listen</code> and the server answers with the
-subset it will honour. Using two types would let them drift, and the whole
-point of the acknowledgement is that the client can compare them.</p>
-<p>⚠ <strong>Empty means nothing is delivered, and that is correct.</strong> The spec makes
-every type opt-in and says the server <strong>MUST NOT</strong> send what was not
-requested, so an absent field is a refusal rather than a default. A client
-that sends <code>{}</code> is acknowledged with nothing and its stream is closed
-immediately, since nothing could ever reach it.</p>
+subset it will honour. Two types could drift, and the point of the
+acknowledgement is that the client can compare them.</p>
+<p><strong>Empty means nothing is delivered.</strong> The spec makes every type opt-in and
+says the server <strong>MUST NOT</strong> send what was not requested, so an absent field
+is a refusal rather than a default: a client that sends <code>{}</code> is
+acknowledged with nothing and its stream closes immediately.</p>
 
 
 
@@ -5400,11 +5745,9 @@ immediately, since nothing could ever reach it.</p>
     <div class="doc doc-contents ">
 
         <p>Read a filter off the wire, ignoring anything unusable.</p>
-<p>Tolerant on the way in: a malformed entry is dropped rather than
-failing the request. The acknowledgement is what tells the client what
-actually took effect, so a dropped field is <em>reported</em> rather than
-silent — which is a better outcome than rejecting a subscription
-outright over one unrecognised key.</p>
+<p>A malformed entry is dropped rather than failing the request: the
+acknowledgement reports what actually took effect, so the drop is
+visible, which beats rejecting a subscription over one bad key.</p>
 
 
     </div>
@@ -5425,9 +5768,9 @@ outright over one unrecognised key.</p>
     <div class="doc doc-contents ">
 
         <p>The wire form, omitting everything not asked for.</p>
-<p>Only truthy entries appear: the acknowledgement is read as "these are
-the things you will actually receive", and a <code>false</code> or an empty list
-in it would read as a promise about something.</p>
+<p>Only truthy entries appear: the acknowledgement reads as "these are the
+things you will receive", so a <code>false</code> or an empty list in it would
+read as a promise about something.</p>
 
 
     </div>
@@ -5460,10 +5803,9 @@ in it would read as a promise about something.</p>
 
 
         <p>The notification types a client can opt in to, other than by URI or id.</p>
-<p>⚠ <strong>Opt-in is not a courtesy — it is a MUST.</strong> The spec: <em>"the server MUST
-NOT send notification types the client has not explicitly requested."</em> So
-this enum is a closed set of things a subscriber can ask for, and anything
-not in the request's filter is not sent, however interesting it might be.</p>
+<p><strong>Opt-in is a MUST</strong>, not a courtesy: <em>"the server MUST NOT send
+notification types the client has not explicitly requested."</em> So this is a
+closed set, and anything outside the request's filter is not sent.</p>
 <p>The values are the notification methods with the <code>notifications/</code> prefix
 stripped, and the filter field names are their camelCase forms — kept
 mechanically related so a new kind cannot be added to one and forgotten in
@@ -5540,39 +5882,27 @@ the other.</p>
 
 
         <p>Topic-keyed pub/sub for notifications, with <strong>many</strong> subscribers per topic.</p>
-<p>⚠ <strong>Deliberately not <code>SSEBroker</code></strong>, which this package already has. That
-one keys on session id and documents "a session has at most one live
-subscriber" — both assumptions fail here:</p>
-<ul>
-<li>A notification is addressed to a <em>topic</em> ("this resource changed"), not
-  to a session. The set of subscribers is discovered at publish time and
-  the publisher does not know it.</li>
-<li>Several clients — and several subscriptions from one client — legitimately
-  watch the same resource. Replacing the previous subscriber, which is what
-  the session broker does on re-subscribe, would silently disconnect them.</li>
-</ul>
-<p>So it is a second collaborator rather than a widening of the first. The
-session broker keeps serving the legacy GET stream, whose contract really is
-one-per-session.</p>
+<p><strong>Deliberately not <code>SSEBroker</code></strong>, which this package already has for the
+legacy GET stream: that one keys on session id and allows a session at most
+one live subscriber. Here a notification is addressed to a <em>topic</em>, whose
+subscriber set is discovered at publish time, and several clients — or
+several subscriptions from one client — legitimately watch the same
+resource, so replacing the previous subscriber would silently disconnect
+them.</p>
 <p><strong>Topics are opaque strings</strong> built by
-:mod:<code>rest_framework_mcp.subscriptions.utils</code> — a resource URI, a task id, a
+<code>rest_framework_mcp.subscriptions.utils</code> — a resource URI, a task id, a
 notification kind. The broker never interprets them, so adding a new
 notification type needs no change here.</p>
-<p>⚠ <strong>A topic is not an authorization boundary.</strong> Anyone who can name a topic
+<p><strong>A topic is not an authorization boundary.</strong> Anyone who can name a topic
 can receive it, so the <em>subscription</em> checks what the caller may watch before
-it attaches. Putting the check in the broker would be checking it once per
-delivery instead of once per subscription, and would need the broker to
-understand principals.</p>
-<p>:meth:<code>subscribe</code> returns a queue that receives every payload published to
-any of <code>topics</code> until :meth:<code>unsubscribe</code>. One queue per subscription, not
+it attaches — once per subscription rather than once per delivery, and
+without the broker having to understand principals.</p>
+<p><code>subscribe</code> returns a queue that receives every payload published to
+any of <code>topics</code> until <code>unsubscribe</code>. One queue per subscription, not
 per topic — a subscription watching five resources reads one stream, which
-is what the wire format wants.</p>
-<p>⚠ <strong><code>subscribe</code> is awaitable, and that is load-bearing rather than
-stylistic.</strong> It must not return until the subscription is genuinely live.
-A sync signature forced the Redis implementation to register its channels
-in a background task, which opened a window: the stream emitted "you are
-subscribed" while publishes were still going nowhere. The caller has to be
-able to await readiness, so the contract says so.</p>
+is what the wire format wants. It is awaitable because that is load-bearing:
+it must not return until the subscription is genuinely live, or the caller
+emits "you are subscribed" while publishes still go nowhere.</p>
 
 
 
@@ -5611,10 +5941,9 @@ able to await readiness, so the contract says so.</p>
     <div class="doc doc-contents ">
 
         <p>How many subscriptions this broker is currently feeding.</p>
-<p>⚠ <strong>Per process, not per cluster.</strong> It is what bounds this worker's
-occupancy — see <code>MAX_CONCURRENT_SUBSCRIPTIONS</code> — and a cluster-wide
-count would cost a round trip on every subscribe to bound something
-that is already a per-worker resource.</p>
+<p><strong>Per process, not per cluster.</strong> It bounds this worker's occupancy —
+see <code>MAX_CONCURRENT_SUBSCRIPTIONS</code> — and a cluster-wide count would
+cost a round trip per subscribe to bound a per-worker resource.</p>
 
     </div>
 
@@ -5647,14 +5976,13 @@ that is already a per-worker resource.</p>
 
 
         <p>In-process topic fan-out, for development and tests.</p>
-<p>⚠ <strong>A multi-worker deployment needs a cross-process broker.</strong> The write that
-triggers a notification lands on whichever worker served that request, and
-the subscriber's stream is parked on a different one — so an in-process
-broker delivers to nobody, silently. The failure looks exactly like "the
-resource never changed", which is why it is worth being blunt about:
-subscriptions are a <strong>single-worker feature</strong> until a broker that crosses
-processes is wired in. Pass one to <code>MCPServer(subscription_broker=…)</code>.</p>
-<p>⚠ <strong>Not a default.</strong> <code>MCPServer</code> constructs no broker at all when none is
+<p><strong>A multi-worker deployment needs a cross-process broker.</strong> The write that
+triggers a notification lands on whichever worker served that request while
+the subscriber's stream is parked on a different one, so an in-process
+broker delivers to nobody, silently, and the failure looks exactly like "the
+resource never changed". Subscriptions are a <strong>single-worker feature</strong> until
+a cross-process broker is passed to <code>MCPServer(subscription_broker=…)</code>.</p>
+<p><strong>Not a default.</strong> <code>MCPServer</code> constructs no broker at all when none is
 given, precisely so this class cannot be reached by accident.</p>
 <p>Unlike the session broker this keeps a <em>set</em> of queues per topic, and a
 queue may sit under several topics at once — one subscription watching five
@@ -5700,9 +6028,9 @@ resources reads a single stream. Both directions of that mapping are kept so
     <div class="doc doc-contents ">
 
         <p>Deliver to every subscriber of <code>topic</code>; returns how many got it.</p>
-<p>The count is for the caller's benefit — <code>0</code> means nobody was
-listening, which is ordinary and not an error. Notifications are
-best-effort by design: a client that missed one re-reads the resource.</p>
+<p><code>0</code> means nobody was listening, which is ordinary and not an error:
+notifications are best-effort by design, and a client that missed one
+re-reads the resource.</p>
 
 
     </div>
@@ -5733,11 +6061,10 @@ best-effort by design: a client that missed one re-reads the resource.</p>
 
 
         <p>Cross-process topic fan-out over Redis pub/sub. <strong>The deployable one.</strong></p>
-<p>Subscriptions are the feature where a single-process broker fails most
-quietly: the write that triggers a notification lands on whichever worker
-served that request, and the subscriber's stream is parked on another, so
-:class:<code>InMemorySubscriptionBroker</code> delivers to nobody and the client simply
-never hears that anything changed. Anything past one worker wants this::</p>
+<p><a class="autorefs autorefs-internal" title="InMemorySubscriptionBroker" href="#rest_framework_mcp.subscriptions.in_memory_subscription_broker.InMemorySubscriptionBroker"><code>InMemorySubscriptionBroker</code></a>
+delivers to nobody once the publisher and the subscriber's stream land on
+different workers, and does so
+silently, so anything past one worker wants this:</p>
 <div class="language-text highlight"><pre><span></span><code>from redis.asyncio import Redis
 from rest_framework_mcp.subscriptions.redis_subscription_broker import (
     RedisSubscriptionBroker,
@@ -5748,14 +6075,12 @@ server = MCPServer(
     subscription_broker=RedisSubscriptionBroker(Redis.from_url(&quot;redis://…&quot;)),
 )
 </code></pre></div>
-<p>⚠ <strong>One Redis channel per topic, one listener task per subscription.</strong> The
-session broker's shape — a channel per session — does not transfer: a
-subscription watches several topics and several subscriptions watch the same
-topic, so the mapping is many-to-many in both directions. Each subscription
-gets one task subscribed to all of its channels at once, feeding the single
-queue its stream reads. That keeps the task count proportional to <em>live
-subscriptions</em> rather than to topics, which is the number that is bounded by
-connections.</p>
+<p><strong>One Redis channel per topic, one listener task per subscription.</strong> The
+mapping is many-to-many — a subscription watches several topics and several
+subscriptions watch one topic — so each subscription gets a single task
+subscribed to all of its channels, feeding the one queue its stream reads.
+That keeps the task count proportional to live subscriptions rather than to
+topics, and it is subscriptions that connections bound.</p>
 <p>The Redis client's lifecycle belongs to the consumer — close it during ASGI
 lifespan shutdown, as with the other Redis collaborators here.</p>
 
@@ -5798,13 +6123,12 @@ lifespan shutdown, as with the other Redis collaborators here.</p>
     <div class="doc doc-contents ">
 
         <p>Register the channels <strong>before returning</strong>, then pump them.</p>
-<p>⚠ <strong>The await is the whole point.</strong> Registering inside the background
-task instead would return a queue that is not yet subscribed, and the
-caller emits "you are subscribed" immediately afterwards — so every
-notification published in that window went nowhere while the client had
-been told otherwise. Exactly the deployment this class exists for is
-where that race is most likely, since the publisher is a different
-process and does not wait for anyone.</p>
+<p><strong>The await is the whole point.</strong> Registering inside the background task
+would return a queue that is not yet subscribed, and the caller emits
+"you are subscribed" immediately afterwards, so everything published in
+that window goes nowhere while the client has been told otherwise — a
+race this class's own deployment makes likely, since the publisher is
+another process and waits for nobody.</p>
 
 
     </div>
@@ -5829,10 +6153,10 @@ process and does not wait for anyone.</p>
     <div class="doc doc-contents ">
 
         <p>Publish to <code>topic</code>'s channel; returns Redis's subscriber count.</p>
-<p>⚠ The count is <strong>cluster-wide receivers, not confirmed deliveries</strong> —
-and a listener that has not finished connecting yet reports as zero. It
-is a diagnostic, not a delivery guarantee; notifications are best-effort
-by design and a client that missed one re-reads the resource.</p>
+<p>The count is <strong>cluster-wide receivers, not confirmed deliveries</strong>, and a
+listener still connecting reports as zero. A diagnostic, not a delivery
+guarantee: notifications are best-effort and a client that missed one
+re-reads the resource.</p>
 
 
     </div>
@@ -5861,16 +6185,15 @@ by design and a client that missed one re-reads the resource.</p>
     <div class="doc doc-contents first">
 
         <p>The topic <code>notifications/resources/updated</code> for <code>uri</code> goes to.</p>
-<p>⚠ <strong>Exact URI, never a prefix.</strong> The spec permits notifying about a
-<em>sub</em>-resource of the one subscribed to, which invites prefix matching — but
-a prefix match over a free-form URI is a guess about a scheme this package
-does not own, and it fails in both directions: <code>invoices://1</code> would match
-<code>invoices://11</code>, while a tenant-scoped <code>t1/invoices://…</code> would match
-nothing a client sensibly subscribed to.</p>
+<p><strong>Exact URI, never a prefix.</strong> The spec permits notifying about a
+<em>sub</em>-resource of the one subscribed to, which invites prefix matching, but
+a prefix match over a free-form URI guesses at a scheme this package does
+not own and fails both ways: <code>invoices://1</code> would match <code>invoices://11</code>,
+while a tenant-scoped <code>t1/invoices://…</code> would match nothing.</p>
 <p>A publisher that wants a collection watched says so, by publishing the
-collection URI as well as the instance one. That is what an <code>invalidates=</code>
-naming both <code>invoices://{pk}</code> and <code>invoices://</code> expresses — the
-declaration is explicit and reviewable, where a matching rule is neither.</p>
+collection URI alongside the instance one — an <code>invalidates=</code> naming both
+<code>invoices://{pk}</code> and <code>invoices://</code> is explicit and reviewable where a
+matching rule is neither.</p>
 
 
     </div>
@@ -5902,21 +6225,19 @@ up; these are the types.</p>
 
         <p>The wire shape of a task, in every message that carries one.</p>
 <p>One type serves three roles the spec names separately — the
-<code>CreateTaskResult</code> body, the <code>tasks/get</code> result, and the
+<code>CreateTaskResult</code> body, the <code>tasks/get</code> result and the
 <code>notifications/tasks</code> params — because they are the same object with the
-same fields. The spec splits it into <code>WorkingTask</code> / <code>InputRequiredTask</code>
-/ <code>CompletedTask</code> / <code>FailedTask</code> / <code>CancelledTask</code>, but the split is
-only <em>which extra field is present</em>, and that is a property of
-:attr:<code>status</code>. :meth:<code>to_dict</code> emits the right one and refuses the wrong
-one, which is the part a client can observe.</p>
-<p>⚠ <strong>Timestamps are ISO 8601 strings, stored as strings.</strong> They come from
-the store and go out verbatim; nothing here parses or compares them. A
-<code>datetime</code> field would invite a comparison against <code>now()</code> somewhere,
-and TTL expiry belongs to the store — which is the only component that
-knows what clock its backend keeps.</p>
-<p>:attr:<code>ttl_ms</code> is <code>None</code> for "no expiry", which is the spec's own
-encoding (<code>ttlMs: number | null</code>) rather than an omission — the field is
-always present.</p>
+same fields. The spec's <code>WorkingTask</code> / <code>InputRequiredTask</code> /
+<code>CompletedTask</code> / <code>FailedTask</code> / <code>CancelledTask</code> split is only <em>which
+extra field is present</em>, which is a property of <code>status</code>;
+<code>to_dict</code> emits the right one and refuses the wrong one.</p>
+<p><strong>Timestamps are ISO 8601 strings, stored as strings.</strong> They come from the
+store and go out verbatim; nothing here parses or compares them. A
+<code>datetime</code> would invite a comparison against <code>now()</code>, and TTL expiry
+belongs to the store — the only component that knows its backend's clock.</p>
+<p><code>ttl_ms</code> is <code>None</code> for "no expiry", the spec's own encoding
+(<code>ttlMs: number | null</code>) rather than an omission: the field is always
+present.</p>
 
 
 
@@ -5953,11 +6274,9 @@ always present.</p>
     <div class="doc doc-contents ">
 
         <p>Project to the wire, carrying only the field this status licenses.</p>
-<p>The status-specific field is gated on the status rather than on
-whether it happens to be set, so a stored record that somehow holds
-both a <code>result</code> and an <code>error</code> cannot emit a shape no variant in
-the spec describes. The status is the single source of truth for what
-a client should find.</p>
+<p>Gated on the status rather than on whether a field happens to be set, so
+a record holding both a <code>result</code> and an <code>error</code> cannot emit a shape
+no spec variant describes.</p>
 
 
     </div>
@@ -5992,14 +6311,13 @@ a client should find.</p>
         <p>Lifecycle of a task, per the extension.</p>
 <p><code>WORKING</code> and <code>INPUT_REQUIRED</code> are live; the other three are terminal
 and a task never leaves them.</p>
-<p>⚠ <strong><code>FAILED</code> is narrower than it looks.</strong> The spec: the status <strong>MUST
-NOT</strong> be used to represent non-JSON-RPC errors. A tool that raises
-<code>ServiceError</code> has <em>completed</em> — it produced a well-formed
-<code>CallToolResult</code> carrying <code>isError: true</code>, which is what this package
-already builds in <code>build_error_tool_result</code>. <code>FAILED</code> is for the task
-machinery itself failing: the worker died, the payload could not be
-revived. Getting this backwards would hide every tool error behind a status
-the client reads as "the server broke".</p>
+<p><strong><code>FAILED</code> is narrower than it looks.</strong> The spec forbids using the status
+to represent non-JSON-RPC errors. A tool that raises <code>ServiceError</code> has
+<em>completed</em> — it produced a well-formed <code>CallToolResult</code> carrying
+<code>isError: true</code>. <code>FAILED</code> is for the task machinery itself failing: the
+worker died, the payload could not be revived. Getting this backwards would
+hide every tool error behind a status the client reads as "the server
+broke".</p>
 
 
 
@@ -6048,26 +6366,60 @@ the client reads as "the server broke".</p>
 
 
         <p>Whether a binding may — or must — answer with a task handle.</p>
-<p>⚠ <strong>This is our policy surface, not a wire field.</strong> An earlier draft of the
-extension negotiated per tool via <code>execution.taskSupport</code> on
-<code>tools/list</code>; the shipped extension removed it and says instead that <em>"the
-server is the sole decider; clients do not signal task preference on the
-request itself."</em> So the decision has to be made somewhere on this side, and
-the binding is where every other per-tool knob already lives.</p>
-<p>The three values are not invented — they are the two branches the spec
-actually distinguishes, plus the default:</p>
-<ul>
-<li><code>FORBIDDEN</code> (default): never a task. Every tool registered before this
-  existed keeps behaving exactly as it did.</li>
-<li><code>OPTIONAL</code>: a task for a client that declared the extension, an ordinary
-  inline call for one that did not. The safe choice for a slow tool that can
-  still run inline if it has to.</li>
-<li><code>REQUIRED</code>: a task, or nothing. A client that did not declare the
-  extension gets <code>-32021</code> — this is the case the spec covers with <em>"if a
-  server is unable to service a request ... without returning
-  CreateTaskResult"</em>. For work that genuinely cannot finish inside a
-  request, where running it anyway would just hit the deadline.</li>
-</ul>
+<p><strong>A policy surface, not a wire field.</strong> The shipped extension makes <em>"the
+server the sole decider; clients do not signal task preference on the
+request itself"</em>, so the decision has to be made on this side, and the
+binding is where every other per-tool knob lives.</p>
+
+
+<p><span class="doc-section-title">Attributes:</span></p>
+    <table>
+      <thead>
+        <tr>
+          <th>Name</th>
+          <th>Type</th>
+          <th>Description</th>
+        </tr>
+      </thead>
+      <tbody>
+          <tr class="doc-section-item">
+            <td><code><span title="rest_framework_mcp.constants.TaskPolicy.FORBIDDEN">FORBIDDEN</span></code></td>
+            <td>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Never a task. The default, so every tool registered before
+this existed behaves exactly as it did.</p>
+              </div>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td><code><span title="rest_framework_mcp.constants.TaskPolicy.OPTIONAL">OPTIONAL</span></code></td>
+            <td>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>A task for a client that declared the extension, an ordinary
+inline call for one that did not. The safe choice for a slow tool
+that can still run inline.</p>
+              </div>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td><code><span title="rest_framework_mcp.constants.TaskPolicy.REQUIRED">REQUIRED</span></code></td>
+            <td>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>A task, or nothing — a client that did not declare the
+extension gets <code>-32021</code>. For work that genuinely cannot finish
+inside a request, where running it anyway would just hit the
+deadline.</p>
+              </div>
+            </td>
+          </tr>
+      </tbody>
+    </table>
 
 
 
@@ -6116,32 +6468,31 @@ actually distinguishes, plus the default:</p>
 
 
         <p>Pluggable persistence for tasks, mirroring <code>SessionStore</code>.</p>
-<p>⚠ <strong>Unlike <code>SessionStore</code>, an in-process implementation is not
-deployable.</strong> A session only ever has to be recognised by the process that
-minted it; a task is created by a web worker and finished by a <em>different</em>
-process entirely — that is the whole point of it. So
-:class:<code>InMemoryTaskStore</code> is a development and test convenience, and
-:class:<code>DjangoCacheTaskStore</code> is the default.</p>
+<p><strong>Unlike <code>SessionStore</code>, an in-process implementation is not deployable.</strong> A
+session only has to be recognised by the process that minted it, while a task is
+created by a web worker and finished by a <em>different</em> process. So
+<a class="autorefs autorefs-internal" title="InMemoryTaskStore" href="#rest_framework_mcp.tasks.in_memory_task_store.InMemoryTaskStore"><code>InMemoryTaskStore</code></a>
+is a development and test convenience, and
+<a class="autorefs autorefs-internal" title="DjangoCacheTaskStore" href="#rest_framework_mcp.tasks.django_cache_task_store.DjangoCacheTaskStore"><code>DjangoCacheTaskStore</code></a>
+is the default.</p>
 <p>Four operations, no more:</p>
 <ul>
-<li>:meth:<code>create</code> writes the seed record and <strong>must not return until the
-  task is durable</strong>. The spec is explicit: a server must not answer with a
-  <code>CreateTaskResult</code> until a <code>tasks/get</code> for that id would resolve.
-  Answering first and writing after is the one race that produces a task id
-  the client cannot use.</li>
-<li>:meth:<code>get</code> reads one back, or <code>None</code> if it never existed or has
+<li><code>create</code> writes the seed record and <strong>must not return until the task
+  is durable</strong>: the spec forbids answering with a <code>CreateTaskResult</code>
+  before a <code>tasks/get</code> for that id would resolve, and answering first is
+  the one race that hands a client an id it cannot use.</li>
+<li><code>get</code> reads one back, or <code>None</code> if it never existed or has
   expired. Both are the same answer to a caller: <code>-32602</code>.</li>
-<li>:meth:<code>save</code> overwrites in place, preserving the original expiry.</li>
-<li>:meth:<code>delete</code> removes one.</li>
+<li><code>save</code> overwrites in place, preserving the original expiry.</li>
+<li><code>delete</code> removes one.</li>
 </ul>
 <p><strong>Expiry belongs to the store.</strong> <code>ttlMs</code> is on the record, but only the
-store knows what clock its backend keeps, and only the store can drop an
-entry without anyone asking. Callers never compare a timestamp to now.</p>
-<p>⚠ <strong>No locking, deliberately.</strong> Last write wins, and the guard against a
+store knows what clock its backend keeps and only the store can drop an
+entry unasked. Callers never compare a timestamp to now.</p>
+<p><strong>No locking, deliberately.</strong> Last write wins, and the guard against a
 finished task being reopened lives in
-:func:<code>rest_framework_mcp.tasks.transition_task</code> rather than in each
-backend — a rule enforced in one place beats four backends implementing
-compare-and-swap differently.</p>
+<code>rest_framework_mcp.tasks.transition_task</code> — one rule in one place
+beats four backends implementing compare-and-swap differently.</p>
 
 
 
@@ -6190,12 +6541,11 @@ compare-and-swap differently.</p>
 
 
         <p>Where a created task goes to be worked on.</p>
-<p>One method, taking one string, because that is the entire seam. The record
-is already in the store when this is called, so the id is enough to find
-everything — and keeping the payload out of the queue message means the
-queue never holds a copy of the arguments that can drift from the stored
-ones, or outlive the task.</p>
-<p>A Celery consumer writes::</p>
+<p>One method taking one string, because that is the entire seam. The record is
+already in the store when this is called, so the id finds everything, and
+keeping the payload out of the queue message stops the queue holding a copy
+of the arguments that can drift from the stored ones or outlive the task.</p>
+<p>A Celery consumer writes:</p>
 <div class="language-text highlight"><pre><span></span><code>@shared_task
 def run_mcp_task(task_id: str) -&gt; None:
     my_server.run_task(task_id)
@@ -6204,19 +6554,16 @@ class CeleryExecutor:
     def enqueue(self, task_id: str) -&gt; None:
         run_mcp_task.delay(task_id)
 </code></pre></div>
-<p>…and nothing in this package imports Celery. ⚠ <strong>That is deliberate and
-load-bearing.</strong> "Celery-or-any": the protocol is satisfied by an RQ or
-Dramatiq call, a <code>ThreadPoolExecutor.submit</code> in a test, or a management
-command that drains the store on a schedule. This package has no opinion
-about which, and no dependency on any of them.</p>
-<p>⚠ <strong><code>enqueue</code> must not run the work.</strong> It is called on the request path,
-with the client waiting for its <code>CreateTaskResult</code>; anything slow here
-reintroduces exactly the blocking the extension exists to remove. It should
-hand off and return.</p>
-<p>⚠ <strong>Failures here are not silent.</strong> If <code>enqueue</code> raises, the task is
-already durable and would otherwise sit in <code>working</code> forever, so the
-caller marks it <code>failed</code> and lets the client find out by polling — a
-status a client can act on, rather than a handle that never resolves.</p>
+<p>…and nothing in this package imports Celery. The protocol is satisfied just
+as well by an RQ or Dramatiq call, a <code>ThreadPoolExecutor.submit</code> in a
+test, or a management command that drains the store on a schedule.</p>
+<p><strong><code>enqueue</code> must not run the work.</strong> It is called on the request path with
+the client waiting for its <code>CreateTaskResult</code>, so anything slow here
+reintroduces exactly the blocking the extension exists to remove.</p>
+<p><strong>Failures here are not silent.</strong> If <code>enqueue</code> raises, the task is already
+durable and would otherwise sit in <code>working</code> forever, so the caller marks
+it <code>failed</code> and the client finds out by polling — a status it can act on,
+rather than a handle that never resolves.</p>
 
 
 
@@ -6266,39 +6613,140 @@ status a client can act on, rather than a handle that never resolves.</p>
 
 
 
-        <p>What a store holds: the wire :class:<code>Task</code> plus what a worker needs.</p>
-<p>Deliberately a <em>superset</em> rather than a parallel type. The extra fields
-never reach the client and could not — no task message has a slot for
-them — but they are the whole reason a task can outlive the request that
-created it. The worker that finishes it shares nothing with that request
-except this record.</p>
-<p>Three groups:</p>
-<ul>
-<li><strong>The call.</strong> :attr:<code>tool_name</code> and :attr:<code>arguments</code>, replayed verbatim.</li>
-<li><strong>The authorization context.</strong> :attr:<code>principal_id</code> (the form
-  :func:<code>~rest_framework_mcp.auth.principal_for_token.principal_for_token</code> already
-  produces for sessions), :attr:<code>user_pk</code> to rehydrate the user, and
-  :attr:<code>scopes</code> / :attr:<code>audience</code> to rebuild the <code>TokenInfo</code>.</li>
-<li><strong>Bookkeeping.</strong> :attr:<code>enqueued</code>, so a worker cannot be tricked into
-  running the same task twice, and :attr:<code>progress</code> / :attr:<code>total</code>, which
-  are where a running task's <code>progress(...)</code> calls land.</li>
-</ul>
-<p>⚠ <strong>The scopes are stored, and that is the point.</strong> Without them the worker
-would rebuild a token that proves nothing, and every <code>ScopeRequired</code>
-binding would deny the call it had already been authorized for — silently,
-long after the client was told the work had started. Storing them lets the
-worker re-run the <em>same</em> permission checks the request path ran, which is
-defence in depth rather than a shortcut around it.</p>
-<p>⛔ <code>TokenInfo.raw</code> is <strong>not</strong> stored. It is backend-defined and holds
-whatever the backend felt like keeping — an <code>AccessToken</code> row, decoded JWT
-claims — so persisting it would put credential material in a cache with a
-week-long fallback TTL. A rehydrated token has <code>raw=None</code>; a permission
-that reaches into it is one that cannot run as a task, which is a fair
-trade for not writing tokens to the cache.</p>
-<p>⚠ <strong>The separation is a security boundary, so keep it.</strong> :meth:<code>to_wire</code> is
-the only route from a record to a message, which is what stops a principal
-id or a scope list leaking into a response because someone added a field to
-the wrong dataclass.</p>
+        <p>What a store holds: the wire
+<a class="autorefs autorefs-internal" title="Task
+
+
+  
+      dataclass
+  " href="#rest_framework_mcp.protocol.types.task.Task"><code>Task</code></a> plus what a worker needs.</p>
+<p>A <em>superset</em> rather than a parallel type. The extra fields never reach the
+client — no task message has a slot for them — but they are why a task can
+outlive the request that created it: the worker that finishes it shares
+nothing with that request except this record.</p>
+<p><strong>The scopes are stored, and that is the point.</strong> Without them the worker
+rebuilds a token that proves nothing, and every <code>ScopeRequired</code> binding
+denies the call it had already been authorized for — silently, long after
+the client was told the work had started.</p>
+<p><code>TokenInfo.raw</code> is <strong>not</strong> stored: it is backend-defined credential
+material, and persisting it would put that in a cache with a week-long
+fallback TTL. A rehydrated token has <code>raw=None</code>, so a permission reaching
+into it is one that cannot run as a task.</p>
+<p><strong>The separation is a security boundary.</strong> <code>to_wire</code> is the only route
+from a record to a message, which is what stops a principal id or a scope
+list leaking into a response because a field was added to the wrong
+dataclass.</p>
+
+
+<p><span class="doc-section-title">Attributes:</span></p>
+    <table>
+      <thead>
+        <tr>
+          <th>Name</th>
+          <th>Type</th>
+          <th>Description</th>
+        </tr>
+      </thead>
+      <tbody>
+          <tr class="doc-section-item">
+            <td><code><span title="rest_framework_mcp.tasks.types.task_record.TaskRecord.task">task</span></code></td>
+            <td>
+                  <code><a class="autorefs autorefs-internal" title="Task
+
+
+  
+      dataclass
+   (rest_framework_mcp.protocol.types.task.Task)" href="#rest_framework_mcp.protocol.types.task.Task">Task</a></code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>The wire task — the only part a client ever sees.</p>
+              </div>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td><code><span title="rest_framework_mcp.tasks.types.task_record.TaskRecord.tool_name">tool_name</span></code></td>
+            <td>
+                  <code><span title="str">str</span></code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>The tool the worker replays, verbatim.</p>
+              </div>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td><code><span title="rest_framework_mcp.tasks.types.task_record.TaskRecord.arguments">arguments</span></code></td>
+            <td>
+                  <code><span title="dict">dict</span>[<span title="str">str</span>, <span title="typing.Any">Any</span>]</code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>The arguments it replays, verbatim.</p>
+              </div>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td><code><span title="rest_framework_mcp.tasks.types.task_record.TaskRecord.principal_id">principal_id</span></code></td>
+            <td>
+                  <code><span title="str">str</span></code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>The owner, in the form
+<code>principal_for_token</code>
+already produces for sessions.</p>
+              </div>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td><code><span title="rest_framework_mcp.tasks.types.task_record.TaskRecord.user_pk">user_pk</span></code></td>
+            <td>
+                  <code><span title="typing.Any">Any</span></code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Rehydrates the user on the worker.</p>
+              </div>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td><code><span title="rest_framework_mcp.tasks.types.task_record.TaskRecord.scopes">scopes</span></code></td>
+            <td>
+                  <code><span title="tuple">tuple</span>[<span title="str">str</span>, ...]</code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Rebuild the worker's <code>TokenInfo</code> so its permission checks see
+what the request path saw.</p>
+              </div>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td><code><span title="rest_framework_mcp.tasks.types.task_record.TaskRecord.audience">audience</span></code></td>
+            <td>
+                  <code><span title="str">str</span> | None</code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Rebuilds that <code>TokenInfo</code>'s audience.</p>
+              </div>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td><code><span title="rest_framework_mcp.tasks.types.task_record.TaskRecord.enqueued">enqueued</span></code></td>
+            <td>
+                  <code><span title="bool">bool</span></code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Whether the task reached the executor, so a worker cannot be
+tricked into running it twice.</p>
+              </div>
+            </td>
+          </tr>
+      </tbody>
+    </table>
 
 
 
@@ -6339,15 +6787,11 @@ the wrong dataclass.</p>
 
         <p>How far along the running task said it was, or <code>None</code> if it never said.</p>
 <p>Written by
-:func:<code>~rest_framework_mcp.tasks.report_task_progress.report_task_progress</code>,
-which is what a task's <code>progress</code> kwarg-pool seed resolves to. Paired with
-:attr:<code>total</code> when the service supplied one.</p>
-<p>⚠ <strong>Server-side only, by protocol.</strong> The wire <code>Task</code> carries
-<code>statusMessage</code> and no numeric field, so a polling client only ever sees
-the <em>rendered</em> string these two produce. Keeping the numbers is still worth
-it: they are what makes the value legible in logs and the admin, and they
-are the input a future adaptive <code>pollIntervalMs</code> would need. Rendering is
-lossy and rendering back is not a thing.</p>
+<code>report_task_progress</code>,
+what a task's <code>progress</code> kwarg-pool seed resolves to. <strong>Server-side only,
+by protocol</strong>: the wire <code>Task</code> carries <code>statusMessage</code> and no numeric
+field, so a polling client sees only the <em>rendered</em> string this and
+<code>total</code> produce.</p>
 
     </div>
 
@@ -6372,7 +6816,7 @@ lossy and rendering back is not a thing.</p>
 
     <div class="doc doc-contents ">
 
-        <p>What :attr:<code>progress</code> counts toward, or <code>None</code> for an open-ended count.</p>
+        <p>What <code>progress</code> counts toward, or <code>None</code> for an open-ended count.</p>
 <p><code>None</code> is the ordinary case for work that cannot say how much there is —
 the reporter renders a bare count rather than inventing a denominator.</p>
 
@@ -6402,11 +6846,11 @@ the reporter renders a bare count rather than inventing a denominator.</p>
         <p>Answers the client has supplied via <code>tasks/update</code>, keyed as the
 matching <code>inputRequests</code> were.</p>
 <p>Accumulated rather than replaced, because the spec lets a client answer a
-strict subset of what is outstanding and come back for the rest. A worker
+strict subset of what is outstanding and come back for the rest; a worker
 parked on <code>input_required</code> reads this to find out what it was told.</p>
-<p>⚠ Keys are never reused over a task's lifetime — the spec requires it of
-the server — so a key appearing here is answered for good, and a later
-request must pick a new one.</p>
+<p>The spec requires the server never to reuse a key over a task's lifetime, so
+a key appearing here is answered for good and a later request picks a new
+one.</p>
 
     </div>
 
@@ -6428,10 +6872,15 @@ request must pick a new one.</p>
 
     <div class="doc doc-contents ">
 
-        <p>Return a copy with fields changed on the embedded :class:<code>Task</code>.</p>
+        <p>Return a copy with fields changed on the embedded
+<a class="autorefs autorefs-internal" title="Task
+
+
+  
+      dataclass
+  " href="#rest_framework_mcp.protocol.types.task.Task"><code>Task</code></a>.</p>
 <p>Saves every caller a nested <code>replace(record, task=replace(record.task,
-...))</code>, which is easy to get wrong as a direct assignment to a frozen
-field.</p>
+...))</code>.</p>
 
 
     </div>
@@ -6465,21 +6914,21 @@ field.</p>
 <p>Cross-process, which for tasks is not a nice-to-have: the web worker that
 creates a task and the worker that finishes it are different processes, so
 a store they do not share cannot work at all (see
-:class:<code>InMemoryTaskStore</code>).</p>
-<p><strong>Namespacing</strong> follows :class:<code>DjangoCacheSessionStore</code> exactly — the
-server's <code>name</code>, hashed into the key prefix, so two servers in one project
-cannot read or overwrite each other's tasks. The digest is for key hygiene
-(<code>name</code> is free-form; memcached rejects spaces and caps length), not
-secrecy.</p>
-<p>⚠ <strong>Records are serialised to plain dicts rather than pickled.</strong> The cache
-holds them across a deploy, so a pickled dataclass would be a version of
-this package's class definition — rename a field and every in-flight task
-becomes unreadable at exactly the moment a worker tries to finish it. It
-also keeps the store usable under a JSON-serialising cache backend.</p>
-<p><strong>Expiry</strong> is absolute, stamped once at :meth:<code>create</code> from <code>ttlMs</code> and
-carried in the envelope, so :meth:<code>save</code> renews the cache timeout to the
-<em>remaining</em> lifetime rather than restarting the clock. Without that, a task
-that reports progress often would never expire.</p>
+<a class="autorefs autorefs-internal" title="InMemoryTaskStore" href="#rest_framework_mcp.tasks.in_memory_task_store.InMemoryTaskStore"><code>InMemoryTaskStore</code></a>).</p>
+<p><strong>Namespacing</strong> follows
+<a class="autorefs autorefs-internal" title="DjangoCacheSessionStore" href="../registries/#rest_framework_mcp.transport.django_cache_session_store.DjangoCacheSessionStore"><code>DjangoCacheSessionStore</code></a>
+exactly — the server's <code>name</code>, hashed into the key prefix, so two servers in one
+project cannot read or overwrite each other's tasks. The digest is for key hygiene
+(<code>name</code> is free-form; memcached rejects spaces and caps length), not secrecy.</p>
+<p><strong>Records are serialised to plain dicts rather than pickled.</strong> The cache
+holds them across a deploy, and a pickled dataclass is a version of this
+package's class definition: rename a field and every in-flight task becomes
+unreadable exactly when a worker tries to finish it. Plain dicts also keep
+the store usable under a JSON-serialising backend.</p>
+<p><strong>Expiry</strong> is absolute, stamped once at <code>create</code> from <code>ttlMs</code> and
+carried in the envelope, so <code>save</code> renews the cache timeout to the
+<em>remaining</em> lifetime rather than restarting the clock — otherwise a task
+reporting progress often would never expire.</p>
 
 
 
@@ -6526,16 +6975,15 @@ that reports progress often would never expire.</p>
 
 
         <p>Task store held in one process's memory. <strong>Development and tests only.</strong></p>
-<p>⚠ <strong>Not a deployable backend, and the reason is not the usual one.</strong> An
-in-memory <em>session</em> store is merely restart-fragile; an in-memory <em>task</em>
-store is broken by design, because a task is created on a web worker and
-finished somewhere else. Under any real deployment the worker writes its
-result into a dict the web process cannot see, and every poll answers
-"unknown task" until the client gives up. It fails silently and looks like
-a hung job.</p>
-<p>:class:<code>DjangoCacheTaskStore</code> is the default for exactly this reason. This
-class exists so tests and a single-process <code>runserver</code> can exercise the
-machinery without a cache backend.</p>
+<p><strong>Not a deployable backend, and not for the usual reason.</strong> An in-memory <em>session</em>
+store is merely restart-fragile; an in-memory <em>task</em> store is broken by design,
+because a task is created on a web worker and finished somewhere else — the worker
+writes its result into a dict the web process cannot see, and every poll answers
+"unknown task" until the client gives up. It fails silently and looks like a hung
+job, which is why
+<a class="autorefs autorefs-internal" title="DjangoCacheTaskStore" href="#rest_framework_mcp.tasks.django_cache_task_store.DjangoCacheTaskStore"><code>DjangoCacheTaskStore</code></a>
+is the default. This class exists so tests and a single-process <code>runserver</code> can
+exercise the machinery without a cache.</p>
 <p>No expiry: <code>ttlMs</code> is advisory here, and a process short-lived enough to
 use this store is its own garbage collection.</p>
 

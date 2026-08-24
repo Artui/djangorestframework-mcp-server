@@ -546,6 +546,8 @@
       
         
       
+        
+      
     
     
     
@@ -981,6 +983,34 @@
     
   
     Register tools from a spec registry
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../recipes/pydantic-ai-client/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Connect a Pydantic-AI agent
   
 
     
@@ -1526,17 +1556,54 @@
 
 
 
-        <p>Output format for the human-readable text block of a <code>ToolResult</code>.</p>
-<p><code>structuredContent</code> is always JSON; this enum only controls the
-encoding of the <code>content[0]</code> text block:</p>
-<ul>
-<li><code>JSON</code>: pretty-printed JSON, the safe default.</li>
-<li><code>TOON</code>: token-oriented object notation. Compact for large uniform
-  arrays; falls back to JSON if the optional <code>toon</code> extra is not
-  installed.</li>
-<li><code>AUTO</code>: encoder picks per-payload — TOON for uniform list-of-objects,
-  JSON otherwise.</li>
-</ul>
+        <p>Encoding of a <code>ToolResult</code>'s human-readable text block.</p>
+<p>Only <code>content[0]</code> varies; <code>structuredContent</code> is always JSON.</p>
+
+
+<p><span class="doc-section-title">Attributes:</span></p>
+    <table>
+      <thead>
+        <tr>
+          <th>Name</th>
+          <th>Type</th>
+          <th>Description</th>
+        </tr>
+      </thead>
+      <tbody>
+          <tr class="doc-section-item">
+            <td><code><span title="rest_framework_mcp.constants.OutputFormat.JSON">JSON</span></code></td>
+            <td>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Pretty-printed JSON. The safe default.</p>
+              </div>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td><code><span title="rest_framework_mcp.constants.OutputFormat.TOON">TOON</span></code></td>
+            <td>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Token-oriented object notation, compact for large uniform arrays.
+Falls back to JSON when the optional <code>toon</code> extra is absent.</p>
+              </div>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td><code><span title="rest_framework_mcp.constants.OutputFormat.AUTO">AUTO</span></code></td>
+            <td>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Per-payload choice — TOON for a uniform list of objects, JSON
+otherwise.</p>
+              </div>
+            </td>
+          </tr>
+      </tbody>
+    </table>
 
 
 
@@ -1605,9 +1672,9 @@ encoding of the <code>content[0]</code> text block:</p>
     <div class="doc doc-contents first">
 
         <p>Encode <code>payload</code> as a stable, pretty JSON string.</p>
-<p>Uses <code>default=str</code> so DRF outputs containing <code>Decimal</code>, <code>UUID</code>,
-<code>datetime</code>, etc. are rendered without raising. Sorts keys for
-deterministic output (helpful in tests and diff-friendly transcripts).</p>
+<p><code>default=str</code> renders DRF outputs containing <code>Decimal</code>, <code>UUID</code> or
+<code>datetime</code> without raising; keys are sorted so the output is
+deterministic.</p>
 
 
     </div>
@@ -1628,14 +1695,10 @@ deterministic output (helpful in tests and diff-friendly transcripts).</p>
     <div class="doc doc-contents first">
 
         <p>Encode <code>payload</code> as TOON (token-oriented object notation).</p>
-<p>TOON is an optional dependency. If <code>python-toon</code> is not installed, this
-encoder issues a warning and falls back to JSON so a tool call never
-breaks just because the extra is absent. The warning fires every time —
-silencing it is the consumer's job (<code>warnings.filterwarnings</code> or
-installing the extra).</p>
-<p>The import goes through <code>importlib</code> so static analysers (<code>ty</code>) don't
-flag the optional module as unresolved on environments without the
-<code>[toon]</code> extra installed.</p>
+<p>TOON is an optional dependency. Without <code>python-toon</code> installed this
+warns and falls back to JSON, so a tool call never breaks because the extra
+is absent. The warning fires every time — silence it with
+<code>warnings.filterwarnings</code> or install the extra.</p>
 
 
     </div>
@@ -1665,27 +1728,166 @@ flag the optional module as unresolved on environments without the
 
     <div class="doc doc-contents first">
 
-        <p>Build a :class:<code>ToolResult</code> for a successful (or tool-level error) call.</p>
-<p><code>payload</code> is the JSON-shaped tool output; it becomes <code>structuredContent</code>
-verbatim and is also rendered as the first content block per
-<code>output_format</code>. TOON output is wrapped in a fenced <code>toon</code> block with
-a leading marker line so clients that don't parse TOON natively can still
-display it.</p>
-<p>When <code>include_structured_content</code> is <code>False</code>, the
-<code>structuredContent</code> field is omitted from the response. The text
-rendering in <code>content[0]</code> still carries the full payload, so clients
-that don't consume the structured field lose nothing.</p>
-<p><code>meta</code> is the base protocol's generic <code>_meta</code> bundle on the <em>result
-envelope</em> — genuinely per-call, so it is a parameter here rather than
-something sourced from the binding: a tool's static <code>_meta</code> is already
-advertised on its <code>tools/list</code> entry and repeating it on every result
-would be redundant. Omitted from the payload when empty.</p>
-<p><code>content_kind</code> selects the block type, per the binding's declaration.
-Anything other than <code>TEXT</code> bypasses <code>output_format</code> entirely — there is
-no TOON rendering of a PNG — and a payload that doesn't match the declared
-kind comes back as an <code>isError</code> result naming the binding, which is the
-same treatment an oversized result or a missed deadline gets.
-<code>binding_name</code> exists only to make that message actionable.</p>
+        <p>Build a <a class="autorefs autorefs-internal" title="ToolResult
+
+
+  
+      dataclass
+  " href="../protocol/#rest_framework_mcp.protocol.types.tool_result.ToolResult"><code>ToolResult</code></a>
+for a successful (or tool-level error) call.</p>
+
+
+<p><span class="doc-section-title">Parameters:</span></p>
+    <table>
+      <thead>
+        <tr>
+          <th>Name</th>
+          <th>Type</th>
+          <th>Description</th>
+          <th>Default</th>
+        </tr>
+      </thead>
+      <tbody>
+          <tr class="doc-section-item">
+            <td>
+                <code>payload</code>
+            </td>
+            <td>
+                  <code><span title="typing.Any">Any</span></code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>The JSON-shaped tool output. Becomes <code>structuredContent</code>
+verbatim and is also rendered as the first content block.</p>
+              </div>
+            </td>
+            <td>
+                <em>required</em>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td>
+                <code>output_format</code>
+            </td>
+            <td>
+                  <code><a class="autorefs autorefs-internal" title="OutputFormat (rest_framework_mcp.constants.OutputFormat)" href="#rest_framework_mcp.constants.OutputFormat">OutputFormat</a></code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>How <code>content[0]</code> renders the payload. TOON output is
+wrapped in a fenced <code>toon</code> block with a leading marker line so
+clients that don't parse TOON natively can still display it.</p>
+              </div>
+            </td>
+            <td>
+                  <code><span title="rest_framework_mcp.constants.OutputFormat.JSON">JSON</span></code>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td>
+                <code>is_error</code>
+            </td>
+            <td>
+                  <code><span title="bool">bool</span></code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Stamped onto the result as <code>isError</code>.</p>
+              </div>
+            </td>
+            <td>
+                  <code>False</code>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td>
+                <code>include_structured_content</code>
+            </td>
+            <td>
+                  <code><span title="bool">bool</span></code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p><code>False</code> omits <code>structuredContent</code>. The
+text block still carries the full payload, so a client that doesn't
+consume the structured field loses nothing.</p>
+              </div>
+            </td>
+            <td>
+                  <code>True</code>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td>
+                <code>meta</code>
+            </td>
+            <td>
+                  <code><span title="dict">dict</span>[<span title="str">str</span>, <span title="typing.Any">Any</span>] | None</code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>The base protocol's <code>_meta</code> bundle on the <em>result envelope</em> —
+per-call, unlike the static <code>_meta</code> already advertised on the
+<code>tools/list</code> entry. Omitted from the payload when empty.</p>
+              </div>
+            </td>
+            <td>
+                  <code>None</code>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td>
+                <code>content_kind</code>
+            </td>
+            <td>
+                  <code><a class="autorefs autorefs-internal" title="ToolContentKind (rest_framework_mcp.constants.ToolContentKind)" href="../protocol/#rest_framework_mcp.constants.ToolContentKind">ToolContentKind</a></code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>The block type the binding declared. Anything other than
+<code>TEXT</code> bypasses <code>output_format</code> entirely — there is no TOON
+rendering of a PNG — and a payload that doesn't match the declared
+kind comes back as an <code>isError</code> result naming the binding.</p>
+              </div>
+            </td>
+            <td>
+                  <code><span title="rest_framework_mcp.constants.ToolContentKind.TEXT">TEXT</span></code>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td>
+                <code>content_mime_type</code>
+            </td>
+            <td>
+                  <code><span title="str">str</span> | None</code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Media type for a non-<code>TEXT</code> block.</p>
+              </div>
+            </td>
+            <td>
+                  <code>None</code>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td>
+                <code>binding_name</code>
+            </td>
+            <td>
+                  <code><span title="str">str</span> | None</code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Names the binding in that mismatch message.</p>
+              </div>
+            </td>
+            <td>
+                  <code>None</code>
+            </td>
+          </tr>
+      </tbody>
+    </table>
 
 
     </div>

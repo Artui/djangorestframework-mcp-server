@@ -550,6 +550,8 @@
       
         
       
+        
+      
     
     
     
@@ -1105,6 +1107,34 @@
   
   
     <li class="md-nav__item">
+      <a href="../pydantic-ai-client/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Connect a Pydantic-AI agent
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
       <a href="../migrating/" class="md-nav__link">
         
   
@@ -1496,11 +1526,15 @@
 
 
 <h1 id="multi-worker-sse-with-redis">Multi-worker SSE with Redis<a class="headerlink" href="#multi-worker-sse-with-redis" title="Permanent link">&para;</a></h1>
-<p>The default :class:<code>InMemorySSEBroker</code> works for single-process deployments —
+<p>The default
+<a class="autorefs autorefs-internal" title="InMemorySSEBroker" href="../../reference/registries/#rest_framework_mcp.transport.in_memory_sse_broker.InMemorySSEBroker"><code>InMemorySSEBroker</code></a>
+works for single-process deployments —
 one ASGI worker, one event loop, no fan-out concerns. Multi-worker setups
 need an out-of-process broker so any worker can deliver a <code>notify(...)</code> to
 whichever worker is holding the streaming GET.</p>
-<p>The shipped :class:<code>RedisSSEBroker</code> is the production answer.</p>
+<p>The shipped
+<a class="autorefs autorefs-internal" title="RedisSSEBroker" href="../../reference/registries/#rest_framework_mcp.transport.redis_sse_broker.RedisSSEBroker"><code>RedisSSEBroker</code></a>
+is the production answer.</p>
 <h2 id="install">Install<a class="headerlink" href="#install" title="Permanent link">&para;</a></h2>
 <div class="language-bash highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a>pip<span class="w"> </span>install<span class="w"> </span><span class="s2">&quot;djangorestframework-mcp-server[redis]&quot;</span>
 </span></code></pre></div>
@@ -1540,7 +1574,9 @@ every worker subscribes to the same channel.</p>
   subscriber's task on the original worker eventually unwinds (cancelled by
   <code>unsubscribe</code> or by Redis client shutdown).</li>
 <li><strong>Replay is opt-in.</strong> Messages published while no subscriber was attached
-  are dropped <em>unless</em> you configure an :class:<code>SSEReplayBuffer</code> — see
+  are dropped <em>unless</em> you configure an
+  <a class="autorefs autorefs-internal" title="SSEReplayBuffer" href="../../reference/registries/#rest_framework_mcp.transport.types.sse_replay_buffer.SSEReplayBuffer"><code>SSEReplayBuffer</code></a>
+  — see
   the <a href="../sse-replay-buffer/">Last-Event-ID resume recipe</a>.</li>
 <li><strong>Channel-prefix isolation.</strong> Pass <code>channel_prefix="env-staging"</code> (or
   similar) to keep dev / staging / prod traffic in the same Redis instance
@@ -1549,7 +1585,8 @@ every worker subscribes to the same channel.</p>
   lifespan shutdown — the broker doesn't own it.</li>
 </ul>
 <h2 id="custom-brokers">Custom brokers<a class="headerlink" href="#custom-brokers" title="Permanent link">&para;</a></h2>
-<p><code>RedisSSEBroker</code> is just a class that implements the :class:<code>SSEBroker</code>
+<p><code>RedisSSEBroker</code> is just a class that implements the
+<a class="autorefs autorefs-internal" title="SSEBroker" href="../../reference/registries/#rest_framework_mcp.transport.types.sse_broker.SSEBroker"><code>SSEBroker</code></a>
 Protocol (four methods: <code>subscribe</code>, <code>unsubscribe</code>, <code>publish</code>,
 <code>has_subscriber</code>). NATS-, Kafka-, RabbitMQ-backed brokers fit the same
 interface — just keep the single-subscriber-per-session contract.</p>

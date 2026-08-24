@@ -550,6 +550,8 @@
       
         
       
+        
+      
     
     
     
@@ -1116,6 +1118,34 @@
   
   
     <li class="md-nav__item">
+      <a href="../pydantic-ai-client/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Connect a Pydantic-AI agent
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
       <a href="../migrating/" class="md-nav__link">
         
   
@@ -1522,7 +1552,8 @@
 <a href="https://html.spec.whatwg.org/multipage/server-sent-events.html#last-event-id"><code>Last-Event-ID</code></a>
 header so clients that drop a streaming connection can reconnect and
 receive the events they missed. This is <strong>opt-in</strong>: pass an
-:class:<code>SSEReplayBuffer</code> to <code>MCPServer(sse_replay_buffer=...)</code> and every
+<a class="autorefs autorefs-internal" title="SSEReplayBuffer" href="../../reference/registries/#rest_framework_mcp.transport.types.sse_replay_buffer.SSEReplayBuffer"><code>SSEReplayBuffer</code></a>
+to <code>MCPServer(sse_replay_buffer=...)</code> and every
 event published via <code>await server.notify(...)</code> is recorded with a
 monotonic ID before fan-out, then replayed on the client's next GET if it
 arrives carrying <code>Last-Event-ID</code>.</p>

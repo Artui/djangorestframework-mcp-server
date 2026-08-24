@@ -1183,6 +1183,8 @@
       
         
       
+        
+      
     
     
     
@@ -1618,6 +1620,34 @@
     
   
     Register tools from a spec registry
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../recipes/pydantic-ai-client/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Connect a Pydantic-AI agent
   
 
     
@@ -2997,6 +3027,12 @@ re-implementing dispatch:</p>
 <div class="language-python highlight"><pre><span></span><code><span id="__span-9-1"><a id="__codelineno-9-1" name="__codelineno-9-1" href="#__codelineno-9-1"></a><span class="n">result</span> <span class="o">=</span> <span class="n">server</span><span class="o">.</span><span class="n">call_tool</span><span class="p">(</span><span class="s2">&quot;invoices.create&quot;</span><span class="p">,</span> <span class="p">{</span><span class="s2">&quot;number&quot;</span><span class="p">:</span> <span class="s2">&quot;A-1&quot;</span><span class="p">},</span> <span class="n">user</span><span class="o">=</span><span class="n">request</span><span class="o">.</span><span class="n">user</span><span class="p">)</span>
 </span><span id="__span-9-2"><a id="__codelineno-9-2" name="__codelineno-9-2" href="#__codelineno-9-2"></a><span class="n">result</span><span class="o">.</span><span class="n">structured_content</span>  <span class="c1"># the rendered payload</span>
 </span></code></pre></div>
+<p>An agent is the common case, and it has a shorter path still: this package's
+sister repo,
+<a href="https://artui.github.io/djangorestframework-pydantic-ai/"><code>djangorestframework-pydantic-ai</code></a>,
+exposes the same specs to a <code>pydantic_ai.Agent</code> directly. See
+<a href="../recipes/pydantic-ai-client/">Connect a Pydantic-AI agent</a> for that choice and
+for driving this server over the wire instead.</p>
 <p>It is built on <code>djangorestframework-services</code>' transport-neutral
 <code>dispatch_spec</code> / <code>render_spec_output</code> / <code>enforce_permissions</code>, so the
 spec-execution core (instance resolution, input validation, the
@@ -3299,10 +3335,10 @@ the same service runs unchanged over HTTP where nobody is listening.</p>
 <code>text/event-stream</code> carrying <code>notifications/progress</code> frames followed by the
 result; without it, a single JSON object as before — a stream whose only event
 is the final response costs a connection and buys nothing.</p>
-<p>⭐ <strong>Era-independent.</strong> <code>_meta.progressToken</code> sits in the same place in
+<p><strong>Era-independent.</strong> <code>_meta.progressToken</code> sits in the same place in
 <code>2025-11-25</code> and <code>2026-07-28</code>, so a legacy client gets streamed progress on
 exactly the same terms as a modern one.</p>
-<p>⚠ <strong>ASGI only, for <em>streamed</em> progress.</strong> A sync WSGI view cannot yield while
+<p><strong>ASGI only, for <em>streamed</em> progress.</strong> A sync WSGI view cannot yield while
 its dispatch is still running, so <code>server.urls</code> keeps answering
 <code>application/json</code>. That stays spec-legal — a single JSON object is always
 permitted. Use <code>server.async_urls</code> if you want progress on the wire mid-call.</p>
@@ -3332,7 +3368,7 @@ rather than to a stream, and the client polls for them.</p>
 </tr>
 <tr>
 <td>Closing the stream cancels</td>
-<td>Client disconnect <em>is</em> the cancellation signal in <code>2026-07-28</code>. ⚠ It cancels the await, not the work — a thread parked in a driver's socket read is not interruptible by asyncio, the same caveat <code>DISPATCH_TIMEOUT</code> carries.</td>
+<td>Client disconnect <em>is</em> the cancellation signal in <code>2026-07-28</code>. It cancels the await, not the work — a thread parked in a driver's socket read is not interruptible by asyncio, the same caveat <code>DISPATCH_TIMEOUT</code> carries.</td>
 </tr>
 </tbody>
 </table>
@@ -3355,7 +3391,7 @@ in the body.</p>
 </span><span id="__span-22-3"><a id="__codelineno-22-3" name="__codelineno-22-3" href="#__codelineno-22-3"></a><span class="w">     </span><span class="nt">&quot;resourceSubscriptions&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">[</span><span class="s2">&quot;invoices://42&quot;</span><span class="p">],</span>
 </span><span id="__span-22-4"><a id="__codelineno-22-4" name="__codelineno-22-4" href="#__codelineno-22-4"></a><span class="w">     </span><span class="nt">&quot;toolsListChanged&quot;</span><span class="p">:</span><span class="w"> </span><span class="kc">true</span><span class="p">}}}</span>
 </span></code></pre></div>
-<p>⚠ <strong>Every type is opt-in, and that is a MUST</strong>: the server must not send a
+<p><strong>Every type is opt-in, and that is a MUST</strong>: the server must not send a
 notification type the client did not ask for. So an absent field is a refusal,
 not a default — and a subscription that was granted <em>nothing</em> is acknowledged
 and then <strong>closed</strong>, rather than held open to deliver silence.</p>
@@ -3388,7 +3424,7 @@ delivers to nobody, and the failure looks exactly like "the resource never
 changed". <code>RedisSubscriptionBroker</code> (in the <code>[redis]</code> extra) is the
 deployable one.</p>
 </div>
-<p>⚠ <strong>A subscription occupies a worker for as long as it is open.</strong> One parked
+<p><strong>A subscription occupies a worker for as long as it is open.</strong> One parked
 ASGI task per subscriber — inherent to the wire format, since this method exists
 to replace the old GET endpoint. Two settings bound it:</p>
 <table>
@@ -3401,7 +3437,7 @@ to replace the old GET endpoint. Two settings bound it:</p>
 <tbody>
 <tr>
 <td><code>SUBSCRIPTION_MAX_SECONDS</code> (1 h)</td>
-<td>The server closes the stream gracefully and the client re-subscribes. ⚠ Also the <strong>re-authorization interval</strong>: a subscription's permissions are checked once, when it opens, so this is what stops a principal whose access was revoked from receiving change signals indefinitely.</td>
+<td>The server closes the stream gracefully and the client re-subscribes. Also the <strong>re-authorization interval</strong>: a subscription's permissions are checked once, when it opens, so this is what stops a principal whose access was revoked from receiving change signals indefinitely.</td>
 </tr>
 <tr>
 <td><code>MAX_CONCURRENT_SUBSCRIPTIONS</code> (100)</td>
@@ -3421,12 +3457,12 @@ fallback you have to implement anyway.</p>
 <p>A task is watchable only by the principal that created it: its status is as
 revealing as its result, since knowing someone else's export finished is knowing
 they ran one.</p>
-<p>⛔ <strong>One exception to "refused entries are dropped":</strong> a client asking for
+<p><strong>One exception to "refused entries are dropped":</strong> a client asking for
 <code>taskIds</code> without declaring the <code>io.modelcontextprotocol/tasks</code> extension gets a
 JSON-RPC error, not a quiet omission. The spec requires it, and it is not an
 existence oracle — the error turns on what the <em>client</em> declared, not on
 anything about the tasks it named.</p>
-<p>⛔ <code>notifications/progress</code> and <code>notifications/message</code> are <strong>MUST NOT</strong> on this
+<p><code>notifications/progress</code> and <code>notifications/message</code> are <strong>MUST NOT</strong> on this
 stream. Progress for a task is the task's own status; the progress channel
 belongs to the request-scoped stream, which a task by definition outlived.</p>
 <h3 id="publishing-a-change">Publishing a change<a class="headerlink" href="#publishing-a-change" title="Permanent link">&para;</a></h3>
@@ -3443,7 +3479,7 @@ against the result merged with the call's arguments (<strong>result wins</strong
 write it is authoritative; the arguments cover a delete, whose result carries
 nothing). Publishing happens <strong>after the transaction commits</strong>, and a call that
 came back <code>isError</code> publishes nothing.</p>
-<p>⚠ <strong>Its boundary is real, and is why the explicit trigger exists too.</strong> It fires
+<p><strong>Its boundary is real, and is why the explicit trigger exists too.</strong> It fires
 for calls that go through this server and for nothing else — a management
 command, a Celery job or an admin edit changes the same rows and announces
 nothing. For those:</p>
@@ -3453,11 +3489,11 @@ nothing. For those:</p>
 </span><span id="__span-26-4"><a id="__codelineno-26-4" name="__codelineno-26-4" href="#__codelineno-26-4"></a>    <span class="k">lambda</span><span class="p">:</span> <span class="n">async_to_sync</span><span class="p">(</span><span class="n">server</span><span class="o">.</span><span class="n">notify_resource_updated</span><span class="p">)(</span><span class="sa">f</span><span class="s2">&quot;invoices://</span><span class="si">{</span><span class="n">invoice</span><span class="o">.</span><span class="n">pk</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
 </span><span id="__span-26-5"><a id="__codelineno-26-5" name="__codelineno-26-5" href="#__codelineno-26-5"></a><span class="p">)</span>
 </span></code></pre></div>
-<p>⚠ <strong>Publish after the transaction commits.</strong> Inside <code>transaction.atomic()</code> you
+<p><strong>Publish after the transaction commits.</strong> Inside <code>transaction.atomic()</code> you
 would be announcing a change that may still roll back, and a subscriber that
 re-reads immediately sees the old value — worse than no notification at all.
 <code>invalidates=</code> does this for you; <code>notify_resource_updated</code> is yours to place.</p>
-<p>⚠ <strong>Matching is exact, not by prefix.</strong> Publish the concrete URI <em>and</em> the
+<p><strong>Matching is exact, not by prefix.</strong> Publish the concrete URI <em>and</em> the
 collection URI if you want watchers of the collection to hear about it. A prefix
 rule would match <code>invoices://1</code> against <code>invoices://11</code> and would miss a
 tenant-scoped scheme entirely, so the publisher says what it means instead.</p>
@@ -3559,7 +3595,7 @@ running it inline would only hit the dispatch deadline.</p>
 <p>Then <code>tasks/get</code> until <code>completed</code> / <code>failed</code> / <code>cancelled</code>, honouring
 <code>pollIntervalMs</code>. <code>tasks/cancel</code> signals intent to stop; <code>tasks/update</code> answers
 a task that is parked on <code>input_required</code>.</p>
-<p>⚠ <strong><code>Mcp-Name</code> must carry the <code>taskId</code></strong> on all three methods — the extension
+<p><strong><code>Mcp-Name</code> must carry the <code>taskId</code></strong> on all three methods — the extension
 requires it so a gateway can route a follow-up to the instance holding the
 task's state. A mismatch is <code>-32020</code>, exactly as for <code>tools/call</code>.</p>
 <h3 id="progress-from-inside-a-task">Progress from inside a task<a class="headerlink" href="#progress-from-inside-a-task" title="Permanent link">&para;</a></h3>
@@ -3573,7 +3609,7 @@ connection to stream on — so the reports land on the task record instead, and
 the client reads them from the <code>statusMessage</code> it was already polling:</p>
 <div class="language-json highlight"><pre><span></span><code><span id="__span-31-1"><a id="__codelineno-31-1" name="__codelineno-31-1" href="#__codelineno-31-1"></a><span class="p">{</span><span class="nt">&quot;taskId&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;…&quot;</span><span class="p">,</span><span class="w"> </span><span class="nt">&quot;status&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;working&quot;</span><span class="p">,</span><span class="w"> </span><span class="nt">&quot;statusMessage&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;Exporting (142/500)&quot;</span><span class="p">}</span>
 </span></code></pre></div>
-<p>⭐ <strong>This is what makes <code>progress</code> worth declaring at all under the task
+<p><strong>This is what makes <code>progress</code> worth declaring at all under the task
 model.</strong> Without it the seed is live-connection-only, and the operations most
 in need of progress — the ones promoted to tasks <em>because</em> they run long — are
 exactly the ones it would silently do nothing for. Nothing about the service,
@@ -3675,7 +3711,7 @@ anything else a caller sent.</p>
 </span><span id="__span-33-8"><a id="__codelineno-33-8" name="__codelineno-33-8" href="#__codelineno-33-8"></a><span class="w">                                  </span><span class="nt">&quot;required&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">[</span><span class="s2">&quot;confirmed&quot;</span><span class="p">]}}}},</span>
 </span><span id="__span-33-9"><a id="__codelineno-33-9" name="__codelineno-33-9" href="#__codelineno-33-9"></a><span class="w"> </span><span class="nt">&quot;requestState&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;…&quot;</span><span class="p">}</span>
 </span></code></pre></div>
-<p>⚠ <strong>This is a success, not an error.</strong> <code>input_required</code> is a second legal shape
+<p><strong>This is a success, not an error.</strong> <code>input_required</code> is a second legal shape
 for a <code>tools/call</code> result, inside a <code>200</code>, and a client that treats a non-<code>complete</code>
 <code>resultType</code> as a failure will never retry.</p>
 <p>The client collects the input and <strong>retries the original call</strong> — a new request,
@@ -3685,7 +3721,7 @@ a new JSON-RPC id — carrying <code>inputResponses</code> and the <code>request
 </span><span id="__span-34-3"><a id="__codelineno-34-3" name="__codelineno-34-3" href="#__codelineno-34-3"></a><span class="w">                                        </span><span class="nt">&quot;content&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">{</span><span class="nt">&quot;confirmed&quot;</span><span class="p">:</span><span class="w"> </span><span class="kc">true</span><span class="p">}}},</span>
 </span><span id="__span-34-4"><a id="__codelineno-34-4" name="__codelineno-34-4" href="#__codelineno-34-4"></a><span class="w"> </span><span class="nt">&quot;requestState&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;…&quot;</span><span class="p">}</span>
 </span></code></pre></div>
-<p>⭐ <strong>Nothing is held between the two requests.</strong> That is the point of the pattern
+<p><strong>Nothing is held between the two requests.</strong> That is the point of the pattern
 — it replaced server-initiated requests precisely so the retry can land on a
 different process, behind a load balancer that knows nothing about the first one.
 The service is not resumed; it <strong>runs again from the top</strong>, with the answer
@@ -3742,6 +3778,9 @@ result carrying the service's message <strong>and the schema</strong>:</p>
 <p>A model reading that can simply pass <code>confirmed: true</code> on its next call, which
 is the same outcome by a shorter route. This is what a legacy-era client sees, a
 URL-only client, and a task worker replaying a call with nobody at the other end.</p>
+<p>Which of the two a real client gets is decided by its MCP SDK, not by anything
+you configure — <a href="../recipes/pydantic-ai-client/">Connect a Pydantic-AI agent</a>
+names the versions where the question is asked and where it degrades.</p>
 <h3 id="boundaries">Boundaries<a class="headerlink" href="#boundaries" title="Permanent link">&para;</a></h3>
 <table>
 <thead>
@@ -3753,7 +3792,7 @@ URL-only client, and a task worker replaying a call with nobody at the other end
 <tbody>
 <tr>
 <td>Service tools only</td>
-<td>⛔ A <strong>chain</strong> tool degrades instead of asking. MRTR completes a call by re-running it, and a chain that asked at step three would run steps one and two twice on the retry. A <strong>selector</strong> is a read — one that needs the user to decide something is a tool wearing the wrong registration.</td>
+<td>A <strong>chain</strong> tool degrades instead of asking. MRTR completes a call by re-running it, and a chain that asked at step three would run steps one and two twice on the retry. A <strong>selector</strong> is a read — one that needs the user to decide something is a tool wearing the wrong registration.</td>
 </tr>
 <tr>
 <td>Form mode only</td>
@@ -3769,7 +3808,7 @@ URL-only client, and a task worker replaying a call with nobody at the other end
 </tr>
 <tr>
 <td>Sampling and roots</td>
-<td>⛔ Not built. Both are <strong>Deprecated</strong> as of <code>2026-07-28</code>; elicitation is the only input worth asking for.</td>
+<td>Not built. Both are <strong>Deprecated</strong> as of <code>2026-07-28</code>; elicitation is the only input worth asking for.</td>
 </tr>
 </tbody>
 </table>
@@ -3854,7 +3893,7 @@ describes a notification that leaves through <code>subscriptions/listen</code>, 
 legacy <code>initialize</code> is told about neither, however the server is configured
 — and <code>server/discover</code>, which both eras may call, answers according to the
 version the caller declared.</p>
-<p>⛔ <strong><code>resources/subscribe</code> is deliberately not implemented.</strong> It is optional
+<p><strong><code>resources/subscribe</code> is deliberately not implemented.</strong> It is optional
 in <code>2025-11-25</code> and gone from <code>2026-07-28</code>, where the schema says
 <code>SubscriptionFilter.resourceSubscriptions</code> <em>"replaces the former <code>resources/subscribe</code>
 RPC"</em> — which this server does implement. Building the legacy RPC would mean

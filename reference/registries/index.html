@@ -548,6 +548,8 @@
       
         
       
+        
+      
     
     
     
@@ -983,6 +985,34 @@
     
   
     Register tools from a spec registry
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../recipes/pydantic-ai-client/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Connect a Pydantic-AI agent
   
 
     
@@ -4318,14 +4348,14 @@ via an <code>OrderingFilter</code>); the deprecated <code>ordering_fields</code>
 
 
         <p>All wiring for a single MCP tool, derived from a <code>ServiceSpec</code>.</p>
-<p>A tool is the projection of a service callable plus its declared input
-and output serializers. The MCP server invokes <code>spec.service</code> directly
-via <code>resolve_callable_kwargs</code> + <code>run_service</code> — there is no view or
-viewset in the dispatch path.</p>
-<p>The <code>Generic[InputT, ResultT, ExtraT]</code> parameters mirror
-<code>ServiceSpec</code>'s generics and are purely informational for type
-checkers. They default to <code>Any</code> when omitted, so existing call sites
-keep working unchanged.</p>
+<p>A tool is the projection of a service callable plus its declared input and
+output serializers. The MCP server invokes <code>spec.service</code> directly via
+<code>resolve_callable_kwargs</code> + <code>run_service</code> — there is no view or viewset
+in the dispatch path.</p>
+<p><code>annotations</code> and <code>meta</code> are emitted verbatim on this tool's
+<code>tools/list</code> entry, under <code>annotations</code> and <code>_meta</code> respectively.</p>
+<p>The generic parameters mirror <code>ServiceSpec</code>'s and are purely
+informational for type checkers, defaulting to <code>Any</code> when omitted.</p>
 
 
 
@@ -4364,9 +4394,8 @@ keep working unchanged.</p>
 
     <div class="doc doc-contents ">
 
-        <p>Consumer-only label — <strong>never emitted on the MCP wire</strong> (<code>tools/list</code>
-ignores it). Provided so a downstream library can render a richer label
-than the protocol <code>title</code>. <code>None</code> means "unset".</p>
+        <p>Consumer-only label, <strong>never emitted on the MCP wire</strong>, so a downstream
+library can render a richer label than the protocol <code>title</code>.</p>
 
     </div>
 
@@ -4391,9 +4420,8 @@ than the protocol <code>title</code>. <code>None</code> means "unset".</p>
 
     <div class="doc doc-contents ">
 
-        <p>Consumer-only blurb, the sibling of :attr:<code>display_name</code> — also never
-emitted on the MCP wire. Lets a downstream library show more than the
-protocol <code>description</code>. <code>None</code> means "unset".</p>
+        <p>Consumer-only blurb, the sibling of <code>display_name</code> and likewise
+never emitted on the MCP wire.</p>
 
     </div>
 
@@ -4418,8 +4446,8 @@ protocol <code>description</code>. <code>None</code> means "unset".</p>
 
     <div class="doc doc-contents ">
 
-        <p>Display icons for this entry, emitted in its listing. Purely
-presentational — a client renders them; nothing in dispatch reads them.</p>
+        <p>Display icons, emitted in this tool's listing entry. Purely
+presentational; nothing in dispatch reads them.</p>
 
     </div>
 
@@ -4444,10 +4472,9 @@ presentational — a client renders them; nothing in dispatch reads them.</p>
 
     <div class="doc doc-contents ">
 
-        <p>Tri-state override for whether this tool's <code>tools/call</code> response
-includes a <code>structuredContent</code> field. <code>None</code> (the default) defers to the
-<code>INCLUDE_STRUCTURED_CONTENT</code> setting; <code>True</code> / <code>False</code> force the
-behaviour regardless of the global.</p>
+        <p>Whether this tool's <code>tools/call</code> response carries
+<code>structuredContent</code>. <code>None</code> defers to the
+<code>INCLUDE_STRUCTURED_CONTENT</code> setting.</p>
 
     </div>
 
@@ -4472,13 +4499,11 @@ behaviour regardless of the global.</p>
 
     <div class="doc doc-contents ">
 
-        <p>Tri-state override for whether this tool's <code>tools/list</code> entry carries
-an <code>outputSchema</code>. <code>None</code> (the default) defers to the
-<code>INCLUDE_OUTPUT_SCHEMA</code> setting; <code>True</code> / <code>False</code> force the behaviour
-regardless of the global.</p>
+        <p>Whether this tool's <code>tools/list</code> entry carries an <code>outputSchema</code>.
+<code>None</code> defers to the <code>INCLUDE_OUTPUT_SCHEMA</code> setting.</p>
 <p>The MCP spec forbids advertising <code>outputSchema</code> while suppressing
-<code>structuredContent</code>, so <code>include_output_schema=True</code> together with
-<code>include_structured_content=False</code> is rejected at construction time.</p>
+<code>structuredContent</code>, so <code>True</code> together with
+<code>include_structured_content=False</code> is rejected at construction.</p>
 
     </div>
 
@@ -4503,12 +4528,10 @@ regardless of the global.</p>
 
     <div class="doc doc-contents ">
 
-        <p>Per-tool override for the outbound result ceiling. <code>UNSET</code> (the
-default) defers to the server's <code>MAX_RESULT_BYTES</code>; <code>None</code> disables the
-check for this tool; an <code>int</code> sets its own ceiling.</p>
-<p><code>None</code> cannot double as "not supplied" here — disabling the ceiling for
-one deliberately-large export tool is a real thing to want — which is why
-this is <code>UNSET</code>-sentinelled rather than tri-state like the fields above.</p>
+        <p>Per-tool outbound result ceiling. <code>UNSET</code> defers to the server's
+<code>MAX_RESULT_BYTES</code>, <code>None</code> disables the check for this tool, an <code>int</code>
+sets its own. Sentinelled rather than tri-state because <code>None</code> here means
+"no ceiling", which a deliberately-large export tool genuinely wants.</p>
 
     </div>
 
@@ -4533,10 +4556,9 @@ this is <code>UNSET</code>-sentinelled rather than tri-state like the fields abo
 
     <div class="doc doc-contents ">
 
-        <p>Per-tool override for the dispatch deadline, in seconds. <code>UNSET</code>
-defers to the server's <code>DISPATCH_TIMEOUT</code>; <code>None</code> disables it for this
-tool; a number sets its own. ⚠ Async transport only — see
-:attr:<code>~rest_framework_mcp.config.types.mcp_config.MCPConfig.dispatch_timeout</code>.</p>
+        <p>Per-tool dispatch deadline, in seconds. <code>UNSET</code> defers to the server's
+<code>DISPATCH_TIMEOUT</code>, <code>None</code> disables it here. Async transport only — see
+<code>dispatch_timeout</code>.</p>
 
     </div>
 
@@ -4561,9 +4583,9 @@ tool; a number sets its own. ⚠ Async transport only — see
 
     <div class="doc doc-contents ">
 
-        <p>How MCP <code>arguments</code> flow into the kwarg pool. Defaults to <code>BUNDLE</code>
-for service tools: mutation services typically take a single
-<code>input_serializer</code>-validated <code>data</code> payload, so spreading the dict as
+        <p>How MCP <code>arguments</code> flow into the kwarg pool. <code>BUNDLE</code> for service
+tools, because a mutation service typically takes one
+<code>input_serializer</code>-validated <code>data</code> payload and spreading the dict as
 top-level kwargs would conflict with that shape.</p>
 
     </div>
@@ -4592,15 +4614,14 @@ top-level kwargs would conflict with that shape.</p>
         <p>How unknown <code>arguments</code> keys are handled relative to the binding's
 <code>inputSchema</code>.</p>
 <ul>
-<li><code>REJECT</code> (default) rejects unknown keys with <code>-32602</code> and advertises
-  <code>additionalProperties: false</code> — but <strong>only</strong> when there is an
-  <code>input_serializer</code> to validate against. A serializer-less binding has no
-  declared field set, so <code>REJECT</code> can't fire and its schema stays open
-  (<code>additionalProperties: true</code>).</li>
-<li><code>PASSTHROUGH</code> advertises <code>additionalProperties: true</code> and merges
-  unknown keys into the validated payload.</li>
-<li><code>IGNORE</code> advertises <code>additionalProperties: true</code> and silently drops
-  them.</li>
+<li><code>REJECT</code> (default) answers <code>-32602</code> and advertises
+  <code>additionalProperties: false</code> — but <strong>only</strong> with an
+  <code>input_serializer</code> to validate against. A serializer-less binding has
+  no declared field set, so <code>REJECT</code> cannot fire and its schema stays
+  open.</li>
+<li><code>PASSTHROUGH</code> advertises an open schema and merges unknown keys into
+  the validated payload.</li>
+<li><code>IGNORE</code> advertises an open schema and drops them.</li>
 </ul>
 
     </div>
@@ -4626,11 +4647,10 @@ top-level kwargs would conflict with that shape.</p>
 
     <div class="doc doc-contents ">
 
-        <p>Opt this binding back into listings it would otherwise be filtered out
-of. When <code>FILTER_LISTINGS_BY_PERMISSIONS</code> is enabled, a binding is
-normally dropped from <code>tools/list</code> if any of its <code>permissions</code> deny the
-caller; <code>True</code> keeps it visible — useful as a discovery aid for admin
-tools the caller can see but not invoke (<code>tools/call</code> still 403s).</p>
+        <p>Keep this binding in <code>tools/list</code> even when
+<code>FILTER_LISTINGS_BY_PERMISSIONS</code> would drop it because its
+<code>permissions</code> deny the caller. A discovery aid for tools the caller can
+see but not invoke — <code>tools/call</code> still 403s.</p>
 
     </div>
 
@@ -4659,7 +4679,7 @@ tools the caller can see but not invoke (<code>tools/call</code> still 403s).</p
 <p>Popped from the caller's arguments like a URL kwarg, but landing in the
 synthetic request's <code>GET</code> rather than <code>view.kwargs</code> — the channel a
 serializer reads when it branches on the query string. A <code>filter_set</code>
-field is <strong>not</strong> one of these; see <code>split_query_params</code>.</p>
+field is <strong>not</strong> one of these.</p>
 
     </div>
 
@@ -4685,11 +4705,15 @@ field is <strong>not</strong> one of these; see <code>split_query_params</code>.
     <div class="doc doc-contents ">
 
         <p>URL-derived values the model supplies as tool args, seeded into the
-off-HTTP view's <code>kwargs</code> rather than reaching the service as ordinary
-params — from there drf-services spreads them into the dispatch pools, so a
-scoping <code>spec.kwargs</code> provider reading <code>view.kwargs</code> sees them. See
-:class:<code>UrlKwarg</code>. Advertised in the <code>inputSchema</code> and stripped from the
-dispatched params.</p>
+off-HTTP view's <code>kwargs</code> instead of reaching the service as ordinary
+params, so a scoping <code>spec.kwargs</code> provider reading <code>view.kwargs</code> sees
+them. Advertised in the <code>inputSchema</code> and stripped from the dispatched
+params. See <a class="autorefs autorefs-internal" title="UrlKwarg
+
+
+  
+      dataclass
+  " href="#rest_framework_services.types.url_kwarg.UrlKwarg"><code>UrlKwarg</code></a>.</p>
 
     </div>
 
@@ -4714,10 +4738,10 @@ dispatched params.</p>
 
     <div class="doc doc-contents ">
 
-        <p>What this tool's payload becomes in the result's <code>content</code> array.
-<code>TEXT</code> (the default) renders JSON per :attr:<code>output_format</code>; the other
-kinds project the payload into an image / audio / resource-link block.
-See :class:<code>ToolContentKind</code>.</p>
+        <p>What this tool's payload becomes in the result's <code>content</code> array. <code>TEXT</code>
+renders JSON per <code>output_format</code>; the other kinds project it into an image / audio
+/ resource-link block. See
+<a class="autorefs autorefs-internal" title="ToolContentKind" href="../protocol/#rest_framework_mcp.constants.ToolContentKind"><code>ToolContentKind</code></a>.</p>
 
     </div>
 
@@ -4742,9 +4766,9 @@ See :class:<code>ToolContentKind</code>.</p>
 
     <div class="doc doc-contents ">
 
-        <p>The media type for an <code>IMAGE</code> / <code>AUDIO</code> :attr:<code>content_kind</code>.
-Required for those and meaningless for the rest — a resource link
-carries its own <code>mimeType</code> per entry.</p>
+        <p>The media type for an <code>IMAGE</code> / <code>AUDIO</code> <code>content_kind</code>.
+Required for those and meaningless for the rest — a resource link carries
+its own <code>mimeType</code> per entry.</p>
 
     </div>
 
@@ -4769,11 +4793,10 @@ carries its own <code>mimeType</code> per entry.</p>
 
     <div class="doc doc-contents ">
 
-        <p>Whether calling this tool hands back a task handle instead of a result.</p>
-<p><code>FORBIDDEN</code> by default, so nothing changes for a tool registered before
-tasks existed. See :class:<code>TaskPolicy</code> — and note that the choice lives
-here, on the binding, because the extension makes the <em>server</em> the sole
-decider and gives the client no way to ask.</p>
+        <p>Whether calling this tool hands back a task handle instead of a result.
+The choice lives on the binding because the extension makes the <em>server</em>
+the sole decider and gives the client no way to ask. See
+<a class="autorefs autorefs-internal" title="TaskPolicy" href="../protocol/#rest_framework_mcp.constants.TaskPolicy"><code>TaskPolicy</code></a>.</p>
 
     </div>
 
@@ -4799,21 +4822,18 @@ decider and gives the client no way to ask.</p>
     <div class="doc doc-contents ">
 
         <p>URI templates naming the resources a successful call changed.</p>
-<p>Published as <code>notifications/resources/updated</code> after the transaction
-commits, so subscribers re-read. Uses the same <code>{var}</code> syntax as a
-resource's <code>uri_template</code>, rendered against the result merged with the
-call's arguments::</p>
+<p>Published as <code>notifications/resources/updated</code> once the transaction
+commits, so subscribers re-read. Same <code>{var}</code> syntax as a resource's
+<code>uri_template</code>, rendered against the result merged with the call's
+arguments:</p>
 <div class="language-text highlight"><pre><span></span><code>invalidates=(&quot;invoices://{pk}&quot;, &quot;invoices://&quot;)
 </code></pre></div>
-<p>⚠ <strong>Name the collection too if you want it watched.</strong> Topic matching is
-exact — a prefix rule would match <code>invoices://1</code> against <code>invoices://11</code>
-and miss a tenant-scoped scheme entirely — so a client watching
-<code>invoices://</code> hears nothing unless the write says so.</p>
-<p>⚠ <strong>Its boundary is real:</strong> this fires for calls that go through this
-server and for nothing else. A management command, a Celery job or an admin
-edit changes the same rows and publishes nothing, which is why
-<code>MCPServer.notify_resource_updated</code> exists rather than being an
-afterthought.</p>
+<p><strong>Name the collection too if you want it watched.</strong> Topic matching is
+exact — a prefix rule would match <code>invoices://1</code> against
+<code>invoices://11</code> and miss a tenant-scoped scheme entirely.</p>
+<p>Only calls that go through this server fire it. A management command, a
+Celery job or an admin edit changes the same rows and publishes nothing;
+<code>MCPServer.notify_resource_updated</code> covers those.</p>
 
     </div>
 
@@ -4851,34 +4871,43 @@ afterthought.</p>
 
 
 
-        <p>All wiring for a single MCP <strong>read-shaped</strong> tool, derived from a <code>SelectorSpec</code>.</p>
-<p>Mirrors :class:<code>ToolBinding</code> (which wraps a <code>ServiceSpec</code> for
-mutations), but the dispatch pipeline is read-shaped. The shape is
-chosen by :attr:<code>kind</code>:</p>
+        <p>All wiring for a single MCP <strong>read-shaped</strong> tool, from a <code>SelectorSpec</code>.</p>
+<p>The read-shaped mirror of
+<a class="autorefs autorefs-internal" title="ToolBinding
+
+
+  
+      dataclass
+  " href="#rest_framework_mcp.registry.types.tool_binding.ToolBinding"><code>ToolBinding</code></a>.
+Selectors return raw, unscoped data and the tool layer owns every shape decision,
+chosen by <code>kind</code>.</p>
 <p><code>kind=LIST</code> runs the full pipeline:</p>
-<p>.. code-block:: text</p>
-<div class="language-text highlight"><pre><span></span><code>arguments → validate(merged inputSchema) → run_selector
-          → FilterSet(data=...).qs    (if ``filter_set`` set)
-          → order_by(...)             (if ``ordering_fields`` set)
-          → paginate                  (if ``paginate=True``)
-          → output_serializer(many=True)
-          → ToolResult
-</code></pre></div>
-<p><code>kind=RETRIEVE</code> skips ordering / pagination but still applies
-queryset shaping + <code>spec.filter_set</code> before materializing the
-single instance via <code>.first()</code> (so a "stats from a filtered set"
-retrieve works, matching the sister repo's <code>dispatch_spec</code>), then
-renders <code>output_serializer(many=False)</code>. Combining <code>RETRIEVE</code>
-with <code>ordering_fields</code> / <code>paginate</code> is rejected at construction
-(those knobs only make sense on a collection).</p>
-<p>Selectors return raw, unscoped data (a queryset for <code>LIST</code>, a
-single instance for <code>RETRIEVE</code>) — the tool layer owns shape
-decisions. A <code>LIST</code> binding with none of <code>filter_set</code> /
-<code>ordering_fields</code> / <code>paginate</code> set behaves like a plain RPC
-read that calls the selector and renders its return value verbatim.</p>
-<p>The <code>Generic[InputT, ResultT, ExtraT]</code> parameters mirror
-<code>SelectorSpec</code>'s generics and are purely informational for type
-checkers.</p>
+<div class="language-text highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a>arguments → validate(merged inputSchema) → run_selector
+</span><span id="__span-0-2"><a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a>          → FilterSet(data=...).qs    (if ``filter_set`` set)
+</span><span id="__span-0-3"><a id="__codelineno-0-3" name="__codelineno-0-3" href="#__codelineno-0-3"></a>          → order_by(...)             (if ``ordering_fields`` set)
+</span><span id="__span-0-4"><a id="__codelineno-0-4" name="__codelineno-0-4" href="#__codelineno-0-4"></a>          → paginate                  (if ``paginate=True``)
+</span><span id="__span-0-5"><a id="__codelineno-0-5" name="__codelineno-0-5" href="#__codelineno-0-5"></a>          → output_serializer(many=True)
+</span><span id="__span-0-6"><a id="__codelineno-0-6" name="__codelineno-0-6" href="#__codelineno-0-6"></a>          → ToolResult
+</span></code></pre></div>
+<p>With none of the three set it behaves as a plain RPC read, rendering the
+selector's return value verbatim.</p>
+<p><code>kind=RETRIEVE</code> skips ordering and pagination but still applies queryset
+shaping and <code>spec.filter_set</code> before materializing the instance via
+<code>.first()</code> — so a "stats from a filtered set" retrieve works — then
+renders <code>output_serializer(many=False)</code>. Pairing it with
+<code>ordering_fields</code> / <code>paginate</code> is rejected at construction: those knobs
+only mean something on a collection.</p>
+<p><code>paginate=True</code> generates <code>page</code> / <code>limit</code> arguments, slices the
+queryset and wraps the response with <code>items</code> / <code>page</code> / <code>totalPages</code>
+/ <code>hasNext</code>. <code>ordering_fields</code> is <strong>deprecated</strong>: it exposes each name
+as <code>"&lt;name&gt;"</code> and <code>"-&lt;name&gt;"</code> and hands raw ORM paths to
+<code>.order_by()</code>, a second vocabulary for the same <code>ordering</code> argument a
+<code>FilterSet</code>'s <code>OrderingFilter</code> already advertises. Declaring both is
+refused; declaring it alone still works for a spec with no <code>filter_set</code>.</p>
+<p><code>annotations</code> and <code>meta</code> are emitted verbatim on this tool's
+<code>tools/list</code> entry, under <code>annotations</code> and <code>_meta</code> respectively.</p>
+<p>The generic parameters mirror <code>SelectorSpec</code>'s and are purely
+informational for type checkers.</p>
 
 
 
@@ -4917,9 +4946,8 @@ checkers.</p>
 
     <div class="doc doc-contents ">
 
-        <p>Consumer-only label — <strong>never emitted on the MCP wire</strong> (<code>tools/list</code>
-ignores it). Provided so a downstream library can render a richer label
-than the protocol <code>title</code>. <code>None</code> means "unset".</p>
+        <p>Consumer-only label, <strong>never emitted on the MCP wire</strong>, so a downstream
+library can render a richer label than the protocol <code>title</code>.</p>
 
     </div>
 
@@ -4944,9 +4972,8 @@ than the protocol <code>title</code>. <code>None</code> means "unset".</p>
 
     <div class="doc doc-contents ">
 
-        <p>Consumer-only blurb, the sibling of :attr:<code>display_name</code> — also never
-emitted on the MCP wire. Lets a downstream library show more than the
-protocol <code>description</code>. <code>None</code> means "unset".</p>
+        <p>Consumer-only blurb, the sibling of <code>display_name</code> and likewise
+never emitted on the MCP wire.</p>
 
     </div>
 
@@ -4972,11 +4999,11 @@ protocol <code>description</code>. <code>None</code> means "unset".</p>
     <div class="doc doc-contents ">
 
         <p>Custom non-filter tool arguments, declared MCP-side.</p>
-<p><code>SelectorSpec</code> carries no input serializer of its own — a selector only
-describes how to fetch, and the HTTP transport validates the URL / query
-separately. MCP has no such split (every tool call is one JSON
-<code>arguments</code> dict), so arguments that aren't filter / ordering /
-pagination knobs are declared here.</p>
+<p><code>SelectorSpec</code> carries no input serializer of its own: a selector only
+describes how to fetch, and the HTTP transport validates the URL and query
+separately. MCP has no such split — every tool call is one <code>arguments</code>
+dict — so arguments that are not filter / ordering / pagination knobs are
+declared here.</p>
 
     </div>
 
@@ -5001,8 +5028,8 @@ pagination knobs are declared here.</p>
 
     <div class="doc doc-contents ">
 
-        <p>Display icons for this entry, emitted in its listing. Purely
-presentational — a client renders them; nothing in dispatch reads them.</p>
+        <p>Display icons, emitted in this tool's listing entry. Purely
+presentational; nothing in dispatch reads them.</p>
 
     </div>
 
@@ -5027,10 +5054,9 @@ presentational — a client renders them; nothing in dispatch reads them.</p>
 
     <div class="doc doc-contents ">
 
-        <p>Tri-state override for whether this tool's <code>tools/call</code> response
-includes a <code>structuredContent</code> field. <code>None</code> (the default) defers to the
-<code>INCLUDE_STRUCTURED_CONTENT</code> setting; <code>True</code> / <code>False</code> force the
-behaviour regardless of the global.</p>
+        <p>Whether this tool's <code>tools/call</code> response carries
+<code>structuredContent</code>. <code>None</code> defers to the
+<code>INCLUDE_STRUCTURED_CONTENT</code> setting.</p>
 
     </div>
 
@@ -5055,13 +5081,11 @@ behaviour regardless of the global.</p>
 
     <div class="doc doc-contents ">
 
-        <p>Tri-state override for whether this tool's <code>tools/list</code> entry carries
-an <code>outputSchema</code>. <code>None</code> (the default) defers to the
-<code>INCLUDE_OUTPUT_SCHEMA</code> setting; <code>True</code> / <code>False</code> force the behaviour
-regardless of the global.</p>
+        <p>Whether this tool's <code>tools/list</code> entry carries an <code>outputSchema</code>.
+<code>None</code> defers to the <code>INCLUDE_OUTPUT_SCHEMA</code> setting.</p>
 <p>The MCP spec forbids advertising <code>outputSchema</code> while suppressing
-<code>structuredContent</code>, so <code>include_output_schema=True</code> together with
-<code>include_structured_content=False</code> is rejected at construction time.</p>
+<code>structuredContent</code>, so <code>True</code> together with
+<code>include_structured_content=False</code> is rejected at construction.</p>
 
     </div>
 
@@ -5086,9 +5110,8 @@ regardless of the global.</p>
 
     <div class="doc doc-contents ">
 
-        <p>Per-tool override for the outbound result ceiling. <code>UNSET</code> defers to
-the server's <code>MAX_RESULT_BYTES</code>; <code>None</code> disables it here; an <code>int</code>
-sets its own.</p>
+        <p>Per-tool outbound result ceiling. <code>UNSET</code> defers to the server's
+<code>MAX_RESULT_BYTES</code>, <code>None</code> disables it here, an <code>int</code> sets its own.</p>
 
     </div>
 
@@ -5113,9 +5136,8 @@ sets its own.</p>
 
     <div class="doc doc-contents ">
 
-        <p>Per-tool override for the dispatch deadline, in seconds. <code>UNSET</code>
-defers to the server's <code>DISPATCH_TIMEOUT</code>; <code>None</code> disables it here.
-⚠ Async transport only.</p>
+        <p>Per-tool dispatch deadline, in seconds. <code>UNSET</code> defers to the server's
+<code>DISPATCH_TIMEOUT</code>, <code>None</code> disables it here. Async transport only.</p>
 
     </div>
 
@@ -5141,12 +5163,11 @@ defers to the server's <code>DISPATCH_TIMEOUT</code>; <code>None</code> disables
     <div class="doc doc-contents ">
 
         <p>Per-tool ceiling on the model-supplied <code>limit</code>. <code>UNSET</code> defers to the
-server's <code>MAX_PAGE_SIZE</code>; <code>None</code> lets this tool serve any <code>limit</code> the
-model asks for; an <code>int</code> sets its own.</p>
-<p>Only meaningful with <code>paginate=True</code> — an unpaginated selector has no
-<code>limit</code> argument to clamp, and clamping its result silently would drop
-rows with nothing in the payload to say so (see
-<code>UnboundedListWarning</code>).</p>
+server's <code>MAX_PAGE_SIZE</code>, <code>None</code> serves any <code>limit</code> the model asks
+for.</p>
+<p>Only meaningful with <code>paginate=True</code>: an unpaginated selector has no
+<code>limit</code> to clamp, and clamping its result would drop rows with nothing in
+the payload to say so (see <code>UnboundedListWarning</code>).</p>
 
     </div>
 
@@ -5171,11 +5192,10 @@ rows with nothing in the payload to say so (see
 
     <div class="doc doc-contents ">
 
-        <p>How MCP <code>arguments</code> flow into the kwarg pool. Defaults to
-<code>SPREAD_AUTHOR_WINS</code> for selector tools: selectors typically declare their
-query parameters as individual function arguments
-(<code>def list_drafts(*, project_id, page=1, limit=10)</code>), so the MCP layer
-spreads the validated / raw arguments across the pool.</p>
+        <p>How MCP <code>arguments</code> flow into the kwarg pool. <code>SPREAD_AUTHOR_WINS</code>
+for selector tools, because a selector typically declares its query
+parameters as individual function arguments
+(<code>def list_drafts(*, project_id, page=1, limit=10)</code>).</p>
 
     </div>
 
@@ -5200,11 +5220,10 @@ spreads the validated / raw arguments across the pool.</p>
 
     <div class="doc doc-contents ">
 
-        <p>How unknown <code>arguments</code> keys are handled relative to the binding's
-merged <code>inputSchema</code> (<code>input_serializer</code> fields + <code>filter_set</code>
-properties + ordering + pagination). <code>REJECT</code> (default) rejects unknown
-keys with <code>-32602</code>; <code>PASSTHROUGH</code> merges them into the validated
-payload; <code>IGNORE</code> silently drops them.</p>
+        <p>How unknown <code>arguments</code> keys are handled relative to the merged
+<code>inputSchema</code> (<code>input_serializer</code> fields, <code>filter_set</code> properties,
+ordering, pagination). <code>REJECT</code> answers <code>-32602</code>, <code>PASSTHROUGH</code>
+merges them into the validated payload, <code>IGNORE</code> drops them.</p>
 
     </div>
 
@@ -5229,9 +5248,15 @@ payload; <code>IGNORE</code> silently drops them.</p>
 
     <div class="doc doc-contents ">
 
-        <p>Opt this binding back into listings it would otherwise be filtered out
-of — same semantics as :attr:<code>ToolBinding.always_listed</code>, applied to
-selector tools when <code>FILTER_LISTINGS_BY_PERMISSIONS</code> is enabled.</p>
+        <p>Keep this binding in <code>tools/list</code> even when <code>FILTER_LISTINGS_BY_PERMISSIONS</code>
+would drop it — same semantics as
+<a class="autorefs autorefs-internal" title="always_listed
+
+
+  
+      class-attribute
+      instance-attribute
+  " href="#rest_framework_mcp.registry.types.tool_binding.ToolBinding.always_listed"><code>ToolBinding.always_listed</code></a>.</p>
 
     </div>
 
@@ -5260,7 +5285,7 @@ selector tools when <code>FILTER_LISTINGS_BY_PERMISSIONS</code> is enabled.</p>
 <p>Popped from the caller's arguments like a URL kwarg, but landing in the
 synthetic request's <code>GET</code> rather than <code>view.kwargs</code> — the channel a
 serializer reads when it branches on the query string. A <code>filter_set</code>
-field is <strong>not</strong> one of these; see <code>split_query_params</code>.</p>
+field is <strong>not</strong> one of these.</p>
 
     </div>
 
@@ -5285,11 +5310,16 @@ field is <strong>not</strong> one of these; see <code>split_query_params</code>.
 
     <div class="doc doc-contents ">
 
-        <p>URL-derived values the model supplies as tool args, seeded into the
-off-HTTP view's <code>kwargs</code> rather than reaching the selector as ordinary
-params — from there drf-services spreads them into the selector / target
-pools. See :class:<code>UrlKwarg</code>. Advertised in the <code>inputSchema</code>, exempt from
-the unknown-argument check, and stripped from the dispatched params.</p>
+        <p>URL-derived values the model supplies as tool args, seeded into the off-HTTP
+view's <code>kwargs</code> instead of reaching the selector as ordinary params. Advertised in
+the <code>inputSchema</code>, exempt from the unknown-argument check, and stripped from the
+dispatched params. See
+<a class="autorefs autorefs-internal" title="UrlKwarg
+
+
+  
+      dataclass
+  " href="#rest_framework_services.types.url_kwarg.UrlKwarg"><code>UrlKwarg</code></a>.</p>
 
     </div>
 
@@ -5314,10 +5344,10 @@ the unknown-argument check, and stripped from the dispatched params.</p>
 
     <div class="doc doc-contents ">
 
-        <p>What this tool's payload becomes in the result's <code>content</code> array.
-<code>TEXT</code> (the default) renders JSON per :attr:<code>output_format</code>; the other
-kinds project the payload into an image / audio / resource-link block.
-See :class:<code>ToolContentKind</code>.</p>
+        <p>What this tool's payload becomes in the result's <code>content</code> array. <code>TEXT</code>
+renders JSON per <code>output_format</code>; the other kinds project it into an image / audio
+/ resource-link block. See
+<a class="autorefs autorefs-internal" title="ToolContentKind" href="../protocol/#rest_framework_mcp.constants.ToolContentKind"><code>ToolContentKind</code></a>.</p>
 
     </div>
 
@@ -5342,9 +5372,9 @@ See :class:<code>ToolContentKind</code>.</p>
 
     <div class="doc doc-contents ">
 
-        <p>The media type for an <code>IMAGE</code> / <code>AUDIO</code> :attr:<code>content_kind</code>.
-Required for those and meaningless for the rest — a resource link
-carries its own <code>mimeType</code> per entry.</p>
+        <p>The media type for an <code>IMAGE</code> / <code>AUDIO</code> <code>content_kind</code>.
+Required for those and meaningless for the rest — a resource link carries
+its own <code>mimeType</code> per entry.</p>
 
     </div>
 
@@ -5369,11 +5399,10 @@ carries its own <code>mimeType</code> per entry.</p>
 
     <div class="doc doc-contents ">
 
-        <p>Whether calling this tool hands back a task handle instead of a result.</p>
-<p><code>FORBIDDEN</code> by default, so nothing changes for a tool registered before
-tasks existed. See :class:<code>TaskPolicy</code> — and note that the choice lives
-here, on the binding, because the extension makes the <em>server</em> the sole
-decider and gives the client no way to ask.</p>
+        <p>Whether calling this tool hands back a task handle instead of a result.
+The choice lives on the binding because the extension makes the <em>server</em>
+the sole decider and gives the client no way to ask. See
+<a class="autorefs autorefs-internal" title="TaskPolicy" href="../protocol/#rest_framework_mcp.constants.TaskPolicy"><code>TaskPolicy</code></a>.</p>
 
     </div>
 
@@ -5397,12 +5426,9 @@ decider and gives the client no way to ask.</p>
 
     <div class="doc doc-contents ">
 
-        <p>Shape discriminator — derived from the spec's required <code>kind</code> field.</p>
-<p>Sister-repo 0.13+ made <code>kind</code> a required field on
-:class:<code>SelectorSpec</code>, so the binding doesn't store an
-independent copy — it would only be a chance for the two to
-drift. Exposed as a property so the dispatch layer can keep
-reading <code>binding.kind</code> unchanged.</p>
+        <p>Shape discriminator, read from the spec's required <code>kind</code> field.</p>
+<p>Not stored independently on the binding: a second copy would only be a
+chance for the two to drift.</p>
 
     </div>
 
@@ -5426,17 +5452,12 @@ reading <code>binding.kind</code> unchanged.</p>
 
     <div class="doc doc-contents ">
 
-        <p>Transport-neutral filtering, sourced from the spec.</p>
-<p>Like :attr:<code>kind</code> and :attr:<code>selector</code>, this delegates to the
-:class:<code>SelectorSpec</code> rather than storing a copy — the spec is
-the single source of truth (<code>SelectorSpec.filter_set</code>,
-<code>djangorestframework-services</code> 0.18+). The MCP read pipeline
-and <code>inputSchema</code> generation read <code>binding.filter_set</code>
-unchanged, so a project declares its filterable shape once, on
-the spec, and both the HTTP and MCP transports honour it.</p>
-<p>Typed <code>Any</code> because <code>django-filter</code> is an optional dep behind
-the <code>[filter]</code> extra — narrowing the type would force a hard
-import here.</p>
+        <p>Transport-neutral filtering, read from <code>SelectorSpec.filter_set</code>.</p>
+<p>Delegated rather than copied, like <code>kind</code> and <code>selector</code>,
+so a project declares its filterable shape once on the spec and both
+the HTTP and MCP transports honour it.</p>
+<p>Typed <code>Any</code> because <code>django-filter</code> is optional behind the
+<code>[filter]</code> extra, and narrowing would force a hard import here.</p>
 
     </div>
 
@@ -5460,18 +5481,15 @@ import here.</p>
 
     <div class="doc doc-contents ">
 
-        <p>Whether the spec's own reflected shape already offers an <code>ordering</code> arg.</p>
+        <p>Whether the spec's reflected shape already offers an <code>ordering</code> arg.</p>
 <p><code>django_filters.OrderingFilter</code> subclasses <code>ChoiceFilter</code>, so
-drf-services' reflection maps it to an enum exactly like any other
-choice filter — which means a spec carrying one advertises <code>ordering</code>
-to the model with nothing declared here at all.</p>
-<p>The question is asked of the <strong>reflected schema</strong> rather than by
-isinstance-checking <code>django_filters</code> types, for two reasons:
-<code>django-filter</code> is an optional extra, and more importantly the
-invariant worth encoding is <em>whatever the inputSchema advertises, the
-dispatch must deliver</em>. Reading the same reflection the schema builder
-reads is what makes the promise and the delivery agree by construction
-rather than by two matching guesses.</p>
+reflection maps it to an enum like any other choice filter: a spec
+carrying one advertises <code>ordering</code> with nothing declared here.</p>
+<p>Asked of the <strong>reflected schema</strong> rather than by isinstance-checking
+<code>django_filters</code> types, because that extra is optional and because
+the invariant worth encoding is that whatever the <code>inputSchema</code>
+advertises, the dispatch delivers. Reading the same reflection the
+schema builder reads makes promise and delivery agree by construction.</p>
 
     </div>
 
@@ -5510,48 +5528,107 @@ rather than by two matching guesses.</p>
         <p>A URL route capture exposed as a caller-supplied argument off-HTTP.</p>
 <p>Over HTTP a nested route's captures (the <code>project_pk</code> of
 <code>/projects/{project_pk}/widgets/</code>) reach a spec through <code>view.kwargs</code> —
-directly, or through a <code>spec.kwargs</code> provider that scopes by them.
-Off-HTTP there is no route, so the caller supplies the value as an ordinary
-argument: the transport advertises it in the tool / operation schema, pops it
-out of the arguments, and hands it to <code>build_offline_context(kwargs=…)</code>,
-from where :func:<code>~rest_framework_services.dispatch_spec</code> spreads it into the
-selector / target pools — authoritative over the spec params, below a
-<code>spec.kwargs</code> provider. It never reaches the spec as an ordinary input, so
-the unknown-argument policy never flags it.</p>
-<p><strong>This type is declared here, not in each adapter, on purpose.</strong> It is the
-same declaration whichever transport carries it, and two independent copies
-had already drifted into validating the same declaration against different
-reserved-name sets. Adapters import it and pair it with
-:func:<code>~rest_framework_services.validate_channel_names</code>.</p>
-<p>Reach for a <code>UrlKwarg</code> when the value is a URL-derived input a spec depends
-on that is <strong>not</strong> already an ordinary argument — most commonly a scoping
-<code>spec.kwargs</code> provider reading <code>view.kwargs</code> (off-HTTP that mapping is
-otherwise empty, so the provider mis-scopes for every caller), or a
-closed-surface spec whose route capture must be caller-suppliable.</p>
-<p>A selector that reads the value from its own <code>**extras: Unpack[TypedDict]</code>
-needs <strong>no</strong> <code>UrlKwarg</code>: drf-services reflects the key into the schema and
-<code>params</code> delivers it. A key can be <em>both</em> reflected and registered — the
-explicit <code>UrlKwarg</code> wins the adapter's schema merge, registration pops the
-argument into <code>kwargs=</code>, and the authoritative spread still delivers it to
-the selector pool, so both readers see it.</p>
-<ul>
-<li><code>name</code> — the argument / view-kwarg key. Must not collide with a reserved
-  transport key; see :func:<code>~rest_framework_services.validate_channel_names</code>.</li>
-<li><code>type</code> — the JSON-Schema type advertised to the caller (<code>"string"</code> by
-  default; <code>"integer"</code> / <code>"number"</code> / <code>"boolean"</code> …).</li>
-<li><code>description</code> — optional help text shown to the caller.</li>
-<li><code>default</code> — optional value seeded when the caller omits the argument;
-  also surfaced as the schema <code>default</code>.</li>
-<li><code>required</code> — advertise the key in the schema's <code>required</code> list. Use it
-  for a route capture the spec genuinely cannot run without, so a caller is
-  told up front instead of failing mid-dispatch. Setting both <code>required</code>
-  and a <code>default</code> is contradictory and raises in
-  :func:<code>~rest_framework_services.validate_channel_names</code>.</li>
-</ul>
-<p><code>required</code> here is the registered-declaration counterpart of the
-:data:<code>~rest_framework_services.InputRequired</code> marker, which does the same
-job for a key the callable's own <code>TypedDict</code> declares. Both end up in the
-schema's <code>required</code>; they differ only in where the key is declared.</p>
+directly, or through a <code>spec.kwargs</code> provider that scopes by them. Off-HTTP there
+is no route, so the caller supplies the value as an ordinary argument: the transport
+advertises it in the tool / operation schema, pops it out of the arguments, and
+hands it to <code>build_offline_context(kwargs=…)</code>, from where
+<a class="autorefs autorefs-external" href="https://artui.github.io/djangorestframework-services/reference/dispatch/#rest_framework_services.dispatch.dispatch_spec.dispatch_spec"><code>dispatch_spec</code></a>
+spreads it into the selector / target pools — authoritative over the spec params,
+below a <code>spec.kwargs</code> provider. It never reaches the spec as an ordinary input, so
+the unknown-argument policy never flags it. Adapters import this declaration and
+pair it with
+<a class="autorefs autorefs-external" href="https://artui.github.io/djangorestframework-services/reference/types/#rest_framework_services.types.validate_channel_names.validate_channel_names"><code>validate_channel_names</code></a>.</p>
+<p>Reach for one when the value is a URL-derived input a spec depends on that is
+<strong>not</strong> already an ordinary argument — most commonly a scoping <code>spec.kwargs</code>
+provider reading <code>view.kwargs</code> (off-HTTP that mapping is otherwise empty, so
+the provider mis-scopes for every caller), or a closed-surface spec whose route
+capture must be caller-suppliable. A selector reading the value from its own
+<code>**extras: Unpack[TypedDict]</code> needs <strong>no</strong> <code>UrlKwarg</code>: drf-services reflects
+the key into the schema and <code>params</code> delivers it. A key can be <em>both</em>
+reflected and registered — the explicit <code>UrlKwarg</code> wins the adapter's schema
+merge, registration pops the argument into <code>kwargs=</code>, and the authoritative
+spread still delivers it to the selector pool, so both readers see it.</p>
+
+
+<p><span class="doc-section-title">Attributes:</span></p>
+    <table>
+      <thead>
+        <tr>
+          <th>Name</th>
+          <th>Type</th>
+          <th>Description</th>
+        </tr>
+      </thead>
+      <tbody>
+          <tr class="doc-section-item">
+            <td><code><span title="rest_framework_services.types.url_kwarg.UrlKwarg.name">name</span></code></td>
+            <td>
+                  <code><span title="str">str</span></code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>The argument / view-kwarg key. Must not collide with a reserved
+transport key; see
+<a class="autorefs autorefs-external" href="https://artui.github.io/djangorestframework-services/reference/types/#rest_framework_services.types.validate_channel_names.validate_channel_names"><code>validate_channel_names</code></a>.</p>
+              </div>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td><code><span title="rest_framework_services.types.url_kwarg.UrlKwarg.type">type</span></code></td>
+            <td>
+                  <code><span title="str">str</span></code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>The JSON-Schema type advertised to the caller — <code>"string"</code> by
+default, or <code>"integer"</code> / <code>"number"</code> / <code>"boolean"</code> …</p>
+              </div>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td><code><span title="rest_framework_services.types.url_kwarg.UrlKwarg.description">description</span></code></td>
+            <td>
+                  <code><span title="str">str</span> | None</code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Optional help text shown to the caller.</p>
+              </div>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td><code><span title="rest_framework_services.types.url_kwarg.UrlKwarg.default">default</span></code></td>
+            <td>
+                  <code><span title="typing.Any">Any</span></code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Optional value seeded when the caller omits the argument; also
+surfaced as the schema <code>default</code>.</p>
+              </div>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td><code><span title="rest_framework_services.types.url_kwarg.UrlKwarg.required">required</span></code></td>
+            <td>
+                  <code><span title="bool">bool</span></code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Advertise the key in the schema's <code>required</code> list. Use it for
+a route capture the spec genuinely cannot run without, so a caller is
+told up front instead of failing mid-dispatch. Setting both
+<code>required</code> and a <code>default</code> is contradictory and raises in
+<a class="autorefs autorefs-external" href="https://artui.github.io/djangorestframework-services/reference/types/#rest_framework_services.types.validate_channel_names.validate_channel_names"><code>validate_channel_names</code></a>. It is the
+registered-declaration counterpart of
+<code>InputRequired</code>, which does the same job
+for a key the callable's own <code>TypedDict</code> declares; both end up in the
+schema's <code>required</code>.</p>
+              </div>
+            </td>
+          </tr>
+      </tbody>
+    </table>
 
 
 
@@ -5629,28 +5706,38 @@ arguments to any read-shaping param a serializer reads off
 transport advertises it, pops it from the arguments, and hands it to
 <code>build_offline_context(query_params=…)</code>; it never reaches the spec as an
 input, so the unknown-argument policy never flags it.</p>
-<p>A :class:<code>~rest_framework_services.SelectorSpec</code> <code>filter_set</code> does <strong>not</strong>
-need this — its fields are already generated into the schema and flow through
-as ordinary <code>params</code>.</p>
+<p>A <a class="autorefs autorefs-external" href="https://artui.github.io/djangorestframework-services/reference/types/#rest_framework_services.types.selector_spec.SelectorSpec"><code>SelectorSpec</code></a>
+<code>filter_set</code> does <strong>not</strong> need this — its fields are already generated into the
+schema and flow through as ordinary <code>params</code>.</p>
 <p>Declared here rather than in each adapter for the same reason as
-:class:<code>~rest_framework_services.UrlKwarg</code>: it is the same declaration
-whichever transport carries it. Pair it with
-:func:<code>~rest_framework_services.validate_channel_names</code>.</p>
+<a class="autorefs autorefs-internal" title="UrlKwarg
+
+
+  
+      dataclass
+  " href="#rest_framework_services.types.url_kwarg.UrlKwarg"><code>UrlKwarg</code></a>: it is the same
+declaration whichever transport carries it. Pair it with
+<a class="autorefs autorefs-external" href="https://artui.github.io/djangorestframework-services/reference/types/#rest_framework_services.types.validate_channel_names.validate_channel_names"><code>validate_channel_names</code></a>.</p>
 <ul>
-<li><code>name</code> — the argument / query-string key. Must not collide with a
-  reserved transport key; see
-  :func:<code>~rest_framework_services.validate_channel_names</code>.</li>
-<li><code>type</code> — the JSON-Schema type advertised to the caller (<code>"string"</code> by
-  default; <code>"integer"</code> / <code>"number"</code> / <code>"boolean"</code> / <code>"array"</code> …).</li>
+<li><code>name</code> — the argument / query-string key. Must not collide with a reserved
+  transport key; see
+  <a class="autorefs autorefs-external" href="https://artui.github.io/djangorestframework-services/reference/types/#rest_framework_services.types.validate_channel_names.validate_channel_names"><code>validate_channel_names</code></a>.</li>
+<li><code>type</code> — the JSON-Schema type advertised to the caller (<code>"string"</code> by default;
+  <code>"integer"</code> / <code>"number"</code> / <code>"boolean"</code> / <code>"array"</code> …).</li>
 <li><code>description</code> — optional help text shown to the caller.</li>
-<li><code>default</code> — optional value seeded when the caller omits the argument;
-  also surfaced as the schema <code>default</code>.</li>
+<li><code>default</code> — optional value seeded when the caller omits the argument; also
+  surfaced as the schema <code>default</code>.</li>
 </ul>
 <p><strong>No <code>required</code> flag, deliberately.</strong> A query param is <em>read-shaping</em> —
 omitting one is legitimate by construction, and the spec runs correctly
 without it. Requiredness belongs to inputs the spec cannot run without, which
-is :class:<code>~rest_framework_services.UrlKwarg</code> and the
-:data:<code>~rest_framework_services.InputRequired</code> marker.</p>
+is <a class="autorefs autorefs-internal" title="UrlKwarg
+
+
+  
+      dataclass
+  " href="#rest_framework_services.types.url_kwarg.UrlKwarg"><code>UrlKwarg</code></a> and the
+<code>InputRequired</code> marker.</p>
 
 
 
@@ -5716,12 +5803,10 @@ is :class:<code>~rest_framework_services.UrlKwarg</code> and the
 
 
 
-        <p>Name → tool binding lookup.</p>
-<p>Holds both :class:<code>ToolBinding</code> (service tools, mutations) and
-:class:<code>SelectorToolBinding</code> (selector tools, reads). Names share a
-namespace — duplicates are rejected loudly so a misconfigured project
-surfaces the conflict at discovery time rather than silently shadowing
-a tool.</p>
+        <p>Name to tool binding lookup.</p>
+<p>Holds service, selector and chain bindings in one namespace, rejecting
+duplicates loudly so a misconfigured project surfaces the conflict at
+registration rather than silently shadowing a tool.</p>
 
 
 
@@ -5758,14 +5843,11 @@ a tool.</p>
     <div class="doc doc-contents ">
 
         <p>Every binding, in <strong>registration order</strong>.</p>
-<p>The spec asks that <code>tools/list</code> be deterministic, so clients can
-cache the catalog and so cursor pagination is stable. A dict satisfies
-that: insertion order is preserved, and registration runs the same code
-in the same order on every boot.</p>
-<p>Deliberately not sorted by name. Registration order is <em>authored</em>
-order — the sequence a server's author put the tools in — which is a
-better first page for a model than an alphabetical one, and sorting
-would buy nothing the dict does not already give.</p>
+<p><code>tools/list</code> has to be deterministic so clients can cache the catalog
+and cursor pagination stays stable, which dict insertion order already
+gives. Deliberately not sorted by name: registration order is authored
+order, which is a better first page for a model than an alphabetical
+one.</p>
 
 
     </div>
@@ -5805,19 +5887,17 @@ would buy nothing the dict does not already give.</p>
 <p>A resource is a selector callable plus a URI template. The MCP server
 invokes the selector directly via <code>resolve_callable_kwargs</code> +
 <code>run_selector</code> — there is no view or viewset in the dispatch path.</p>
-<p><code>output_serializer</code> is consulted by <code>resources/read</code> to render the
-selector's return value. <code>mime_type</code> advertises the encoding we will
-return — usually <code>"application/json"</code>.</p>
-<p><code>kwargs_provider</code> mirrors <code>SelectorSpec.kwargs</code> from
-<code>djangorestframework-services &gt;= 0.6</code>: when set, the handler invokes it
-once per request and merges the returned dict into the kwarg pool. The
-provider receives a synthesised
-:class:<code>~rest_framework_services.OfflineServiceView</code> (URI-template
-variables exposed as <code>view.kwargs</code>, the binding name as
-<code>view.action</code>).</p>
-<p>The <code>Generic[ResultT]</code> parameter is purely informational — it lets
-callers pin the selector's return type for IDE / type-checker help.
-Defaults to <code>Any</code> when omitted.</p>
+<p><code>output_serializer</code> is what <code>resources/read</code> renders the selector's
+return value through, and <code>mime_type</code> advertises the type that body will
+carry. <code>kwargs_provider</code> mirrors <code>SelectorSpec.kwargs</code>: when set, the
+handler invokes it once per request and merges the returned dict into the
+kwarg pool, passing a synthesised
+<code>OfflineServiceView</code> whose <code>view.kwargs</code>
+holds the URI-template variables and whose <code>view.action</code> is the binding
+name. <code>annotations</code> and <code>meta</code> are emitted verbatim on the listing
+entry, and <code>meta</code> also on the <code>contents</code> block of <code>resources/read</code>.</p>
+<p>The generic parameter is purely informational, letting callers pin the
+selector's return type for type-checker help.</p>
 
 
 
@@ -5855,11 +5935,11 @@ Defaults to <code>Any</code> when omitted.</p>
 
     <div class="doc doc-contents ">
 
-        <p>Required, no default. Pulled out of <code>SelectorSpec.kind</code> by the adapter
-so the binding doesn't carry a reference to the whole spec. <code>LIST</code> invokes
-the output serializer with <code>many=True</code>; <code>RETRIEVE</code> (the common case for
-URI-template resources) invokes it with <code>many=False</code>. Resources have no
-post-fetch pipeline, so both kinds are unconditionally accepted.</p>
+        <p>Pulled out of <code>SelectorSpec.kind</code> by the adapter, so the binding does
+not carry a reference to the whole spec. <code>LIST</code> invokes the output
+serializer with <code>many=True</code>, <code>RETRIEVE</code> (the common case for
+URI-template resources) with <code>many=False</code>. Resources have no post-fetch
+pipeline, so both kinds are accepted unconditionally.</p>
 
     </div>
 
@@ -5884,11 +5964,10 @@ post-fetch pipeline, so both kinds are unconditionally accepted.</p>
 
     <div class="doc doc-contents ">
 
-        <p>How the selector's value becomes the <code>resources/read</code> body. <code>JSON</code>
-(the default) pretty-prints it; <code>TEXT</code> returns it verbatim, which is what
-an HTML / Markdown / CSV resource needs. Declared rather than inferred from
-<code>mime_type</code>, so advertising a new mime type never silently changes how the
-body is encoded.</p>
+        <p>How the selector's value becomes the <code>resources/read</code> body. Declared rather
+than inferred from <code>mime_type</code>, so advertising a new mime type never silently
+changes the encoding. See
+<a class="autorefs autorefs-internal" title="ResourceEncoding" href="#rest_framework_mcp.constants.ResourceEncoding"><code>ResourceEncoding</code></a>.</p>
 
     </div>
 
@@ -5913,13 +5992,13 @@ body is encoded.</p>
 
     <div class="doc doc-contents ">
 
-        <p>Argument name → completer callable, powering <code>completion/complete</code>.</p>
+        <p>Argument name to completer callable, powering <code>completion/complete</code>.</p>
 <p>A completer is dispatched through <code>resolve_callable_kwargs</code> against a
 pool of <code>value</code> (the text typed so far), <code>arguments</code> (siblings the
 client has already resolved, also spread by name), <code>request</code> and
-<code>user</code>. It returns an iterable of suggestions — a list, a generator or
-a queryset — and the handler slices it to the spec's cap rather than
-draining it.</p>
+<code>user</code>. It returns an iterable of suggestions — a list, a generator or a
+queryset — which the handler slices to the spec's cap rather than
+draining.</p>
 
     </div>
 
@@ -5944,11 +6023,11 @@ draining it.</p>
 
     <div class="doc doc-contents ">
 
-        <p>How long a client may cache this resource's body, in milliseconds.</p>
-<p><code>UNSET</code> takes the server's <code>RESOURCE_CACHE_TTL_MS</code> (<code>0</code> by default —
-live data). Worth setting on anything genuinely static: an interactive view
-is a document that changes only on deploy, and hosts prefetch views before
-any tool call, so a zero TTL means fetching the same HTML repeatedly.</p>
+        <p>How long a client may cache this resource's body, in milliseconds.
+<code>UNSET</code> takes the server's <code>RESOURCE_CACHE_TTL_MS</code>, <code>0</code> by default
+because a resource body is live data. Worth setting on anything genuinely
+static: hosts prefetch interactive views before any tool call, so a zero
+TTL means fetching the same HTML repeatedly.</p>
 
     </div>
 
@@ -5973,8 +6052,8 @@ any tool call, so a zero TTL means fetching the same HTML repeatedly.</p>
 
     <div class="doc doc-contents ">
 
-        <p>Display icons for this entry, emitted in its listing. Purely
-presentational — a client renders them; nothing in dispatch reads them.</p>
+        <p>Display icons, emitted in this resource's listing entry. Purely
+presentational; nothing in dispatch reads them.</p>
 
     </div>
 
@@ -5999,12 +6078,15 @@ presentational — a client renders them; nothing in dispatch reads them.</p>
 
     <div class="doc doc-contents ">
 
-        <p>Opt this resource back into listings it would otherwise be filtered out
-of. With <code>FILTER_LISTINGS_BY_PERMISSIONS</code> enabled, a resource is normally
-dropped from <code>resources/list</code> (and <code>resources/templates/list</code> for
-templates) if any binding permission denies the caller; <code>True</code> keeps it
-visible as a discovery aid. Same semantics as
-:attr:<code>ToolBinding.always_listed</code>.</p>
+        <p>Keep this resource in <code>resources/list</code> (or <code>resources/templates/list</code>) even
+when <code>FILTER_LISTINGS_BY_PERMISSIONS</code> would drop it — same semantics as
+<a class="autorefs autorefs-internal" title="always_listed
+
+
+  
+      class-attribute
+      instance-attribute
+  " href="#rest_framework_mcp.registry.types.tool_binding.ToolBinding.always_listed"><code>ToolBinding.always_listed</code></a>.</p>
 
     </div>
 
@@ -6036,10 +6118,17 @@ visible as a discovery aid. Same semantics as
 
 
 
-        <p>URI / URI-template → :class:<code>ResourceBinding</code> lookup.</p>
-<p>Concrete resources (no template variables) are matched by exact URI;
-templates are matched by regex derived from the template. <code>resolve</code>
-returns the binding plus the variable bindings extracted from the URI.</p>
+        <p>URI or URI-template to
+<a class="autorefs autorefs-internal" title="ResourceBinding
+
+
+  
+      dataclass
+  " href="#rest_framework_mcp.registry.types.resource_binding.ResourceBinding"><code>ResourceBinding</code></a>
+lookup.</p>
+<p>Concrete resources are matched by exact URI, templates by a regex derived
+from the template. <code>resolve</code> returns the binding plus the variables
+extracted from the URI.</p>
 
 
 
@@ -6076,9 +6165,8 @@ returns the binding plus the variable bindings extracted from the URI.</p>
     <div class="doc doc-contents ">
 
         <p>Exact lookup on the registered template string.</p>
-<p>Distinct from :meth:<code>resolve</code>, which matches a <em>concrete</em> URI against
-each template's pattern. A caller holding the template itself — the
-completion API's <code>ref/resource</code>, say — must not go through that:
+<p>A caller holding the template itself — the completion API's
+<code>ref/resource</code>, say — must use this rather than <code>resolve</code>:
 <code>things://{pk}</code> satisfies its own pattern with <code>pk="{pk}"</code>, so
 <code>resolve</code> would answer, plausibly and wrongly.</p>
 
@@ -6112,23 +6200,59 @@ completion API's <code>ref/resource</code>, say — must not go through that:
 
 
 
-        <p>How a resource's selector return value becomes the <code>text</code> body.</p>
-<p><code>resources/read</code> advertises <code>mimeType</code> from the binding but the body
-encoding is a separate decision, so it is declared separately rather than
-sniffed from the mime type — sniffing would silently change behaviour for
-anyone already advertising a non-JSON type.</p>
-<ul>
-<li><code>JSON</code>: pretty-print the value as JSON. The default, and what every
-  selector-backed data resource wants.</li>
-<li><code>TEXT</code>: the value is already the body. Used for HTML, Markdown, CSV,
-  plain text — anything where JSON-encoding would wrap the payload in a
-  quoted string literal instead of returning it. The selector must return
-  a <code>str</code>.</li>
-<li><code>BLOB</code>: the value is binary. The selector returns <code>bytes</code> and the
-  body is base64-encoded into the spec's <code>blob</code> field instead of
-  <code>text</code> — the two are mutually exclusive on a <code>contents</code> entry.
-  This is what a PDF, an image, or a generated spreadsheet needs.</li>
-</ul>
+        <p>How a resource's selector return value becomes the <code>resources/read</code> body.</p>
+<p>Declared separately from the binding's <code>mimeType</code> rather than sniffed
+from it — sniffing would silently change behaviour for anyone already
+advertising a non-JSON type.</p>
+
+
+<p><span class="doc-section-title">Attributes:</span></p>
+    <table>
+      <thead>
+        <tr>
+          <th>Name</th>
+          <th>Type</th>
+          <th>Description</th>
+        </tr>
+      </thead>
+      <tbody>
+          <tr class="doc-section-item">
+            <td><code><span title="rest_framework_mcp.constants.ResourceEncoding.JSON">JSON</span></code></td>
+            <td>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Pretty-print the value as JSON. The default, and what every
+selector-backed data resource wants.</p>
+              </div>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td><code><span title="rest_framework_mcp.constants.ResourceEncoding.TEXT">TEXT</span></code></td>
+            <td>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>The value is already the body; the selector must return a
+<code>str</code>. For HTML, Markdown, CSV or plain text, where
+JSON-encoding would wrap the payload in a quoted string literal.</p>
+              </div>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td><code><span title="rest_framework_mcp.constants.ResourceEncoding.BLOB">BLOB</span></code></td>
+            <td>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>The value is binary. The selector returns <code>bytes</code> and the body
+is base64-encoded into the spec's <code>blob</code> field instead of
+<code>text</code> — the two are mutually exclusive on a <code>contents</code> entry.</p>
+              </div>
+            </td>
+          </tr>
+      </tbody>
+    </table>
 
 
 
@@ -6179,17 +6303,20 @@ anyone already advertising a non-JSON type.</p>
 
 
         <p>All wiring for a single MCP prompt.</p>
-<p>A prompt is a server-defined message-template the client invokes by
-name. The <code>render</code> callable receives the client-supplied arguments as
-kwargs and returns either:</p>
-<ul>
-<li>a list of :class:<code>PromptMessage</code> instances (full control), or</li>
-<li>a list of strings (each becomes a user text message), or</li>
-<li>a single string (becomes one user text message), or</li>
-<li>a coroutine yielding any of the above.</li>
-</ul>
-<p>The handler normalises whatever shape the callable returns into the spec's
-<code>messages</code> list at dispatch time.</p>
+<p>A prompt is a server-defined message template the client invokes by name. The
+<code>render</code> callable receives the client-supplied arguments as kwargs and returns a
+list of
+<a class="autorefs autorefs-internal" title="PromptMessage
+
+
+  
+      dataclass
+  " href="../protocol/#rest_framework_mcp.protocol.types.prompt_message.PromptMessage"><code>PromptMessage</code></a>
+instances, a list of strings (each becoming a user text message), a single string,
+or a coroutine yielding any of those. The handler normalises whichever shape arrives
+into the spec's <code>messages</code> list at dispatch time.</p>
+<p><code>annotations</code> and <code>meta</code> are emitted verbatim on this prompt's
+<code>prompts/list</code> entry, under <code>annotations</code> and <code>_meta</code> respectively.</p>
 
 
 
@@ -6228,13 +6355,13 @@ kwargs and returns either:</p>
 
     <div class="doc doc-contents ">
 
-        <p>Argument name → completer callable, powering <code>completion/complete</code>.</p>
+        <p>Argument name to completer callable, powering <code>completion/complete</code>.</p>
 <p>A completer is dispatched through <code>resolve_callable_kwargs</code> against a
 pool of <code>value</code> (the text typed so far), <code>arguments</code> (siblings the
 client has already resolved, also spread by name), <code>request</code> and
-<code>user</code>. It returns an iterable of suggestions — a list, a generator or
-a queryset — and the handler slices it to the spec's cap rather than
-draining it.</p>
+<code>user</code>. It returns an iterable of suggestions — a list, a generator or a
+queryset — which the handler slices to the spec's cap rather than
+draining.</p>
 
     </div>
 
@@ -6259,8 +6386,8 @@ draining it.</p>
 
     <div class="doc doc-contents ">
 
-        <p>Display icons for this entry, emitted in its listing. Purely
-presentational — a client renders them; nothing in dispatch reads them.</p>
+        <p>Display icons, emitted in this prompt's listing entry. Purely
+presentational; nothing in dispatch reads them.</p>
 
     </div>
 
@@ -6285,9 +6412,15 @@ presentational — a client renders them; nothing in dispatch reads them.</p>
 
     <div class="doc doc-contents ">
 
-        <p>Opt this prompt back into <code>prompts/list</code> when
-<code>FILTER_LISTINGS_BY_PERMISSIONS</code> would otherwise hide it — same semantics
-as :attr:<code>ToolBinding.always_listed</code>.</p>
+        <p>Keep this prompt in <code>prompts/list</code> even when <code>FILTER_LISTINGS_BY_PERMISSIONS</code>
+would hide it — same semantics as
+<a class="autorefs autorefs-internal" title="always_listed
+
+
+  
+      class-attribute
+      instance-attribute
+  " href="#rest_framework_mcp.registry.types.tool_binding.ToolBinding.always_listed"><code>ToolBinding.always_listed</code></a>.</p>
 
     </div>
 
@@ -6319,9 +6452,16 @@ as :attr:<code>ToolBinding.always_listed</code>.</p>
 
 
 
-        <p>Name → :class:<code>PromptBinding</code> lookup.</p>
-<p>Mirrors :class:<code>ToolRegistry</code> exactly — names are unique, duplicates
-raise loudly at registration time.</p>
+        <p>Name to
+<a class="autorefs autorefs-internal" title="PromptBinding
+
+
+  
+      dataclass
+  " href="#rest_framework_mcp.registry.types.prompt_binding.PromptBinding"><code>PromptBinding</code></a>
+lookup.</p>
+<p>Mirrors <a class="autorefs autorefs-internal" title="ToolRegistry" href="#rest_framework_mcp.registry.tool_registry.ToolRegistry"><code>ToolRegistry</code></a>:
+names are unique and a duplicate raises at registration.</p>
 
 
 
@@ -6382,20 +6522,83 @@ rule.</p>
 
         <p>What a host needs to know to render an interactive view.</p>
 <p>Serialises into the resource's <code>_meta</code> under the Apps extension's key.
-Typed here, at the registration parameter, rather than in the wire types:
-<code>_meta</code> itself is an open namespace shared by every extension, so it
-stays a free-form dict at the boundary while each extension keeps its own
-closed shape on the way in.</p>
-<ul>
-<li><code>csp</code> — origins the view needs; see :class:<code>UICsp</code>.</li>
-<li><code>permissions</code> — browser capabilities the view would use. The host
-  decides whether to grant them.</li>
-<li><code>domain</code> — a stable identity for the view's origin, letting a host
-  group views from the same publisher (e.g. for a single consent prompt)
-  rather than treating every URI as unrelated.</li>
-<li><code>prefers_border</code> — a rendering hint: the view looks better with the
-  host's chrome around it. A hint, not a requirement.</li>
-</ul>
+Typed at the registration parameter rather than in the wire types, because
+<code>_meta</code> is an open namespace shared by every extension: it stays a
+free-form dict at the boundary while each extension keeps its own closed
+shape on the way in.</p>
+
+
+<p><span class="doc-section-title">Attributes:</span></p>
+    <table>
+      <thead>
+        <tr>
+          <th>Name</th>
+          <th>Type</th>
+          <th>Description</th>
+        </tr>
+      </thead>
+      <tbody>
+          <tr class="doc-section-item">
+            <td><code><span title="rest_framework_mcp.registry.types.ui_resource_meta.UIResourceMeta.csp">csp</span></code></td>
+            <td>
+                  <code><a class="autorefs autorefs-internal" title="UICsp
+
+
+  
+      dataclass
+   (rest_framework_mcp.registry.types.ui_csp.UICsp)" href="#rest_framework_mcp.registry.types.ui_csp.UICsp">UICsp</a> | None</code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Origins the view needs; see
+<a class="autorefs autorefs-internal" title="UICsp
+
+
+  
+      dataclass
+  " href="#rest_framework_mcp.registry.types.ui_csp.UICsp"><code>UICsp</code></a>.</p>
+              </div>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td><code><span title="rest_framework_mcp.registry.types.ui_resource_meta.UIResourceMeta.permissions">permissions</span></code></td>
+            <td>
+                  <code><span title="collections.abc.Sequence">Sequence</span>[<a class="autorefs autorefs-internal" title="UIPermission (rest_framework_mcp.constants.UIPermission)" href="#rest_framework_mcp.constants.UIPermission">UIPermission</a>]</code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Browser capabilities the view would use. The host decides
+whether to grant them.</p>
+              </div>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td><code><span title="rest_framework_mcp.registry.types.ui_resource_meta.UIResourceMeta.domain">domain</span></code></td>
+            <td>
+                  <code><span title="str">str</span> | None</code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>A stable identity for the view's origin, letting a host group
+views from one publisher — for a single consent prompt, say —
+rather than treating every URI as unrelated.</p>
+              </div>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td><code><span title="rest_framework_mcp.registry.types.ui_resource_meta.UIResourceMeta.prefers_border">prefers_border</span></code></td>
+            <td>
+                  <code><span title="bool">bool</span> | None</code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Rendering hint that the view looks better with the
+host's chrome around it. A hint, not a requirement.</p>
+              </div>
+            </td>
+          </tr>
+      </tbody>
+    </table>
 
 
 
@@ -6468,23 +6671,72 @@ closed shape on the way in.</p>
         <p>The network origins an interactive view needs, declared to the host.</p>
 <p>The server <strong>declares</strong>; the host <strong>enforces</strong>. A host builds the iframe's
 Content-Security-Policy from this, so an origin the view talks to but does
-not declare here is blocked at runtime — with nothing in the server logs to
+not declare here is blocked at runtime, with nothing in the server logs to
 say so.</p>
-<p>Each field is a list of origins (<code>"https://api.example.com"</code>), mapping
-onto the corresponding CSP directive:</p>
-<ul>
-<li><code>connect_domains</code> — <code>fetch</code> / <code>XMLHttpRequest</code> / WebSocket targets.</li>
-<li><code>resource_domains</code> — images, stylesheets, scripts, fonts. A view that
-  loads Django <code>{% static %}</code> assets must list the static origin here;
-  a self-contained single-file template needs nothing.</li>
-<li><code>frame_domains</code> — origins the view may itself embed in an iframe.</li>
-<li><code>base_uri_domains</code> — permitted values for the document's <code>&lt;base&gt;</code>.</li>
-</ul>
-<p>A list is as welcome as a tuple — <code>to_dict</code> copies either way, mirroring
-<code>ordering_fields</code> on the selector-tool registrations.</p>
-<p>Empty lists are omitted from the payload, so declaring nothing declares
-nothing — it is not the same as declaring "deny all", which is the host's
-default anyway.</p>
+<p>Each field is a sequence of origins (<code>"https://api.example.com"</code>) mapping
+onto one CSP directive. An empty one is omitted from the payload, so
+declaring nothing declares nothing — which is not the same as declaring
+"deny all", the host's default anyway.</p>
+
+
+<p><span class="doc-section-title">Attributes:</span></p>
+    <table>
+      <thead>
+        <tr>
+          <th>Name</th>
+          <th>Type</th>
+          <th>Description</th>
+        </tr>
+      </thead>
+      <tbody>
+          <tr class="doc-section-item">
+            <td><code><span title="rest_framework_mcp.registry.types.ui_csp.UICsp.connect_domains">connect_domains</span></code></td>
+            <td>
+                  <code><span title="collections.abc.Sequence">Sequence</span>[<span title="str">str</span>]</code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p><code>fetch</code> / <code>XMLHttpRequest</code> / WebSocket targets.</p>
+              </div>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td><code><span title="rest_framework_mcp.registry.types.ui_csp.UICsp.resource_domains">resource_domains</span></code></td>
+            <td>
+                  <code><span title="collections.abc.Sequence">Sequence</span>[<span title="str">str</span>]</code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Images, stylesheets, scripts, fonts. A view loading
+Django <code>{% static %}</code> assets must list the static origin here; a
+self-contained single-file template needs nothing.</p>
+              </div>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td><code><span title="rest_framework_mcp.registry.types.ui_csp.UICsp.frame_domains">frame_domains</span></code></td>
+            <td>
+                  <code><span title="collections.abc.Sequence">Sequence</span>[<span title="str">str</span>]</code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Origins the view may itself embed in an iframe.</p>
+              </div>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td><code><span title="rest_framework_mcp.registry.types.ui_csp.UICsp.base_uri_domains">base_uri_domains</span></code></td>
+            <td>
+                  <code><span title="collections.abc.Sequence">Sequence</span>[<span title="str">str</span>]</code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Permitted values for the document's <code>&lt;base&gt;</code>.</p>
+              </div>
+            </td>
+          </tr>
+      </tbody>
+    </table>
 
 
 
@@ -6553,9 +6805,9 @@ default anyway.</p>
 
 
         <p>A browser capability an interactive view asks the host to grant.</p>
-<p>The host decides — this only declares what the view would use, in the
-resource's <code>_meta.ui.permissions</code>. Anything not declared is denied by
-the iframe sandbox the host builds.</p>
+<p>The host decides; this only declares what the view would use, in the
+resource's <code>_meta.ui.permissions</code>. Anything not declared is denied by the
+iframe sandbox the host builds.</p>
 
 
 
@@ -6606,21 +6858,53 @@ the iframe sandbox the host builds.</p>
 
 
         <p>Links a tool to the interactive view that renders its result.</p>
-<p>Serialises into the tool's <code>_meta</code> under the Apps extension's key, so a
-host reading <code>tools/list</code> knows which <code>ui://</code> resource to fetch and
-which surfaces may call the tool.</p>
-<ul>
-<li><code>resource_uri</code> — the <code>ui://</code> URI of a view registered on this same
-  server with <code>register_ui_resource</code>. A concrete URI: the spec defines no
-  expansion mechanism, because the host fetches a view once and then pushes
-  each result into it by notification.</li>
-<li><code>visibility</code> — who may call the tool. Empty means "unsaid", which
-  hosts read as the ordinary model-callable default. <strong>Host-enforced</strong>;
-  this server declares it and does not filter <code>tools/list</code> on it.</li>
-</ul>
-<p>The view renders from the tool's <code>structuredContent</code>, which is why a
-linked tool must emit it — :meth:<code>~rest_framework_mcp.MCPServer.register_service_tool</code>
+<p>Serialises into the tool's <code>_meta</code> under the Apps extension's key, so a host
+reading <code>tools/list</code> knows which <code>ui://</code> resource to fetch and which surfaces
+may call the tool. The view renders from the tool's <code>structuredContent</code>, so a
+linked tool must emit it:
+<a class="autorefs autorefs-internal" title="register_service_tool" href="../mcp-server/#rest_framework_mcp.server.mcp_server.MCPServer.register_service_tool"><code>register_service_tool</code></a>
 and friends refuse a link when it is switched off.</p>
+
+
+<p><span class="doc-section-title">Attributes:</span></p>
+    <table>
+      <thead>
+        <tr>
+          <th>Name</th>
+          <th>Type</th>
+          <th>Description</th>
+        </tr>
+      </thead>
+      <tbody>
+          <tr class="doc-section-item">
+            <td><code><span title="rest_framework_mcp.registry.types.ui_tool_meta.UIToolMeta.resource_uri">resource_uri</span></code></td>
+            <td>
+                  <code><span title="str">str</span></code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>The <code>ui://</code> URI of a view registered on this same
+server with <code>register_ui_resource</code>. Concrete, never a template —
+the spec defines no expansion mechanism, because the host fetches a
+view once and then pushes each result into it by notification.</p>
+              </div>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td><code><span title="rest_framework_mcp.registry.types.ui_tool_meta.UIToolMeta.visibility">visibility</span></code></td>
+            <td>
+                  <code><span title="collections.abc.Sequence">Sequence</span>[<a class="autorefs autorefs-internal" title="UIVisibility (rest_framework_mcp.constants.UIVisibility)" href="#rest_framework_mcp.constants.UIVisibility">UIVisibility</a>]</code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Who may call the tool. Empty is "unsaid", which hosts read
+as the ordinary model-callable default. <strong>Host-enforced</strong>: this
+server declares it and does not filter <code>tools/list</code> on it.</p>
+              </div>
+            </td>
+          </tr>
+      </tbody>
+    </table>
 
 
 
@@ -6694,11 +6978,41 @@ which the spec requires not to offer the model a tool whose visibility
 omits <code>MODEL</code>. This server only declares it — nothing here filters
 <code>tools/list</code> on it, because a client that does not implement the
 extension would not honour the rule anyway.</p>
-<ul>
-<li><code>MODEL</code>: the agent may call it — ordinary tool behaviour.</li>
-<li><code>APP</code>: the view may call it. An <code>APP</code>-only tool is a fine-grained
-  operation that exists to serve the view rather than the conversation.</li>
-</ul>
+
+
+<p><span class="doc-section-title">Attributes:</span></p>
+    <table>
+      <thead>
+        <tr>
+          <th>Name</th>
+          <th>Type</th>
+          <th>Description</th>
+        </tr>
+      </thead>
+      <tbody>
+          <tr class="doc-section-item">
+            <td><code><span title="rest_framework_mcp.constants.UIVisibility.MODEL">MODEL</span></code></td>
+            <td>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>The agent may call it — ordinary tool behaviour.</p>
+              </div>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td><code><span title="rest_framework_mcp.constants.UIVisibility.APP">APP</span></code></td>
+            <td>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>The view may call it. An <code>APP</code>-only tool is a fine-grained
+operation that serves the view rather than the conversation.</p>
+              </div>
+            </td>
+          </tr>
+      </tbody>
+    </table>
 
 
 
@@ -6755,17 +7069,194 @@ bindings in input order.</p>
 
     <div class="doc doc-contents first">
 
-        <p>Register every :class:<code>ToolDefinition</code> against <code>server</code>.</p>
-<p>Defaults dataclasses supply per-kind kwarg defaults that are merged
-underneath each definition's own values (definition wins on
-conflict — every field on the definition that is <em>not</em> <code>None</code> is
-considered "set by the author").</p>
-<p>Returns the list of resulting bindings in the same order as
-<code>definitions</code>, so test harnesses and observability code can
-introspect what landed.</p>
-<p>Raises :class:<code>TypeError</code> if a definition's <code>kind</code> is unrecognised
-(the discriminator is internal, so this can only happen via direct
-:class:<code>ToolDefinition</code> construction with an unsupported value).</p>
+        <p>Register every
+<a class="autorefs autorefs-internal" title="ToolDefinition
+
+
+  
+      dataclass
+  " href="#rest_framework_mcp.registry.types.tool_definition.ToolDefinition"><code>ToolDefinition</code></a>
+against <code>server</code>.</p>
+
+
+<p><span class="doc-section-title">Parameters:</span></p>
+    <table>
+      <thead>
+        <tr>
+          <th>Name</th>
+          <th>Type</th>
+          <th>Description</th>
+          <th>Default</th>
+        </tr>
+      </thead>
+      <tbody>
+          <tr class="doc-section-item">
+            <td>
+                <code>server</code>
+            </td>
+            <td>
+                  <code><a class="autorefs autorefs-internal" title="MCPServer (rest_framework_mcp.server.mcp_server.MCPServer)" href="../mcp-server/#rest_framework_mcp.server.mcp_server.MCPServer">MCPServer</a></code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>The server to register against.</p>
+              </div>
+            </td>
+            <td>
+                <em>required</em>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td>
+                <code>definitions</code>
+            </td>
+            <td>
+                  <code><span title="collections.abc.Iterable">Iterable</span>[<a class="autorefs autorefs-internal" title="ToolDefinition
+
+
+  
+      dataclass
+   (rest_framework_mcp.registry.types.tool_definition.ToolDefinition)" href="#rest_framework_mcp.registry.types.tool_definition.ToolDefinition">ToolDefinition</a>]</code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>The definitions to register, in order.</p>
+              </div>
+            </td>
+            <td>
+                <em>required</em>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td>
+                <code>selector_defaults</code>
+            </td>
+            <td>
+                  <code><a class="autorefs autorefs-internal" title="SelectorDefaults
+
+
+  
+      dataclass
+   (rest_framework_mcp.registry.types.selector_defaults.SelectorDefaults)" href="#rest_framework_mcp.registry.types.selector_defaults.SelectorDefaults">SelectorDefaults</a> | None</code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Per-kind defaults merged underneath each selector
+definition's own values. Any field the definition sets to something
+other than <code>None</code> counts as authored and wins.</p>
+              </div>
+            </td>
+            <td>
+                  <code>None</code>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td>
+                <code>service_defaults</code>
+            </td>
+            <td>
+                  <code><a class="autorefs autorefs-internal" title="ServiceDefaults
+
+
+  
+      dataclass
+   (rest_framework_mcp.registry.types.service_defaults.ServiceDefaults)" href="#rest_framework_mcp.registry.types.service_defaults.ServiceDefaults">ServiceDefaults</a> | None</code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>The same, for service definitions.</p>
+              </div>
+            </td>
+            <td>
+                  <code>None</code>
+            </td>
+          </tr>
+      </tbody>
+    </table>
+
+
+    <p><span class="doc-section-title">Returns:</span></p>
+    <table>
+      <thead>
+        <tr>
+          <th>Type</th>
+          <th>Description</th>
+        </tr>
+      </thead>
+      <tbody>
+          <tr class="doc-section-item">
+            <td>
+                  <code><span title="list">list</span>[<a class="autorefs autorefs-internal" title="ToolBinding
+
+
+  
+      dataclass
+   (rest_framework_mcp.registry.types.tool_binding.ToolBinding)" href="#rest_framework_mcp.registry.types.tool_binding.ToolBinding">ToolBinding</a> | <a class="autorefs autorefs-internal" title="SelectorToolBinding
+
+
+  
+      dataclass
+   (rest_framework_mcp.registry.types.selector_tool_binding.SelectorToolBinding)" href="#rest_framework_mcp.registry.types.selector_tool_binding.SelectorToolBinding">SelectorToolBinding</a>]</code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>The resulting bindings, in the order of <code>definitions</code>, so test</p>
+              </div>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td>
+                  <code><span title="list">list</span>[<a class="autorefs autorefs-internal" title="ToolBinding
+
+
+  
+      dataclass
+   (rest_framework_mcp.registry.types.tool_binding.ToolBinding)" href="#rest_framework_mcp.registry.types.tool_binding.ToolBinding">ToolBinding</a> | <a class="autorefs autorefs-internal" title="SelectorToolBinding
+
+
+  
+      dataclass
+   (rest_framework_mcp.registry.types.selector_tool_binding.SelectorToolBinding)" href="#rest_framework_mcp.registry.types.selector_tool_binding.SelectorToolBinding">SelectorToolBinding</a>]</code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>harnesses and observability code can introspect what landed.</p>
+              </div>
+            </td>
+          </tr>
+      </tbody>
+    </table>
+
+
+<p><span class="doc-section-title">Raises:</span></p>
+    <table>
+      <thead>
+        <tr>
+          <th>Type</th>
+          <th>Description</th>
+        </tr>
+      </thead>
+      <tbody>
+          <tr class="doc-section-item">
+            <td>
+                  <code><span title="TypeError">TypeError</span></code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>The definition's <code>kind</code> is unrecognised. The discriminator
+is internal, so this needs direct
+<a class="autorefs autorefs-internal" title="ToolDefinition
+
+
+  
+      dataclass
+  " href="#rest_framework_mcp.registry.types.tool_definition.ToolDefinition"><code>ToolDefinition</code></a>
+construction with an unsupported value.</p>
+              </div>
+            </td>
+          </tr>
+      </tbody>
+    </table>
 
 
     </div>
@@ -6791,24 +7282,37 @@ introspect what landed.</p>
 
 
 
-        <p>Declarative description of a single tool, fed to :func:<code>register_tools</code>.</p>
-<p><code>ToolDefinition</code> is a transport-agnostic container — it holds the
-kwargs that would otherwise be passed to
-:meth:<code>MCPServer.register_service_tool</code> or
-:meth:<code>MCPServer.register_selector_tool</code>, plus a :class:<code>ToolKind</code>
-discriminator that selects between them at dispatch time.</p>
-<p>Construct via the classmethods, not the dataclass constructor — the
-methods enforce the per-kind kwarg surface (a service definition
-can't set <code>ordering_fields</code> / <code>paginate</code>; a selector definition
-can't omit <code>input_serializer</code> quietly etc.). Filtering is declared
-on the spec (<code>SelectorSpec.filter_set</code>), not here, so neither kind
-carries a <code>filter_set</code> kwarg. Direct construction is available for
-tests and tooling but bypasses the type-shape guarantees.</p>
-<p>Every per-call kwarg defaults to <code>None</code>; downstream
-:func:<code>register_tools</code> treats <code>None</code> as "no override", which lets
-a :class:<code>SelectorDefaults</code> / :class:<code>ServiceDefaults</code> instance
-supply the value, falling back to the registration method's own
-default if neither is set.</p>
+        <p>Declarative description of a single tool, fed to
+<a class="autorefs autorefs-internal" title="register_tools" href="#rest_framework_mcp.registry.register_tools.register_tools"><code>register_tools</code></a>.</p>
+<p>A transport-agnostic container for the kwargs that would otherwise be passed to
+<a class="autorefs autorefs-internal" title="register_service_tool" href="../mcp-server/#rest_framework_mcp.server.mcp_server.MCPServer.register_service_tool"><code>MCPServer.register_service_tool</code></a>
+or
+<a class="autorefs autorefs-internal" title="register_selector_tool" href="../mcp-server/#rest_framework_mcp.server.mcp_server.MCPServer.register_selector_tool"><code>MCPServer.register_selector_tool</code></a>,
+plus a <a class="autorefs autorefs-internal" title="ToolKind" href="#rest_framework_mcp.constants.ToolKind"><code>ToolKind</code></a> discriminator selecting
+between them at dispatch time.</p>
+<p>Construct via <code>service</code> / <code>selector</code>, which enforce the
+per-kind kwarg surface; direct construction is available for tests and
+tooling but bypasses that. Filtering is declared on the spec
+(<code>SelectorSpec.filter_set</code>), so neither kind carries a <code>filter_set</code>
+kwarg.</p>
+<p>Every per-call kwarg defaults to <code>None</code>, which
+<a class="autorefs autorefs-internal" title="register_tools" href="#rest_framework_mcp.registry.register_tools.register_tools"><code>register_tools</code></a> reads
+as "no override" — letting a
+<a class="autorefs autorefs-internal" title="SelectorDefaults
+
+
+  
+      dataclass
+  " href="#rest_framework_mcp.registry.types.selector_defaults.SelectorDefaults"><code>SelectorDefaults</code></a>
+/
+<a class="autorefs autorefs-internal" title="ServiceDefaults
+
+
+  
+      dataclass
+  " href="#rest_framework_mcp.registry.types.service_defaults.ServiceDefaults"><code>ServiceDefaults</code></a>
+supply the value, and falling back to the registration method's own default when
+neither does.</p>
 
 
 
@@ -6847,9 +7351,9 @@ default if neither is set.</p>
 
     <div class="doc doc-contents ">
 
-        <p>Consumer-only label — <strong>never emitted on the MCP wire</strong>. Carried onto the
-resulting binding so a downstream library can render a richer label than the
-protocol <code>title</code>.</p>
+        <p>Consumer-only label, <strong>never emitted on the MCP wire</strong>. Carried onto the
+resulting binding so a downstream library can render a richer label than
+the protocol <code>title</code>.</p>
 
     </div>
 
@@ -6874,8 +7378,8 @@ protocol <code>title</code>.</p>
 
     <div class="doc doc-contents ">
 
-        <p>Consumer-only blurb, the sibling of :attr:<code>display_name</code> — also never
-emitted on the MCP wire, and likewise carried onto the binding.</p>
+        <p>Consumer-only blurb, the sibling of <code>display_name</code> and likewise
+never emitted on the MCP wire.</p>
 
     </div>
 
@@ -6900,10 +7404,9 @@ emitted on the MCP wire, and likewise carried onto the binding.</p>
 
     <div class="doc doc-contents ">
 
-        <p>Per-binding opt-back-in to <code>tools/list</code> when
-<code>FILTER_LISTINGS_BY_PERMISSIONS</code> would otherwise hide this binding.
-<code>None</code> means "use the registration default" (<code>False</code>); <code>True</code> /
-<code>False</code> force the behaviour.</p>
+        <p>Keep this binding in <code>tools/list</code> when
+<code>FILTER_LISTINGS_BY_PERMISSIONS</code> would otherwise hide it. <code>None</code> takes
+the registration default (<code>False</code>).</p>
 
     </div>
 
@@ -6933,8 +7436,8 @@ these required callable parameters at dispatch time.</p>
 <p>Trust has to be declared <strong>per transport</strong>, because <code>spec.kwargs</code> is a
 runtime callable whose output depends on the view context — URL path params
 under DRF, URI template vars for MCP resources, neither for MCP tools.
-<code>None</code> means no opt-in; supply a sequence to acknowledge that the provider
-is the static source for those names.</p>
+Supply a sequence to acknowledge that the provider is the static source for
+those names.</p>
 
     </div>
 
@@ -6959,9 +7462,14 @@ is the static source for those names.</p>
 
     <div class="doc doc-contents ">
 
-        <p>URL-derived values the model supplies as tool args, seeded into the
-off-HTTP <code>view.kwargs</code> at dispatch (see :class:<code>UrlKwarg</code>). <code>None</code> means
-"use the registration default" (no URL kwargs).</p>
+        <p>URL-derived values the model supplies as tool args, seeded into the off-HTTP
+<code>view.kwargs</code> at dispatch. See
+<a class="autorefs autorefs-internal" title="UrlKwarg
+
+
+  
+      dataclass
+  " href="#rest_framework_services.types.url_kwarg.UrlKwarg"><code>UrlKwarg</code></a>.</p>
 
     </div>
 
@@ -6986,9 +7494,14 @@ off-HTTP <code>view.kwargs</code> at dispatch (see :class:<code>UrlKwarg</code>)
 
     <div class="doc doc-contents ">
 
-        <p>Read-shaping values the model supplies as tool args, seeded into the
-off-HTTP <code>request.query_params</code> at dispatch (see :class:<code>QueryParam</code>).
-<code>None</code> means "use the registration default" (no query params).</p>
+        <p>Read-shaping values the model supplies as tool args, seeded into the off-HTTP
+<code>request.query_params</code> at dispatch. See
+<a class="autorefs autorefs-internal" title="QueryParam
+
+
+  
+      dataclass
+  " href="#rest_framework_services.types.query_param.QueryParam"><code>QueryParam</code></a>.</p>
 
     </div>
 
@@ -7084,10 +7597,9 @@ off-HTTP <code>request.query_params</code> at dispatch (see :class:<code>QueryPa
     <div class="doc doc-contents ">
 
         <p>Typed entry point for selector-tool definitions.</p>
-<p>The selector's <code>LIST</code> / <code>RETRIEVE</code> shape lives on the spec
-(<code>SelectorSpec.kind</code>, required in
-<code>djangorestframework-services</code> 0.13+), not here — the bulk
-registration loop reads it from there.</p>
+<p>The <code>LIST</code> / <code>RETRIEVE</code> shape lives on the spec
+(<code>SelectorSpec.kind</code>), not here — the bulk registration loop reads it
+from there.</p>
 
 
     </div>
@@ -7121,18 +7633,17 @@ registration loop reads it from there.</p>
 
 
 
-        <p>Per-kind defaults for :func:<code>register_tools</code> over service definitions.</p>
-<p>Every field is <code>Optional</code> and <code>None</code> is the "no override"
-sentinel — only non-<code>None</code> values are applied as defaults to the
-matching :meth:<code>MCPServer.register_service_tool</code> call. A per-
-definition value always wins over the default.</p>
-<p>Because <code>include_structured_content</code> and <code>include_output_schema</code>
-are tri-state on the registration method (<code>None</code> = inherit global
-setting, <code>True</code>/<code>False</code> = force), the same <code>None</code>-as-sentinel
-convention applies here: <code>ServiceDefaults(include_structured_content=None)</code>
-is identical to "no override" — if you want to force every binding
-to inherit the global, leave it unset; if you want to force
-<code>True</code>/<code>False</code>, pass that explicitly.</p>
+        <p>Per-kind defaults for
+<a class="autorefs autorefs-internal" title="register_tools" href="#rest_framework_mcp.registry.register_tools.register_tools"><code>register_tools</code></a> over
+service definitions.</p>
+<p><code>None</code> is the "no override" sentinel: only non-<code>None</code> values are applied as
+defaults to the matching
+<a class="autorefs autorefs-internal" title="register_service_tool" href="../mcp-server/#rest_framework_mcp.server.mcp_server.MCPServer.register_service_tool"><code>MCPServer.register_service_tool</code></a>
+call, and a per-definition value always wins.</p>
+<p>That includes the tri-state fields, where <code>None</code> on the registration
+method means "inherit the global setting": passing
+<code>include_structured_content=None</code> here is "no override", not a request to
+inherit. Leave it unset for the global, or pass <code>True</code> / <code>False</code>.</p>
 
 
 
@@ -7182,19 +7693,24 @@ to inherit the global, leave it unset; if you want to force
 
 
 
-        <p>Per-kind defaults for :func:<code>register_tools</code> over selector definitions.</p>
-<p>Sister of :class:<code>ServiceDefaults</code>. Same conventions:</p>
-<ul>
-<li>Every field is <code>Optional</code>.</li>
-<li><code>None</code> = "no override; use the per-definition or the
-  :meth:<code>MCPServer.register_selector_tool</code> default".</li>
-<li>Per-definition kwargs always win on conflict.</li>
-</ul>
-<p>Selector-only knobs (<code>input_serializer</code>, <code>ordering_fields</code>,
-<code>paginate</code>) live here too so a project that wants every selector
-tool to paginate by default can express that in one place. Filtering
-is not among them — <code>filter_set</code> is declared on each
-<code>SelectorSpec</code>, not as a registration default.</p>
+        <p>Per-kind defaults for
+<a class="autorefs autorefs-internal" title="register_tools" href="#rest_framework_mcp.registry.register_tools.register_tools"><code>register_tools</code></a> over
+selector definitions.</p>
+<p>Sister of
+<a class="autorefs autorefs-internal" title="ServiceDefaults
+
+
+  
+      dataclass
+  " href="#rest_framework_mcp.registry.types.service_defaults.ServiceDefaults"><code>ServiceDefaults</code></a>,
+with the same convention: <code>None</code> is "no override", deferring to the per-definition
+value or to
+<a class="autorefs autorefs-internal" title="register_selector_tool" href="../mcp-server/#rest_framework_mcp.server.mcp_server.MCPServer.register_selector_tool"><code>MCPServer.register_selector_tool</code></a>'s
+own default, and a per-definition kwarg always wins on conflict.</p>
+<p>The selector-only knobs live here too, so a project wanting every selector
+tool to paginate by default says so once. Filtering is not among them —
+<code>filter_set</code> is declared on each <code>SelectorSpec</code>, never as a
+registration default.</p>
 
 
 
@@ -7242,17 +7758,35 @@ is not among them — <code>filter_set</code> is declared on each
 
 
 
-        <p>Discriminator for :class:<code>ToolDefinition</code> and the
-:func:<code>register_tools</code> dispatch table.</p>
-<p>Internal-only — never appears on the wire. Members map directly to
-the two registration entry points on :class:<code>MCPServer</code>:</p>
-<ul>
-<li><code>SERVICE</code> → :meth:<code>MCPServer.register_service_tool</code></li>
-<li><code>SELECTOR</code> → :meth:<code>MCPServer.register_selector_tool</code></li>
-</ul>
-<p>Use :meth:<code>ToolDefinition.service</code> / :meth:<code>ToolDefinition.selector</code>
-instead of constructing :class:<code>ToolDefinition</code> with this kwarg
-directly — the classmethods are the typed entry points.</p>
+        <p>Discriminator for
+<a class="autorefs autorefs-internal" title="ToolDefinition
+
+
+  
+      dataclass
+  " href="#rest_framework_mcp.registry.types.tool_definition.ToolDefinition"><code>ToolDefinition</code></a>
+and the
+<a class="autorefs autorefs-internal" title="register_tools" href="#rest_framework_mcp.registry.register_tools.register_tools"><code>register_tools</code></a>
+dispatch table.</p>
+<p>Internal-only — never appears on the wire. <code>SERVICE</code> maps to
+<a class="autorefs autorefs-internal" title="register_service_tool" href="../mcp-server/#rest_framework_mcp.server.mcp_server.MCPServer.register_service_tool"><code>MCPServer.register_service_tool</code></a>,
+<code>SELECTOR</code> to
+<a class="autorefs autorefs-internal" title="register_selector_tool" href="../mcp-server/#rest_framework_mcp.server.mcp_server.MCPServer.register_selector_tool"><code>MCPServer.register_selector_tool</code></a>.
+Prefer
+<a class="autorefs autorefs-internal" title="service
+
+
+  
+      classmethod
+  " href="#rest_framework_mcp.registry.types.tool_definition.ToolDefinition.service"><code>ToolDefinition.service</code></a>
+/
+<a class="autorefs autorefs-internal" title="selector
+
+
+  
+      classmethod
+  " href="#rest_framework_mcp.registry.types.tool_definition.ToolDefinition.selector"><code>ToolDefinition.selector</code></a>
+over passing this kwarg by hand — those are the typed entry points.</p>
 
 
 
@@ -7304,20 +7838,21 @@ these dispatch policies); import them from <code>rest_framework_mcp.constants</c
 
 
         <p>How <code>dispatch_spec</code> treats <code>params</code> keys outside a spec's declared set.</p>
-<p>The <em>declared set</em> is derived from the spec without any transport knowledge:
-a :class:<code>ServiceSpec</code>'s <code>input_serializer</code> fields plus the keys its nested
-target selectors consume; a :class:<code>SelectorSpec</code>'s <code>selector</code> parameters.
-When the set cannot be enumerated — a callable that declares <code>**kwargs</code>, or
-a duck-typed <code>filter_set</code> whose fields are opaque to the core — the spec is
-treated as <strong>open</strong> and this policy is a no-op (there is nothing to call
-"unknown").</p>
+<p>The <em>declared set</em> is derived from the spec without any transport knowledge: a
+<a class="autorefs autorefs-external" href="https://artui.github.io/djangorestframework-services/reference/types/#rest_framework_services.types.service_spec.ServiceSpec"><code>ServiceSpec</code></a>'s
+<code>input_serializer</code> fields plus the keys its nested target selectors consume; a
+<a class="autorefs autorefs-external" href="https://artui.github.io/djangorestframework-services/reference/types/#rest_framework_services.types.selector_spec.SelectorSpec"><code>SelectorSpec</code></a>'s
+<code>selector</code> parameters. When the set cannot be enumerated — a callable that
+declares <code>**kwargs</code>, or a duck-typed <code>filter_set</code> whose fields are opaque to the
+core — the spec is treated as <strong>open</strong> and this policy is a no-op (there is nothing
+to call "unknown").</p>
 <p>Members (internal knob — the value never appears on a wire):</p>
 <ul>
 <li><code>IGNORE</code> — undeclared keys are dropped (DRF serializers already do this
   to a mutation's payload, and a selector simply never receives kwargs it
   doesn't declare). The default, reproducing the pre-policy behaviour.</li>
 <li><code>REJECT</code> — an undeclared key raises
-  :exc:<code>~rest_framework.exceptions.ValidationError</code>, the same surface a
+  <code>ValidationError</code>, the same surface a
   strict serializer produces. Useful when the caller wants a clean
   correction signal (e.g. a model calling a tool with a mistyped argument).</li>
 <li><code>PASSTHROUGH</code> — undeclared keys survive: they are merged onto the
@@ -7382,30 +7917,73 @@ format) before calling, so the declared-set check sees only spec inputs.</p>
 answers about its wire: <strong>can client-supplied input land as individual
 keyword arguments, and do those override the spec author's <code>kwargs(...)</code>
 invariants?</strong> It is a trust-boundary decision, not plumbing — which is why it
-belongs to the caller rather than the spec.</p>
-<p>Members (the value never appears on a wire — pass the member directly):</p>
-<ul>
-<li><code>AUTO</code> — resolve per spec type to reproduce the pre-policy behaviour:
-  :class:<code>ServiceSpec</code> → <code>BUNDLE</code> (a mutation takes its validated payload
-  as one <code>data</code> bundle), :class:<code>SelectorSpec</code> → <code>SPREAD_AUTHOR_WINS</code> (a
-  read spreads its params so the selector can declare them as parameters).
-  The default.</li>
-<li><code>BUNDLE</code> — only the validated payload reaches the callable, as <code>data=</code>;
-  individual client fields are <strong>not</strong> spread as kwargs. The safe default for
-  a mutation whose <code>kwargs</code> scopes the write — the client cannot inject
-  arbitrary keyword arguments.</li>
-<li><code>SPREAD_AUTHOR_WINS</code> — client fields are spread into the pool as
-  individual kwargs, but <code>spec.kwargs(...)</code> <strong>overrides on conflict</strong>. An
-  author-scoped <code>tenant_id</code> cannot be reset by the client. (drf-mcp's
-  former <code>MERGE</code>.)</li>
-<li><code>SPREAD_CALLER_WINS</code> — like <code>SPREAD_AUTHOR_WINS</code> but the client wins on
-  conflict: <code>spec.kwargs(...)</code> supplies <em>defaults</em> the client may override.
-  (drf-mcp's former <code>REPLACE</code>.)</li>
-</ul>
-<p>Reserved pool seeds (<code>request</code> / <code>user</code> / <code>data</code> / <code>serializer</code> /
-<code>instance</code> / <code>collection</code>) are always stripped from the spread in the
-<code>SPREAD_*</code> modes, so a client cannot poison transport-controlled state by
-naming an argument after one of them.</p>
+belongs to the caller rather than the spec. Pass the member directly; the
+value never appears on a wire. Those reserved seeds are always stripped from
+the spread in the <code>SPREAD_*</code> modes, so a client cannot poison
+transport-controlled state by naming an argument after one of them.</p>
+
+
+<p><span class="doc-section-title">Attributes:</span></p>
+    <table>
+      <thead>
+        <tr>
+          <th>Name</th>
+          <th>Type</th>
+          <th>Description</th>
+        </tr>
+      </thead>
+      <tbody>
+          <tr class="doc-section-item">
+            <td><code><span title="rest_framework_services.types.argument_binding.ArgumentBinding.AUTO">AUTO</span></code></td>
+            <td>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>The default — resolve per spec type: <a class="autorefs autorefs-external" href="https://artui.github.io/djangorestframework-services/reference/types/#rest_framework_services.types.service_spec.ServiceSpec"><code>ServiceSpec</code></a> →
+<code>BUNDLE</code> (a mutation takes its validated payload as one <code>data</code>
+bundle), <a class="autorefs autorefs-external" href="https://artui.github.io/djangorestframework-services/reference/types/#rest_framework_services.types.selector_spec.SelectorSpec"><code>SelectorSpec</code></a> → <code>SPREAD_AUTHOR_WINS</code> (a read
+spreads its params so the selector can declare them as parameters).</p>
+              </div>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td><code><span title="rest_framework_services.types.argument_binding.ArgumentBinding.BUNDLE">BUNDLE</span></code></td>
+            <td>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Only the validated payload reaches the callable, as <code>data=</code>;
+individual client fields are <strong>not</strong> spread as kwargs. The safe
+choice for a mutation whose <code>kwargs</code> scopes the write — the client
+cannot inject arbitrary keyword arguments.</p>
+              </div>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td><code><span title="rest_framework_services.types.argument_binding.ArgumentBinding.SPREAD_AUTHOR_WINS">SPREAD_AUTHOR_WINS</span></code></td>
+            <td>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Client fields are spread into the pool as individual
+kwargs, but <code>spec.kwargs(...)</code> <strong>overrides on conflict</strong> — an
+author-scoped <code>tenant_id</code> cannot be reset by the client.</p>
+              </div>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td><code><span title="rest_framework_services.types.argument_binding.ArgumentBinding.SPREAD_CALLER_WINS">SPREAD_CALLER_WINS</span></code></td>
+            <td>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Like <code>SPREAD_AUTHOR_WINS</code>, but the client wins on
+conflict: <code>spec.kwargs(...)</code> supplies <em>defaults</em> it may override.</p>
+              </div>
+            </td>
+          </tr>
+      </tbody>
+    </table>
 
 
 
@@ -7461,28 +8039,84 @@ any prior step's output as <code>ctx[alias]</code>. See
 
 
 
-        <p>One step in a :class:<code>~rest_framework_mcp.registry.types.chain_tool_binding.ChainToolBinding</code>.</p>
+        <p>One step in a
+<a class="autorefs autorefs-internal" title="ChainToolBinding
+
+
+  
+      dataclass
+  " href="#rest_framework_mcp.registry.types.chain_tool_binding.ChainToolBinding"><code>ChainToolBinding</code></a>.</p>
 <p>A step wraps a single <code>ServiceSpec</code> (a write) or <code>SelectorSpec</code> (a
 read) and binds its output to <code>alias</code> so later steps can read it via
 <code>ctx[alias]</code>.</p>
-<p>Fields:</p>
-<ul>
-<li><code>alias</code> — the name this step's result is stored under in the
-  :class:<code>ChainContext</code>. Must be unique within the chain.</li>
-<li><code>spec</code> — the <code>ServiceSpec</code> or <code>SelectorSpec</code> this step runs.</li>
-<li><code>inputs</code> — optional <code>(ctx) -&gt; Mapping</code> callable returning the kwargs
-  merged into the step's call pool (alongside <code>request</code> / <code>user</code>);
-  <code>resolve_callable_kwargs</code> then filters them to the callable's
-  signature. <code>None</code> (the default) means the step receives only
-  <code>request</code> / <code>user</code> / <code>data</code> (the validated chain <code>args</code>) — handy
-  for a first step whose service takes the chain input as <code>data</code>. Any
-  step that needs a prior output or a reshaped payload supplies
-  <code>inputs</code> explicitly.</li>
-</ul>
-<p>The step's result stored under <code>alias</code> is the <em>final</em> value — for a
-<code>ServiceSpec</code> with an <code>output_selector_spec.selector</code> that means the
-re-fetched value, so a downstream step reads what the response would
-serialize.</p>
+<p>What is stored under <code>alias</code> is the <em>final</em> value: for a <code>ServiceSpec</code>
+with an <code>output_selector_spec.selector</code> that means the re-fetched value,
+so a downstream step reads what the response would serialize.</p>
+
+
+<p><span class="doc-section-title">Attributes:</span></p>
+    <table>
+      <thead>
+        <tr>
+          <th>Name</th>
+          <th>Type</th>
+          <th>Description</th>
+        </tr>
+      </thead>
+      <tbody>
+          <tr class="doc-section-item">
+            <td><code><span title="rest_framework_mcp.registry.types.chain_step.ChainStep.alias">alias</span></code></td>
+            <td>
+                  <code><span title="str">str</span></code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>The name this step's result is stored under in the
+<a class="autorefs autorefs-internal" title="ChainContext
+
+
+  
+      dataclass
+  " href="#rest_framework_mcp.registry.types.chain_context.ChainContext"><code>ChainContext</code></a>.
+Must be unique within the chain.</p>
+              </div>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td><code><span title="rest_framework_mcp.registry.types.chain_step.ChainStep.spec">spec</span></code></td>
+            <td>
+                  <code><a class="autorefs autorefs-external" title="rest_framework_services.types.service_spec.ServiceSpec" href="https://artui.github.io/djangorestframework-services/reference/types/#rest_framework_services.types.service_spec.ServiceSpec">ServiceSpec</a>[<span title="typing.Any">Any</span>, <span title="typing.Any">Any</span>, <span title="typing.Any">Any</span>] | <a class="autorefs autorefs-external" title="rest_framework_services.types.selector_spec.SelectorSpec" href="https://artui.github.io/djangorestframework-services/reference/types/#rest_framework_services.types.selector_spec.SelectorSpec">SelectorSpec</a>[<span title="typing.Any">Any</span>, <span title="typing.Any">Any</span>]</code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>The <code>ServiceSpec</code> or <code>SelectorSpec</code> this step runs.</p>
+              </div>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td><code><span title="rest_framework_mcp.registry.types.chain_step.ChainStep.inputs">inputs</span></code></td>
+            <td>
+                  <code><span title="collections.abc.Callable">Callable</span>[[<a class="autorefs autorefs-internal" title="ChainContext
+
+
+  
+      dataclass
+   (rest_framework_mcp.registry.types.chain_context.ChainContext)" href="#rest_framework_mcp.registry.types.chain_context.ChainContext">ChainContext</a>], <span title="collections.abc.Mapping">Mapping</span>[<span title="str">str</span>, <span title="typing.Any">Any</span>]] | None</code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p><code>(ctx) -&gt; Mapping</code> returning the kwargs merged into the
+step's call pool alongside <code>request</code> / <code>user</code>;
+<code>resolve_callable_kwargs</code> then filters them to the callable's
+signature. <code>None</code> gives the step only <code>request</code> / <code>user</code> /
+<code>data</code> (the validated chain <code>args</code>), which is what a first step
+taking the chain input as <code>data</code> wants. Any step needing a prior
+output or a reshaped payload supplies this explicitly.</p>
+              </div>
+            </td>
+          </tr>
+      </tbody>
+    </table>
 
 
 
@@ -7533,25 +8167,80 @@ serialize.</p>
 
 
         <p>The accumulating context a chain tool threads through its steps.</p>
-<p>Passed to each :class:<code>~rest_framework_mcp.registry.types.chain_step.ChainStep</code>'s
-<code>inputs</code> callable so a step can build its call kwargs from the
-validated tool arguments and any prior step's output:</p>
-<p>.. code-block:: python</p>
-<div class="language-text highlight"><pre><span></span><code>inputs=lambda ctx: {&quot;account_id&quot;: ctx[&quot;acct&quot;].id, **ctx.args}
-</code></pre></div>
-<ul>
-<li><code>args</code> — the validated chain input (a dataclass instance, a dict, or
-  the raw arguments mapping when no input serializer is resolved).</li>
-<li><code>ctx[alias]</code> — the (post-output-selector) result a prior step stored
-  under its alias. <code>KeyError</code> if the alias hasn't run yet, which can
-  only happen if a step references a later alias — a wiring bug worth
-  surfacing loudly.</li>
-<li><code>request</code> / <code>user</code> — the synthesised DRF request and the
-  authenticated user, for steps whose <code>inputs</code> need them.</li>
-</ul>
-<p>Mutable by design: the dispatcher appends to <code>outputs</code> as each step
-completes. A fresh instance is built per tool call, so there is no
-cross-request shared state.</p>
+<p>Passed to each <a class="autorefs autorefs-internal" title="ChainStep
+
+
+  
+      dataclass
+  " href="#rest_framework_mcp.registry.types.chain_step.ChainStep"><code>ChainStep</code></a>'s
+<code>inputs</code> callable so a step can build its call kwargs from the validated
+tool arguments and any prior step's output:</p>
+<div class="language-python highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="n">inputs</span><span class="o">=</span><span class="k">lambda</span> <span class="n">ctx</span><span class="p">:</span> <span class="p">{</span><span class="s2">&quot;account_id&quot;</span><span class="p">:</span> <span class="n">ctx</span><span class="p">[</span><span class="s2">&quot;acct&quot;</span><span class="p">]</span><span class="o">.</span><span class="n">id</span><span class="p">,</span> <span class="o">**</span><span class="n">ctx</span><span class="o">.</span><span class="n">args</span><span class="p">}</span>
+</span></code></pre></div>
+<p><code>ctx[alias]</code> is the post-output-selector result a prior step stored, and
+raises <code>KeyError</code> for an alias that has not run — only possible when a
+step references a later one, a wiring bug worth surfacing loudly. Mutable
+by design, and built fresh per tool call, so there is no cross-request
+shared state.</p>
+
+
+<p><span class="doc-section-title">Attributes:</span></p>
+    <table>
+      <thead>
+        <tr>
+          <th>Name</th>
+          <th>Type</th>
+          <th>Description</th>
+        </tr>
+      </thead>
+      <tbody>
+          <tr class="doc-section-item">
+            <td><code><span title="rest_framework_mcp.registry.types.chain_context.ChainContext.args">args</span></code></td>
+            <td>
+                  <code><span title="typing.Any">Any</span></code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>The validated chain input — a dataclass instance, a dict, or the
+raw arguments mapping when no input serializer is resolved.</p>
+              </div>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td><code><span title="rest_framework_mcp.registry.types.chain_context.ChainContext.request">request</span></code></td>
+            <td>
+                  <code><span title="typing.Any">Any</span></code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>The synthesised DRF request.</p>
+              </div>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td><code><span title="rest_framework_mcp.registry.types.chain_context.ChainContext.user">user</span></code></td>
+            <td>
+                  <code><span title="typing.Any">Any</span></code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>The authenticated user.</p>
+              </div>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td><code><span title="rest_framework_mcp.registry.types.chain_context.ChainContext.outputs">outputs</span></code></td>
+            <td>
+                  <code><span title="dict">dict</span>[<span title="str">str</span>, <span title="typing.Any">Any</span>]</code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Alias to step result, filled in as the chain runs.</p>
+              </div>
+            </td>
+          </tr>
+      </tbody>
+    </table>
 
 
 
@@ -7602,32 +8291,110 @@ cross-request shared state.</p>
 
 
         <p>All wiring for a single MCP tool that runs a <strong>sequence of specs</strong>.</p>
-<p>A chain tool threads a :class:<code>~rest_framework_mcp.registry.types.chain_context.ChainContext</code>
-through its ordered <code>steps</code> — each step's result is stored under its
-alias and is readable by later steps — so a single tool call can express
-<code>retrieve x → write y → write z</code> with <code>z</code> derived from both <code>x</code> and
-<code>y</code>. Sequencing/orchestration is a transport concern owned by the MCP
-layer; the steps themselves are ordinary <code>ServiceSpec</code> / <code>SelectorSpec</code>
-units of API behaviour.</p>
-<p>Fields:</p>
-<ul>
-<li><code>steps</code> — the ordered steps, run front to back. Aliases must be
-  unique. Non-empty.</li>
-<li><code>input_serializer</code> — the chain's input schema / validation. <code>None</code>
-  falls back to the <strong>first step's</strong> <code>ServiceSpec.input_serializer</code> (a
-  first selector step has none, so the chain then validates nothing and
-  <code>ctx.args</code> is the raw arguments mapping).</li>
-<li><code>atomic</code> — when <code>True</code> (default) the whole step sequence runs inside
-  a single <code>transaction.atomic()</code>; any step raising rolls back every
-  prior write. Per-step <code>spec.atomic</code> is subordinate (steps run with
-  <code>atomic=False</code> under the chain transaction).</li>
-<li><code>output_alias</code> — which step's result is rendered as the tool response.
-  <code>None</code> (default) renders the <strong>last</strong> step. Mutually exclusive with
-  <code>output_all</code>.</li>
-<li><code>output_all</code> — when <code>True</code> the response is <code>{alias: rendered}</code> for
-  every step that declares an output serializer.</li>
-</ul>
-<p>The remaining fields mirror :class:<code>~rest_framework_mcp.registry.types.tool_binding.ToolBinding</code>.</p>
+<p>A chain tool threads a
+<a class="autorefs autorefs-internal" title="ChainContext
+
+
+  
+      dataclass
+  " href="#rest_framework_mcp.registry.types.chain_context.ChainContext"><code>ChainContext</code></a>
+through its ordered <code>steps</code> — each step's result is stored under its alias and
+readable by later steps — so one tool call can express <code>retrieve x → write y →
+write z</code> with <code>z</code> derived from both <code>x</code> and <code>y</code>. Sequencing is a transport
+concern owned by the MCP layer; the steps themselves are ordinary <code>ServiceSpec</code> /
+<code>SelectorSpec</code> units of API behaviour.</p>
+<p>Fields not listed below mirror
+<a class="autorefs autorefs-internal" title="ToolBinding
+
+
+  
+      dataclass
+  " href="#rest_framework_mcp.registry.types.tool_binding.ToolBinding"><code>ToolBinding</code></a>.</p>
+
+
+<p><span class="doc-section-title">Attributes:</span></p>
+    <table>
+      <thead>
+        <tr>
+          <th>Name</th>
+          <th>Type</th>
+          <th>Description</th>
+        </tr>
+      </thead>
+      <tbody>
+          <tr class="doc-section-item">
+            <td><code><span title="rest_framework_mcp.registry.types.chain_tool_binding.ChainToolBinding.steps">steps</span></code></td>
+            <td>
+                  <code><span title="tuple">tuple</span>[<a class="autorefs autorefs-internal" title="ChainStep
+
+
+  
+      dataclass
+   (rest_framework_mcp.registry.types.chain_step.ChainStep)" href="#rest_framework_mcp.registry.types.chain_step.ChainStep">ChainStep</a>, ...]</code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>The ordered steps, run front to back. Non-empty, and aliases
+must be unique.</p>
+              </div>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td><code><span title="rest_framework_mcp.registry.types.chain_tool_binding.ChainToolBinding.input_serializer">input_serializer</span></code></td>
+            <td>
+                  <code><span title="type">type</span> | None</code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>The chain's input schema and validation. <code>None</code>
+falls back to the <strong>first step's</strong>
+<code>ServiceSpec.input_serializer</code>; a first selector step has none,
+so the chain then validates nothing and <code>ctx.args</code> is the raw
+arguments mapping.</p>
+              </div>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td><code><span title="rest_framework_mcp.registry.types.chain_tool_binding.ChainToolBinding.atomic">atomic</span></code></td>
+            <td>
+                  <code><span title="bool">bool</span></code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Run the whole sequence inside one <code>transaction.atomic()</code>, so
+any step raising rolls back every prior write. Per-step
+<code>spec.atomic</code> is subordinate — steps run with <code>atomic=False</code>
+under the chain transaction.</p>
+              </div>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td><code><span title="rest_framework_mcp.registry.types.chain_tool_binding.ChainToolBinding.output_alias">output_alias</span></code></td>
+            <td>
+                  <code><span title="str">str</span> | None</code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Which step's result is rendered as the tool response.
+<code>None</code> renders the <strong>last</strong> step. Mutually exclusive with
+<code>output_all</code>.</p>
+              </div>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td><code><span title="rest_framework_mcp.registry.types.chain_tool_binding.ChainToolBinding.output_all">output_all</span></code></td>
+            <td>
+                  <code><span title="bool">bool</span></code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Render <code>{alias: rendered}</code> for every step that declares
+an output serializer.</p>
+              </div>
+            </td>
+          </tr>
+      </tbody>
+    </table>
 
 
 
@@ -7666,9 +8433,8 @@ units of API behaviour.</p>
 
     <div class="doc doc-contents ">
 
-        <p>Consumer-only label — <strong>never emitted on the MCP wire</strong> (<code>tools/list</code>
-ignores it). Provided so a downstream library can render a richer label
-than the protocol <code>title</code>. <code>None</code> means "unset".</p>
+        <p>Consumer-only label, <strong>never emitted on the MCP wire</strong>, so a downstream
+library can render a richer label than the protocol <code>title</code>.</p>
 
     </div>
 
@@ -7693,8 +8459,8 @@ than the protocol <code>title</code>. <code>None</code> means "unset".</p>
 
     <div class="doc doc-contents ">
 
-        <p>Consumer-only blurb, the sibling of :attr:<code>display_name</code> — also never
-emitted on the MCP wire. <code>None</code> means "unset".</p>
+        <p>Consumer-only blurb, the sibling of <code>display_name</code> and likewise
+never emitted on the MCP wire.</p>
 
     </div>
 
@@ -7719,8 +8485,8 @@ emitted on the MCP wire. <code>None</code> means "unset".</p>
 
     <div class="doc doc-contents ">
 
-        <p>Display icons for this entry, emitted in its listing. Purely
-presentational — a client renders them; nothing in dispatch reads them.</p>
+        <p>Display icons, emitted in this tool's listing entry. Purely
+presentational; nothing in dispatch reads them.</p>
 
     </div>
 
@@ -7745,10 +8511,10 @@ presentational — a client renders them; nothing in dispatch reads them.</p>
 
     <div class="doc doc-contents ">
 
-        <p>What this tool's payload becomes in the result's <code>content</code> array.
-<code>TEXT</code> (the default) renders JSON per :attr:<code>output_format</code>; the other
-kinds project the payload into an image / audio / resource-link block.
-See :class:<code>ToolContentKind</code>.</p>
+        <p>What this tool's payload becomes in the result's <code>content</code> array. <code>TEXT</code>
+renders JSON per <code>output_format</code>; the other kinds project it into an image / audio
+/ resource-link block. See
+<a class="autorefs autorefs-internal" title="ToolContentKind" href="../protocol/#rest_framework_mcp.constants.ToolContentKind"><code>ToolContentKind</code></a>.</p>
 
     </div>
 
@@ -7773,9 +8539,9 @@ See :class:<code>ToolContentKind</code>.</p>
 
     <div class="doc doc-contents ">
 
-        <p>The media type for an <code>IMAGE</code> / <code>AUDIO</code> :attr:<code>content_kind</code>.
-Required for those and meaningless for the rest — a resource link
-carries its own <code>mimeType</code> per entry.</p>
+        <p>The media type for an <code>IMAGE</code> / <code>AUDIO</code> <code>content_kind</code>.
+Required for those and meaningless for the rest — a resource link carries
+its own <code>mimeType</code> per entry.</p>
 
     </div>
 
@@ -7800,11 +8566,10 @@ carries its own <code>mimeType</code> per entry.</p>
 
     <div class="doc doc-contents ">
 
-        <p>Whether calling this tool hands back a task handle instead of a result.</p>
-<p><code>FORBIDDEN</code> by default, so nothing changes for a tool registered before
-tasks existed. See :class:<code>TaskPolicy</code> — and note that the choice lives
-here, on the binding, because the extension makes the <em>server</em> the sole
-decider and gives the client no way to ask.</p>
+        <p>Whether calling this tool hands back a task handle instead of a result.
+The choice lives on the binding because the extension makes the <em>server</em>
+the sole decider and gives the client no way to ask. See
+<a class="autorefs autorefs-internal" title="TaskPolicy" href="../protocol/#rest_framework_mcp.constants.TaskPolicy"><code>TaskPolicy</code></a>.</p>
 
     </div>
 
@@ -7830,21 +8595,18 @@ decider and gives the client no way to ask.</p>
     <div class="doc doc-contents ">
 
         <p>URI templates naming the resources a successful call changed.</p>
-<p>Published as <code>notifications/resources/updated</code> after the transaction
-commits, so subscribers re-read. Uses the same <code>{var}</code> syntax as a
-resource's <code>uri_template</code>, rendered against the result merged with the
-call's arguments::</p>
+<p>Same contract as <a class="autorefs autorefs-internal" title="invalidates
+
+
+  
+      class-attribute
+      instance-attribute
+  " href="#rest_framework_mcp.registry.types.tool_binding.ToolBinding.invalidates"><code>invalidates</code></a>:
+published as <code>notifications/resources/updated</code> once the transaction
+commits, rendered against the result merged with the call's arguments, and
+matched exactly — so name the collection too if you want it watched:</p>
 <div class="language-text highlight"><pre><span></span><code>invalidates=(&quot;invoices://{pk}&quot;, &quot;invoices://&quot;)
 </code></pre></div>
-<p>⚠ <strong>Name the collection too if you want it watched.</strong> Topic matching is
-exact — a prefix rule would match <code>invoices://1</code> against <code>invoices://11</code>
-and miss a tenant-scoped scheme entirely — so a client watching
-<code>invoices://</code> hears nothing unless the write says so.</p>
-<p>⚠ <strong>Its boundary is real:</strong> this fires for calls that go through this
-server and for nothing else. A management command, a Celery job or an admin
-edit changes the same rows and publishes nothing, which is why
-<code>MCPServer.notify_resource_updated</code> exists rather than being an
-afterthought.</p>
 
     </div>
 
@@ -7894,11 +8656,9 @@ afterthought.</p>
 
         <p>The serializer used to validate the chain's <code>arguments</code>.</p>
 <p><code>input_serializer</code> when set, else the <strong>first step's</strong>
-<code>ServiceSpec.input_serializer</code> (the first-step fallback). A first
-selector step contributes no serializer — the chain then validates
-nothing and <code>ctx.args</code> is the raw arguments mapping. Shared by the
-<code>tools/list</code> schema builder and the dispatcher so the advertised
-schema and the validation never drift.</p>
+<code>ServiceSpec.input_serializer</code>. Shared by the <code>tools/list</code> schema
+builder and the dispatcher, so the advertised schema and the validation
+cannot drift.</p>
 
     </div>
 
@@ -7923,10 +8683,10 @@ schema and the validation never drift.</p>
     <div class="doc doc-contents ">
 
         <p>The serializer the rendered output goes through, for <code>outputSchema</code>.</p>
-<p>The output step's serializer (<code>ServiceSpec.output_selector_spec.
+<p>The output step's own (<code>ServiceSpec.output_selector_spec.
 output_serializer</code> or <code>SelectorSpec.output_serializer</code>). <code>None</code>
-when <code>output_all</code> (the response is a multi-key object with no single
-schema) or when the output step declares no serializer.</p>
+under <code>output_all</code>, where the response is a multi-key object with no
+single schema, or when the output step declares no serializer.</p>
 
     </div>
 
@@ -7969,44 +8729,125 @@ top, so the shape is described the same way across transports.</p>
     <div class="doc doc-contents first">
 
         <p>Build the JSON Schema for a selector tool's <code>inputSchema</code>.</p>
-<p>Merges five sources, in order of precedence (later sources override
-earlier ones on key collision):</p>
+<p>Merges five sources, in order of precedence (later sources override earlier
+ones on key collision):</p>
 <ol>
-<li><strong>Reflected <code>spec</code> shape</strong> — the selector callable's own parameters
-   (an <code>**extras: Unpack[TypedDict]</code> expanded into one property per key,
-   the TypedDict's required keys populating <code>required</code>, the
-   <code>request</code> / <code>user</code> / <code>view</code> transport seeds skipped) plus the
-   <code>filter_set</code> fields — via drf-services' :func:<code>spec_to_json_schema</code>,
-   the <em>same</em> reflection the Pydantic-AI <code>SpecToolset</code> consumes, so both
-   transports advertise the same shape. This is what makes a URL kwarg a
-   selector reads from its <code>extras</code> (a nested route's <code>parent_pk</code>)
-   discoverable over MCP without an explicit <code>UrlKwarg</code> — and what makes
-   a <code>FilterSet</code>'s <code>OrderingFilter</code> advertise <code>ordering</code> here with
-   nothing else declared, since it subclasses <code>ChoiceFilter</code> and reflects
-   as an enum of the FilterSet's public choices.</li>
-<li><strong><code>spec.input_serializer</code></strong> — any explicit input shape declared by the
-   consumer (tool-specific args that aren't reflected selector params). A
-   <code>SelectorSpec</code> carries no input serializer, so this is MCP-only; its
-   curated fields win over a reflected param of the same name, and all
-   required-marked fields stay required.</li>
-<li><strong><code>ordering_fields</code></strong> — adds an <code>ordering</code> property as an enum
-   of <code>"&lt;field&gt;"</code> and <code>"-&lt;field&gt;"</code> values. Optional, and <strong>deprecated</strong>
-   in favour of source 1: these are raw ORM paths, a second vocabulary for
-   the same key. Declaring it alongside a filter-provided ordering is
-   refused at construction, so it can never overwrite the reflected enum
-   here — which is what it used to do, silently.</li>
-<li><strong><code>paginate=True</code></strong> — adds optional <code>page</code> (positive integer)
-   and <code>limit</code> (positive integer) properties. <code>limit</code> carries a
-   <code>maximum</code> when the caller supplies the effective <code>max_page_size</code>
-   (the binding's override, else the server's) so the model sees the same
-   ceiling dispatch will clamp to.</li>
-<li><strong><code>url_kwargs</code></strong> — each registered :class:<code>UrlKwarg</code>'s advertised
-   schema; wins over a reflected key of the same name (it is the
-   intentional, authoritative declaration).</li>
+<li><strong>Reflected <code>spec</code> shape</strong> — the selector callable's own parameters (an
+   <code>**extras: Unpack[TypedDict]</code> expanded into one property per key, its
+   required keys populating <code>required</code>, the <code>request</code> / <code>user</code> /
+   <code>view</code> transport seeds skipped) plus the <code>filter_set</code> fields, via
+   drf-services' <code>spec_to_json_schema</code>. This is the <em>same</em> reflection
+   the Pydantic-AI <code>SpecToolset</code> consumes, so both transports advertise
+   the same shape: a nested route's <code>parent_pk</code> read from <code>extras</code> is
+   discoverable without an explicit <code>UrlKwarg</code>, and a <code>FilterSet</code>'s
+   <code>OrderingFilter</code> advertises <code>ordering</code> with nothing else declared.</li>
+<li><strong><code>spec.input_serializer</code></strong> — tool-specific args that aren't reflected
+   selector params. A <code>SelectorSpec</code> carries no input serializer, so this
+   is MCP-only; its curated fields win over a reflected param of the same
+   name, and required-marked fields stay required.</li>
+<li><strong><code>ordering_fields</code></strong> — adds an <code>ordering</code> enum of <code>"&lt;field&gt;"</code> and
+   <code>"-&lt;field&gt;"</code> values. <strong>Deprecated</strong> in favour of source 1: these are
+   raw ORM paths, a second vocabulary for the same key. Declaring it
+   alongside a filter-provided ordering is refused at construction, so it
+   can never overwrite the reflected enum here.</li>
+<li><strong><code>paginate=True</code></strong> — adds optional <code>page</code> and <code>limit</code> positive
+   integers. <code>limit</code> carries a <code>maximum</code> when <code>max_page_size</code> is
+   supplied, so the model sees the ceiling dispatch will clamp to.</li>
+<li><strong><code>url_kwargs</code></strong> — each registered
+   <a class="autorefs autorefs-internal" title="UrlKwarg
+
+
+  
+      dataclass
+  " href="#rest_framework_services.types.url_kwarg.UrlKwarg"><code>UrlKwarg</code></a>'s advertised
+   schema, winning over a reflected key of the same name.</li>
 </ol>
-<p>The final schema is always an object with <code>"type": "object"</code>,
-<code>"properties": {...}</code>, and <code>"required": [...]</code> only when at
-least one required field exists.</p>
+
+
+<p><span class="doc-section-title">Parameters:</span></p>
+    <table>
+      <thead>
+        <tr>
+          <th>Name</th>
+          <th>Type</th>
+          <th>Description</th>
+          <th>Default</th>
+        </tr>
+      </thead>
+      <tbody>
+          <tr class="doc-section-item">
+            <td>
+                <code>binding</code>
+            </td>
+            <td>
+                  <code><a class="autorefs autorefs-internal" title="SelectorToolBinding
+
+
+  
+      dataclass
+   (rest_framework_mcp.registry.types.selector_tool_binding.SelectorToolBinding)" href="#rest_framework_mcp.registry.types.selector_tool_binding.SelectorToolBinding">SelectorToolBinding</a></code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>The selector tool binding to describe.</p>
+              </div>
+            </td>
+            <td>
+                <em>required</em>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td>
+                <code>max_page_size</code>
+            </td>
+            <td>
+                  <code><span title="int">int</span> | None</code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>The effective page ceiling — the binding's override, else
+the server's. <code>None</code> advertises no <code>maximum</code>.</p>
+              </div>
+            </td>
+            <td>
+                  <code>None</code>
+            </td>
+          </tr>
+      </tbody>
+    </table>
+
+
+    <p><span class="doc-section-title">Returns:</span></p>
+    <table>
+      <thead>
+        <tr>
+          <th>Type</th>
+          <th>Description</th>
+        </tr>
+      </thead>
+      <tbody>
+          <tr class="doc-section-item">
+            <td>
+                  <code><span title="dict">dict</span>[<span title="str">str</span>, <span title="typing.Any">Any</span>]</code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>An object schema carrying <code>properties</code>, and <code>required</code> only when at</p>
+              </div>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td>
+                  <code><span title="dict">dict</span>[<span title="str">str</span>, <span title="typing.Any">Any</span>]</code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>least one required field exists.</p>
+              </div>
+            </td>
+          </tr>
+      </tbody>
+    </table>
 
 
     </div>
@@ -8032,21 +8873,16 @@ least one required field exists.</p>
 
 
         <p>Pluggable persistence for <code>MCP-Session-Id</code> lifecycle.</p>
-<p>The transport calls :meth:<code>create</code> after a successful <code>initialize</code> —
-binding the new session to the authenticated principal — and
-:meth:<code>owner</code> on every subsequent request to enforce both that clients
-re-initialize after a server restart and that a session minted under
-one principal cannot be presented by another. :meth:<code>destroy</code> is
-invoked on HTTP DELETE (after the same ownership check).</p>
+<p>The transport calls <code>create</code> after a successful <code>initialize</code>,
+binding the new session to the authenticated principal, and <code>owner</code>
+on every subsequent request — which is what enforces both that clients
+re-initialize after a server restart and that a session minted under one
+principal cannot be presented by another. <code>destroy</code> runs on HTTP
+DELETE, after the same ownership check.</p>
 <p><code>principal_id</code> is an opaque string the transport derives from the
 authenticated token (see
-:func:<code>rest_framework_mcp.auth.principal_for_token.principal_for_token</code>);
+<code>rest_framework_mcp.auth.principal_for_token.principal_for_token</code>);
 stores persist and return it verbatim.</p>
-<p>.. versionchanged:: 0.7
-   :meth:<code>create</code> takes a required keyword-only <code>principal_id</code> and
-   :meth:<code>owner</code> joined the protocol. Custom store implementations
-   must add both; storing the principal alongside the session id is
-   the only new obligation.</p>
 
 
 
@@ -8093,9 +8929,10 @@ stores persist and return it verbatim.</p>
 
 
         <p>Process-local session store. Useful for tests and single-process dev servers.</p>
-<p>State lives on the instance, so each store is isolated. Multi-process
-deployments should use :class:<code>DjangoCacheSessionStore</code> instead — this
-class will not see sessions created in another process.</p>
+<p>State lives on the instance, so each store is isolated. Multi-process deployments
+should use
+<a class="autorefs autorefs-internal" title="DjangoCacheSessionStore" href="#rest_framework_mcp.transport.django_cache_session_store.DjangoCacheSessionStore"><code>DjangoCacheSessionStore</code></a>
+instead — this class will not see sessions created in another process.</p>
 
 
 
@@ -8145,36 +8982,29 @@ class will not see sessions created in another process.</p>
 <p>Works across processes — the production-suitable default.</p>
 <p><strong>Two windows, both configurable</strong> (<code>SESSION_TTL_SECONDS</code> /
 <code>SESSION_MAX_AGE_SECONDS</code>, or the constructor arguments here). The TTL is
-an <strong>idle</strong> window that restarts on every successful :meth:<code>owner</code> read, so
+an <strong>idle</strong> window that restarts on every successful <code>owner</code> read, so
 a session in continuous use never lapses; the max age is the <strong>absolute</strong>
-ceiling that stops a sliding window outliving a revoked principal. Both were
-once a single fixed 24-hour constant, which meant an actively-used connector
-still died on the mark.</p>
-<p>⚠ <strong>Neither window can promise more than the cache underneath.</strong> An
-eviction policy like Redis's <code>allkeys-lru</code> drops session keys well before
-any timeout, and the client cannot tell that apart from expiry. If sessions
+ceiling that stops a sliding window outliving a revoked principal.</p>
+<p><strong>Neither window can promise more than the cache underneath.</strong> An eviction
+policy like Redis's <code>allkeys-lru</code> drops session keys well before any
+timeout, and the client cannot tell that apart from expiry. If sessions
 vanish early, check the eviction policy before these settings.</p>
-<p>The cached value carries the owning principal and the mint time, so
-:meth:<code>owner</code> is a single read. Sessions written by pre-0.7 versions stored
-<code>True</code> instead of a principal — those fail the ownership comparison and
-the client transparently re-initializes. A bare principal string, the shape
-written up to 0.24, is honoured and rewritten in the current shape so an
-upgrade doesn't log every current holder out.</p>
-<p><strong>Namespacing.</strong> Every instance built by :class:<code>MCPServer</code> keys its cache
-entries under the server's <code>name</code> — the spec's programmatic identifier —
-so two servers in one project cannot see each other's sessions. Without it
-they share one flat key space over the same Django cache: a session minted
-at one satisfies the other's ownership check, and a <code>DELETE</code> against
-either destroys the other's session.</p>
-<p>The namespace is <strong>hashed</strong> into the key rather than interpolated raw:
-<code>name</code> is consumer-supplied and free-form (<code>"My Invoicing Server"</code>),
-while cache keys must survive backends like memcached that reject spaces
-and control characters and cap length at 250. Keys are therefore
-<code>drf-mcp:session:&lt;digest&gt;:&lt;token&gt;</code>.</p>
-<p>Constructing the store yourself opts out of that — you own the namespace::</p>
+<p>A value this store cannot read fails the ownership comparison and the
+client transparently re-initializes. A bare principal string — the shape
+older versions wrote — is honoured and rewritten in the current shape, so
+an upgrade does not log every current holder out.</p>
+<p><strong>Namespacing.</strong> An instance built by
+<a class="autorefs autorefs-internal" title="MCPServer" href="../mcp-server/#rest_framework_mcp.server.mcp_server.MCPServer"><code>MCPServer</code></a> keys its entries under
+the server's <code>name</code>, so two servers in one project cannot see each other's
+sessions. Without it they share one flat key space over the same Django cache: a
+session minted at one satisfies the other's ownership check, and a <code>DELETE</code>
+against either destroys the other's session. The namespace is <strong>hashed</strong> into the
+key (<code>drf-mcp:session:&lt;digest&gt;:&lt;token&gt;</code>) because <code>name</code> is free-form while cache
+keys must survive backends like memcached, which reject spaces and control
+characters and cap length at 250.</p>
+<p>Constructing the store yourself means you own the namespace:</p>
 <div class="language-text highlight"><pre><span></span><code>MCPServer(session_store=DjangoCacheSessionStore(namespace=&quot;internal&quot;))
 </code></pre></div>
-<p>so two hand-built stores with no <code>namespace</code> collide exactly as before.</p>
 
 
 
@@ -8211,10 +9041,9 @@ and control characters and cap length at 250. Keys are therefore
     <div class="doc doc-contents ">
 
         <p>Whether a key is present — deliberately <em>not</em> <code>owner() is not None</code>.</p>
-<p>A value this store cannot read (a pre-0.7 <code>True</code>) is present but
-ownerless, and the gate keys on :meth:<code>owner</code>, so the distinction is the
-documented one. Reading through <code>owner</code> here would also refresh the
-idle window, making a liveness probe extend the thing it probes.</p>
+<p>A value this store cannot read is present but ownerless, and the gate
+keys on <code>owner</code>. Reading through <code>owner</code> here would also
+refresh the idle window, making a liveness probe extend what it probes.</p>
 
 
     </div>
@@ -8235,15 +9064,11 @@ idle window, making a liveness probe extend the thing it probes.</p>
     <div class="doc doc-contents ">
 
         <p>Resolve the owning principal, refreshing the idle window on the way.</p>
-<p><strong>Idle, not fixed.</strong> The window restarts on every successful read, so a
-session in continuous use never lapses and only a genuinely idle one
-does. Before this, a connector talking every minute still died at the
-24-hour mark — the failure that produced this setting.</p>
-<p>⚠ <strong>Bounded by an absolute maximum age</strong>, which is not optional. The
-principal binding is checked once, at <code>initialize</code>; an unbounded
-sliding window would therefore keep a <em>revoked</em> principal alive for as
-long as it kept talking. This is the same argument
-<code>SUBSCRIPTION_MAX_SECONDS</code> already makes for subscriptions.</p>
+<p><strong>Idle, not fixed.</strong> The window restarts on every successful read, so
+only a genuinely idle session lapses.</p>
+<p><strong>Bounded by an absolute maximum age.</strong> The principal binding is
+checked once, at <code>initialize</code>, so an unbounded sliding window would
+keep a <em>revoked</em> principal alive for as long as it kept talking.</p>
 
 
     </div>
@@ -8277,22 +9102,19 @@ long as it kept talking. This is the same argument
 
 
         <p>Pluggable pub/sub for server-pushed MCP messages.</p>
-<p>The transport calls :meth:<code>subscribe</code> when a client opens
-<code>GET /mcp/</code>, :meth:<code>publish</code> from app code that wants to push a
-payload to a specific session, and :meth:<code>unsubscribe</code> when the
-streaming generator unwinds.</p>
-<p>Two concrete implementations ship today:</p>
-<ul>
-<li>:class:<code>InMemorySSEBroker</code> — single-process, no infra. Suitable for
-  development and single-worker ASGI deployments.</li>
-<li>:class:<code>RedisSSEBroker</code> — Redis pub/sub. Required for multi-worker
-  deployments where any worker can serve the streaming GET. Pulled in
-  via the <code>[redis]</code> optional extra.</li>
-</ul>
-<p>The contract is intentionally narrow: a session has at most one live
-subscriber; <code>publish</code> returns <code>True</code> if a delivery was attempted,
-<code>False</code> if no subscriber was attached. Implementations decide whether
-<code>publish</code> is fire-and-forget or awaits delivery confirmation; the MCP
+<p>The transport calls <code>subscribe</code> when a client opens <code>GET /mcp/</code>,
+<code>publish</code> from app code pushing a payload to a specific session, and
+<code>unsubscribe</code> when the streaming generator unwinds.</p>
+<p>Two implementations ship:
+<a class="autorefs autorefs-internal" title="InMemorySSEBroker" href="#rest_framework_mcp.transport.in_memory_sse_broker.InMemorySSEBroker"><code>InMemorySSEBroker</code></a>
+(single-process, no infra) and
+<a class="autorefs autorefs-internal" title="RedisSSEBroker" href="#rest_framework_mcp.transport.redis_sse_broker.RedisSSEBroker"><code>RedisSSEBroker</code></a>
+(the <code>[redis]</code> extra), required for multi-worker deployments where any worker can
+serve the streaming GET.</p>
+<p>The contract is deliberately narrow: a session has at most one live
+subscriber, and <code>publish</code> returns <code>True</code> if a delivery was attempted,
+<code>False</code> if no subscriber was attached. Whether <code>publish</code> is
+fire-and-forget or awaits confirmation is the implementation's choice; the
 transport treats it as best-effort either way.</p>
 
 
@@ -8340,19 +9162,16 @@ transport treats it as best-effort either way.</p>
 
 
         <p>In-process per-session pub/sub for server-pushed MCP messages.</p>
-<p>Each subscribed session gets a private :class:<code>asyncio.Queue</code>. App code
-running in the same Python process publishes to it via :meth:<code>publish</code>;
-the streaming GET generator pulls off the queue and emits SSE frames.</p>
-<p>State is instance-scoped — the :class:<code>MCPServer</code> owns one broker, so
-multiple servers in the same process don't share state. Multi-process
-deployments need an out-of-process backend; see
-:class:<code>RedisSSEBroker</code> (in the <code>[redis]</code> extra) for the production
-choice.</p>
-<p>The broker enforces a single subscriber per session — if a client
-re-subscribes (e.g. after a dropped connection), the previous queue is
-replaced and the old generator will eventually error out on its next
-<code>await</code>. There is no replay; clients that need durability should call
-<code>tools/call</code> directly rather than relying on SSE.</p>
+<p>Each subscribed session gets a private <code>asyncio.Queue</code>. App code in
+the same process publishes to it via <code>publish</code>; the streaming GET
+generator pulls off the queue and emits SSE frames.</p>
+<p>State is instance-scoped, so multiple servers in one process share none of it.
+Multi-process deployments need an out-of-process backend — see
+<a class="autorefs autorefs-internal" title="RedisSSEBroker" href="#rest_framework_mcp.transport.redis_sse_broker.RedisSSEBroker"><code>RedisSSEBroker</code></a>
+(the <code>[redis]</code> extra).</p>
+<p>One subscriber per session: re-subscribing replaces the previous queue, and
+the old generator errors out on its next <code>await</code>. There is no replay;
+clients needing durability call <code>tools/call</code> rather than relying on SSE.</p>
 
 
 
@@ -8416,9 +9235,8 @@ unregister the new queue when the old generator shuts down.</p>
 
         <p>Enqueue <code>payload</code> for <code>session_id</code> if a subscriber exists.</p>
 <p>Returns <code>True</code> if delivery was attempted, <code>False</code> if the session
-had no subscriber. The caller decides how to react to a miss — most
-callers will ignore it (the client will catch up via a fresh
-<code>tools/call</code> round-trip).</p>
+had no subscriber. A miss is the caller's to react to, and most ignore
+it: the client catches up on a fresh <code>tools/call</code> round-trip.</p>
 
 
     </div>
@@ -8449,36 +9267,31 @@ callers will ignore it (the client will catch up via a fresh
 
 
         <p>Cross-process SSE broker backed by Redis pub/sub.</p>
-<p>Drop-in replacement for :class:<code>InMemorySSEBroker</code> when running
-multiple ASGI workers behind a load balancer. The streaming GET handler
-can land on any worker; <code>await server.notify(...)</code> from a different
-worker reaches the right session because every worker subscribes to the
-same Redis channel.</p>
-<p>Each session subscribes to its own Redis channel (<code>&lt;prefix&gt;:&lt;session_id&gt;</code>)
-and runs a background <code>asyncio.Task</code> that pulls messages off the
-Redis pub/sub stream and pushes them onto a local
-:class:<code>asyncio.Queue</code> — the same queue shape the SSE response generator
-expects. JSON encode/decode happens at the broker boundary so app code
-pushes Python dicts and the streaming generator sees them as dicts too.</p>
-<p>Wire it into :class:<code>MCPServer</code>:</p>
-<p>.. code-block:: python</p>
-<div class="language-text highlight"><pre><span></span><code>from redis.asyncio import Redis
-from rest_framework_mcp import MCPServer
-from rest_framework_mcp.transport.redis_sse_broker import RedisSSEBroker
-
-broker = RedisSSEBroker(Redis.from_url(&quot;redis://localhost:6379/0&quot;))
-server = MCPServer(name=&quot;my-app&quot;, sse_broker=broker)
-</code></pre></div>
+<p>Drop-in replacement for
+<a class="autorefs autorefs-internal" title="InMemorySSEBroker" href="#rest_framework_mcp.transport.in_memory_sse_broker.InMemorySSEBroker"><code>InMemorySSEBroker</code></a>
+when running multiple ASGI workers behind a load balancer. The streaming GET handler
+can land on any worker, and <code>await server.notify(...)</code> from a different worker
+still reaches the right session because every worker subscribes to the same Redis
+channel (<code>&lt;prefix&gt;:&lt;session_id&gt;</code>). JSON encode/decode happens at the broker
+boundary, so app code pushes Python dicts and the streaming generator sees dicts
+too.</p>
+<p>Wire it into <a class="autorefs autorefs-internal" title="MCPServer" href="../mcp-server/#rest_framework_mcp.server.mcp_server.MCPServer"><code>MCPServer</code></a>:</p>
+<div class="language-python highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="kn">from</span><span class="w"> </span><span class="nn">redis.asyncio</span><span class="w"> </span><span class="kn">import</span> <span class="n">Redis</span>
+</span><span id="__span-0-2"><a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a><span class="kn">from</span><span class="w"> </span><span class="nn">rest_framework_mcp</span><span class="w"> </span><span class="kn">import</span> <span class="n">MCPServer</span>
+</span><span id="__span-0-3"><a id="__codelineno-0-3" name="__codelineno-0-3" href="#__codelineno-0-3"></a><span class="kn">from</span><span class="w"> </span><span class="nn">rest_framework_mcp.transport.redis_sse_broker</span><span class="w"> </span><span class="kn">import</span> <span class="n">RedisSSEBroker</span>
+</span><span id="__span-0-4"><a id="__codelineno-0-4" name="__codelineno-0-4" href="#__codelineno-0-4"></a>
+</span><span id="__span-0-5"><a id="__codelineno-0-5" name="__codelineno-0-5" href="#__codelineno-0-5"></a><span class="n">broker</span> <span class="o">=</span> <span class="n">RedisSSEBroker</span><span class="p">(</span><span class="n">Redis</span><span class="o">.</span><span class="n">from_url</span><span class="p">(</span><span class="s2">&quot;redis://localhost:6379/0&quot;</span><span class="p">))</span>
+</span><span id="__span-0-6"><a id="__codelineno-0-6" name="__codelineno-0-6" href="#__codelineno-0-6"></a><span class="n">server</span> <span class="o">=</span> <span class="n">MCPServer</span><span class="p">(</span><span class="n">name</span><span class="o">=</span><span class="s2">&quot;my-app&quot;</span><span class="p">,</span> <span class="n">sse_broker</span><span class="o">=</span><span class="n">broker</span><span class="p">)</span>
+</span></code></pre></div>
 <p>Caveats:</p>
 <ul>
-<li>Same single-subscriber-per-session contract as the in-memory broker
-  (re-subscribing replaces the old subscriber's queue).</li>
-<li>Message replay is a separate, opt-in collaborator — pair this with
-  :class:<code>RedisSSEReplayBuffer</code> (passed as
-  <code>MCPServer(sse_replay_buffer=...)</code>) for cross-worker
-  <code>Last-Event-ID</code> resume.</li>
-<li>The Redis client's lifecycle is the consumer's responsibility — close
-  it during ASGI lifespan shutdown.</li>
+<li>Same single-subscriber-per-session contract as the in-memory broker:
+  re-subscribing replaces the old subscriber's queue.</li>
+<li>Replay is a separate, opt-in collaborator — pair this with
+  <a class="autorefs autorefs-internal" title="RedisSSEReplayBuffer" href="#rest_framework_mcp.transport.redis_sse_replay_buffer.RedisSSEReplayBuffer"><code>RedisSSEReplayBuffer</code></a>
+  for cross-worker <code>Last-Event-ID</code> resume.</li>
+<li>The Redis client's lifecycle is the consumer's: close it during ASGI
+  lifespan shutdown.</li>
 </ul>
 
 
@@ -8520,11 +9333,9 @@ server = MCPServer(name=&quot;my-app&quot;, sse_broker=broker)
     <div class="doc doc-contents ">
 
         <p>Publish to the session's channel and report whether anyone received it.</p>
-<p><code>redis.publish</code> returns the number of subscribers that got the
-message; we surface <code>True</code> when at least one listener was attached
-(typical case), <code>False</code> otherwise. Note that "0 subscribers" can
-also mean the streaming task hasn't connected yet — callers that
-require strict at-least-once delivery should layer their own retry.</p>
+<p><code>True</code> when at least one listener was attached. <code>False</code> — zero
+subscribers — can also mean the streaming task has not connected yet,
+so a caller needing at-least-once delivery layers its own retry.</p>
 
 
     </div>
@@ -8544,11 +9355,9 @@ require strict at-least-once delivery should layer their own retry.</p>
 
     <div class="doc doc-contents ">
 
-        <p>Local-only check.</p>
-<p>Reflects whether <em>this</em> worker has an active subscriber. Across-
-process visibility would require an extra Redis round-trip and isn't
-useful for the typical caller (the streaming generator only cares
-about its own queue).</p>
+        <p>Local-only check: whether <em>this</em> worker has an active subscriber.</p>
+<p>Cross-process visibility would cost an extra Redis round-trip and buy
+nothing — the streaming generator only cares about its own queue.</p>
 
 
     </div>
@@ -8582,26 +9391,22 @@ about its own queue).</p>
 
 
         <p>Pluggable per-session ring buffer for SSE event replay.</p>
-<p>Pair this with an :class:<code>SSEBroker</code> to support
+<p>Pair this with an
+<a class="autorefs autorefs-internal" title="SSEBroker" href="#rest_framework_mcp.transport.types.sse_broker.SSEBroker"><code>SSEBroker</code></a> to support
 <a href="https://html.spec.whatwg.org/multipage/server-sent-events.html#last-event-id"><code>Last-Event-ID</code></a>
-resume — when a client reconnects with that header, the SSE response
-generator drains every event past the supplied ID from the buffer
-<em>before</em> entering live mode, so the client sees no gap from the
-server's POV.</p>
-<p>The buffer is the single source of truth for event IDs:
-:meth:<code>record</code> assigns a new monotonic ID per session and returns it,
-so the live frame and any future replayed frame agree on the ID. The
-transport wraps that ID into the broker payload as
-<code>{"_mcp_event_id", "_mcp_payload"}</code> and the SSE response generator
-unwraps it to emit <code>id:</code> lines.</p>
-<p>Implementations should bound their per-session storage — replay
-buffers without a cap leak when clients never reconnect. The shipped
-in-memory variant uses a fixed-size :class:<code>collections.deque</code>; the
-Redis variant uses <code>XADD MAXLEN ~ N</code> for capped streams.</p>
+resume: when a client reconnects with that header, the SSE response generator drains
+every event past the supplied ID <em>before</em> entering live mode, so the client sees no
+gap.</p>
+<p>The buffer is the single source of truth for event IDs: <code>record</code>
+assigns a new monotonic ID per session, so the live frame and any replayed
+frame agree. The transport wraps that ID into the broker payload as
+<code>{"_mcp_event_id", "_mcp_payload"}</code> and the response generator unwraps it
+to emit <code>id:</code> lines.</p>
+<p>Implementations must bound their per-session storage — an uncapped buffer
+leaks when clients never reconnect.</p>
 <p>Resume is <strong>opt-in</strong>: pass <code>sse_replay_buffer=...</code> to
-:class:<code>MCPServer</code> to enable it. When omitted, the SSE wire shape is
-unchanged (no <code>id:</code> lines) and <code>Last-Event-ID</code> from clients is
-silently ignored.</p>
+<a class="autorefs autorefs-internal" title="MCPServer" href="../mcp-server/#rest_framework_mcp.server.mcp_server.MCPServer"><code>MCPServer</code></a>. When omitted there
+are no <code>id:</code> lines and <code>Last-Event-ID</code> is ignored.</p>
 
 
 
@@ -8642,10 +9447,9 @@ silently ignored.</p>
     <div class="doc doc-contents ">
 
         <p>Persist <code>payload</code> for <code>session_id</code> and return its event ID.</p>
-<p>The returned ID is what the SSE response emits as the <code>id:</code> line
-and what the client echoes back via <code>Last-Event-ID</code> on resume.
-IDs must be monotonic <em>within a session</em>; cross-session ordering
-is not required.</p>
+<p>The ID is what the response emits as the <code>id:</code> line and what the
+client echoes back via <code>Last-Event-ID</code>. IDs must be monotonic
+<em>within a session</em>; cross-session ordering is not required.</p>
 
 
     </div>
@@ -8666,12 +9470,11 @@ is not required.</p>
     <div class="doc doc-contents ">
 
         <p>Yield <code>(event_id, payload)</code> pairs strictly after <code>after_id</code>.</p>
-<p><code>after_id=None</code> (no header sent) yields nothing — fresh subscribe
-is the no-replay path. An <code>after_id</code> that's older than the
-buffer's oldest retained event yields whatever is still in the
-ring (best-effort delivery; the client knows it lost some events
-only by counting). An <code>after_id</code> newer than the latest recorded
-event yields nothing — the client is already up to date.</p>
+<p><code>after_id=None</code> yields nothing — a fresh subscribe is the no-replay
+path. An <code>after_id</code> older than the oldest retained event yields
+whatever is still held, best-effort: the client can tell it lost events
+only by counting. One newer than the latest recorded event yields
+nothing, the client being up to date.</p>
 
 
     </div>
@@ -8696,9 +9499,9 @@ event yields nothing — the client is already up to date.</p>
     <div class="doc doc-contents ">
 
         <p>Drop all retained events for <code>session_id</code>.</p>
-<p>Called when a session is explicitly destroyed (DELETE) so dead
-sessions don't accumulate buffer state. Implementations that rely
-on TTL-based eviction can no-op this.</p>
+<p>Called when a session is explicitly destroyed, so dead sessions do not
+accumulate buffer state. Implementations relying on TTL eviction can
+no-op this.</p>
 
 
     </div>
@@ -8729,17 +9532,16 @@ on TTL-based eviction can no-op this.</p>
 
 
         <p>In-process bounded replay buffer for SSE event resume.</p>
-<p>Each session holds its own :class:<code>collections.deque</code> capped at
-<code>max_events</code>; the oldest event is evicted when a new one arrives.
-Event IDs are zero-padded monotonic integers per session — string-
-valued because the SSE wire format is string-only and clients echo
-them back verbatim via <code>Last-Event-ID</code>.</p>
-<p>Suitable for <strong>single-process</strong> ASGI deployments. Multi-worker
-deployments must use :class:<code>RedisSSEReplayBuffer</code> because the
-streaming GET that handles a resume can land on a different worker
-than the one that recorded the events.</p>
-<p>State is instance-scoped — :class:<code>MCPServer</code> owns one buffer, so
-multiple servers in the same process don't share replay history.</p>
+<p>Each session holds its own <code>collections.deque</code> capped at
+<code>max_events</code>, evicting the oldest event when a new one arrives. Event IDs
+are zero-padded monotonic integers per session, string-valued because the
+SSE wire format is string-only and clients echo them back verbatim via
+<code>Last-Event-ID</code>.</p>
+<p><strong>Single-process</strong> ASGI deployments only: a resume can land on a different worker
+than the one that recorded the events, so multi-worker deployments need
+<a class="autorefs autorefs-internal" title="RedisSSEReplayBuffer" href="#rest_framework_mcp.transport.redis_sse_replay_buffer.RedisSSEReplayBuffer"><code>RedisSSEReplayBuffer</code></a>.
+State is instance-scoped, so multiple servers in one process share no replay
+history.</p>
 
 
 
@@ -8786,16 +9588,15 @@ multiple servers in the same process don't share replay history.</p>
 
 
         <p>Cross-process replay buffer backed by Redis Streams.</p>
-<p>Drop-in replacement for :class:<code>InMemorySSEReplayBuffer</code> when running
-multiple ASGI workers. The streaming GET that handles a reconnect
-can land on any worker; reading from a shared Redis Stream means the
-replay is the same regardless of which worker recorded the events.</p>
-<p>Stream IDs are auto-assigned by Redis (<code>ms-seq</code> format) and are
-monotonic within a session — they double as the SSE event IDs the
-client echoes back via <code>Last-Event-ID</code>. <code>MAXLEN ~ N</code> caps the
-retained history per session; the <code>~</code> makes trimming approximate
-(Redis trims when convenient) which is fine for replay buffers.</p>
-<p>Wire it into :class:<code>MCPServer</code>::</p>
+<p>Drop-in replacement for
+<a class="autorefs autorefs-internal" title="InMemorySSEReplayBuffer" href="#rest_framework_mcp.transport.in_memory_sse_replay_buffer.InMemorySSEReplayBuffer"><code>InMemorySSEReplayBuffer</code></a>
+when running multiple ASGI workers: a reconnect can land on any worker, and a shared
+Redis Stream replays the same events whichever worker recorded them.</p>
+<p>Stream IDs are auto-assigned by Redis and monotonic within a session, so
+they double as the SSE event IDs the client echoes back via
+<code>Last-Event-ID</code>. <code>MAXLEN ~ N</code> caps the retained history per session,
+approximately — Redis trims when convenient, which is fine here.</p>
+<p>Wire it into <a class="autorefs autorefs-internal" title="MCPServer" href="../mcp-server/#rest_framework_mcp.server.mcp_server.MCPServer"><code>MCPServer</code></a>:</p>
 <div class="language-text highlight"><pre><span></span><code>from redis.asyncio import Redis
 from rest_framework_mcp import MCPServer
 from rest_framework_mcp.transport.redis_sse_replay_buffer import (
@@ -8848,10 +9649,9 @@ ASGI lifespan shutdown.</p>
     <div class="doc doc-contents ">
 
         <p>Append <code>payload</code> to the session's stream and return the assigned ID.</p>
-<p><code>XADD &lt;key&gt; MAXLEN ~ N * data &lt;json&gt;</code> — the <code>*</code> lets Redis
-choose a monotonic ID; <code>~</code> makes trimming approximate (Redis
-trims at internal node boundaries, which is faster than exact
-trimming and bounds memory in the same shape).</p>
+<p><code>XADD &lt;key&gt; MAXLEN ~ N * data &lt;json&gt;</code>: the <code>*</code> lets Redis choose a
+monotonic ID, and <code>~</code> trims at internal node boundaries, which bounds
+memory in the same shape as exact trimming and is faster.</p>
 
 
     </div>

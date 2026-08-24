@@ -548,6 +548,8 @@
       
         
       
+        
+      
     
     
     
@@ -983,6 +985,34 @@
     
   
     Register tools from a spec registry
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../recipes/pydantic-ai-client/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Connect a Pydantic-AI agent
   
 
     
@@ -2315,18 +2345,16 @@
 
 
         <p>Pluggable authentication for the MCP transport.</p>
-<p>The transport calls :meth:<code>authenticate</code> on every request. A backend that
-returns <code>None</code> signals "no valid credentials" — the transport then emits
-a 401 with <code>WWW-Authenticate</code> built from
-:meth:<code>www_authenticate_challenge</code>. <code>protected_resource_metadata</code> powers
-the <code>/.well-known/oauth-protected-resource</code> view (RFC 9728) and returns
-a :class:<code>ProtectedResourceMetadata</code> dataclass; the contrib PRM ViewSet
-calls <code>.to_dict()</code> for the wire shape.</p>
-<p>:meth:<code>authorization_server_metadata</code> is consumed by the optional
-<code>rest_framework_mcp.contrib.oauth</code> mount — backends
-that host an authorization server return an :class:<code>AuthorizationServerMetadata</code>
-dataclass; backends that don't host one raise :class:<code>NotImplementedError</code>
-so the contrib code can skip the AS endpoint matrix cleanly.</p>
+<p>The transport calls <code>authenticate</code> on every request; returning
+<code>None</code> signals "no valid credentials" and the transport emits a 401 whose
+<code>WWW-Authenticate</code> comes from <code>www_authenticate_challenge</code>.
+<code>protected_resource_metadata</code> powers the
+<code>/.well-known/oauth-protected-resource</code> view (RFC 9728); the PRM ViewSet
+calls <code>.to_dict()</code> on the returned dataclass for the wire shape.</p>
+<p><code>authorization_server_metadata</code> is consumed by the optional
+<code>rest_framework_mcp.contrib.oauth</code> mount. A backend that hosts no
+authorization server raises <code>NotImplementedError</code> so the contrib
+code can skip the AS endpoint matrix cleanly.</p>
 <p>Backends MUST be safe to instantiate without arguments — settings-driven
 configuration belongs inside the backend's own module.</p>
 
@@ -2382,15 +2410,67 @@ configuration belongs inside the backend's own module.</p>
 <p>Backends construct this once per request and attach it to the Django
 <code>HttpRequest</code> (as <code>request.mcp_token</code>). Permission classes consult it
 to gate tool/resource access.</p>
-<ul>
-<li><code>user</code>: the resolved Django user (or <code>AnonymousUser</code>-equivalent).
-  <code>Any</code> here because the user model is project-defined.</li>
-<li><code>scopes</code>: OAuth scopes proven by the bearer token.</li>
-<li><code>audience</code>: the <code>aud</code> claim — must match the canonical <code>/mcp</code> URL
-  per RFC 8707; backends are responsible for that comparison.</li>
-<li><code>raw</code>: backend-specific opaque payload (the <code>AccessToken</code> row, the
-  JWT claims dict, etc.) for advanced use cases.</li>
-</ul>
+
+
+<p><span class="doc-section-title">Attributes:</span></p>
+    <table>
+      <thead>
+        <tr>
+          <th>Name</th>
+          <th>Type</th>
+          <th>Description</th>
+        </tr>
+      </thead>
+      <tbody>
+          <tr class="doc-section-item">
+            <td><code><span title="rest_framework_mcp.auth.types.token_info.TokenInfo.user">user</span></code></td>
+            <td>
+                  <code><span title="typing.Any">Any</span></code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>The resolved Django user, or an <code>AnonymousUser</code> equivalent.
+<code>Any</code> because the user model is project-defined.</p>
+              </div>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td><code><span title="rest_framework_mcp.auth.types.token_info.TokenInfo.scopes">scopes</span></code></td>
+            <td>
+                  <code><span title="tuple">tuple</span>[<span title="str">str</span>, ...]</code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>OAuth scopes proven by the bearer token.</p>
+              </div>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td><code><span title="rest_framework_mcp.auth.types.token_info.TokenInfo.audience">audience</span></code></td>
+            <td>
+                  <code><span title="str">str</span> | None</code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>The <code>aud</code> claim. RFC 8707 requires it to match the
+canonical <code>/mcp</code> URL; backends own that comparison.</p>
+              </div>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td><code><span title="rest_framework_mcp.auth.types.token_info.TokenInfo.raw">raw</span></code></td>
+            <td>
+                  <code><span title="typing.Any">Any</span></code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Backend-specific opaque payload — the <code>AccessToken</code> row, the JWT
+claims dict — for advanced use cases.</p>
+              </div>
+            </td>
+          </tr>
+      </tbody>
+    </table>
 
 
 
@@ -2440,11 +2520,17 @@ to gate tool/resource access.</p>
 
         <p>Per-tool / per-resource gate evaluated after authentication.</p>
 <p>The transport pulls authenticated state from the request as a
-:class:<code>TokenInfo</code> and asks each permission whether the call may proceed.
-Returning <code>False</code> becomes a 403 + <code>WWW-Authenticate</code>; raising lets the
-permission supply a richer payload via the JSON-RPC error path.</p>
-<p>Permissions MUST be cheap to construct (we instantiate them per-binding
-at discovery time) and side-effect free at evaluation.</p>
+<a class="autorefs autorefs-internal" title="TokenInfo
+
+
+  
+      dataclass
+  " href="#rest_framework_mcp.auth.types.token_info.TokenInfo"><code>TokenInfo</code></a> and asks each
+permission whether the call may proceed. Returning <code>False</code> becomes a 403 +
+<code>WWW-Authenticate</code>; raising lets the permission supply a richer payload via the
+JSON-RPC error path.</p>
+<p>Permissions MUST be cheap to construct — they are instantiated per binding
+at discovery time — and side-effect free at evaluation.</p>
 
 
 
@@ -2481,9 +2567,7 @@ at discovery time) and side-effect free at evaluation.</p>
     <div class="doc doc-contents ">
 
         <p>Scopes to advertise in <code>WWW-Authenticate</code> when this permission denies.</p>
-<p>Defaulting via Protocol: implementations that don't override this
-should return <code>[]</code>. We type it as a method (not a property) so it's
-easy to compute dynamically from constructor args.</p>
+<p>Implementations with no scope semantics return <code>[]</code>.</p>
 
 
     </div>
@@ -2563,48 +2647,47 @@ intentionally minimal so misconfiguration is loud rather than silent.</p>
 
 
         <p>Resource-server adapter for <code>django-oauth-toolkit</code> (DOT).</p>
-<p>Validates the bearer token using DOT's own validators, then projects the
-result into a :class:<code>TokenInfo</code>. The <code>oauth2_provider</code> package is
-imported lazily inside <code>authenticate</code> because it's an optional extra
-(<code>pip install "djangorestframework-mcp-server[oauth]"</code>) — importing this module
-never blows up just because DOT is absent; the <code>ImportError</code> only fires
-when a request actually reaches authentication.</p>
+<p>Validates the bearer token using DOT's own validators, then projects the result into
+a <a class="autorefs autorefs-internal" title="TokenInfo
+
+
+  
+      dataclass
+  " href="#rest_framework_mcp.auth.types.token_info.TokenInfo"><code>TokenInfo</code></a>.
+<code>oauth2_provider</code> is imported lazily inside the method bodies because it is an
+optional extra (<code>pip install "djangorestframework-mcp-server[oauth]"</code>): importing
+this module without DOT is fine, and the <code>ImportError</code> fires only when a request
+actually reaches authentication.</p>
 <p>Audience enforcement (RFC 8707) is controlled by <code>enforce_audience</code>,
 <strong>not</strong> by <code>resource_url</code>. <code>resource_url</code> is the identity this server
 publishes in its protected-resource metadata; enforcement is whether a
-token that doesn't carry that identity is rejected.</p>
-<p>Those two were once one knob, and coupling them made the bundled backend
-unusable. Enforcement needs the access token to record the resource it was
-issued for, and <strong>DOT's stock <code>AccessToken</code> has no such field</strong> — DOT
-implements no resource indicators, so <code>getattr(token, "resource", None)</code>
-is always <code>None</code>. Setting <code>resource_url</code>, which RFC 9728 effectively
-requires, therefore rejected every token: a deployment had to choose between
-authenticating anybody and publishing valid metadata, with no configuration
-that did both.</p>
-<p>So enforcement now defaults off and, when switched on, is checked at
-construction rather than discovered per request. It works when the token
-really does carry the resource:</p>
+token that doesn't carry that identity is rejected. It defaults off because
+enforcement needs the access token to record the resource it was issued
+for, and <strong>DOT's stock <code>AccessToken</code> has no such field</strong> — so switching
+it on against stock DOT rejects every token, while <code>resource_url</code> is
+effectively required by RFC 9728. Enforcement works when the token really
+does carry the resource:</p>
 <ul>
 <li>a swapped <code>OAUTH2_PROVIDER["ACCESS_TOKEN_MODEL"]</code> carrying a
   <code>resource</code> field (DOT supports substituting the model), or</li>
 <li>an explicit <code>audience_getter=</code> reading it from wherever it lives — a
   JWT claim, an upstream gateway header, a related row.</li>
 </ul>
-<p>Turning it on without either raises :class:<code>ImproperlyConfigured</code> at
-startup, naming both ways out, instead of 401-ing every request.</p>
-<p><strong>One resource URL per server.</strong> RFC 8707 binds a token to <em>a</em> resource, so
-each server needs its own canonical URL — that binding is precisely what
-stops a token issued for one resource being replayed against another. Two
-servers sharing a single URL defeat it: a token minted for <code>/public/mcp</code>
-would satisfy <code>/internal/mcp</code>. Hence <code>resource_url</code> is per-backend and
-the <code>RESOURCE_URL</code> setting is only its default::</p>
+<p>Turning it on without either raises <code>ImproperlyConfigured</code> at
+construction, naming both ways out, instead of 401-ing every request.</p>
+<p><strong>One resource URL per server.</strong> RFC 8707 binds a token to <em>a</em> resource,
+and that binding is precisely what stops a token issued for one resource
+being replayed against another: two servers sharing a single URL would let
+a token minted for <code>/public/mcp</code> satisfy <code>/internal/mcp</code>. Hence
+<code>resource_url</code> is per-backend and the <code>RESOURCE_URL</code> setting is only
+its default:</p>
 <div class="language-text highlight"><pre><span></span><code>MCPServer(
     name=&quot;internal&quot;,
     resource_url=&quot;https://example.com/internal/mcp/&quot;,
 )
 </code></pre></div>
-<p>Every value is resolved <strong>once, here</strong> — the settings reads are defaults for
-the arguments, not per-request lookups — so two backends in one process can
+<p>Every value is resolved <strong>once, here</strong> — the settings reads are argument
+defaults, not per-request lookups — so two backends in one process can
 genuinely differ.</p>
 
 
@@ -2642,23 +2725,20 @@ genuinely differ.</p>
     <div class="doc doc-contents ">
 
         <p>Return the RFC 8414 metadata payload for the DOT-hosted authorization server.</p>
-<p>Pulls the issuer, endpoint URLs, supported grant / response types,
-and scopes from this backend's <code>authorization_servers</code> (first
-entry) plus the endpoint paths, which default to the <code>contrib.oauth</code>
+<p>Endpoints are built from this backend's first <code>authorization_servers</code>
+entry plus the endpoint paths, which default to the <code>contrib.oauth</code>
 mount convention (<code>/oauth/authorize/</code>, <code>/oauth/token/</code>,
 <code>/oauth/register/</code>) and are constructor arguments for a project that
 mounts DOT somewhere else.</p>
-<p>⚠ The issuer is treated as a <strong>site root</strong>, and the paths are appended
-to it. Passing the value DOT advertises as <em>its</em> issuer
-(<code>&lt;host&gt;/oauth</code>) therefore publishes <code>&lt;host&gt;/oauth/oauth/authorize/</code>
-— three 404s in a document clients read to find the login flow. That
-mistake now warns at construction; see
-:class:<code>MountedAuthorizationServerWarning</code>.</p>
-<p>Missing values fall through as empty strings / lists so the wire
-shape is always valid JSON; consumers are expected to configure
-<code>authorization_servers</code> for production deployments.</p>
-<p><code>client_id_metadata_document_supported</code> is read from DOT rather than
-asserted here — see :func:<code>_cimd_enabled</code>.</p>
+<p>The issuer is treated as a <strong>site root</strong> and the paths are appended to
+it, so passing the value DOT advertises as <em>its</em> issuer
+(<code>&lt;host&gt;/oauth</code>) publishes <code>&lt;host&gt;/oauth/oauth/authorize/</code> — three
+404s in a document clients read to find the login flow. That mistake
+warns at construction; see <code>MountedAuthorizationServerWarning</code>.</p>
+<p>Missing values fall through as empty strings / lists so the wire shape
+is always valid JSON; configure <code>authorization_servers</code> for
+production. <code>client_id_metadata_document_supported</code> is read from DOT
+rather than asserted here — see <code>_cimd_enabled</code>.</p>
 
 
     </div>
@@ -2690,18 +2770,17 @@ asserted here — see :func:<code>_cimd_enabled</code>.</p>
 
 
         <p>Allow only requests whose token carries every listed OAuth scope.</p>
-<p>Takes a list, or a bare string for the single-scope case::</p>
+<p>Takes a list, or a bare string for the single-scope case:</p>
 <div class="language-text highlight"><pre><span></span><code>ScopeRequired([&quot;invoices:read&quot;, &quot;invoices:write&quot;])
 ScopeRequired(&quot;invoices:write&quot;)
 </code></pre></div>
-<p>⚠ <strong>The bare string is not sugar — it closes a trap.</strong> This used to accept
-only a list and normalise with <code>list(scopes)</code>, which silently turns
-<code>ScopeRequired("mcp:admin")</code> into nine one-character scopes. Nothing
-failed at registration; the misconfiguration surfaced much later as a
-permission that could never be satisfied and a nonsense challenge
-(<code>scope="m c p : a d m i n"</code>). :class:<code>DjangoPermRequired</code> had always
-accepted a bare string, so the two siblings disagreed — and a developer who
-learned the permissive one naturally wrote the same thing here.</p>
+<p><strong>The bare string is not sugar — it closes a trap.</strong> Normalising with
+<code>list(scopes)</code> would silently turn <code>ScopeRequired("mcp:admin")</code> into nine
+one-character scopes: nothing fails at registration, and the misconfiguration
+surfaces much later as a permission that can never be satisfied and a nonsense
+challenge.
+<a class="autorefs autorefs-internal" title="DjangoPermRequired" href="#rest_framework_mcp.auth.permissions.django_perm_required.DjangoPermRequired"><code>DjangoPermRequired</code></a>
+takes a bare string too, so the siblings agree.</p>
 
 
 
@@ -2748,10 +2827,12 @@ learned the permissive one naturally wrote the same thing here.</p>
 
 
         <p>Allow only requests whose user has the given Django permission(s).</p>
-<p>Wraps <code>user.has_perm</code> from the standard Django auth backend. A token
-backed by <code>AnonymousUser</code> will always be rejected — that is the point
-of using this class instead of :class:<code>ScopeRequired</code>.</p>
-<p>Takes a list or a bare string, as :class:<code>ScopeRequired</code> now also does.</p>
+<p>Wraps <code>user.has_perm</code> from the standard Django auth backend. A token backed by
+<code>AnonymousUser</code> is always rejected — that is the point of using this class instead
+of
+<a class="autorefs autorefs-internal" title="ScopeRequired" href="#rest_framework_mcp.auth.permissions.scope_required.ScopeRequired"><code>ScopeRequired</code></a>.
+Takes a list or a bare string, like
+<a class="autorefs autorefs-internal" title="ScopeRequired" href="#rest_framework_mcp.auth.permissions.scope_required.ScopeRequired"><code>ScopeRequired</code></a>.</p>
 
 
 
@@ -2797,19 +2878,20 @@ of using this class instead of :class:<code>ScopeRequired</code>.</p>
 
 
 
-        <p>Bridge a DRF <code>BasePermission</code> class into the :class:<code>MCPPermission</code> Protocol.</p>
-<p>Sister-repo 0.12.0 added <code>permission_classes</code> on <code>ServiceSpec</code> and
-<code>SelectorSpec</code> — a sequence of DRF <code>BasePermission</code> <em>classes</em>. The MCP
-transport doesn't go through DRF views, so each class is wrapped in this
-adapter at registration time; the wrapped instance is constructed once
-(mirrors sister-repo's <code>[perm() for perm in spec.permission_classes]</code>
-in its view <code>get_permissions</code>).</p>
-<p>The DRF instance receives a synthesised :class:<code>rest_framework.request.Request</code>
+        <p>Bridge a DRF <code>BasePermission</code> class into the
+<a class="autorefs autorefs-internal" title="MCPPermission" href="#rest_framework_mcp.auth.permissions.types.mcp_permission.MCPPermission"><code>MCPPermission</code></a>
+Protocol.</p>
+<p><code>ServiceSpec</code> / <code>SelectorSpec</code> carry <code>permission_classes</code> as DRF
+<code>BasePermission</code> <em>classes</em>, and the MCP transport doesn't go through DRF
+views, so each class is wrapped here at registration time and instantiated
+once — mirroring what a DRF view's <code>get_permissions</code> does.</p>
+<p>The DRF instance receives a synthesised <code>rest_framework.request.Request</code>
 with <code>user</code> set to <code>token.user</code> and a lightweight view stand-in
-sufficient for the DRF permission contract (<code>request</code>, <code>action</code>).
-The HTTP method on the underlying <code>HttpRequest</code> is left untouched
-(unlike :func:<code>~rest_framework_services.build_offline_context</code>, which forces
-<code>POST</code> for mutation-flow dispatch) — permission evaluation is method-agnostic.</p>
+sufficient for the DRF permission contract (<code>request</code>, <code>action</code>). The
+HTTP method on the underlying <code>HttpRequest</code> is left untouched — unlike
+<code>build_offline_context</code>, which forces
+<code>POST</code> for mutation dispatch — because permission evaluation is
+method-agnostic.</p>
 
 
 
@@ -2861,16 +2943,14 @@ The HTTP method on the underlying <code>HttpRequest</code> is left untouched
         <p>Per-binding rate limiter, evaluated after authentication and permissions.</p>
 <p>The single <code>consume</code> call is the gate AND the bookkeeping update — there
 is no separate "check then commit" because that pattern races under
-concurrency. Implementations decrement quotas atomically in storage; the
-return value is the suggested <code>Retry-After</code> in seconds when the limit
-has been hit, or <code>None</code> to allow the call.</p>
-<p>Returning <code>0</code> is allowed (e.g. "denied but window resets immediately")
-but most implementations will return a positive integer.</p>
-<p>Limiters are constructed per-binding at registration time; keep them cheap
+concurrency. Implementations decrement quotas atomically in storage and
+return the suggested <code>Retry-After</code> in seconds once the limit is hit
+(<code>0</code> is legal, meaning the window resets immediately), or <code>None</code> to
+allow the call.</p>
+<p>Limiters are constructed per binding at registration time; keep them cheap
 to construct and thread-safe at evaluation. State that crosses requests
-must live in shared storage (Django cache, Redis, …), not on the
-instance — instance state would be lost the moment the binding is
-re-used across worker processes.</p>
+must live in shared storage (Django cache, Redis), not on the instance,
+which is not shared across worker processes.</p>
 
 
 
@@ -2918,15 +2998,14 @@ re-used across worker processes.</p>
 
         <p>A fixed-window-counter rate limiter backed by <code>django.core.cache</code>.</p>
 <p>The window is bucketed by absolute time: each integer multiple of
-<code>per_seconds</code> since the epoch starts a new counter. Simple and
-sufficient for protecting against runaway clients; not as smooth as a
-sliding window but doesn't require a sorted set.</p>
-<p>The cache key is namespaced with <code>namespace</code> so multiple limits on the
-same binding (e.g. burst + steady-state) don't share counters. <code>key</code>
-customises the bucket dimension — defaults to per-token-user.</p>
+<code>per_seconds</code> since the epoch starts a new counter. Not as smooth as a
+sliding window, but it needs no sorted set.</p>
+<p><code>namespace</code> keeps multiple limits on one binding (burst plus
+steady-state) from sharing counters; <code>key</code> customises the bucket
+dimension and defaults to per-token-user.</p>
 <p>The cache <strong>must</strong> be a shared backend in multi-process deployments;
-Django's <code>locmem</code> cache is fine for tests but won't enforce a global
-limit across worker processes.</p>
+Django's <code>locmem</code> is fine for tests but enforces no global limit across
+worker processes.</p>
 
 
 
@@ -2973,26 +3052,23 @@ limit across worker processes.</p>
 
 
         <p>Sliding-window rate limiter using a list of timestamps in cache.</p>
-<p>Avoids the well-known fixed-window edge case where a client can issue
-<code>2 * max_calls</code> requests across two adjacent windows. Stores the
-timestamps of recent calls in a Django cache entry; on each call,
-expired entries are pruned and the live count is compared against
-<code>max_calls</code>.</p>
-<p>Trade-offs vs :class:<code>FixedWindowRateLimit</code>:</p>
+<p>Avoids the fixed-window edge case where a client issues <code>2 * max_calls</code>
+requests across two adjacent windows: the timestamps of recent calls are
+stored in a cache entry, and each call prunes the expired ones and compares
+the live count against <code>max_calls</code>.</p>
+<p>Trade-offs against
+<a class="autorefs autorefs-internal" title="FixedWindowRateLimit" href="#rest_framework_mcp.auth.rate_limits.fixed_window_rate_limit.FixedWindowRateLimit"><code>FixedWindowRateLimit</code></a>:</p>
 <ul>
-<li><strong>Smoother</strong>: limits actual request rate over the trailing
-  <code>per_seconds</code> window, not bucketed counts.</li>
-<li><strong>Memory cost</strong>: the timestamp list grows with traffic up to
-  <code>max_calls</code> entries per key; negligible for typical limits.</li>
-<li><strong>Read-modify-write</strong>: doesn't have the atomic guarantees of the
-  fixed-window's <code>cache.add</code> + <code>cache.incr</code> primitives. Concurrent
-  calls can see slightly stale state and admit a small number of
-  extra requests under contention. For strict atomicity in
-  multi-worker deployments, use a Redis-backed limiter with Lua.</li>
+<li><strong>Smoother</strong>: limits the actual rate over the trailing <code>per_seconds</code>,
+  not bucketed counts.</li>
+<li><strong>Memory cost</strong>: up to <code>max_calls</code> timestamps per key.</li>
+<li><strong>Read-modify-write</strong>: no atomic guarantee, unlike the fixed window's
+  <code>cache.add</code> + <code>cache.incr</code>. Concurrent calls can read stale state and
+  admit a few extra requests under contention; for strict atomicity in a
+  multi-worker deployment, back the limiter with a Redis-Lua script.</li>
 </ul>
 <p>The cache <strong>must</strong> be a shared backend in multi-process deployments;
-Django's <code>locmem</code> works for tests but won't share state across
-workers.</p>
+Django's <code>locmem</code> works for tests but shares no state across workers.</p>
 
 
 
@@ -3039,23 +3115,21 @@ workers.</p>
 
 
         <p>Token-bucket rate limiter using Django cache for state.</p>
-<p>A bucket has at most <code>capacity</code> tokens. Each accepted call consumes
-one token; the bucket refills continuously at <code>refill_per_second</code>
-tokens per second. When empty, the limiter returns the suggested
-retry-after time until at least one token is available again.</p>
-<p>Trade-offs vs the sliding-window scheme:</p>
+<p>A bucket holds at most <code>capacity</code> tokens, each accepted call consumes
+one, and the bucket refills continuously at <code>refill_per_second</code>. When
+empty, the limiter returns the time until one token is available again.</p>
+<p>Trade-offs against the sliding-window scheme:</p>
 <ul>
-<li><strong>Burst-friendly</strong>: a full bucket can absorb a burst of <code>capacity</code>
-  requests instantly, then rate-limit the steady state at
-  <code>refill_per_second</code>. Useful when consumers naturally batch.</li>
-<li><strong>Read-modify-write</strong>: like the sliding-window class, this is not
-  strictly atomic across concurrent workers. Under contention a small
-  number of extra tokens may slip through. For strict atomicity in
-  multi-worker deployments, back the limiter with a Redis-Lua script.</li>
+<li><strong>Burst-friendly</strong>: a full bucket absorbs <code>capacity</code> requests
+  instantly, then holds the steady state at <code>refill_per_second</code>. Useful
+  when consumers naturally batch.</li>
+<li><strong>Read-modify-write</strong>: like the sliding window, not strictly atomic
+  across workers, so a few extra tokens can slip through under contention.
+  For strict atomicity, back the limiter with a Redis-Lua script.</li>
 </ul>
 <p>The cache <strong>must</strong> be a shared backend (Memcached or Redis) in
-multi-process deployments; Django's <code>locmem</code> is fine for tests but
-won't share state across workers.</p>
+multi-process deployments; Django's <code>locmem</code> is fine for tests but shares
+no state across workers.</p>
 
 
 
@@ -3150,20 +3224,17 @@ payloads to the user see a meaningful message rather than an empty body.</p>
 
 
         <p>RFC 9728 OAuth 2.0 Protected Resource Metadata endpoint.</p>
-<p>Mounted at <code>/.well-known/oauth-protected-resource</code> by :class:<code>MCPServer</code>.
-Single-action ViewSet — the canonical GET is wired as <code>list</code> via
-<code>ProtectedResourceMetadataViewSet.as_view({"get": "list"}, auth_backend=...)</code>
-so the URL conf doesn't need a router.</p>
-<p>Delegates payload construction to the configured
-:meth:<code>MCPAuthBackend.protected_resource_metadata</code>, which returns a
-:class:<code>ProtectedResourceMetadata</code> dataclass. The backend is
-instance-scoped — passed in via <code>as_view</code> — so multiple servers in
-one process can advertise different metadata.</p>
-<p>DRF's default authentication / permission / throttling layers are
-disabled (empty lists below): PRM is a public discovery endpoint by
-design and the MCP transport owns its own auth pipeline through
-:class:<code>MCPAuthBackend</code>. The renderer is pinned to JSON because the
-payload shape is RFC-defined; content negotiation would be noise.</p>
+<p>Mounted at <code>/.well-known/oauth-protected-resource</code> by
+<a class="autorefs autorefs-internal" title="MCPServer" href="../mcp-server/#rest_framework_mcp.server.mcp_server.MCPServer"><code>MCPServer</code></a>. Single-action ViewSet
+— the canonical GET is wired as <code>list</code> via
+<code>ProtectedResourceMetadataViewSet.as_view({"get": "list"}, auth_backend=...)</code> so
+the URL conf doesn't need a router. The payload comes from the instance-scoped
+<code>MCPAuthBackend.protected_resource_metadata</code>, so multiple servers in one process
+advertise different metadata.</p>
+<p>DRF authentication and permissions are deliberately open: PRM is a public discovery
+endpoint, and the MCP transport owns its own auth pipeline through
+<a class="autorefs autorefs-internal" title="MCPAuthBackend" href="#rest_framework_mcp.auth.types.auth_backend.MCPAuthBackend"><code>MCPAuthBackend</code></a>. The
+renderer is pinned to JSON because the payload shape is RFC-defined.</p>
 
 
 
@@ -3214,11 +3285,11 @@ payload shape is RFC-defined; content negotiation would be noise.</p>
 
 
         <p>RFC 9728 OAuth 2.0 Protected Resource Metadata payload.</p>
-<p>Returned by :meth:<code>MCPAuthBackend.protected_resource_metadata</code> and
-serialised onto the wire by the PRM ViewSet. Keys map 1:1 to the
-RFC 9728 field names; <code>warning</code> is the package-local extension
-that <code>AllowAnyBackend</code> uses to make dev-mode misconfiguration
-loud.</p>
+<p>Returned by <code>MCPAuthBackend.protected_resource_metadata</code> and
+serialised onto the wire by the PRM ViewSet. Keys map 1:1 to the RFC 9728
+field names, except <code>warning</code>: a package-local extension serialised as
+<code>_warning</code>, which <code>AllowAnyBackend</code> uses to make dev-mode
+misconfiguration loud in client tooling.</p>
 
 
 
@@ -3279,33 +3350,22 @@ probe (aliases render the canonical payload — they are not HTTP redirects).</p
     <div class="doc doc-contents first">
 
         <p>Return URL patterns for the OAuth endpoint matrix.</p>
-<p>Endpoint matrix when all flags are <code>True</code>:</p>
-<p>+---------------------------------------------------------+--------------------------------------+
-| Path                                                    | View                                 |
-+=========================================================+======================================+
-| <code>/.well-known/oauth-protected-resource</code>               | <code>ProtectedResourceMetadataViewSet</code>    |
-+---------------------------------------------------------+--------------------------------------+
-| <code>/.well-known/oauth-protected-resource/mcp</code>           | alias                                |
-+---------------------------------------------------------+--------------------------------------+
-| <code>/mcp/.well-known/oauth-protected-resource</code>           | alias                                |
-+---------------------------------------------------------+--------------------------------------+
-| <code>/.well-known/oauth-authorization-server</code>             | <code>AuthorizationServerMetadataViewSet</code>  |
-+---------------------------------------------------------+--------------------------------------+
-| <code>/.well-known/oauth-authorization-server/oauth</code>       | alias                                |
-+---------------------------------------------------------+--------------------------------------+
-| <code>/oauth/.well-known/oauth-authorization-server</code>       | alias                                |
-+---------------------------------------------------------+--------------------------------------+
-| <code>/.well-known/openid-configuration</code>                   | <code>OpenIDDiscoveryViewSet</code>              |
-+---------------------------------------------------------+--------------------------------------+
-| <code>/.well-known/openid-configuration/oauth</code>             | alias                                |
-+---------------------------------------------------------+--------------------------------------+
-| <code>/oauth/register/</code>                                    | <code>DynamicClientRegistrationViewSet</code>    |
-+---------------------------------------------------------+--------------------------------------+</p>
-<p>The DOT-provided <code>/oauth/authorize/</code> and <code>/oauth/token/</code> views
-are NOT mounted here — consumers include <code>oauth2_provider.urls</code>
-separately. The contrib mount focuses on the discovery / DCR
-surface; the AS endpoints themselves belong to whichever framework
-actually hosts the AS.</p>
+<p>With every flag on, the canonical paths and their aliases are:</p>
+<div class="language-text highlight"><pre><span></span><code>/.well-known/oauth-protected-resource     ProtectedResourceMetadataViewSet
+  + /.well-known/oauth-protected-resource/mcp
+  + /mcp/.well-known/oauth-protected-resource
+/.well-known/oauth-authorization-server   AuthorizationServerMetadataViewSet
+  + /.well-known/oauth-authorization-server/oauth
+  + /oauth/.well-known/oauth-authorization-server
+/.well-known/openid-configuration         OpenIDDiscoveryViewSet
+  + /.well-known/openid-configuration/oauth
+/oauth/register/                          DynamicClientRegistrationViewSet
+</code></pre></div>
+<p>DOT's own <code>/oauth/authorize/</code> and <code>/oauth/token/</code> are <strong>not</strong> mounted:
+this covers the discovery and DCR surface, while the AS endpoints belong to
+whichever framework hosts the authorization server. Every argument is
+resolved here, when the patterns are built, rather than per request, so two
+mounts in one project can differ.</p>
 
 
 <p><span class="doc-section-title">Parameters:</span></p>
@@ -3328,9 +3388,9 @@ actually hosts the AS.</p>
             </td>
             <td>
               <div class="doc-md-description">
-                <p>The :class:<code>MCPServer</code> whose <code>auth_backend</code> should drive
-all of the discovery payloads. Passed in instead of looked up
-from settings so multi-server deployments work.</p>
+                <p>The <a class="autorefs autorefs-internal" title="MCPServer" href="../mcp-server/#rest_framework_mcp.server.mcp_server.MCPServer"><code>MCPServer</code></a>
+whose <code>auth_backend</code> drives every discovery payload. A parameter rather than a settings lookup so
+multi-server deployments work.</p>
               </div>
             </td>
             <td>
@@ -3346,9 +3406,8 @@ from settings so multi-server deployments work.</p>
             </td>
             <td>
               <div class="doc-md-description">
-                <p>Mount <code>/oauth/register/</code>. Default <code>False</code> because
-DCR is gated by <code>dcr_enabled</code> anyway and consumers who don't
-need it shouldn't even see the URL.</p>
+                <p>Mount <code>/oauth/register/</code>. Off by default, so a consumer
+who does not want DCR never exposes the URL at all.</p>
               </div>
             </td>
             <td>
@@ -3364,8 +3423,7 @@ need it shouldn't even see the URL.</p>
             </td>
             <td>
               <div class="doc-md-description">
-                <p>Mount the alias URLs alongside the canonical ones.
-Default <code>True</code> because clients in the wild use varied paths.</p>
+                <p>Mount the alias URLs alongside the canonical ones.</p>
               </div>
             </td>
             <td>
@@ -3381,8 +3439,7 @@ Default <code>True</code> because clients in the wild use varied paths.</p>
             </td>
             <td>
               <div class="doc-md-description">
-                <p>Mount the OIDC discovery alias. Default
-<code>True</code> for the same reason.</p>
+                <p>Mount the OIDC discovery alias.</p>
               </div>
             </td>
             <td>
@@ -3399,13 +3456,11 @@ Default <code>True</code> because clients in the wild use varied paths.</p>
             <td>
               <div class="doc-md-description">
                 <p>Mount <code>/oauth/authorize/</code> as a thin DOT
-:class:<code>AuthorizationView</code> subclass with the configured
-:class:<code>AuthUserAdapter</code> hook. Default <code>False</code> because the
-consumer's own URL conf typically owns <code>/oauth/authorize/</code> via
-<code>include('oauth2_provider.urls')</code>; flip this on when you want
-the adapter wired and you're not including DOT's urls otherwise.
-Requires the <code>[oauth]</code> extra — DOT is imported lazily inside
-the factory.</p>
+<code>AuthorizationView</code> subclass carrying the
+<code>auth_user_adapter</code> hook. Off by default because the consumer's URL
+conf usually owns that path via <code>include('oauth2_provider.urls')</code>;
+turn it on to wire the adapter when it does not. Requires the
+<code>[oauth]</code> extra.</p>
               </div>
             </td>
             <td>
@@ -3421,11 +3476,10 @@ the factory.</p>
             </td>
             <td>
               <div class="doc-md-description">
-                <p>An :class:<code>AuthUserAdapter</code> instance that hydrates
-<code>request.user</code> before DOT's <code>AuthorizationView</code> dispatches.
-<code>None</code> (the default) means "no adapter; DOT's own dispatch
-decides the user" — typically a session-based login redirect.
-Only used when <code>include_authorize</code> is on.</p>
+                <p>Hydrates <code>request.user</code> before DOT's
+<code>AuthorizationView</code> dispatches. <code>None</code> leaves the user to DOT's own
+dispatch, typically a session-based login redirect. Only read when
+<code>include_authorize</code> is on.</p>
               </div>
             </td>
             <td>
@@ -3441,10 +3495,8 @@ Only used when <code>include_authorize</code> is on.</p>
             </td>
             <td>
               <div class="doc-md-description">
-                <p>Whether <code>/oauth/register/</code> accepts registrations.
-<code>None</code> takes <code>REST_FRAMEWORK_MCP['DCR_ENABLED']</code> (default
-<code>False</code> — an open DCR endpoint lets anyone create an OAuth
-client against your authorization server).</p>
+                <p>Whether <code>/oauth/register/</code> accepts registrations. <code>None</code>
+takes <code>REST_FRAMEWORK_MCP['DCR_ENABLED']</code>.</p>
               </div>
             </td>
             <td>
@@ -3460,10 +3512,9 @@ client against your authorization server).</p>
             </td>
             <td>
               <div class="doc-md-description">
-                <p>RFC 7591 §3 token a DCR client must
-present. <code>None</code> takes <code>REST_FRAMEWORK_MCP
-['DCR_INITIAL_ACCESS_TOKEN']</code>, whose own default is <code>None</code> —
-meaning no token check.</p>
+                <p>RFC 7591 §3 token a DCR client must present.
+<code>None</code> takes <code>REST_FRAMEWORK_MCP['DCR_INITIAL_ACCESS_TOKEN']</code>,
+itself <code>None</code>, which means no token check.</p>
               </div>
             </td>
             <td>
@@ -3472,9 +3523,6 @@ meaning no token check.</p>
           </tr>
       </tbody>
     </table>
-        <p>Every value is resolved <strong>here</strong>, when the patterns are built, rather than
-on each request — the same reason <code>server</code> is a parameter: so two mounts
-in one project can differ.</p>
 
 
     </div>
@@ -3499,19 +3547,18 @@ in one project can differ.</p>
 
 
         <p>RFC 8414 OAuth 2.0 Authorization Server Metadata endpoint.</p>
-<p>Mounted by :func:<code>build_oauth_urlpatterns</code> at the canonical
-<code>/.well-known/oauth-authorization-server</code> URL plus aliases. The
-canonical GET wires up as the <code>list</code> action via
-<code>AuthorizationServerMetadataViewSet.as_view({"get": "list"}, auth_backend=...)</code>.</p>
-<p>Delegates payload construction to
-:meth:<code>MCPAuthBackend.authorization_server_metadata</code>, which returns
-an :class:<code>AuthorizationServerMetadata</code> dataclass. Backends that
-don't host an authorization server raise :class:<code>NotImplementedError</code>
-on the method; this view surfaces that as <code>501 Not Implemented</code> so
-clients see a deterministic "no AS here" signal rather than a 500.</p>
-<p>DRF's default auth / permission / throttling layers are disabled —
-discovery is public and the MCP transport owns its own pipeline.
-The renderer is pinned to JSON; the payload shape is RFC-defined.</p>
+<p>Mounted by
+<a class="autorefs autorefs-internal" title="build_oauth_urlpatterns" href="#rest_framework_mcp.contrib.oauth.build_oauth_urlpatterns.build_oauth_urlpatterns"><code>build_oauth_urlpatterns</code></a>
+at <code>/.well-known/oauth-authorization-server</code> plus aliases, wired as the <code>list</code>
+action: <code>as_view({"get": "list"}, auth_backend=...)</code>.</p>
+<p>The payload comes from
+<code>MCPAuthBackend.authorization_server_metadata</code>. A backend that hosts
+no authorization server raises <code>NotImplementedError</code>, which this
+view surfaces as <code>501</code> so clients get a deterministic "no AS here" rather
+than a 500.</p>
+<p>DRF's default auth / permission / throttling layers are off: discovery is
+public and the MCP transport owns its own pipeline. The renderer is pinned
+to JSON, the payload shape being RFC-defined.</p>
 
 
 
@@ -3560,34 +3607,23 @@ The renderer is pinned to JSON; the payload shape is RFC-defined.</p>
 
 
         <p>OIDC discovery alias — <code>/.well-known/openid-configuration</code>.</p>
-<p>Some MCP / LLM-host clients probe <code>/.well-known/openid-configuration</code>
-before falling back to RFC 8414. This ViewSet returns the same
-payload as :class:<code>AuthorizationServerMetadataViewSet</code> plus a small
-set of OIDC defaults so the probe succeeds even though
-:mod:<code>rest_framework_mcp</code> doesn't implement an actual ID-token
-endpoint.</p>
-<p>Single-action ViewSet — the canonical GET wires up as <code>list</code> via
-<code>OpenIDDiscoveryViewSet.as_view({"get": "list"}, auth_backend=...)</code>.</p>
-<p>Concretely, the payload is the backend's AS metadata composed with:</p>
-<ul>
-<li><code>subject_types_supported: ["public"]</code> — DOT-style pseudonymous
-  identifiers.</li>
-<li><code>id_token_signing_alg_values_supported</code> — <strong>derived</strong>, not fixed.
-  This used to be a hardcoded <code>["RS256"]</code>, on the reasoning that
-  the value is inert because "we don't actually mint ID tokens". That
-  reasoning was wrong wherever DOT <em>is</em> the authorization server with
-  <code>OIDC_ENABLED</code>: DOT's token endpoint mints ID tokens, so a client
-  that read this list, saw RS256 and requested <code>openid</code> reached
-  <code>Application.jwk_key</code> on a DCR-registered client that had no
-  algorithm — <code>ImproperlyConfigured</code>, surfacing as a 500 after the
-  user had already logged in and consented. It now reports what the
-  server can genuinely sign with, which is empty when no RSA key is
-  configured.</li>
-<li><code>response_modes_supported: ["query"]</code> — standard.</li>
-</ul>
-<p>Backends that don't host an authorization server raise
-:class:<code>NotImplementedError</code>; this view surfaces that as <code>501</code> for
-parity with :class:<code>AuthorizationServerMetadataViewSet</code>.</p>
+<p>Some MCP hosts probe this path before falling back to RFC 8414, so the
+payload is the backend's AS metadata plus a few OIDC defaults, letting the
+probe succeed even though this package implements no ID-token endpoint.
+Wired as the <code>list</code> action:
+<code>as_view({"get": "list"}, auth_backend=...)</code>.</p>
+<p>The additions are <code>subject_types_supported: ["public"]</code>,
+<code>response_modes_supported: ["query"]</code>, and
+<code>id_token_signing_alg_values_supported</code> — the last <strong>derived</strong> rather
+than fixed, because wherever DOT is the authorization server with
+<code>OIDC_ENABLED</code> its token endpoint really does mint ID tokens. A client
+that read a hardcoded <code>RS256</code> and requested <code>openid</code> would reach
+<code>Application.jwk_key</code> on a client registered with no algorithm and take
+an <code>ImproperlyConfigured</code> 500, after logging in and consenting. The list
+is empty when no RSA key is configured.</p>
+<p>A backend that hosts no authorization server raises <code>NotImplementedError</code>,
+surfaced as <code>501</code> for parity with
+<a class="autorefs autorefs-internal" title="AuthorizationServerMetadataViewSet" href="#rest_framework_mcp.contrib.oauth.authorization_server_metadata_viewset.AuthorizationServerMetadataViewSet"><code>AuthorizationServerMetadataViewSet</code></a>.</p>
 
 
 
@@ -3636,30 +3672,23 @@ parity with :class:<code>AuthorizationServerMetadataViewSet</code>.</p>
 
 
         <p>RFC 7591 Dynamic Client Registration endpoint.</p>
-<p>Default state is locked down: <code>DCR_ENABLED=False</code> produces a 403
-on every request. To turn DCR on, set the flag in
-<code>REST_FRAMEWORK_MCP</code> settings and (recommended) also set
-<code>DCR_INITIAL_ACCESS_TOKEN</code> to a static bearer that clients must
-present.</p>
-<p>Single-action ViewSet — wired as the <code>create</code> action (POST) via
-<code>DynamicClientRegistrationViewSet.as_view({"post": "create"})</code>.
-Successful POST returns the RFC 7591 client information response
-(<code>client_id</code> / echoed registration metadata, plus a plaintext
-<code>client_secret</code> for confidential clients) and persists a DOT
-<code>Application</code>. A client that registers with
-<code>token_endpoint_auth_method: none</code> becomes a public client and is
-issued no secret — it authenticates at the token endpoint with PKCE
-alone, which is the only mode Claude's custom connectors can use.</p>
-<p>DOT (<code>oauth2_provider</code>) is imported lazily inside the action so
-this module remains importable without the <code>[oauth]</code> extra. A
-request that arrives with DCR enabled but DOT absent surfaces a
-clear <code>ImportError</code> at first use rather than at server startup.</p>
-<p>DRF's default auth / permission / throttling layers are disabled —
-DCR is gated by its own <code>dcr_enabled</code> / <code>initial_access_token</code>
-knobs, not by DRF's session/token authenticators. The CSRF / session
-middleware is sidestepped because DRF's <code>APIView.dispatch</code> (which
-<code>ViewSet</code> inherits) wraps responses with <code>csrf_exempt</code> semantics
-when no <code>SessionAuthentication</code> class is configured.</p>
+<p>Locked down by default: <code>dcr_enabled=False</code> answers 403 to every
+request. Turn it on with <code>REST_FRAMEWORK_MCP['DCR_ENABLED']</code> and,
+recommended, a <code>DCR_INITIAL_ACCESS_TOKEN</code> clients must present. Wired as
+the <code>create</code> action: <code>as_view({"post": "create"})</code>.</p>
+<p>A successful POST persists a DOT <code>Application</code> and returns the RFC 7591
+client information response — <code>client_id</code>, the registered metadata, and a
+plaintext <code>client_secret</code> for confidential clients. Registering with
+<code>token_endpoint_auth_method: none</code> makes a public client, issued no
+secret and authenticating with PKCE alone, which is the only mode some
+connectors can use.</p>
+<p>DOT is imported lazily inside the action, so this module stays importable
+without the <code>[oauth]</code> extra and a request arriving with DCR enabled but
+DOT absent gets a clear <code>ImportError</code> rather than a startup failure.</p>
+<p>DRF's default auth / permission / throttling layers are off: DCR is gated
+by its own knobs, not by DRF's authenticators. CSRF is sidestepped because
+<code>APIView.dispatch</code> applies <code>csrf_exempt</code> semantics when no
+<code>SessionAuthentication</code> is configured.</p>
 
 
 
@@ -3708,36 +3737,33 @@ when no <code>SessionAuthentication</code> class is configured.</p>
 
 
         <p>RFC 7591 dynamic client registration request shape.</p>
-<p>Wraps :class:<code>DynamicClientRegistrationRequest</code> so the validated
-payload arrives at :class:<code>DynamicClientRegistrationViewSet</code> as a typed
-dataclass instance (via <code>.save()</code>). Field overrides below replace
-the dataclass-derived auto-generated fields with shapes that
-actually validate the wire contract:</p>
-<ul>
-<li><code>redirect_uris</code> is required + non-empty + child is a URL.</li>
-<li><code>application_type</code> is validated against OIDC's two values and
-  echoed. Clients are required by the MCP spec to send it, so it is
-  accepted rather than dropped — but this server imposes none of the
-  redirect-URI constraints an OIDC provider would derive from it.</li>
-<li><code>token_endpoint_auth_method</code> / <code>grant_types</code> are the RFC 7591
-  §2 spellings every interoperable client sends. They are the
-  <em>primary</em> inputs: :meth:<code>validate</code> translates them into DOT's
-  <code>client_type</code> / <code>authorization_grant_type</code>.</li>
-<li><code>client_type</code> / <code>authorization_grant_type</code> are DOT's
-  non-standard spellings, retained as an escape hatch for callers
-  already speaking DOT. They are <code>ChoiceField</code> with choices sourced
-  from DOT's <code>Application</code> model constants at instance
-  construction, so a malformed value is rejected per-field before the
-  request ever reaches the database. The lazy import keeps this
-  module importable without the <code>[oauth]</code> extra.</li>
-</ul>
-<p>Supplying both spellings is allowed only when they agree; a
-contradiction is a 400 rather than a silent winner, because either
-choice would hand back a client that cannot complete the flow it
-registered for.</p>
-<p>Other RFC 7591 fields are silently ignored — DOT doesn't model them
-and inventing a richer shape would diverge from the underlying
-authorization server.</p>
+<p>Wraps
+<a class="autorefs autorefs-internal" title="DynamicClientRegistrationRequest
+
+
+  
+      dataclass
+  " href="#rest_framework_mcp.contrib.oauth.types.dynamic_client_registration_request.DynamicClientRegistrationRequest"><code>DynamicClientRegistrationRequest</code></a>
+so <code>.save()</code> hands
+<a class="autorefs autorefs-internal" title="DynamicClientRegistrationViewSet" href="#rest_framework_mcp.contrib.oauth.dynamic_client_registration_viewset.DynamicClientRegistrationViewSet"><code>DynamicClientRegistrationViewSet</code></a>
+a typed dataclass instance. The field overrides replace the dataclass-derived
+defaults with shapes that validate the wire contract: <code>redirect_uris</code> is required,
+non-empty and URL-valued, and <code>application_type</code> is checked against OIDC's two
+values and echoed without imposing the redirect-URI constraints an OIDC provider
+would derive from it.</p>
+<p><code>token_endpoint_auth_method</code> / <code>grant_types</code> are the RFC 7591 §2
+spellings every interoperable client sends, and are the <em>primary</em> inputs:
+<code>validate</code> translates them into DOT's <code>client_type</code> /
+<code>authorization_grant_type</code>. Those two remain accepted as an escape hatch
+for callers already speaking DOT, their choices sourced from
+<code>Application</code>'s constants at instance construction — so a malformed value
+is rejected per-field before reaching the database, and the lazy import
+keeps this module usable without the <code>[oauth]</code> extra.</p>
+<p>Supplying both spellings is allowed only when they agree. A contradiction
+is a 400 rather than a silent winner, since either choice would hand back a
+client that cannot complete the flow it registered for. Other RFC 7591
+fields are ignored: DOT does not model them, and inventing a richer shape
+would diverge from the underlying authorization server.</p>
 
 
 
@@ -3774,15 +3800,13 @@ authorization server.</p>
     <div class="doc doc-contents ">
 
         <p>Reconcile the RFC 7591 and DOT spellings, in both directions.</p>
-<p>Every caller downstream reads all four fields already populated
-and mutually consistent, so nobody has to know which vocabulary
-the client used, and nobody re-applies defaults.</p>
-<p><code>attrs</code> is the dataclass instance built by
-<code>DataclassSerializer.to_internal_value</code>; it is mutable precisely
-so normalisation like this can happen in place. Fields the client
-omitted carry the dataclass defaults (<code>""</code> / <code>[]</code>), neither of
-which is an accepted choice, so "empty" unambiguously means "not
-supplied".</p>
+<p>Downstream reads all four fields already populated and mutually
+consistent, so nobody has to know which vocabulary the client used and
+nobody re-applies defaults.</p>
+<p><code>attrs</code> is the dataclass <code>DataclassSerializer.to_internal_value</code>
+built, mutable precisely so normalisation can happen in place. Omitted
+fields carry the dataclass defaults (<code>""</code> / <code>[]</code>), neither of which
+is an accepted choice, so "empty" unambiguously means "not supplied".</p>
 
 
     </div>
@@ -3817,15 +3841,13 @@ supplied".</p>
 
 
         <p>RFC 8414 OAuth 2.0 Authorization Server Metadata payload.</p>
-<p>Returned by :meth:<code>MCPAuthBackend.authorization_server_metadata</code>
-and serialised by the contrib AS metadata ViewSet. Backends that
-don't host an AS raise :class:<code>NotImplementedError</code> instead of
-returning this dataclass; the calling ViewSet maps the exception
-to <code>501 Not Implemented</code>.</p>
-<p>Field shapes mirror RFC 8414; <code>str</code>-typed endpoints default to
-<code>""</code> so the wire shape is always valid JSON even when the
-configuration is incomplete (callers can populate <code>SERVER_INFO</code>
-to fill them).</p>
+<p>Returned by <code>MCPAuthBackend.authorization_server_metadata</code> and
+serialised by the contrib AS metadata ViewSet. A backend that hosts no
+authorization server raises <code>NotImplementedError</code> instead, which
+that ViewSet maps to <code>501 Not Implemented</code>.</p>
+<p>Field shapes mirror RFC 8414. The <code>str</code>-typed endpoints default to <code>""</code>
+so the wire shape is valid JSON even when the configuration is incomplete;
+populate <code>SERVER_INFO</code> to fill them.</p>
 
 
 
@@ -3865,14 +3887,13 @@ to fill them).</p>
     <div class="doc doc-contents ">
 
         <p>Whether the authorization server accepts an HTTPS URL as a <code>client_id</code>.</p>
-<p>The field MCP clients check to decide <em>how</em> to register, and the reason it
-matters here: the registration priority order is pre-registration → CIMD →
-Dynamic Client Registration, and DCR is deprecated. A server that supports
-CIMD but stays silent about it sends every client down the deprecated path
-for no reason.</p>
-<p>⚠ Never hardcode this to <code>True</code>. It describes the authorization server,
-not this package — a backend must source it from whatever the AS actually
-does, so the advertisement cannot drift from the behaviour.</p>
+<p>Clients check this to decide how to register: the priority order is
+pre-registration, then CIMD, then the deprecated Dynamic Client
+Registration, so a server that supports CIMD but stays silent sends every
+client down the deprecated path.</p>
+<p>Never hardcode this to <code>True</code>. It describes the authorization server, not
+this package, so a backend must source it from what the AS actually does or
+the advertisement drifts from the behaviour.</p>
 
     </div>
 
@@ -3908,16 +3929,19 @@ does, so the advertisement cannot drift from the behaviour.</p>
 
 
 
-        <p>OIDC discovery alias payload — extends :class:<code>AuthorizationServerMetadata</code>.</p>
-<p>Composes (not subclasses) the AS metadata so the underlying type
-stays exactly RFC 8414. The OIDC additions (<code>subject_types_supported</code>,
-<code>id_token_signing_alg_values_supported</code>, <code>response_modes_supported</code>)
-are advertised because some MCP / LLM-host clients probe
-<code>/.well-known/openid-configuration</code> first and skip the probe
-silently if these keys are absent.</p>
-<p>See :class:<code>OpenIDDiscoveryViewSet</code> for the rationale on returning
-OIDC-shaped metadata without implementing an actual ID-token
-endpoint.</p>
+        <p>OIDC discovery alias payload — extends
+<a class="autorefs autorefs-internal" title="AuthorizationServerMetadata
+
+
+  
+      dataclass
+  " href="#rest_framework_mcp.auth.types.authorization_server_metadata.AuthorizationServerMetadata"><code>AuthorizationServerMetadata</code></a>.</p>
+<p>Composes rather than subclasses the AS metadata, so the underlying type stays
+exactly RFC 8414. The OIDC additions are advertised because some MCP hosts probe
+<code>/.well-known/openid-configuration</code> first and skip the probe silently when these
+keys are absent. See
+<a class="autorefs autorefs-internal" title="OpenIDDiscoveryViewSet" href="#rest_framework_mcp.contrib.oauth.openid_discovery_viewset.OpenIDDiscoveryViewSet"><code>OpenIDDiscoveryViewSet</code></a>
+for why OIDC-shaped metadata is returned with no ID-token endpoint behind it.</p>
 
 
 
@@ -3968,41 +3992,31 @@ endpoint.</p>
 
 
         <p>RFC 7591 dynamic client registration request payload.</p>
-<p>Mutable dataclass so :class:<code>DynamicClientRegistrationSerializer</code>
-(a <code>DataclassSerializer</code> over this type) can apply defaults via
-<code>setdefault</code>-style normalisation if needed. Frozen would force
-consumers to build a second instance just to change a defaulted
-field, which is awkward for a request-shape type.</p>
-<p>Two vocabularies land here side by side:</p>
-<ul>
-<li><code>token_endpoint_auth_method</code>, <code>grant_types</code> and
-  <code>response_types</code> are the RFC 7591 §2 fields an interoperable
-  client actually sends.</li>
-<li><code>client_type</code> and <code>authorization_grant_type</code> are DOT's
-  non-standard equivalents, kept as an escape hatch for callers that
-  already speak DOT.</li>
-</ul>
-<p>The serializer's <code>validate</code> reconciles the two, so everything
-downstream reads a consistent set. <code>response_types</code> has no DOT
-counterpart at all — RFC 7591 §2.1 makes it a function of the grant,
-so it is derived rather than stored, and an explicit value that
-contradicts the grant is rejected.</p>
-<p><code>id_token_signed_response_alg</code> maps to DOT's <code>Application.algorithm</code>,
-which decides whether an ID token can be signed at all. Only the
-viewset can resolve it, because whether an algorithm is <em>usable</em>
-depends on server configuration (an RSA key) and on the client type
-(HS256 signs with the client secret, which a public client does not
-have) — neither of which is visible from the payload alone.</p>
-<p><code>application_type</code> is the one field kept without a DOT counterpart. The
-MCP spec makes sending it a client <strong>MUST</strong>, because an OIDC authorization
-server derives redirect-URI constraints from it — so dropping it silently
-would leave a client that carefully declared <code>native</code> unable to tell
-whether it had been heard. It is validated and echoed back; see the
-serializer for why it is not enforced.</p>
-<p>RFC 7591 fields the server doesn't understand (<code>contacts</code>,
-<code>logo_uri</code>, <code>jwks</code>, …) are ignored, which §2 requires — DOT has
-nowhere to put them, and echoing metadata the authorization server
-won't honour is worse than dropping it.</p>
+<p>Mutable, so
+<a class="autorefs autorefs-internal" title="DynamicClientRegistrationSerializer" href="#rest_framework_mcp.contrib.oauth.dcr_serializer.DynamicClientRegistrationSerializer"><code>DynamicClientRegistrationSerializer</code></a>
+can normalise in place; frozen would force a second instance just to change a
+defaulted field.</p>
+<p>Two vocabularies land here side by side. <code>token_endpoint_auth_method</code>,
+<code>grant_types</code> and <code>response_types</code> are the RFC 7591 §2 fields an
+interoperable client sends; <code>client_type</code> and
+<code>authorization_grant_type</code> are DOT's non-standard equivalents, kept as an
+escape hatch. The serializer's <code>validate</code> reconciles them, so everything
+downstream reads a consistent set.</p>
+<p><code>response_types</code> has no DOT counterpart: RFC 7591 §2.1 makes it a
+function of the grant, so it is derived rather than stored and an explicit
+value contradicting the grant is rejected.
+<code>id_token_signed_response_alg</code> maps to <code>Application.algorithm</code>, which
+decides whether an ID token can be signed at all; only the viewset can
+resolve it, because usability depends on server configuration (an RSA key)
+and client type (HS256 signs with a secret a public client does not have).
+<code>application_type</code> is validated and echoed but has no DOT counterpart —
+the MCP spec makes <em>sending</em> it a client MUST, so dropping it silently
+would leave a client that declared <code>native</code> unable to tell whether it had
+been heard.</p>
+<p>RFC 7591 fields the server does not understand (<code>contacts</code>,
+<code>logo_uri</code>, <code>jwks</code>, …) are ignored, as §2 requires: DOT has nowhere to
+put them, and echoing metadata the authorization server will not honour is
+worse than dropping it.</p>
 
 
 
@@ -4053,25 +4067,23 @@ won't honour is worse than dropping it.</p>
 
 
         <p>RFC 7591 client information response.</p>
-<p>The wire shape returned by :class:<code>DynamicClientRegistrationViewSet</code>
-on a successful registration.</p>
-<p>RFC 7591 §3.2.1 lets the authorization server substitute any metadata
-value it likes, but obliges it to return everything it registered. A
-substitution the client is never told about is what turns a legal
-downgrade into an undiagnosable failure: the client goes on behaving
-as what it asked to be while the token endpoint enforces something
-else. So every field here is the <em>resolved</em> value — what was written
-— not an echo of what was asked for.</p>
-<p><code>client_secret</code> is the <strong>plaintext</strong> secret, and it is only present
-for confidential clients. DOT hashes the column on save, so the value
-here has to be the one generated before the <code>Application</code> was
-written — read it back off the model and you emit the PBKDF2 digest,
-which no client can authenticate with. A public client
-(<code>token_endpoint_auth_method: none</code>) gets no secret at all, per
-RFC 7591 §2. <code>client_secret_expires_at</code> rides along whenever a
-secret is issued because §3.2.1 makes it REQUIRED in that case; <code>0</code>
-means "does not expire".</p>
-<p><code>scope</code> is optional (only emitted when the request supplied one).</p>
+<p>The wire shape
+<a class="autorefs autorefs-internal" title="DynamicClientRegistrationViewSet" href="#rest_framework_mcp.contrib.oauth.dynamic_client_registration_viewset.DynamicClientRegistrationViewSet"><code>DynamicClientRegistrationViewSet</code></a>
+returns on a successful registration.</p>
+<p>RFC 7591 §3.2.1 lets the authorization server substitute any metadata value
+it likes but obliges it to return everything it registered, so every field
+here is the <em>resolved</em> value rather than an echo of the request: an
+untold substitution turns a legal downgrade into an undiagnosable failure,
+with the client behaving as what it asked to be while the token endpoint
+enforces something else.</p>
+<p><code>client_secret</code> is the <strong>plaintext</strong> secret and is present only for
+confidential clients — DOT hashes the column on save, so this has to be the
+value generated before the <code>Application</code> was written; read back off the
+model it would be the PBKDF2 digest, which no client can authenticate with.
+A public client gets no secret at all, per RFC 7591 §2.
+<code>client_secret_expires_at</code> rides along whenever one is issued, §3.2.1
+making it REQUIRED in that case, with <code>0</code> meaning "does not expire".
+<code>scope</code> is emitted only when the request supplied one.</p>
 
 
 
@@ -4130,23 +4142,16 @@ matching setting when omitted:</p>
 
 
         <p>Hydrate <code>request.user</code> before DOT's <code>AuthorizationView</code> dispatches.</p>
-<p>The common production setup is "DRF backend with SimpleJWT cookies on
-the same host". DOT's <code>AuthorizationView</code> only knows about Django's
-standard session-based <code>request.user</code> — without an adapter, a
-JWT-authenticated user appears anonymous to the OAuth flow and the
-consent screen gets shown again. The adapter is the seam where the
-consumer's preferred authentication scheme decides which user the
-OAuth flow should attribute the grant to.</p>
-<p>Implementations return:</p>
-<ul>
-<li>The authenticated :class:<code>AbstractBaseUser</code> to set on the request
-  before delegating to DOT.</li>
-<li><code>None</code> to leave <code>request.user</code> untouched — DOT then falls back
-  to its own session-based flow (which may redirect to login).</li>
-</ul>
-<p>Adapters MUST be safe to instantiate without arguments —
-settings-driven configuration belongs inside the adapter's own
-module so the dotted-path setting can resolve it directly.</p>
+<p>DOT's <code>AuthorizationView</code> knows only Django's session-based
+<code>request.user</code>, so on the common "DRF backend with SimpleJWT cookies"
+setup an authenticated user appears anonymous to the OAuth flow and is
+shown the consent screen again. The adapter is the seam where the
+consumer's own authentication scheme decides which user the flow should
+attribute the grant to.</p>
+<p><code>hydrate</code> returns the authenticated user to set on the request before
+delegating to DOT, or <code>None</code> to leave <code>request.user</code> untouched — DOT
+then falls back to its session-based flow, which may redirect to login.</p>
+<p>Implementations MUST be safe to instantiate without arguments.</p>
 
 
 
@@ -4192,18 +4197,19 @@ module so the dotted-path setting can resolve it directly.</p>
 
 
 
-        <p>Reference :class:<code>AuthUserAdapter</code> for SimpleJWT cookie-authenticated apps.</p>
-<p>Reads the access-token cookie (name configured via
-<code>REST_FRAMEWORK_MCP['SIMPLEJWT_ACCESS_COOKIE']</code>, default
-<code>"access"</code>), decodes it with
-:class:<code>rest_framework_simplejwt.tokens.AccessToken</code>, looks the user
-up by primary key, and returns it. Returns <code>None</code> for any failure
-mode (no cookie, malformed token, expired token, unknown user) —
-DOT's view then falls back to its session-based flow.</p>
-<p><code>rest_framework_simplejwt</code> is imported lazily inside :meth:<code>hydrate</code>
-so this module remains importable without the <code>[jwt]</code> extra. A
-consumer who configures this adapter without the extra installed
-surfaces a clear <code>ImportError</code> at first request, not at import.</p>
+        <p>Reference
+<a class="autorefs autorefs-internal" title="AuthUserAdapter" href="#rest_framework_mcp.contrib.oauth.adapters.types.auth_user_adapter.AuthUserAdapter"><code>AuthUserAdapter</code></a>
+for SimpleJWT cookie-authenticated apps.</p>
+<p>Reads the access-token cookie (<code>cookie_name=</code>, defaulting to
+<code>REST_FRAMEWORK_MCP['SIMPLEJWT_ACCESS_COOKIE']</code>), decodes it with
+<code>rest_framework_simplejwt.tokens.AccessToken</code> and looks the user up
+by primary key. Every failure mode — no cookie, malformed or expired
+token, unknown user — returns <code>None</code>, so DOT's view falls back to its
+session-based flow.</p>
+<p><code>rest_framework_simplejwt</code> is imported lazily inside <code>hydrate</code>, so
+this module stays importable without the <code>[jwt]</code> extra and a consumer
+who configures the adapter without it gets a clear <code>ImportError</code> at first
+request rather than at import.</p>
 
 
 

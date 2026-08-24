@@ -548,6 +548,8 @@
       
         
       
+        
+      
     
     
     
@@ -983,6 +985,34 @@
     
   
     Register tools from a spec registry
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../recipes/pydantic-ai-client/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Connect a Pydantic-AI agent
   
 
     
@@ -1606,7 +1636,7 @@ derivation follows it to <code>private</code>.</p>
 <tr>
 <td><code>PROTOCOL_VERSIONS</code></td>
 <td><code>["2026-07-28", "2025-11-25", "2025-06-18"]</code></td>
-<td>Every revision this server speaks, most-preferred first, across <strong>both eras</strong> — <code>2026-07-28</code> is modern (per-request metadata, no session), the rest are legacy (<code>initialize</code> handshake). <code>server/discover</code> reports the whole list; each era validates against its own half. ⚠ <code>initialize</code> never offers a modern version whatever heads the list: the handshake does not exist there, so answering with it would hand the client a protocol the transport would refuse on its next request.</td>
+<td>Every revision this server speaks, most-preferred first, across <strong>both eras</strong> — <code>2026-07-28</code> is modern (per-request metadata, no session), the rest are legacy (<code>initialize</code> handshake). <code>server/discover</code> reports the whole list; each era validates against its own half. <code>initialize</code> never offers a modern version whatever heads the list: the handshake does not exist there, so answering with it would hand the client a protocol the transport would refuse on its next request.</td>
 </tr>
 <tr>
 <td><code>REQUIRE_PROTOCOL_VERSION_HEADER</code></td>
@@ -1641,7 +1671,7 @@ derivation follows it to <code>private</code>.</p>
 <tr>
 <td><code>INPUT_REQUEST_TTL_SECONDS</code></td>
 <td><code>600</code> (10 min)</td>
-<td>How long a <code>requestState</code> handed to a client stays redeemable. ⚠ Bounds the replay window on the one value in this protocol that leaves the server, passes through the client, and comes back trusted — the spec requires the expiry alongside the principal and originating-request checks, which are not configurable because there is no defensible value other than "enforced". Long enough to read a confirmation dialog and decide; short enough that a token captured from a log is dead before anyone replays it.</td>
+<td>How long a <code>requestState</code> handed to a client stays redeemable. Bounds the replay window on the one value in this protocol that leaves the server, passes through the client, and comes back trusted — the spec requires the expiry alongside the principal and originating-request checks, which are not configurable because there is no defensible value other than "enforced". Long enough to read a confirmation dialog and decide; short enough that a token captured from a log is dead before anyone replays it.</td>
 </tr>
 <tr>
 <td><code>MAX_INPUT_ROUNDS</code></td>
@@ -1688,12 +1718,12 @@ derivation follows it to <code>private</code>.</p>
 <tr>
 <td><code>SESSION_MAX_AGE_SECONDS</code></td>
 <td><code>604800</code> (7 days)</td>
-<td>Ceiling on a session's <strong>total</strong> lifetime regardless of activity. ⚠ Not optional in spirit, though <code>None</code> disables it: a session's principal binding is checked once, at <code>initialize</code>, so without an absolute cap a sliding idle window keeps a <em>revoked</em> principal alive for as long as it keeps talking. A cache-backed store may also evict earlier under memory pressure, which is indistinguishable from expiry on the client side — if sessions vanish early, check the eviction policy before this setting.</td>
+<td>Ceiling on a session's <strong>total</strong> lifetime regardless of activity. Not optional in spirit, though <code>None</code> disables it: a session's principal binding is checked once, at <code>initialize</code>, so without an absolute cap a sliding idle window keeps a <em>revoked</em> principal alive for as long as it keeps talking. A cache-backed store may also evict earlier under memory pressure, which is indistinguishable from expiry on the client side — if sessions vanish early, check the eviction policy before this setting.</td>
 </tr>
 <tr>
 <td><code>SUBSCRIPTION_MAX_SECONDS</code></td>
 <td><code>3600</code> (1 h)</td>
-<td>How long one <code>subscriptions/listen</code> stream may stay open before the server closes it gracefully and the client re-subscribes. ⚠ An authorization control as much as a resource one: a subscription's permissions are checked once, when it opens, so without a cap a principal whose access was revoked keeps receiving change signals for as long as it holds the connection. <code>None</code> disables the cap — and both bounds with it.</td>
+<td>How long one <code>subscriptions/listen</code> stream may stay open before the server closes it gracefully and the client re-subscribes. An authorization control as much as a resource one: a subscription's permissions are checked once, when it opens, so without a cap a principal whose access was revoked keeps receiving change signals for as long as it holds the connection. <code>None</code> disables the cap — and both bounds with it.</td>
 </tr>
 <tr>
 <td><code>MAX_CONCURRENT_SUBSCRIPTIONS</code></td>
@@ -1786,7 +1816,7 @@ See <a href="../../performance/#what-the-package-bounds">What the package bounds
 <tr>
 <td><code>DISPATCH_TIMEOUT</code></td>
 <td><code>60.0</code></td>
-<td>Wall-clock ceiling, in seconds, on one dispatch. <strong>ASGI only</strong> — a sync WSGI view has no in-process way to bound its own dispatch. ⚠ It does <strong>not</strong> reclaim the worker: a thread parked in a database driver's socket read is not interruptible by asyncio cancellation, so the query runs on. What it buys is a <em>terminal protocol event</em> instead of an open request that never resolves. Pair it with a database statement timeout.</td>
+<td>Wall-clock ceiling, in seconds, on one dispatch. <strong>ASGI only</strong> — a sync WSGI view has no in-process way to bound its own dispatch. It does <strong>not</strong> reclaim the worker: a thread parked in a database driver's socket read is not interruptible by asyncio cancellation, so the query runs on. What it buys is a <em>terminal protocol event</em> instead of an open request that never resolves. Pair it with a database statement timeout.</td>
 </tr>
 <tr>
 <td><code>REQUIRE_LIST_PAGINATION</code></td>
