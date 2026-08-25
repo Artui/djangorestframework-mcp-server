@@ -7,6 +7,58 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- **Tool results are projected for the audience that reads them.** A serializer
+  written for a REST API is handed to the model verbatim when the same spec is
+  exposed as a tool, so records get named by primary key, a status reads as
+  `PENDING_REVIEW` rather than "Awaiting review", and an ETag gets narrated as
+  content. Mark the fields once, on the serializer, with `AgentField` from
+  djangorestframework-services:
+
+  ```python
+  extra_kwargs = {
+      "id": {"style": {AGENT: AgentField.handle("Invoice handle.")}},
+      "etag": {"style": {AGENT: AgentField.hidden()}},
+      "number": {"style": {AGENT: AgentField.label()}},
+  }
+  ```
+
+  Every dispatch path now renders through `render_for_agent`, so hidden fields
+  leave the payload and a choice field's display value replaces its constant —
+  except on a handle, which is another tool's input and is never re-spelled.
+  The same markings drive the advertised `outputSchema`, generated from the one
+  declaration so it cannot advertise a field the payload no longer carries, and
+  a handle's `description` reaches the schema entry a model reads beside it.
+
+  Removed rather than relocated: a tool result is emitted as `structuredContent`
+  **and** rendered into a text content block, so a subtree of "internal" fields
+  would cost its keys twice over and hide nothing.
+
+  Tool descriptions gain one generated line naming the label field and the handle
+  convention — only for tools that actually have a handle, since a description is
+  read on every listing.
+
+  A chain projects each step through its own spec's serializer, and a paginated
+  list projects the items, never the `page` / `totalPages` / `hasNext` envelope
+  this server owns.
+
+- **`field_audiences` on all three tool bindings** — per-tool overrides for the
+  case one tool needs what a sibling hides. The serializer stays authoritative.
+  Overrides leaving two fields marked as the label raise `ImproperlyConfigured`
+  naming the tool.
+
+### Changed
+
+- **`outputSchema` now describes read-only fields.** They were being dropped:
+  drf-services' output path reused its input walker, which skips `read_only` by
+  design. Tools were advertising a shape their own results did not match — most
+  visibly by omitting the primary key. Fixed upstream in drf-services 0.43.0.
+  `required` on an output schema now lists every rendered field.
+
+- **Floor raised to `djangorestframework-services>=0.43`** for the audience API
+  and the schema fix above.
+
 ### Fixed
 
 - **The floor-resolution CI gate could resolve against a stale package index.**

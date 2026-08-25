@@ -1,11 +1,12 @@
 from __future__ import annotations
 
-from collections.abc import Callable
+from collections.abc import Callable, Mapping
 from dataclasses import dataclass, field
+from functools import cached_property
 from typing import Any, Generic, TypeVar
 
 from django.core.exceptions import ImproperlyConfigured
-from rest_framework_services import UNSET, UnsetType
+from rest_framework_services import UNSET, AgentField, AgentProjection, UnsetType
 from rest_framework_services.types.service_spec import ServiceSpec
 
 from rest_framework_mcp.constants import (
@@ -18,7 +19,10 @@ from rest_framework_mcp.constants import (
 from rest_framework_mcp.protocol.types.icon import Icon
 from rest_framework_mcp.registry.types.query_param import QueryParam
 from rest_framework_mcp.registry.types.url_kwarg import UrlKwarg
-from rest_framework_mcp.registry.types.utils import validate_content_kind
+from rest_framework_mcp.registry.types.utils import (
+    resolve_agent_projection,
+    validate_content_kind,
+)
 
 InputT = TypeVar("InputT")
 ResultT = TypeVar("ResultT")
@@ -166,6 +170,31 @@ class ToolBinding(Generic[InputT, ResultT, ExtraT]):
     Only calls that go through this server fire it. A management command, a
     Celery job or an admin edit changes the same rows and publishes nothing;
     ``MCPServer.notify_resource_updated`` covers those."""
+
+    field_audiences: Mapping[str, AgentField] | None = None
+    """Per-tool overrides layered over the output serializer's own
+    ``AgentField`` markings.
+
+    The serializer stays authoritative — it is the one declaration the REST API,
+    this transport, and an in-process toolset all read. This exists for the case
+    one tool genuinely needs what a sibling hides: a lookup tool returning the
+    identifier its neighbour drops."""
+
+    @property
+    def agent_output_serializer(self) -> type | None:
+        """The serializer whose rendered output reaches the caller, if any."""
+        spec = self.spec
+        return spec.output_selector_spec.output_serializer if spec.output_selector_spec else None
+
+    @cached_property
+    def agent_projection(self) -> AgentProjection:
+        """This tool's resolved agent markings, derived once per binding.
+
+        Drives both the projected payload and the advertised ``outputSchema``,
+        so the two cannot disagree about which fields a caller will receive."""
+        return resolve_agent_projection(
+            self.agent_output_serializer, self.field_audiences, name=self.name
+        )
 
     def __post_init__(self) -> None:
         if self.include_output_schema is True and self.include_structured_content is False:

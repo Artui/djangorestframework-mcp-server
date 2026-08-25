@@ -26,7 +26,7 @@ from rest_framework_services import (
     build_offline_context,
     dispatch_spec,
     is_queryset,
-    render_spec_output,
+    render_for_agent,
     spec_to_json_schema,
 )
 from rest_framework_services.exceptions.service_error import ServiceError
@@ -341,9 +341,10 @@ def _post_fetch_and_render(
                 content_mime_type=binding.content_mime_type,
                 binding_name=binding.name,
             ).to_dict()
-        payload: Any = render_spec_output(
+        payload: Any = render_for_agent(
             binding.spec,
             instance,
+            projection=binding.agent_projection,
             many=False,
             view=view,
             request=drf_request,
@@ -374,9 +375,13 @@ def _post_fetch_and_render(
         page_no, limit, page_items, total = _slice_for_pagination(
             qs, arguments_raw, resolve_bound(binding.max_page_size, config.max_page_size)
         )
-        rendered_items = render_spec_output(
+        # The projection lands on the *items*, not on the envelope that
+        # wraps them: ``page`` / ``totalPages`` / ``hasNext`` are this
+        # transport's own keys and belong to no serializer.
+        rendered_items = render_for_agent(
             binding.spec,
             page_items,
+            projection=binding.agent_projection,
             many=True,
             view=view,
             request=drf_request,
@@ -390,8 +395,14 @@ def _post_fetch_and_render(
             "hasNext": page_no < total_pages,
         }
     else:
-        payload = render_spec_output(
-            binding.spec, qs, many=True, view=view, request=drf_request, extras={"page": qs}
+        payload = render_for_agent(
+            binding.spec,
+            qs,
+            projection=binding.agent_projection,
+            many=True,
+            view=view,
+            request=drf_request,
+            extras={"page": qs},
         )
     return build_tool_result(
         payload,
