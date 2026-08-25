@@ -1,9 +1,23 @@
-"""``append_agent_conventions`` — teach the model what a tool's handles are."""
+"""Agent-facing wording for a tool's handles — the description and the line.
+
+Both are prompts, so both live in the transport that knows a model is reading.
+drf-services supplies the markings and no wording at all: what a reader should
+*do* with an identifier depends on the reader.
+"""
 
 from __future__ import annotations
 
 from rest_framework_services.types.agent_projection import AgentProjection
 from rest_framework_services.types.field_audience import FieldAudience
+
+HANDLE_DESCRIPTION = (
+    "Opaque identifier. Pass it to other tools that ask for one; do not read it out."
+)
+"""Fallback ``outputSchema`` wording for a handle that declares none of its own.
+
+Per field, beside the field it describes, which is where a model reads it. The
+sentence below is the one that has nowhere else to go and rides the tool
+description instead."""
 
 _HANDLE_LINE = (
     "Fields described as opaque identifiers are for other tool calls, not for the "

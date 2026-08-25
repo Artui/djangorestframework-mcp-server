@@ -4,9 +4,11 @@ from __future__ import annotations
 
 from typing import Any
 
-from rest_framework_services import build_agent_projection
+from rest_framework import serializers
+from rest_framework_services import AGENT, AgentField, build_agent_projection
 from rest_framework_services.types.selector_kind import SelectorKind
 
+from rest_framework_mcp.schema.agent_conventions import HANDLE_DESCRIPTION
 from rest_framework_mcp.schema.output_schema import build_output_schema
 from tests.testapp.serializers import AgentInvoiceSerializer, InvoiceOutputSerializer
 
@@ -50,3 +52,21 @@ def test_an_empty_projection_leaves_the_schema_alone() -> None:
 
 def test_no_serializer_yields_no_schema() -> None:
     assert build_output_schema(None, projection=PROJECTION) is None
+
+
+def test_an_unlabelled_handle_gets_this_transport_s_wording() -> None:
+    """The sentence is a prompt, so it is supplied here, not upstream.
+
+    drf-services holds the markings and no wording at all — it does not know a
+    model is what reads the schema. This asserts the two halves are joined up.
+    """
+
+    class _Thing(serializers.Serializer):
+        ref = serializers.CharField(style={AGENT: AgentField.handle()})
+        described = serializers.CharField(style={AGENT: AgentField.handle("A widget handle.")})
+
+    schema: Any = build_output_schema(_Thing, projection=build_agent_projection(_Thing))
+
+    assert schema["properties"]["ref"]["description"] == HANDLE_DESCRIPTION
+    # A handle that says what it is keeps its own words.
+    assert schema["properties"]["described"]["description"] == "A widget handle."

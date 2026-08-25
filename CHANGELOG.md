@@ -37,6 +37,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   **and** rendered into a text content block, so a subtree of "internal" fields
   would cost its keys twice over and hide nothing.
 
+  **Both sentences a model reads are owned here**, not upstream:
+  `HANDLE_DESCRIPTION` for an unlabelled handle's `outputSchema` entry, and the
+  conventions line appended to the tool description. drf-services holds the
+  markings and no wording — it says what a field *is*, and only a transport
+  knows what kind of reader is on the other end.
+
   Tool descriptions gain one generated line naming the label field and the handle
   convention — only for tools that actually have a handle, since a description is
   read on every listing.
