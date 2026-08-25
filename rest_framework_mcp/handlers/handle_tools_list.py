@@ -16,6 +16,7 @@ from rest_framework_mcp.protocol.types.json_rpc_error import JsonRpcError
 from rest_framework_mcp.protocol.types.tool import Tool
 from rest_framework_mcp.registry.types.chain_tool_binding import ChainToolBinding
 from rest_framework_mcp.registry.types.selector_tool_binding import SelectorToolBinding
+from rest_framework_mcp.schema.agent_conventions import append_agent_conventions
 from rest_framework_mcp.schema.chain_tool_schema import build_chain_tool_input_schema
 from rest_framework_mcp.schema.output_schema import build_output_schema
 from rest_framework_mcp.schema.selector_tool_schema import build_selector_tool_input_schema
@@ -82,23 +83,23 @@ def handle_tools_list(
             default_output_schema=context.config.include_output_schema,
             default_structured_content=context.config.include_structured_content,
         )
-        # Each binding kind keeps its response serializer somewhere different.
+        # ``agent_output_serializer`` reconciles where each binding kind keeps
+        # its response serializer, and carries the same agent markings the
+        # dispatch path projects the payload through -- one declaration, so a
+        # schema cannot advertise a field the payload no longer carries.
         # ``outputSchema`` must match the payload shape the dispatch pipeline
         # actually emits — a LIST tool returns a bare array or the pagination
         # envelope — so the selector schema is kind-aware.
-        if isinstance(binding, ChainToolBinding):
-            output_schema = build_output_schema(binding.output_serializer)
-        elif isinstance(binding, SelectorToolBinding):
+        if isinstance(binding, SelectorToolBinding):
             output_schema = build_output_schema(
-                binding.spec.output_serializer,
+                binding.agent_output_serializer,
                 kind=binding.kind,
                 paginate=binding.paginate,
+                projection=binding.agent_projection,
             )
         else:
             output_schema = build_output_schema(
-                binding.spec.output_selector_spec.output_serializer
-                if binding.spec.output_selector_spec
-                else None
+                binding.agent_output_serializer, projection=binding.agent_projection
             )
         # A media tool has no JSON result to describe, so the schema is dropped
         # rather than advertised over a payload arriving as an image block.
@@ -107,7 +108,7 @@ def handle_tools_list(
             output_schema = None
         tool = Tool(
             name=binding.name,
-            description=binding.description,
+            description=append_agent_conventions(binding.description, binding.agent_projection),
             title=binding.title,
             icons=binding.icons,
             input_schema=input_schema,

@@ -94,6 +94,7 @@ nav:
       - Expose a service: recipes/expose-a-service.md
       - Swap the session store: recipes/swap-session-store.md
       - Ship TOON for large lists: recipes/toon-output.md
+      - Hide plumbing from the model: recipes/agent-audience.md
       - Add a custom permission: recipes/custom-permission.md
       - Async-native auth backend: recipes/async-auth-backend.md
       - Add rate limiting: recipes/rate-limiting.md

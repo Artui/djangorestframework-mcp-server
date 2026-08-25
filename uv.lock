@@ -488,9 +488,9 @@ resolution-markers = [
     "python_full_version < '3.12'",
 ]
 dependencies = [
-    { name = "asgiref" },
-    { name = "sqlparse" },
-    { name = "tzdata", marker = "sys_platform == 'win32'" },
+    { name = "asgiref", marker = "python_full_version < '3.12'" },
+    { name = "sqlparse", marker = "python_full_version < '3.12'" },
+    { name = "tzdata", marker = "python_full_version < '3.12' and sys_platform == 'win32'" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/d5/d8/43e9d000519adceb189620b6869ff88031e046df91c2e9da72f8f6918399/django-5.2.17.tar.gz", hash = "sha256:9d4d93be539a18ab80d058eb515900e10951e04c537c5a6b394fc49528d3251f", size = 10889740, upload-time = "2026-08-04T15:04:03.173Z" }
 wheels = [
@@ -507,9 +507,9 @@ resolution-markers = [
     "python_full_version == '3.12.*'",
 ]
 dependencies = [
-    { name = "asgiref" },
-    { name = "sqlparse" },
-    { name = "tzdata", marker = "sys_platform == 'win32'" },
+    { name = "asgiref", marker = "python_full_version >= '3.12'" },
+    { name = "sqlparse", marker = "python_full_version >= '3.12'" },
+    { name = "tzdata", marker = "python_full_version >= '3.12' and sys_platform == 'win32'" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/e2/42/6cb20996733984c1f6661daeda3877990836c76c633c6c8879d39f7120eb/django-6.1.tar.gz", hash = "sha256:86a2aacd59b817e4d6ac2ebfe22356c58f66f7b24e503f71b7c2fead677ee48b", size = 11223034, upload-time = "2026-08-05T19:21:53.789Z" }
 wheels = [
@@ -674,7 +674,7 @@ requires-dist = [
     { name = "django-oauth-toolkit", marker = "extra == 'oauth'", specifier = ">=2.3" },
     { name = "djangorestframework", specifier = ">=3.14" },
     { name = "djangorestframework-dataclasses", specifier = ">=1.3.1" },
-    { name = "djangorestframework-services", specifier = ">=0.36" },
+    { name = "djangorestframework-services", specifier = ">=0.43" },
     { name = "djangorestframework-simplejwt", marker = "extra == 'jwt'", specifier = ">=5.3.1" },
     { name = "drf-spectacular", marker = "extra == 'spectacular'", specifier = ">=0.27" },
     { name = "opentelemetry-api", marker = "extra == 'otel'", specifier = ">=1.27" },
@@ -714,7 +714,7 @@ docs = [
 
 [[package]]
 name = "djangorestframework-services"
-version = "0.41.0"
+version = "0.43.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "django", version = "5.2.17", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.12'" },
@@ -723,9 +723,9 @@ dependencies = [
     { name = "djangorestframework-dataclasses" },
     { name = "typing-extensions" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/77/0e/5db02cf015e80191067e789f9e923aa13ba1c69bc8e71e21ea7f468d781a/djangorestframework_services-0.41.0.tar.gz", hash = "sha256:558f9a7486b4ffa4c230eb75ac040170cfe9743fd0df8cccbeedc7fe11d872f8", size = 549081, upload-time = "2026-08-14T07:26:02.71Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/3f/2e/2a6512386f94035ddbd0d71e61bfcf2737fd1b5f7108519b862356047f84/djangorestframework_services-0.43.0.tar.gz", hash = "sha256:9e3400f85943b3de56a1eb526141c2b21b9e9c6cb5d3c006158d9ac91c411da4", size = 578941, upload-time = "2026-08-25T15:37:52.867Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/8f/46/7fc758f191446f7dc1f9f7f1d6722d95565ef7d52fde39b0309aa6b93c56/djangorestframework_services-0.41.0-py3-none-any.whl", hash = "sha256:b3b22ef0532166274d2077db63151a73d77fbc5190618ffeaf547ecafa708bdd", size = 246460, upload-time = "2026-08-14T07:26:01.016Z" },
+    { url = "https://files.pythonhosted.org/packages/6c/ab/d8a6b49a3f793e33c403d848f947e0272164c43ff80c3eda7b0dd8661870/djangorestframework_services-0.43.0-py3-none-any.whl", hash = "sha256:702b6f993bcaf816394911938b4fd4938c21157c9b1f08f20dc208b58811d1ac", size = 264983, upload-time = "2026-08-25T15:37:50.851Z" },
 ]
 
 [[package]]
@@ -780,7 +780,7 @@ name = "exceptiongroup"
 version = "1.3.1"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "typing-extensions" },
+    { name = "typing-extensions", marker = "python_full_version < '3.12'" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/50/79/66800aadf48771f6b62f7eb014e352e5d06856655206165d775e675a02c9/exceptiongroup-1.3.1.tar.gz", hash = "sha256:8b412432c6055b0b7d14c310000ae93352ed6754f70fa8f7c34141f91c4e3219", size = 30371, upload-time = "2025-11-21T23:01:54.787Z" }
 wheels = [

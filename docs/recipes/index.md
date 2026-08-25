@@ -36,3 +36,6 @@ that solves a single concrete problem. Browse the list:
   the in-process `SpecToolset` instead.
 - [Migrate from `fastapi-mcp` / hand-rolled MCP](migrating.md) — step
   by step from a custom Django MCP view or a `fastapi-mcp` app.
+- [Hide plumbing from the model](agent-audience.md) — mark serializer
+  fields as handles, labels or plumbing so a tool result stops naming
+  records by primary key and reading ETags out loud.

@@ -57,8 +57,10 @@ def test_chain_tool_advertises_explicit_input_schema_and_output_schema() -> None
     tool = out["tools"][0]
     assert set(tool["inputSchema"]["properties"]) == {"number", "amount_cents"}
     assert "outputSchema" in tool
-    # ``id`` is read-only on the ModelSerializer, so it's excluded from the schema.
-    assert set(tool["outputSchema"]["properties"]) == {"number", "amount_cents", "sent"}
+    # ``id`` is read-only on the ModelSerializer and is therefore *rendered*, so
+    # the output schema has to describe it. It used to be dropped here: the
+    # output path reused the input walker, which skips read-only fields.
+    assert set(tool["outputSchema"]["properties"]) == {"id", "number", "amount_cents", "sent"}
 
 
 def test_chain_tool_falls_back_to_first_step_input_schema() -> None:

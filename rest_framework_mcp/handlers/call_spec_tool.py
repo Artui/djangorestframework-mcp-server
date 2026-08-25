@@ -1,7 +1,7 @@
 """``call_spec_tool`` — transport-neutral invocation of a spec-backed MCP tool.
 
 Drives a ``ServiceSpec`` / ``SelectorSpec`` tool through the sister repo's
-transport-neutral ``dispatch_spec`` + ``render_spec_output`` + ``enforce_permissions``,
+transport-neutral ``dispatch_spec`` + ``render_for_agent`` + ``enforce_permissions``,
 off the HTTP / JSON-RPC path, returning the same
 [`ToolResult`][rest_framework_mcp.protocol.types.tool_result.ToolResult] the wire
 handlers build. A programmatic caller — the django-ag-ui bridge, a Pydantic-AI toolset,
@@ -26,7 +26,7 @@ from rest_framework_services import (
     build_offline_context,
     dispatch_spec,
     enforce_permissions,
-    render_spec_output,
+    render_for_agent,
 )
 from rest_framework_services.exceptions.service_error import ServiceError
 from rest_framework_services.exceptions.service_validation_error import ServiceValidationError
@@ -59,7 +59,7 @@ def call_spec_tool(
 
     Enforces the spec's ``permission_classes`` against a synthetic off-HTTP
     context, dispatches via ``dispatch_spec`` and renders via
-    ``render_spec_output``.
+    ``render_for_agent``.
 
     ``ServiceValidationError`` / ``ServiceError`` and a missing required instance
     come back as ``isError`` tool results the model can self-correct from; a
@@ -139,8 +139,14 @@ def call_spec_tool(
     extras: dict[str, Any] = (
         {"page": result.value} if many else {"instance": result.value, "result": result.value}
     )
-    payload: Any = render_spec_output(
-        spec, result.value, many=many, view=context.view, request=context.request, extras=extras
+    payload: Any = render_for_agent(
+        spec,
+        result.value,
+        projection=binding.agent_projection,
+        many=many,
+        view=context.view,
+        request=context.request,
+        extras=extras,
     )
     _emit_output_schema, emit_structured_content = resolve_structured_output(
         include_output_schema_override=binding.include_output_schema,

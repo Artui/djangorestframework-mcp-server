@@ -30,7 +30,7 @@ from rest_framework_services import (
     OfflineServiceView,
     base_serializer_context,
     build_offline_context,
-    render_spec_output,
+    render_for_agent,
     resolve_callable_kwargs,
     run_selector,
     run_service,
@@ -286,12 +286,13 @@ def _render_step(step: ChainStep, ctx: ChainContext, drf_request: Any) -> Any:
     """Render one step's stored output through its own spec.
 
     Only the ``many`` flag and the extra's *name* are decided here;
-    ``render_spec_output`` owns serializer lookup and context layering.
+    ``render_for_agent`` owns serializer lookup, context layering, and the
+    audience projection.
 
     The serializer-less short-circuit stays local because it is this transport's
     own contract: a step with nothing to render contributes ``{}`` rather than a
     ``null``, and its raw value passes through uncoerced —
-    ``render_spec_output`` would list-coerce a ``many`` result, which a chain
+    ``render_for_agent`` would list-coerce a ``many`` result, which a chain
     step never wants since a later step may consume it.
     """
     result: Any = ctx.outputs[step.alias]
@@ -304,7 +305,10 @@ def _render_step(step: ChainStep, ctx: ChainContext, drf_request: Any) -> Any:
         extra_name = "result"
     if _step_output_serializer(step) is None:
         return {} if result is None else result
-    return render_spec_output(
+    # Derived per step rather than taken from the binding: a chain renders
+    # each step through its own spec, and the binding's projection describes
+    # only the output step's serializer.
+    return render_for_agent(
         spec,
         result,
         many=many,
