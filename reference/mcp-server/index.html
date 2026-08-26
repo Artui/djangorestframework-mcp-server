@@ -2724,6 +2724,13 @@ returns.</p>
 <code>mime_type</code> is not JSON — Markdown, CSV, plain text — wants <code>TEXT</code>,
 or the document comes back wrapped in a quoted string literal. For an
 HTML view use <code>register_ui_resource</code>, which sets both.</p>
+<p>A <code>uri_template</code> variable is a caller-controlled name that reaches the
+selector's kwarg pool, so one named after a dispatcher seed (<code>user</code>,
+<code>request</code>, <code>data</code> …) or declared twice raises here rather than
+letting a URI segment stand in for the authenticated identity.</p>
+<p>A resource with no permissions at all is refused for the same reason a
+tool is — see <code>REQUIRE_TOOL_PERMISSIONS</code>. The same selector exposed
+as a resource is as reachable as it is exposed as a tool.</p>
 
 
     </div>
@@ -2840,6 +2847,13 @@ list of
       dataclass
   " href="../protocol/#rest_framework_mcp.protocol.types.prompt_message.PromptMessage"><code>PromptMessage</code></a>,
 or a coroutine yielding any of those — the dispatch layer normalises the result.</p>
+<p><code>request</code> and <code>user</code> are seeded <strong>over</strong> the client's arguments at
+<code>prompts/get</code>, so an argument named after one of them never reaches
+<code>render</code> in the seed's place.</p>
+<p>A prompt with no permissions at all is refused like a tool — see
+<code>REQUIRE_TOOL_PERMISSIONS</code>. A <code>render</code> callable reads whatever its
+author gave it access to, so nothing about a prompt makes it safe by
+construction.</p>
 <p><code>meta</code> is the generic <code>_meta</code> bundle for this prompt's
 <code>prompts/list</code> entry — see <code>register_service_tool</code>.</p>
 

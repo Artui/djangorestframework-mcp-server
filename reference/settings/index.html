@@ -1761,6 +1761,16 @@ derivation follows it to <code>private</code>.</p>
 <td>Ceiling on concurrent subscription streams <strong>per worker</strong>. Each parks an ASGI task for its lifetime, so without a bound an authenticated caller can exhaust the worker pool by opening streams in a loop. Past the cap a subscription is refused with <code>503</code> / <code>-32603</code> rather than queued. <code>None</code> disables.</td>
 </tr>
 <tr>
+<td><code>SSE_STREAM_MAX_SECONDS</code></td>
+<td><code>3600</code> (1 h)</td>
+<td>How long one <code>GET</code> session stream may stay open before the server closes it gracefully with a <code>: stream closed</code> comment frame. The session stream's counterpart to <code>SUBSCRIPTION_MAX_SECONDS</code>, and an authorization control on the same terms: the caller is authenticated once, when the stream opens, so without a cap a principal whose access was revoked keeps receiving that session's pushes for as long as it holds the connection — and it holds it indefinitely, since the keep-alive is what stops any proxy reaping it. An SSE client reconnects by itself; pair with <code>sse_replay_buffer=</code> for a gapless reconnect. <code>None</code> disables.</td>
+</tr>
+<tr>
+<td><code>MAX_CONCURRENT_SSE_STREAMS</code></td>
+<td><code>100</code></td>
+<td>Ceiling on concurrent <code>GET</code> session streams <strong>per worker</strong>. Each parks an ASGI task for its lifetime and minting sessions is uncapped, so without a bound an authenticated caller opens one stream per session it minted and exhausts the worker pool. Past the cap the <code>GET</code> is refused with <code>503</code> / <code>-32603</code> rather than queued. <code>None</code> disables.</td>
+</tr>
+<tr>
 <td><code>RESOURCE_URL</code></td>
 <td><code>None</code></td>
 <td>Canonical resource URL this server <strong>publishes</strong> — RFC 9728 requires it in protected-resource metadata, and it is what audience enforcement compares against when enabled. Setting it rejects nothing on its own; see <code>ENFORCE_AUDIENCE</code>. Only the <strong>default</strong> for <code>MCPServer(resource_url=…)</code> — RFC 8707 binds a token to <em>a</em> resource, so each server needs its own URL. Two servers sharing one URL means a token minted for one passes the audience check at the other, which is the exact replay the mechanism prevents. Leaving it unset publishes an empty <code>resource</code> plus a <code>_warning</code>.</td>
@@ -1841,7 +1851,7 @@ See <a href="../../performance/#what-the-package-bounds">What the package bounds
 <tr>
 <td><code>MAX_PAGE_SIZE</code></td>
 <td><code>100</code></td>
-<td>Ceiling on the model-supplied <code>limit</code> of a <code>paginate=True</code> selector tool. Advertised as <code>maximum</code> on the generated <code>inputSchema</code> <em>and</em> clamped at dispatch — the schema tells a well-behaved model what to ask for, the clamp is what stops you trusting it. Clamping is safe here because <code>totalPages</code> / <code>hasNext</code> keep a clamped page self-describing. The default matches the page a selector tool serves when the model omits <code>limit</code> entirely, so an unconfigured deployment never advertises a page larger than the one it defaults to.</td>
+<td>Ceiling on how many rows one selector-tool call returns, paged or not. For a <code>paginate=True</code> tool it bounds the model-supplied <code>limit</code>, and clamps <code>page</code> to the last page that exists so an arbitrarily large page number cannot become an arbitrarily large SQL <code>OFFSET</code>. For a <code>paginate=False</code> tool it is applied as a <code>LIMIT</code> before rendering and the call is <strong>refused</strong> over the ceiling rather than truncated, for the reason <code>REQUIRE_LIST_PAGINATION</code> gives below. <code>None</code> disables the ceiling on both. Advertised as <code>maximum</code> on the generated <code>inputSchema</code> <em>and</em> clamped at dispatch — the schema tells a well-behaved model what to ask for, the clamp is what stops you trusting it. Clamping is safe here because <code>totalPages</code> / <code>hasNext</code> keep a clamped page self-describing. The default matches the page a selector tool serves when the model omits <code>limit</code> entirely, so an unconfigured deployment never advertises a page larger than the one it defaults to.</td>
 </tr>
 <tr>
 <td><code>DISPATCH_TIMEOUT</code></td>
@@ -1851,7 +1861,7 @@ See <a href="../../performance/#what-the-package-bounds">What the package bounds
 <tr>
 <td><code>REQUIRE_LIST_PAGINATION</code></td>
 <td><code>False</code></td>
-<td>Registering a LIST selector tool with <code>paginate=False</code> raises <code>ImproperlyConfigured</code> instead of emitting <code>UnboundedListWarning</code>. Such a tool serialises whatever its selector resolves to — the whole table, for a plain <code>Model.objects.all()</code> — and unlike a paginated tool there is no honest way to clamp it, because the result carries no metadata saying rows were dropped. <code>MAX_RESULT_BYTES</code> is the backstop; <code>paginate=True</code> is the fix.</td>
+<td>Registering a LIST selector tool with <code>paginate=False</code> raises <code>ImproperlyConfigured</code> instead of emitting <code>UnboundedListWarning</code>. Such a tool serialises whatever its selector resolves to — the whole table, for a plain <code>Model.objects.all()</code> — and unlike a paginated tool there is no honest way to clamp it, because the result carries no metadata saying rows were dropped. <code>MAX_PAGE_SIZE</code> is the backstop — applied as a <code>LIMIT</code> before the rows are rendered, so an oversized table is refused rather than fetched and measured, which is what <code>MAX_RESULT_BYTES</code> alone could not do. <code>paginate=True</code> is the fix.</td>
 </tr>
 </tbody>
 </table>
@@ -1868,7 +1878,7 @@ See <a href="../../performance/#what-the-package-bounds">What the package bounds
 <tr>
 <td><code>REQUIRE_TOOL_PERMISSIONS</code></td>
 <td><code>True</code></td>
-<td>Registering a tool with no permissions at all (neither <code>spec.permission_classes</code> nor <code>permissions=[…]</code>) raises <code>ImproperlyConfigured</code>. Set it to <code>False</code> to downgrade that to an <code>UnguardedToolWarning</code> while migrating a large surface. The warning exists because guarding the <em>viewset</em> — or relying on <code>REST_FRAMEWORK</code>'s default permission classes — has <strong>no effect over MCP</strong>: this package bypasses DRF's view-layer pipeline, so a spec that looks guarded over HTTP ships as an unguarded tool. See <a href="../../auth/">Authentication</a>.</td>
+<td>Registering a <strong>tool, resource or prompt</strong> with no permissions at all (neither <code>spec.permission_classes</code> nor <code>permissions=[…]</code>) raises <code>ImproperlyConfigured</code>. Set it to <code>False</code> to downgrade that to an <code>UnguardedToolWarning</code> while migrating a large surface. The warning exists because guarding the <em>viewset</em> — or relying on <code>REST_FRAMEWORK</code>'s default permission classes — has <strong>no effect over MCP</strong>: this package bypasses DRF's view-layer pipeline, so a spec that looks guarded over HTTP ships as an unguarded binding. Interactive views (<code>register_ui_resource</code>) are exempt: a view carries no tenant data by construction. See <a href="../../auth/">Authentication</a>.</td>
 </tr>
 <tr>
 <td><code>REQUIRE_TOOL_DESCRIPTIONS</code></td>
@@ -1895,7 +1905,7 @@ See <a href="../../performance/#what-the-package-bounds">What the package bounds
 <tr>
 <td><code>DCR_ENABLED</code></td>
 <td><code>False</code></td>
-<td>Default for <code>build_oauth_urlpatterns(dcr_enabled=)</code>. RFC 7591 dynamic client registration; <code>False</code> makes <code>/oauth/register/</code> refuse every request with 403. An open DCR endpoint lets anyone create an OAuth client against your authorization server.</td>
+<td>Default for <code>build_oauth_urlpatterns(dcr_enabled=)</code>. RFC 7591 dynamic client registration; <code>False</code> makes <code>/oauth/register/</code> refuse every request with 403. An open DCR endpoint lets anyone create an OAuth client against your authorization server — one with no owning user, which is why only the <code>authorization_code</code> grant is registerable here.</td>
 </tr>
 <tr>
 <td><code>DCR_INITIAL_ACCESS_TOKEN</code></td>

@@ -1729,6 +1729,12 @@ per tool at registration:</p>
 <td><code>limit</code> clamped down; <code>hasNext</code> says there's more</td>
 </tr>
 <tr>
+<td>Row count</td>
+<td><code>MAX_PAGE_SIZE</code> (100)</td>
+<td><code>max_page_size=</code></td>
+<td>unpaginated: <code>isError</code> result; paginated: <code>page</code> clamped to the last that exists</td>
+</tr>
+<tr>
 <td>Duration</td>
 <td><code>DISPATCH_TIMEOUT</code> (60 s)</td>
 <td><code>dispatch_timeout=</code></td>
@@ -1766,13 +1772,27 @@ call.</p>
 <li><strong>Query cost.</strong> Nothing here stops a selector from issuing an expensive join;
   the bounds measure the result, not the work. <code>select_related</code> /
   <code>prefetch_related</code> and a database statement timeout are the tools for that.</li>
-<li><strong>Unpaginated LIST tools</strong>, except by <code>MAX_RESULT_BYTES</code>. A <code>paginate=False</code>
-  selector serialises everything its selector resolves to, and it cannot be
-  clamped honestly — the result has nowhere to record that rows were dropped.
+<li><strong>The work a selector does before the ceiling applies.</strong> <code>MAX_PAGE_SIZE</code>
+  bounds an unpaginated LIST tool's rows with a <code>LIMIT</code> before rendering, and
+  the call is refused over that ceiling rather than truncated — a <code>paginate=False</code>
+  result has nowhere to record that rows were dropped, so a clipped list would
+  read as complete to the model. What no bound reaches is an expensive selector
+  that computes before it returns.
   Registering one emits <code>UnboundedListWarning</code>; <code>REQUIRE_LIST_PAGINATION=True</code>
   makes it an error.</li>
-<li><strong>Concurrency.</strong> Bounding one call says nothing about how many run at once.
-  Rate limits (<code>rate_limits=</code> per binding) are the lever there.</li>
+<li><strong>Concurrency of <em>dispatch</em>.</strong> Bounding one call says nothing about how many
+  run at once. Rate limits (<code>rate_limits=</code> per binding) are the lever there, and
+  they are charged once per client call whether it runs inline or as a task.
+  Long-lived <em>streams</em> are bounded separately, per worker:
+  <code>MAX_CONCURRENT_SUBSCRIPTIONS</code> for <code>subscriptions/listen</code> and
+  <code>MAX_CONCURRENT_SSE_STREAMS</code> for the <code>GET</code> session stream, each paired with a
+  lifetime cap (<code>SUBSCRIPTION_MAX_SECONDS</code>, <code>SSE_STREAM_MAX_SECONDS</code>).</li>
+<li><strong>Notification backlog for a client that stops reading.</strong> The SSE brokers hold
+  a bounded per-session queue (<code>max_queued_events=</code>, 1024 by default) and drop
+  the oldest payload past it, reporting the drop as <code>publish</code> returning <code>False</code>.
+  Delivery was always best-effort — a client that missed a notification re-reads
+  — so dropping is the honest bound; blocking would park the publisher on a
+  reader that may never return.</li>
 </ul>
 <h2 id="adding-profile-points">Adding profile points<a class="headerlink" href="#adding-profile-points" title="Permanent link">&para;</a></h2>
 <p>The package emits OpenTelemetry spans for <code>mcp.tools.call</code>,

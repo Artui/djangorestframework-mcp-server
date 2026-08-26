@@ -5038,7 +5038,12 @@ produces (JSON, TOON, or a media block).</p>
             <td>
               <div class="doc-md-description">
                 <p>The same answer JSON-shaped, for clients to parse
-directly.</p>
+directly. <code>UNSET</code> — the default — means the result carries no
+structured channel at all and the key is left off the wire. A
+payload of <code>None</code> is a <em>value</em>: it is emitted as
+<code>"structuredContent": null</code>, so a client branching on the key's
+presence to decide whether the tool offers structured output is not
+told "no" by a tool whose answer simply is null.</p>
               </div>
             </td>
           </tr>
@@ -6102,9 +6107,21 @@ from rest_framework_mcp.subscriptions.redis_subscription_broker import (
 
 server = MCPServer(
     name=&quot;my-app&quot;,
-    subscription_broker=RedisSubscriptionBroker(Redis.from_url(&quot;redis://…&quot;)),
+    subscription_broker=RedisSubscriptionBroker(
+        Redis.from_url(&quot;redis://…&quot;), namespace=&quot;my-app&quot;
+    ),
 )
 </code></pre></div>
+<p><strong>Pass <code>namespace</code> whenever one Redis serves more than one server.</strong>
+Topic names are built from caller-supplied values — a notification kind, a
+resource URI — so two servers that register the same <code>SelectorSpec</code> under
+the same URI derive the same topic. Sharing a broker (or two brokers on the
+same default prefix) then routes one server's change signals to the other's
+subscribers, past the <code>resources/read</code> permission <code>grant_subscription</code>
+gates them on. The cache-backed session and task stores fold the server's
+<code>name</code> into their key prefix for exactly this reason; a Redis client is
+the consumer's to construct, so here it is a constructor argument. The value
+is hashed into the prefix, since <code>name</code> is free-form.</p>
 <p><strong>One Redis channel per topic, one listener task per subscription.</strong> The
 mapping is many-to-many — a subscription watches several topics and several
 subscriptions watch one topic — so each subscription gets a single task
@@ -6959,6 +6976,11 @@ the store usable under a JSON-serialising backend.</p>
 carried in the envelope, so <code>save</code> renews the cache timeout to the
 <em>remaining</em> lifetime rather than restarting the clock — otherwise a task
 reporting progress often would never expire.</p>
+<p><strong>A malformed id is a miss, not an exception.</strong> <code>taskId</code> comes off the
+wire and lands in a cache key, and the memcached backends reject keys with
+spaces or control characters and keys over 250 bytes — raising out of a
+handler with no arm for it. An id that cannot be one this package minted
+cannot name a record either, so it is answered as the absence it is.</p>
 
 
 

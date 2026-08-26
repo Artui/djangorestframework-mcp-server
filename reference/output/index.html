@@ -1729,6 +1729,9 @@ deterministic.</p>
 warns and falls back to JSON, so a tool call never breaks because the extra
 is absent. The warning fires every time — silence it with
 <code>warnings.filterwarnings</code> or install the extra.</p>
+<p>The return value alone cannot say which encoder produced it, so a caller
+that labels the text — <code>build_tool_result</code> stamps a <code># format: toon</code>
+marker — must ask <code>toon_encoder</code> rather than assume.</p>
 
 
     </div>
@@ -1806,7 +1809,10 @@ verbatim and is also rendered as the first content block.</p>
               <div class="doc-md-description">
                 <p>How <code>content[0]</code> renders the payload. TOON output is
 wrapped in a fenced <code>toon</code> block with a leading marker line so
-clients that don't parse TOON natively can still display it.</p>
+clients that don't parse TOON natively can still display it. On a
+deployment without the optional <code>[toon]</code> extra the encoder falls
+back to JSON, and the marker is left off with it — the label always
+names the format the bytes are actually in.</p>
               </div>
             </td>
             <td>
@@ -1838,9 +1844,12 @@ clients that don't parse TOON natively can still display it.</p>
             </td>
             <td>
               <div class="doc-md-description">
-                <p><code>False</code> omits <code>structuredContent</code>. The
-text block still carries the full payload, so a client that doesn't
-consume the structured field loses nothing.</p>
+                <p><code>False</code> omits <code>structuredContent</code>
+entirely — the key is absent, distinct from a <code>True</code> call whose
+payload happens to be <code>null</code>, which is emitted as
+<code>"structuredContent": null</code>. The text block still carries the full
+payload, so a client that doesn't consume the structured field
+loses nothing.</p>
               </div>
             </td>
             <td>

@@ -1694,6 +1694,17 @@
       <ul class="md-nav__list">
         
           <li class="md-nav__item">
+  <a href="#rest_framework_mcp.contrib.oauth.dcr_serializer.DynamicClientRegistrationSerializer.validate_redirect_uris" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        validate_redirect_uris
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
   <a href="#rest_framework_mcp.contrib.oauth.dcr_serializer.DynamicClientRegistrationSerializer.validate" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -2215,6 +2226,17 @@
   
     <nav class="md-nav" aria-label="DynamicClientRegistrationSerializer">
       <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#rest_framework_mcp.contrib.oauth.dcr_serializer.DynamicClientRegistrationSerializer.validate_redirect_uris" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        validate_redirect_uris
+      
+    </span>
+  </a>
+  
+</li>
         
           <li class="md-nav__item">
   <a href="#rest_framework_mcp.contrib.oauth.dcr_serializer.DynamicClientRegistrationSerializer.validate" class="md-nav__link">
@@ -2922,6 +2944,17 @@ HTTP method on the underlying <code>HttpRequest</code> is left untouched — unl
 <code>build_offline_context</code>, which forces
 <code>POST</code> for mutation dispatch — because permission evaluation is
 method-agnostic.</p>
+<p><strong><code>auth</code> is set alongside <code>user</code>, and has to be.</strong> DRF resolves
+<code>request.auth</code> lazily: reading it on a request that has never
+authenticated runs the (here empty) authenticator chain, which ends in
+<code>_not_authenticated()</code> and <em>overwrites</em> <code>request.user</code> with
+<code>UNAUTHENTICATED_USER</code> — on the wrapper and on the <code>HttpRequest</code>
+underneath it. A permission class as ordinary as
+<code>TokenHasScope</code> reads <code>request.auth</code> first and every <code>request.user</code>
+read after it would see <code>AnonymousUser</code>, denying a properly scoped caller
+with nothing in the response explaining why. Assigning the backend's opaque
+payload — DRF's own convention for what <code>auth</code> holds — means the getter
+never reaches for the chain.</p>
 
 
 
@@ -3778,9 +3811,9 @@ so <code>.save()</code> hands
 <a class="autorefs autorefs-internal" title="DynamicClientRegistrationViewSet" href="#rest_framework_mcp.contrib.oauth.dynamic_client_registration_viewset.DynamicClientRegistrationViewSet"><code>DynamicClientRegistrationViewSet</code></a>
 a typed dataclass instance. The field overrides replace the dataclass-derived
 defaults with shapes that validate the wire contract: <code>redirect_uris</code> is required,
-non-empty and URL-valued, and <code>application_type</code> is checked against OIDC's two
-values and echoed without imposing the redirect-URI constraints an OIDC provider
-would derive from it.</p>
+non-empty and absolute-URI-valued, and <code>application_type</code> is checked against
+OIDC's two values and echoed without imposing the redirect-URI constraints an OIDC
+provider would derive from it.</p>
 <p><code>token_endpoint_auth_method</code> / <code>grant_types</code> are the RFC 7591 §2
 spellings every interoperable client sends, and are the <em>primary</em> inputs:
 <code>validate</code> translates them into DOT's <code>client_type</code> /
@@ -3794,6 +3827,9 @@ is a 400 rather than a silent winner, since either choice would hand back a
 client that cannot complete the flow it registered for. Other RFC 7591
 fields are ignored: DOT does not model them, and inventing a richer shape
 would diverge from the underlying authorization server.</p>
+<p><code>authorization_code</code> is the only primary grant registerable here, in
+either vocabulary — see <code>_REGISTERABLE_GRANT_TYPES</code>. <code>refresh_token</code> may
+ride along.</p>
 
 
 
@@ -3815,6 +3851,39 @@ would diverge from the underlying authorization server.</p>
 
 
 
+
+<div class="doc doc-object doc-function">
+
+
+<h3 id="rest_framework_mcp.contrib.oauth.dcr_serializer.DynamicClientRegistrationSerializer.validate_redirect_uris" class="doc doc-heading">
+            <span class="doc doc-object-name doc-function-name">validate_redirect_uris</span>
+
+
+<a href="#rest_framework_mcp.contrib.oauth.dcr_serializer.DynamicClientRegistrationSerializer.validate_redirect_uris" class="headerlink" title="Permanent link">&para;</a></h3>
+<div class="language-python doc-signature highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="nf">validate_redirect_uris</span><span class="p">(</span><span class="n">value</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="nb">str</span><span class="p">])</span> <span class="o">-&gt;</span> <span class="nb">list</span><span class="p">[</span><span class="nb">str</span><span class="p">]</span>
+</span></code></pre></div>
+
+    <div class="doc doc-contents ">
+
+        <p>Require absolute URIs whose scheme the authorization server will honour.</p>
+<p>DRF's <code>URLField</code> was the wrong instrument: its <code>URLValidator</code>
+allowlists the http family, so it refused exactly the private-use
+schemes (<code>com.example.app:/oauth2redirect</code>) that RFC 8252 §7.1 defines
+for the native clients this serializer's own <code>application_type</code> exists
+to describe, while admitting <code>ftp</code>, which no OAuth client redirects to.</p>
+<p>The authority on which schemes are acceptable is the authorization
+server that will later match the redirect, not this endpoint: DOT
+publishes it as <code>ALLOWED_REDIRECT_URI_SCHEMES</code>, defaulting to the http
+family and widened by the operator who deploys native clients. Checking
+the same list here means a registration is refused only where the
+authorization request would have been refused anyway — with an
+actionable 400 at registration rather than a dead end mid-flow — and
+never invents a restriction DOT does not apply.</p>
+
+
+    </div>
+
+</div>
 
 <div class="doc doc-object doc-function">
 

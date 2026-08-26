@@ -2663,6 +2663,23 @@
     </span>
   </a>
   
+    <nav class="md-nav" aria-label="SSEBroker">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#rest_framework_mcp.transport.types.sse_broker.SSEBroker.active_streams" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        active_streams
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
 </li>
       
         <li class="md-nav__item">
@@ -2715,6 +2732,17 @@
   
     <nav class="md-nav" aria-label="RedisSSEBroker">
       <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#rest_framework_mcp.transport.redis_sse_broker.RedisSSEBroker.active_streams" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        active_streams
+      
+    </span>
+  </a>
+  
+</li>
         
           <li class="md-nav__item">
   <a href="#rest_framework_mcp.transport.redis_sse_broker.RedisSSEBroker.publish" class="md-nav__link">
@@ -4338,6 +4366,23 @@
     </span>
   </a>
   
+    <nav class="md-nav" aria-label="SSEBroker">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#rest_framework_mcp.transport.types.sse_broker.SSEBroker.active_streams" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        active_streams
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
 </li>
       
         <li class="md-nav__item">
@@ -4390,6 +4435,17 @@
   
     <nav class="md-nav" aria-label="RedisSSEBroker">
       <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#rest_framework_mcp.transport.redis_sse_broker.RedisSSEBroker.active_streams" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        active_streams
+      
+    </span>
+  </a>
+  
+</li>
         
           <li class="md-nav__item">
   <a href="#rest_framework_mcp.transport.redis_sse_broker.RedisSSEBroker.publish" class="md-nav__link">
@@ -6519,6 +6575,13 @@ lookup.</p>
 <p>Concrete resources are matched by exact URI, templates by a regex derived
 from the template. <code>resolve</code> returns the binding plus the variables
 extracted from the URI.</p>
+<p><strong>Specificity, not registration order.</strong> A template's <code>{var}</code> matches any
+single segment, so <code>reports://{report_id}</code> also matches
+<code>reports://all-tenants-summary</code>. Resolving in registration order would
+make <em>which permission stack guards a URI</em> a function of the order the two
+were registered in — and the wrong answer is the permissive one, since the
+template is the general case. Concrete URIs are therefore tried first, and
+only then templates.</p>
 
 
 
@@ -9589,6 +9652,10 @@ subscriber, and <code>publish</code> returns <code>True</code> if a delivery was
 <code>False</code> if no subscriber was attached. Whether <code>publish</code> is
 fire-and-forget or awaits confirmation is the implementation's choice; the
 transport treats it as best-effort either way.</p>
+<p>Implementations must also bound what an undrained subscriber can accumulate.
+A stream the client stops reading is not an error, and there is no
+backpressure channel to the publisher, so an unbounded queue turns one
+paused consumer into unbounded resident memory.</p>
 
 
 
@@ -9607,6 +9674,33 @@ transport treats it as best-effort either way.</p>
 
 
 
+
+<div class="doc doc-object doc-attribute">
+
+
+
+<h3 id="rest_framework_mcp.transport.types.sse_broker.SSEBroker.active_streams" class="doc doc-heading">
+            <span class="doc doc-object-name doc-attribute-name">active_streams</span>
+
+
+  <span class="doc doc-labels">
+      <small class="doc doc-label doc-label-property"><code>property</code></small>
+  </span>
+
+<a href="#rest_framework_mcp.transport.types.sse_broker.SSEBroker.active_streams" class="headerlink" title="Permanent link">&para;</a></h3>
+<div class="language-python doc-signature highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="n">active_streams</span><span class="p">:</span> <span class="nb">int</span>
+</span></code></pre></div>
+
+    <div class="doc doc-contents ">
+
+        <p>How many session streams this worker is currently serving.</p>
+<p>What <code>MAX_CONCURRENT_SSE_STREAMS</code> is measured against, so it is a
+per-worker count of local subscribers rather than a cluster-wide one:
+the resource being protected is this process's task pool.</p>
+
+    </div>
+
+</div>
 
 
 
@@ -9645,6 +9739,16 @@ Multi-process deployments need an out-of-process backend — see
 <p>One subscriber per session: re-subscribing replaces the previous queue, and
 the old generator errors out on its next <code>await</code>. There is no replay;
 clients needing durability call <code>tools/call</code> rather than relying on SSE.</p>
+<p><strong>Each queue is bounded, and a full one drops its oldest payload.</strong> A
+client that opens the stream and stops reading it drains nothing, while
+<code>notify</code> keeps enqueueing — a paused consumer would otherwise pin one
+payload of memory per notification for as long as it holds the connection.
+Dropping rather than blocking is the only option that keeps the publisher
+honest: <code>publish</code> is called from request handling, so waiting on a reader
+that may never return would park the writer too. Dropping is also already
+the contract — delivery is best-effort, and a client that missed a
+notification re-reads — and the drop is <em>reported</em>, as the <code>False</code> that
+<code>publish</code> already uses for "nobody got this".</p>
 
 
 
@@ -9708,8 +9812,9 @@ unregister the new queue when the old generator shuts down.</p>
 
         <p>Enqueue <code>payload</code> for <code>session_id</code> if a subscriber exists.</p>
 <p>Returns <code>True</code> if delivery was attempted, <code>False</code> if the session
-had no subscriber. A miss is the caller's to react to, and most ignore
-it: the client catches up on a fresh <code>tools/call</code> round-trip.</p>
+had no subscriber <strong>or if the queue was full and the oldest payload was
+dropped to make room</strong>. A miss is the caller's to react to, and most
+ignore it: the client catches up on a fresh <code>tools/call</code> round-trip.</p>
 
 
     </div>
@@ -9760,6 +9865,10 @@ too.</p>
 <ul>
 <li>Same single-subscriber-per-session contract as the in-memory broker:
   re-subscribing replaces the old subscriber's queue.</li>
+<li>Same bounded per-session queue, for the same reason: the listener task
+  pumps Redis into a local queue, so a client that stops reading the socket
+  would otherwise accumulate every published payload in this worker's
+  memory. Past <code>max_queued_events</code> the oldest is dropped.</li>
 <li>Replay is a separate, opt-in collaborator — pair this with
   <a class="autorefs autorefs-internal" title="RedisSSEReplayBuffer" href="#rest_framework_mcp.transport.redis_sse_replay_buffer.RedisSSEReplayBuffer"><code>RedisSSEReplayBuffer</code></a>
   for cross-worker <code>Last-Event-ID</code> resume.</li>
@@ -9784,6 +9893,33 @@ too.</p>
 
 
 
+
+<div class="doc doc-object doc-attribute">
+
+
+
+<h3 id="rest_framework_mcp.transport.redis_sse_broker.RedisSSEBroker.active_streams" class="doc doc-heading">
+            <span class="doc doc-object-name doc-attribute-name">active_streams</span>
+
+
+  <span class="doc doc-labels">
+      <small class="doc doc-label doc-label-property"><code>property</code></small>
+  </span>
+
+<a href="#rest_framework_mcp.transport.redis_sse_broker.RedisSSEBroker.active_streams" class="headerlink" title="Permanent link">&para;</a></h3>
+<div class="language-python doc-signature highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="n">active_streams</span><span class="p">:</span> <span class="nb">int</span>
+</span></code></pre></div>
+
+    <div class="doc doc-contents ">
+
+        <p>Local subscribers only, matching what the cap protects.</p>
+<p>The ceiling exists to stop one worker's task pool being exhausted, and
+a cluster-wide count would neither measure that nor be worth a Redis
+round-trip per GET.</p>
+
+    </div>
+
+</div>
 
 
 
@@ -10010,6 +10146,20 @@ no-op this.</p>
 are zero-padded monotonic integers per session, string-valued because the
 SSE wire format is string-only and clients echo them back verbatim via
 <code>Last-Event-ID</code>.</p>
+<p><strong>Bounded in both directions.</strong> <code>max_events</code> caps one session's history;
+<code>max_sessions</code> caps how many sessions are retained at all, dropping the
+least recently written when a new one arrives. The second bound is what
+stops the buffer growing for the life of the process: <code>forget</code> is called
+only when a client explicitly <code>DELETE</code>s its session, while sessions
+ordinarily end by expiring in the session store — which notifies nothing —
+or by a client simply dropping the connection. Without the cap every
+session that ever recorded an event keeps its ring and its counter forever.</p>
+<p>An evicted session that is somehow still live restarts its numbering, and a
+reconnect carrying the old <code>Last-Event-ID</code> then replays nothing rather
+than replaying the wrong events. That is the same silent gap a client
+already accepts when its ring overflows, which is why the default is
+generous enough that reaching it means far more open sessions than one
+worker can serve streams for.</p>
 <p><strong>Single-process</strong> ASGI deployments only: a resume can land on a different worker
 than the one that recorded the events, so multi-worker deployments need
 <a class="autorefs autorefs-internal" title="RedisSSEReplayBuffer" href="#rest_framework_mcp.transport.redis_sse_replay_buffer.RedisSSEReplayBuffer"><code>RedisSSEReplayBuffer</code></a>.
@@ -10077,9 +10227,20 @@ from rest_framework_mcp.transport.redis_sse_replay_buffer import (
 )
 
 client = Redis.from_url(&quot;redis://localhost:6379/0&quot;)
-buffer = RedisSSEReplayBuffer(client, max_events=2048)
+buffer = RedisSSEReplayBuffer(client, max_events=2048, namespace=&quot;my-app&quot;)
 server = MCPServer(name=&quot;my-app&quot;, sse_broker=..., sse_replay_buffer=buffer)
 </code></pre></div>
+<p><strong>Every stream carries a TTL.</strong> <code>forget</code> runs only on an explicit
+<code>DELETE</code>, while sessions ordinarily end by expiring or by a client simply
+dropping the connection, so without an expiry each such session leaves its
+stream in Redis for good. <code>ttl_seconds</code> is refreshed on every write and
+defaults to a day, matching the session store's idle window: past it the
+session the stream belongs to could not reconnect anyway.</p>
+<p>Pass <code>namespace</code> when one Redis serves more than one server, as the
+cache-backed stores do with the server's <code>name</code>. Keys here are addressed
+by session id, so a collision needs an id minted by the other server, but
+the separation keeps a shared Redis inspectable and matches the
+subscription broker, where topics genuinely do collide.</p>
 <p>The Redis client is the consumer's responsibility — close it during
 ASGI lifespan shutdown.</p>
 

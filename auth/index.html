@@ -466,6 +466,17 @@
 </li>
         
           <li class="md-nav__item">
+  <a href="#object-level-permissions" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Object-level permissions
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
   <a href="#filtering-listings-by-permissions" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -509,6 +520,28 @@
     <span class="md-ellipsis">
       
         What a registration accepts and returns
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#authorization_code-is-the-only-grant-you-can-register-here" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        authorization_code is the only grant you can register here
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#redirect-uris" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Redirect URIs
       
     </span>
   </a>
@@ -1649,6 +1682,17 @@
 </li>
         
           <li class="md-nav__item">
+  <a href="#object-level-permissions" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Object-level permissions
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
   <a href="#filtering-listings-by-permissions" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -1692,6 +1736,28 @@
     <span class="md-ellipsis">
       
         What a registration accepts and returns
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#authorization_code-is-the-only-grant-you-can-register-here" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        authorization_code is the only grant you can register here
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#redirect-uris" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Redirect URIs
       
     </span>
   </a>
@@ -1898,6 +1964,12 @@ per-binding <code>permissions=[...]</code> below gate a tool. Registering a tool
 with neither is <strong>refused</strong> — <code>ImproperlyConfigured</code> at registration.
 Set <code>REST_FRAMEWORK_MCP["REQUIRE_TOOL_PERMISSIONS"] = False</code> to downgrade
 that to an <code>UnguardedToolWarning</code> while migrating a large surface.</p>
+<p>The same check runs on <code>register_resource</code> and <code>register_prompt</code>: the
+identical selector reaches the identical rows whichever surface exposes
+it. Interactive <strong>views</strong> (<code>register_ui_resource</code>) are the one exemption,
+and a deliberate one — a view is a template rendered with no context, a
+literal document, or a zero-argument callable, none of which can read the
+caller's data.</p>
 </div>
 <p>Per-binding permissions are AND-combined. Two ship in v1:</p>
 <ul>
@@ -1966,6 +2038,13 @@ attribute. Any DRF permission classes declared on the spec are
 auto-wrapped and prepended to the per-binding <code>permissions</code> tuple —
 the same spec that backs your HTTP view governs the MCP binding
 without you restating the contract at the MCP call site.</p>
+<h3 id="object-level-permissions">Object-level permissions<a class="headerlink" href="#object-level-permissions" title="Permanent link">&para;</a></h3>
+<p><code>has_object_permission</code> runs on every path, against the row the dispatch
+resolved: the tool paths pass <code>enforce_permissions</code> to <code>dispatch_spec</code> as
+<code>on_target_resolved</code>, <code>resources/read</code> runs it on the selector's return, and a
+chain step runs it on the target the step resolved. A <code>LIST</code> / collection result
+gets the class-level check only — object permissions are a per-row concept, and
+a set is authorized per-set.</p>
 <h3 id="filtering-listings-by-permissions">Filtering listings by permissions<a class="headerlink" href="#filtering-listings-by-permissions" title="Permanent link">&para;</a></h3>
 <p>By default <code>tools/list</code>, <code>resources/list</code>, <code>resources/templates/list</code>,
 and <code>prompts/list</code> return every registered binding regardless of whether
@@ -2169,11 +2248,34 @@ agree; a contradiction (<code>token_endpoint_auth_method: none</code> with
 <code>client_type: confidential</code>) is a <code>400 invalid_client_metadata</code> rather than a
 silent winner. DOT models one grant per application, so <code>grant_types</code> may name
 at most one primary grant — <code>refresh_token</code> rides along and is not counted.</p>
+<h3 id="authorization_code-is-the-only-grant-you-can-register-here"><code>authorization_code</code> is the only grant you can register here<a class="headerlink" href="#authorization_code-is-the-only-grant-you-can-register-here" title="Permanent link">&para;</a></h3>
+<p>A dynamically registered client has <strong>no owning user</strong>: the row is created by an
+unauthenticated caller, with no consent screen and no review step. So the grant
+it may hold has to be one that cannot mint a token without a user at the other
+end, which leaves <code>authorization_code</code> (plus <code>refresh_token</code> riding along).
+<code>client_credentials</code>, <code>password</code> and <code>implicit</code> are refused with a
+<code>400 invalid_client_metadata</code>, in either vocabulary.</p>
+<p><code>client_credentials</code> is the one that matters. Its token carries no user at all,
+and <code>ScopeRequired</code> tests only the token's scopes — so a token minted from a
+dynamically registered client-credentials application satisfies every
+scope-gated tool. With <code>DCR_ENABLED = True</code> and no initial access token (the
+default), that path starts at an unauthenticated <code>POST /oauth/register/</code>.
+<code>password</code> and <code>implicit</code> are removed from OAuth 2.1 outright.
+<code>grant_types_supported</code> in the metadata document never advertised any of the
+three.</p>
+<p>Machine-to-machine clients still belong in your deployment — create them through
+Django admin or a management command, where an owner and a review step exist.</p>
 <p><code>response_types</code> is derived from the grant per RFC 7591 §2.1 rather than chosen
-independently: <code>authorization_code</code> → <code>["code"]</code>, <code>implicit</code> → <code>["token"]</code>, and
-the <code>client_credentials</code> / <code>password</code> grants never reach the authorization
-endpoint, so <code>[]</code>. Supply it to assert the same thing and it is accepted;
-supply something inconsistent and you get a <code>400</code>.</p>
+independently: <code>authorization_code</code> → <code>["code"]</code>. Supply it to assert the same
+thing and it is accepted; supply something inconsistent and you get a <code>400</code>.</p>
+<h3 id="redirect-uris">Redirect URIs<a class="headerlink" href="#redirect-uris" title="Permanent link">&para;</a></h3>
+<p><code>redirect_uris</code> must be absolute URIs, on a scheme the authorization server will
+actually redirect to — which is DOT's own
+<code>OAUTH2_PROVIDER["ALLOWED_REDIRECT_URI_SCHEMES"]</code>, <code>["http", "https"]</code> by
+default. A native client registering an RFC 8252 §7.1 private-use scheme
+(<code>com.example.app:/oauth2redirect</code>) needs that setting widened; it is the same
+list the authorization request is checked against, so a registration is refused
+only where the flow would have failed anyway.</p>
 <h3 id="id-tokens-and-openid">ID tokens and <code>openid</code><a class="headerlink" href="#id-tokens-and-openid" title="Permanent link">&para;</a></h3>
 <p>If your DOT deployment sets <code>OIDC_ENABLED</code>, <code>openid</code> appears in <code>scopes_supported</code>
 and clients will request it. The exchange then routes through the OpenID grant and
