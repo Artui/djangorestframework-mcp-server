@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import secrets
 from typing import Any
 
 from rest_framework.permissions import AllowAny
@@ -61,7 +62,15 @@ class DynamicClientRegistrationViewSet(ViewSet):
         expected_token: str | None = self.initial_access_token
         if expected_token is not None:
             presented: str = request.META.get("HTTP_AUTHORIZATION", "")
-            if presented != f"Bearer {expected_token}":
+            # Constant-time: ``!=`` returns at the first differing byte, which
+            # over enough requests leaks the RFC 7591 initial access token one
+            # prefix at a time, and recovering it turns a gated registration
+            # endpoint into an open one. Compared as bytes rather than str
+            # because ``compare_digest`` raises ``TypeError`` on a non-ASCII
+            # str, and the presented half is a caller-supplied header.
+            if not secrets.compare_digest(
+                presented.encode("utf-8"), f"Bearer {expected_token}".encode()
+            ):
                 return Response(
                     {
                         "error": "invalid_token",

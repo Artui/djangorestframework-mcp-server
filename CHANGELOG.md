@@ -7,6 +7,149 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- **`tools/list` no longer advertises `additionalProperties: false` on a
+  guarantee the runtime does not provide.** For a service tool the
+  unknown-argument check runs against the key set the spec declares, and that
+  set is not always enumerable — a nested selector taking a bare `**kwargs`, or
+  carrying a `filter_set`, leaves it open, and an open set is answered by
+  accepting and silently dropping every undeclared key. Those tools now
+  advertise an open schema, so a client is no longer told a typo'd field will be
+  refused while the server takes it and throws it away.
+
+- **A client-supplied `outputFormat` is validated before the tool runs.** An
+  unrecognised value reached `OutputFormat.coerce` at the *end* of dispatch,
+  past the last `except`, so it raised out of the handler as a bare HTTP 500
+  with no JSON-RPC envelope — after the mutation had committed, leaving the
+  caller unable to tell whether a retry would apply the write twice. It is now
+  a `-32602` returned ahead of task creation and dispatch, on both the sync and
+  the async path.
+
+- **A malformed `arguments` field is named as the fault.** `params.get(
+  "arguments") or {}` collapsed `[]`, `""`, `0` and `false` into an empty dict
+  before the guard on the next line could see them, so a tool whose inputs are
+  all optional ran a call the client never intended in that shape, and every
+  other tool answered with a confusing missing-field error. Only a missing key
+  or an explicit `null` now means "no arguments". Both `tools/call` paths.
+
+- **An explicit `null` no longer satisfies a `required=True` `UrlKwarg`.** A URL
+  kwarg stands in for a route capture, which can never be null over HTTP;
+  off-HTTP `{"pk": null}` was treated as supplied, so the required check never
+  fired and the `None` was seeded into `view.kwargs`, where `.filter(pk=None)`
+  becomes SQL `IS NULL` — an unscoped read that answers successfully with the
+  wrong rows. A null now falls through to the declared default and then to the
+  required check, exactly as an omitted key does.
+
+- **`structuredContent` distinguishes a null answer from no structured channel.**
+  A tool called with `include_structured_content=True` whose payload was
+  genuinely `None` produced the same wire shape as one that had opted out, so a
+  client branching on the key's presence was told the server offers no
+  structured output. A null payload is now emitted as `"structuredContent":
+  null`; the key is omitted only when structured content was not requested.
+
+- **The `# format: toon` marker is stamped only when TOON produced the text.**
+  Without the optional `[toon]` extra the encoder warns and falls back to JSON,
+  and that warning goes to the server's log, not onto the wire — so a client
+  selecting its parser from the marker line was handed JSON labelled as TOON.
+  The fallback now ships as plain, unmarked JSON.
+
+- **`ResourceRegistry.resolve` prefers a concrete URI over a template.**
+  Resolution walked registration order, and a template's `{var}` matches any
+  single segment — so `reports://{report_id}` also matched
+  `reports://all-tenants-summary`, and which permission stack guarded a URI
+  depended on the order the two were registered in. Concrete URIs are tried
+  first, then templates.
+
+- **The DCR initial access token is compared in constant time.** `!=` returns at
+  the first differing byte, which over enough requests leaks a bearer credential
+  one prefix at a time; recovering it turns a gated registration endpoint into
+  an open one. Now `secrets.compare_digest`, on bytes so a non-ASCII header is a
+  401 rather than a crash.
+
+- **`scripts/benchmark.py` runs again.** It imported `handlers.context` and
+  `auth.token_info`, both moved under `types/` sub-packages, and mounted
+  `server.urls` through `include()`, which no longer accepts the namespaced
+  triple. A new smoke test checks every script's package imports still resolve,
+  since nothing else in the gates covers `scripts/`.
+
+### Changed
+
+- **Dynamic client registration accepts only the `authorization_code` grant.**
+  A dynamically registered client has no owning user and no human in the loop,
+  so the grant it holds must be one that cannot mint a token without one.
+  `client_credentials` can: the resulting token carries no user at all, and the
+  scope permission tests only the token's scopes, so it satisfies every
+  scope-gated tool — an open registration endpoint became an unauthenticated
+  path onto the whole tool surface. `password` and `implicit` are removed from
+  OAuth 2.1 outright. The narrowing applies to DOT's `authorization_grant_type`
+  spelling too, and matches what `grant_types_supported` already advertised.
+
+- **DCR `redirect_uris` accepts any absolute URI on a scheme the authorization
+  server will honour.** DRF's `URLField` allowlists the http family, so the
+  endpoint refused exactly the private-use schemes RFC 8252 §7.1 defines for the
+  native clients its own `application_type` exists to describe — while admitting
+  `ftp`, which no OAuth client redirects to. The accepted set is now
+  django-oauth-toolkit's own `ALLOWED_REDIRECT_URI_SCHEMES`, so a registration
+  is refused only where the authorization request would have been refused
+  anyway.
+
+- **`resource_link` content blocks refuse script-bearing URI schemes.** The
+  payload field holding a URI is frequently a row an end user wrote, and the
+  block was emitted verbatim to a host that may render it as a clickable anchor
+  in its own origin or fetch it to build a preview. `javascript:`, `data:`,
+  `vbscript:`, `blob:`, `file:` and `about:` URIs, and anything that is not an
+  absolute URI, now come back as the same explanatory tool-level error the other
+  payload mismatches use.
+
+- **Registering a resource from a `SelectorSpec` that sets a field the read path
+  cannot apply is refused.** `resources/read` dispatches the selector callable
+  directly, so `preconditions`, `select_related`, `prefetch_related`,
+  `annotations`, `extend_queryset`, `filter_set`, `output_serializer_context`,
+  `allow_none`, `progress_reporter` and `metadata` were dropped with no warning
+  — and a `preconditions` gate that holds on every other transport while simply
+  not running here is indistinguishable from success. Registration now names the
+  fields and points at the selector *tool* surface, which honours them.
+
+- **`UrlKwarg` / `QueryParam` defaults tolerate either spelling of "no
+  default".** The declarations live in djangorestframework-services, where the
+  sentinel is moving from `None` to that package's `UNSET`. Both are read as
+  "no default", so this package is correct against either release and needs no
+  version floor raise.
+
+### Upgrade notes
+
+- **Dynamic client registration.** If you relied on `/oauth/register/` to issue
+  `client_credentials`, `password` or `implicit` clients, those registrations
+  now return `400 invalid_client_metadata`. Create such applications through
+  Django admin or a management command, where an owner and a review step exist,
+  and keep DCR for the interactive `authorization_code` clients it is for. Note
+  that `AuthorizationServerMetadata.grant_types_supported` never advertised the
+  other three.
+
+- **DCR redirect URIs.** The accepted schemes now come from
+  `OAUTH2_PROVIDER["ALLOWED_REDIRECT_URI_SCHEMES"]` (django-oauth-toolkit's
+  default is `["http", "https"]`). Native clients registering a private-use
+  scheme need that setting widened — the same setting the authorization request
+  already checked. Conversely, `ftp://` and `ftps://` redirect URIs, which
+  DRF's `URLField` used to admit, are now refused unless the setting names them.
+
+- **`resource_link` tools.** A tool with `content_kind=RESOURCE_LINK` whose
+  payload can carry a `file:`, `data:` or other non-fetchable URI now returns an
+  `isError` result for that call instead of emitting the block. If your resource
+  URIs use a custom scheme (`reports://`, `docs://`), they are unaffected —
+  only the script-bearing and local-content schemes are refused.
+
+- **Resources registered from a rich `SelectorSpec`.** A registration that sets
+  any of the ten fields listed above now raises at startup rather than silently
+  dropping them. Register the spec as a selector tool, or move the behaviour
+  into the selector callable.
+
+- **`structuredContent` on a null payload.** A tool whose answer is `null` now
+  emits `"structuredContent": null` instead of omitting the key. Clients that
+  treated the key's absence as "no value" see no change in meaning; clients that
+  treated it as "this tool has no structured output" were being misled.
+
 ## [0.33.0] — 2026-08-25
 
 ### Added

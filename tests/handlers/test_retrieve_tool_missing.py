@@ -74,7 +74,11 @@ def test_allow_none_returns_null_result() -> None:
     out = handle_tools_call({"name": "invoices.get", "arguments": {"pk": 99999}}, _ctx(server))
     assert isinstance(out, dict)
     assert "isError" not in out
-    assert "structuredContent" not in out
+    # A null answer is a *value*, and the tool does emit structured content, so
+    # the key is present and null rather than absent. Absent means the tool has
+    # no structured channel at all.
+    assert "structuredContent" in out
+    assert out["structuredContent"] is None
     assert out["content"][0]["text"] == "null"
 
 

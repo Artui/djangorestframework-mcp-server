@@ -36,6 +36,7 @@ from rest_framework_mcp.handlers.utils import (
     services_dispatch_policies,
     split_query_params,
     split_url_kwargs,
+    validate_output_format,
     validation_error_data,
 )
 from rest_framework_mcp.output.error_tool_result import build_error_tool_result
@@ -75,9 +76,23 @@ def handle_tools_call(
         # tool is a bad param, so ``-32602`` rather than an ``isError`` result.
         return JsonRpcError(JsonRpcErrorCode.INVALID_PARAMS, f"Unknown tool: {tool_name!r}")
 
-    arguments_raw: Any = params.get("arguments") or {}
+    # Read once: only a missing key (or an explicit ``null``) means "no
+    # arguments". Collapsing every falsy value into ``{}`` — as ``or {}`` did —
+    # let ``[]``, ``0``, ``""`` and ``false`` past the guard on the next line,
+    # so a malformed ``arguments`` ran the tool with no arguments instead of
+    # being named as the fault.
+    arguments_raw: Any = params.get("arguments")
+    if arguments_raw is None:
+        arguments_raw = {}
     if not isinstance(arguments_raw, dict):
         return JsonRpcError(JsonRpcErrorCode.INVALID_PARAMS, "'arguments' must be an object")
+
+    # Before dispatch, so an unrenderable format is a ``-32602`` the caller can
+    # act on rather than a 500 raised once the tool has already run. This is
+    # what lets the coercions further down the dispatch paths stay bare.
+    bad_format: JsonRpcError | None = validate_output_format(params)
+    if bad_format is not None:
+        return bad_format
 
     # Ordering: after argument-shape validation so a malformed call is rejected
     # outright rather than queued, and before dispatch because a task exists

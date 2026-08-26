@@ -66,3 +66,49 @@ def test_concrete_and_templates_partition() -> None:
 def test_resource_binding_is_template_property() -> None:
     assert _binding("u://{x}").is_template is True
     assert _binding("u://").is_template is False
+
+
+def test_a_concrete_uri_wins_over_a_template_registered_first() -> None:
+    """Which binding serves a URI must not depend on registration order.
+
+    A template's ``{var}`` matches any single segment, so ``reports://{id}``
+    also matches ``reports://all-tenants-summary``. Resolving in registration
+    order made *which permission stack guards a URI* a function of the order the
+    two were registered in, and the wrong answer is the permissive one — the
+    template is the general case, guarded for the general caller.
+    """
+    reg = ResourceRegistry()
+    template = _binding("reports://{report_id}", name="report")
+    concrete = _binding("reports://all-tenants-summary", name="summary")
+    reg.register(template)
+    reg.register(concrete)
+
+    found = reg.resolve("reports://all-tenants-summary")
+    assert found is not None
+    matched, vars_ = found
+    assert matched is concrete
+    assert vars_ == {}
+
+
+def test_the_template_still_serves_every_other_uri_under_it() -> None:
+    reg = ResourceRegistry()
+    template = _binding("reports://{report_id}", name="report")
+    concrete = _binding("reports://all-tenants-summary", name="summary")
+    reg.register(template)
+    reg.register(concrete)
+
+    found = reg.resolve("reports://42")
+    assert found is not None
+    matched, vars_ = found
+    assert matched is template
+    assert vars_ == {"report_id": "42"}
+
+
+def test_registration_order_still_decides_between_two_overlapping_templates() -> None:
+    reg = ResourceRegistry()
+    first = _binding("reports://{report_id}", name="a")
+    reg.register(first)
+    reg.register(_binding("reports://{slug}", name="b"))
+    found = reg.resolve("reports://42")
+    assert found is not None
+    assert found[0] is first

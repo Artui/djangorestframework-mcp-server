@@ -8,7 +8,16 @@ from typing import Any
 from django.http import HttpRequest
 from rest_framework import serializers as drf_serializers
 from rest_framework_dataclasses.serializers import DataclassSerializer
-from rest_framework_services import UnsetType
+from rest_framework_services import UNSET, UnsetType
+
+# Not a top-level export of the sister package, so this reaches past its stable
+# dispatch surface on purpose. It is the single implementation of "can this
+# spec's declared key set be enumerated?", which is exactly the question
+# ``advertises_closed_schema`` has to answer, and a local copy of that logic is
+# what would let the advertisement drift away from the enforcement again. A
+# rename upstream breaks this import loudly at start-up rather than quietly at
+# the wire, which is the failure mode to prefer here.
+from rest_framework_services.dispatch.utils import declared_input_keys
 from rest_framework_services.exceptions.service_validation_error import (
     ServiceValidationError,
 )
@@ -24,6 +33,7 @@ from rest_framework_mcp.constants import (
     ArgumentBinding,
     CacheScope,
     JsonRpcErrorCode,
+    OutputFormat,
     UnknownArguments,
 )
 from rest_framework_mcp.handlers.types.context import MCPCallContext
@@ -40,6 +50,20 @@ _SPREAD_BINDINGS = frozenset(
 )
 
 
+def declares_default(default: Any) -> bool:
+    """Whether a channel declaration carries a value to seed when the caller omits one.
+
+    ``UrlKwarg`` / ``QueryParam`` are declared in the sister package, and the
+    sentinel standing for "no default" there is version-dependent: older
+    releases spell it ``None``, newer ones spell it with the package's ``UNSET``
+    sentinel so that a deliberate ``default=None`` becomes expressible. Both are
+    treated as *no default* here, which is correct against either release —
+    testing only for ``None`` would seed the literal ``UNSET`` object as a real
+    value for every declaration that names no default at all.
+    """
+    return default is not None and default is not UNSET
+
+
 def split_url_kwargs(
     arguments: dict[str, Any], url_kwargs: tuple[UrlKwarg, ...]
 ) -> tuple[dict[str, Any], dict[str, Any]]:
@@ -54,6 +78,17 @@ def split_url_kwargs(
     ``ServiceValidationError`` here rather than failing further down:
     ``required`` in the schema is only a hint, and registration forbids pairing
     it with a ``default``.
+
+    **An explicit ``null`` is not a supplied value.** A URL kwarg stands in for
+    a route capture, and a route capture can never be null: over HTTP the
+    segment either matched or the URL did not resolve. Off-HTTP a model that
+    emits ``{"pk": null}`` is saying it has no value, so the kwarg falls through
+    to its ``default`` and then to the ``required`` check, exactly as an omitted
+    key does. Routing the ``None`` on instead would satisfy ``required=True``
+    with nothing, and would reach the ORM as ``IS NULL`` — an unscoped read that
+    answers successfully with the wrong rows. ``split_query_params`` deliberately
+    does *not* mirror this: a query param carries no ``required`` flag and never
+    scopes a lookup, so there is nothing there for a null to defeat.
     """
     if not url_kwargs:
         return arguments, {}
@@ -61,9 +96,10 @@ def split_url_kwargs(
     values: dict[str, Any] = {}
     missing: list[str] = []
     for url_kwarg in url_kwargs:
-        if url_kwarg.name in arguments:
-            values[url_kwarg.name] = arguments[url_kwarg.name]
-        elif url_kwarg.default is not None:
+        supplied: Any = arguments.get(url_kwarg.name)
+        if supplied is not None:
+            values[url_kwarg.name] = supplied
+        elif declares_default(url_kwarg.default):
             values[url_kwarg.name] = url_kwarg.default
         elif url_kwarg.required:
             missing.append(url_kwarg.name)
@@ -97,7 +133,7 @@ def split_query_params(
     for query_param in query_params:
         if query_param.name in arguments:
             values[query_param.name] = arguments[query_param.name]
-        elif query_param.default is not None:
+        elif declares_default(query_param.default):
             values[query_param.name] = query_param.default
     params = {key: value for key, value in arguments.items() if key not in names}
     return params, values
@@ -124,11 +160,60 @@ def advertises_closed_schema(binding: Any) -> bool:
     ``services_dispatch_policies`` downgrades it and
     ``build_validated_input_serializer`` short-circuits before the
     unknown-key check — so advertising a closed schema there would be a lie.
+
+    A **service** tool needs one further condition. Its unknown-argument check
+    is not run here but by the sister package, against the key set the spec
+    declares; that set is not always enumerable — a nested selector taking a
+    bare ``**kwargs``, or carrying a ``filter_set``, leaves it open — and an
+    open set is answered by accepting and silently dropping every undeclared
+    key. Where nothing is enforced, nothing closed may be advertised.
     """
-    return (
-        binding.unknown_arguments is UnknownArguments.REJECT
-        and binding_input_serializer(binding) is not None
-    )
+    if binding.unknown_arguments is not UnknownArguments.REJECT:
+        return False
+    if binding_input_serializer(binding) is None:
+        return False
+    spec: Any = getattr(binding, "spec", None)
+    if not isinstance(spec, ServiceSpec):
+        # Selector and chain bindings enforce the closed set in this package,
+        # via ``build_validated_input_serializer``, so the guarantee holds.
+        return True
+    # Asked of the sister package rather than recomputed here: this is the
+    # exact predicate its dispatch consults, and a second implementation of it
+    # would drift into advertising what the runtime stopped enforcing. The
+    # serializer only ever *adds* declared names, so it cannot change whether
+    # the set is enumerable and is not needed for the question.
+    return declared_input_keys(spec, serializer=None) is not None
+
+
+def validate_output_format(params: dict[str, Any]) -> JsonRpcError | None:
+    """Reject a client-supplied ``outputFormat`` naming a format this server cannot render.
+
+    ``outputFormat`` is a client-facing knob, so an unrecognised value is a bad
+    parameter and belongs in a ``-32602`` envelope. Left unchecked it reaches
+    ``OutputFormat.coerce`` at the *end* of dispatch, where the ``ValueError``
+    it raises is mapped by nothing and surfaces as a bare HTTP 500 — after the
+    tool has already run and any mutation has committed, so the caller cannot
+    tell whether retrying would apply the write twice.
+
+    Called once at the entry of each ``tools/call`` handler, ahead of task
+    creation and dispatch, which is what makes the coercions further down the
+    three dispatch paths safe. ``None`` means "nothing to object to"; a falsy
+    value is passed over because the dispatch paths read the knob as
+    ``params.get("outputFormat") or binding.output_format``, i.e. treat it as
+    unsupplied.
+    """
+    requested: Any = params.get("outputFormat")
+    if not requested:
+        return None
+    try:
+        OutputFormat.coerce(requested)
+    except ValueError:
+        supported: str = ", ".join(repr(member.value) for member in OutputFormat)
+        return JsonRpcError(
+            JsonRpcErrorCode.INVALID_PARAMS,
+            f"'outputFormat' must be one of {supported}; got {requested!r}",
+        )
+    return None
 
 
 def services_dispatch_policies(binding: Any) -> tuple[ArgumentBinding, UnknownArguments]:
@@ -473,6 +558,7 @@ __all__ = [
     "build_validated_input_serializer",
     "check_permissions",
     "consume_rate_limits",
+    "declares_default",
     "effective_rate_limits",
     "enforce_result_ceiling",
     "permission_verdict",
@@ -482,5 +568,6 @@ __all__ = [
     "split_query_params",
     "split_url_kwargs",
     "validate_input_against_serializer",
+    "validate_output_format",
     "validation_error_data",
 ]

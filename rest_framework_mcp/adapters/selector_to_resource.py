@@ -12,6 +12,27 @@ from rest_framework_mcp.constants import ResourceEncoding
 from rest_framework_mcp.protocol.types.icon import Icon
 from rest_framework_mcp.registry.types.resource_binding import ResourceBinding
 
+# Every ``SelectorSpec`` field this adapter cannot carry, paired with the value
+# that means "not set". ``resources/read`` dispatches the bare callable through
+# ``run_selector``, so none of these reach the read: a ``preconditions`` gate
+# would not run, a ``filter_set`` would not filter, an
+# ``output_serializer_context`` provider would not be resolved. Registration
+# refuses rather than dropping them, because a gate that silently does not run
+# on one transport while holding on every other is the worst of the three
+# outcomes and is indistinguishable from success.
+_UNCARRIED_SPEC_FIELDS: tuple[tuple[str, Any], ...] = (
+    ("allow_none", False),
+    ("annotations", None),
+    ("extend_queryset", None),
+    ("filter_set", None),
+    ("metadata", None),
+    ("output_serializer_context", None),
+    ("prefetch_related", None),
+    ("preconditions", None),
+    ("progress_reporter", None),
+    ("select_related", None),
+)
+
 
 def selector_to_resource(
     *,
@@ -45,6 +66,14 @@ def selector_to_resource(
     ``meta`` is the base-protocol ``_meta`` bundle the resource's listing
     entry and its ``resources/read`` contents block carry — see
     ``service_spec_to_tool``.
+
+    Only ``.selector``, ``.kind``, ``.output_serializer``, ``.kwargs`` and
+    ``.permission_classes`` are carried. A spec setting any *other* behavioural
+    field is refused here, naming the fields: the resource read path dispatches
+    the bare callable, so those fields would be dropped, and a dropped
+    ``preconditions`` gate is a hole rather than an inconvenience. Register such
+    a spec as a selector *tool*, which does honour them, or move the behaviour
+    into the callable.
     """
     if not isinstance(selector, SelectorSpec):
         raise TypeError(
@@ -57,6 +86,24 @@ def selector_to_resource(
         raise ValueError(
             f"SelectorSpec for resource {name!r} has selector=None — MCP needs a "
             "concrete callable to dispatch to."
+        )
+    # Identity, not equality: the sentinels are ``None`` and ``False``, both
+    # singletons, and a spec field may hold a class or a callable whose
+    # ``__eq__`` is not this function's business. ``getattr``'s fallback keeps
+    # the check working against a sister release that has not grown one of them.
+    uncarried: list[str] = [
+        field
+        for field, unset in _UNCARRIED_SPEC_FIELDS
+        if getattr(selector, field, unset) is not unset
+    ]
+    if uncarried:
+        listed: str = ", ".join(repr(field) for field in uncarried)
+        raise ValueError(
+            f"SelectorSpec for resource {name!r} sets {listed}, which the resource "
+            "read path does not apply — it dispatches the selector callable "
+            "directly, so these would be silently dropped (a 'preconditions' gate "
+            "would simply not run). Register this spec as a selector tool, which "
+            "honours them, or fold the behaviour into the callable."
         )
     # Spec values fill in caller-omitted kwargs only; an explicit caller
     # argument is an intentional choice and is never overridden.

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import secrets
 
 import pytest
 from django.test import RequestFactory, override_settings
@@ -198,3 +199,48 @@ def test_invalid_client_type_choice_returns_400() -> None:
     assert response.status_code == 400
     body = response.data
     assert "client_type" in body["detail"]
+
+
+def test_the_initial_access_token_is_compared_in_constant_time(monkeypatch) -> None:
+    """``!=`` returns at the first differing byte, and this is a bearer credential.
+
+    An attacker probing the endpoint with candidate prefixes reads the
+    response-time difference between a wrong first byte and N right ones;
+    recovering the token turns a gated registration endpoint into an open one,
+    which is the precondition for every other registration abuse. The comparison
+    is pinned rather than timed because a timing assertion over a test runner is
+    noise, and what is actually being fixed is which primitive is used.
+    """
+    seen: list[tuple[bytes, bytes]] = []
+    real = secrets.compare_digest
+
+    def spy(a: bytes, b: bytes) -> bool:
+        seen.append((a, b))
+        return real(a, b)
+
+    monkeypatch.setattr(
+        "rest_framework_mcp.contrib.oauth.dynamic_client_registration_viewset.secrets"
+        ".compare_digest",
+        spy,
+    )
+    response = _post(
+        '{"redirect_uris": ["https://x/cb"]}',
+        auth_header="Bearer wrong",
+        initial_access_token="secret",
+    )
+    assert response.status_code == 401
+    assert seen == [(b"Bearer wrong", b"Bearer secret")]
+
+
+def test_a_non_ascii_authorization_header_is_a_401_not_a_500() -> None:
+    """``compare_digest`` raises ``TypeError`` on non-ASCII ``str``.
+
+    The presented half is a caller-supplied header, so the comparison is done on
+    bytes; otherwise the fix would trade a timing leak for a crash oracle.
+    """
+    response = _post(
+        '{"redirect_uris": ["https://x/cb"]}',
+        auth_header="Bearer sécret",
+        initial_access_token="secret",
+    )
+    assert response.status_code == 401
