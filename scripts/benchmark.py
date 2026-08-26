@@ -41,9 +41,9 @@ from rest_framework_services.types.service_spec import ServiceSpec  # noqa: E402
 
 from rest_framework_mcp import MCPServer  # noqa: E402
 from rest_framework_mcp.auth.backends.allow_any_backend import AllowAnyBackend  # noqa: E402
-from rest_framework_mcp.auth.token_info import TokenInfo  # noqa: E402
-from rest_framework_mcp.handlers.context import MCPCallContext  # noqa: E402
+from rest_framework_mcp.auth.types.token_info import TokenInfo  # noqa: E402
 from rest_framework_mcp.handlers.handle_tools_call import handle_tools_call  # noqa: E402
+from rest_framework_mcp.handlers.types.context import MCPCallContext  # noqa: E402
 from rest_framework_mcp.transport.in_memory_session_store import (  # noqa: E402
     InMemorySessionStore,
 )
@@ -109,12 +109,14 @@ def _dispatch_factory(server: MCPServer):
 
 
 def _http_factory(server: MCPServer):
-    from django.urls import include, path
+    from django.urls import path
     from django.urls.resolvers import URLResolver, get_resolver
 
     # Mount the server's URLs by monkey-patching the resolver.
     # Easier than building a full url conf module for a benchmark.
-    urlpatterns = [path("mcp/", include(server.urls))]
+    # ``server.urls`` is the namespaced ``(patterns, app_name, namespace)``
+    # triple ``path()`` mounts directly, as ``admin.site.urls`` does.
+    urlpatterns = [path("mcp/", server.urls)]
 
     resolver: URLResolver = get_resolver()
     original = resolver.url_patterns

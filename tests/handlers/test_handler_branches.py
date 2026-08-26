@@ -3,6 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any
 
+import pytest
 from django.http import HttpRequest
 from rest_framework.permissions import BasePermission
 from rest_framework_services.exceptions.service_validation_error import ServiceValidationError
@@ -11,6 +12,7 @@ from rest_framework_services.types.selector_spec import SelectorSpec
 from rest_framework_services.types.service_spec import ServiceSpec
 
 from rest_framework_mcp.auth.types.token_info import TokenInfo
+from rest_framework_mcp.constants import JsonRpcErrorCode
 from rest_framework_mcp.handlers.handle_resources_read import handle_resources_read
 from rest_framework_mcp.handlers.handle_tools_call import handle_tools_call
 from rest_framework_mcp.handlers.handle_tools_call_async import handle_tools_call_async
@@ -513,3 +515,121 @@ def test_service_tool_merge_pool_seeds_cannot_be_overridden_by_client() -> None:
     # User came from the transport (None in test), not from the client.
     assert received["user"] is None
     assert received["ok"] == 1
+
+
+# ---------- request-shape guards on tools/call ----------
+
+
+def _echo_tools() -> ToolRegistry:
+    def svc(**kwargs: Any) -> dict[str, Any]:
+        return dict(kwargs)
+
+    tools = ToolRegistry()
+    tools.register(
+        ToolBinding(name="t", description=None, spec=ServiceSpec(service=svc, atomic=False))
+    )
+    return tools
+
+
+@pytest.mark.parametrize("malformed", [[], "", 0, False])
+def test_a_falsy_non_object_arguments_field_is_named_as_the_fault(malformed: Any) -> None:
+    """``[]`` is not "no arguments" — it is a malformed ``arguments`` field.
+
+    Collapsing every falsy value into ``{}`` ran the tool with no arguments, so
+    a tool whose inputs are all optional executed a call the client never
+    intended in that shape, and every other tool answered with a confusing
+    missing-field validation error instead of naming the real fault.
+    """
+    out = handle_tools_call({"name": "t", "arguments": malformed}, _ctx(_echo_tools()))
+    assert isinstance(out, JsonRpcError)
+    assert out.code == JsonRpcErrorCode.INVALID_PARAMS
+    assert "'arguments'" in out.message
+
+
+@pytest.mark.parametrize("malformed", [[], "", 0, False])
+async def test_a_falsy_non_object_arguments_field_is_named_as_the_fault_async(
+    malformed: Any,
+) -> None:
+    out = await handle_tools_call_async({"name": "t", "arguments": malformed}, _ctx(_echo_tools()))
+    assert isinstance(out, JsonRpcError)
+    assert out.code == JsonRpcErrorCode.INVALID_PARAMS
+
+
+@pytest.mark.parametrize("params", [{"name": "t"}, {"name": "t", "arguments": None}])
+def test_a_missing_or_null_arguments_field_still_means_no_arguments(
+    params: dict[str, Any],
+) -> None:
+    out = handle_tools_call(params, _ctx(_echo_tools()))
+    assert isinstance(out, dict)
+    assert "isError" not in out
+
+
+@pytest.mark.parametrize("params", [{"name": "t"}, {"name": "t", "arguments": None}])
+async def test_a_missing_or_null_arguments_field_still_means_no_arguments_async(
+    params: dict[str, Any],
+) -> None:
+    out = await handle_tools_call_async(params, _ctx(_echo_tools()))
+    assert isinstance(out, dict)
+    assert "isError" not in out
+
+
+def test_an_unrenderable_output_format_is_rejected_before_the_tool_runs() -> None:
+    """A bad ``outputFormat`` must not surface as a 500 after the write committed.
+
+    The coercion used to sit at the end of dispatch, past the last ``except``,
+    so an unknown value raised ``ValueError`` out of the handler *after* the
+    mutation had committed. The caller got a bare 500 with no JSON-RPC envelope
+    and no way to tell whether retrying would apply the write twice.
+    """
+    ran: list[int] = []
+
+    def svc(**kwargs: Any) -> dict[str, Any]:
+        ran.append(1)
+        return {}
+
+    tools = ToolRegistry()
+    tools.register(
+        ToolBinding(name="t", description=None, spec=ServiceSpec(service=svc, atomic=False))
+    )
+    out = handle_tools_call({"name": "t", "arguments": {}, "outputFormat": "xml"}, _ctx(tools))
+    assert isinstance(out, JsonRpcError)
+    assert out.code == JsonRpcErrorCode.INVALID_PARAMS
+    assert "outputFormat" in out.message
+    assert ran == []
+
+
+async def test_an_unrenderable_output_format_is_rejected_before_the_tool_runs_async() -> None:
+    ran: list[int] = []
+
+    def svc(**kwargs: Any) -> dict[str, Any]:
+        ran.append(1)
+        return {}
+
+    tools = ToolRegistry()
+    tools.register(
+        ToolBinding(name="t", description=None, spec=ServiceSpec(service=svc, atomic=False))
+    )
+    out = await handle_tools_call_async(
+        {"name": "t", "arguments": {}, "outputFormat": "xml"}, _ctx(tools)
+    )
+    assert isinstance(out, JsonRpcError)
+    assert out.code == JsonRpcErrorCode.INVALID_PARAMS
+    assert ran == []
+
+
+@pytest.mark.parametrize("requested", ["json", "toon", "auto"])
+def test_the_supported_output_formats_still_pass_the_guard(requested: str) -> None:
+    out = handle_tools_call(
+        {"name": "t", "arguments": {}, "outputFormat": requested}, _ctx(_echo_tools())
+    )
+    assert isinstance(out, dict)
+
+
+def test_an_empty_output_format_is_read_as_unsupplied() -> None:
+    """The dispatch paths read the knob as ``... or binding.output_format``.
+
+    The guard mirrors that exactly, so validation and use cannot disagree about
+    which values count as "not asked for".
+    """
+    out = handle_tools_call({"name": "t", "arguments": {}, "outputFormat": ""}, _ctx(_echo_tools()))
+    assert isinstance(out, dict)

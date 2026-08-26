@@ -139,7 +139,7 @@ See [What the package bounds](../performance.md#what-the-package-bounds).
 
 | Key | Default | What it does |
 |---|---|---|
-| `DCR_ENABLED` | `False` | Default for `build_oauth_urlpatterns(dcr_enabled=)`. RFC 7591 dynamic client registration; `False` makes `/oauth/register/` refuse every request with 403. An open DCR endpoint lets anyone create an OAuth client against your authorization server. |
+| `DCR_ENABLED` | `False` | Default for `build_oauth_urlpatterns(dcr_enabled=)`. RFC 7591 dynamic client registration; `False` makes `/oauth/register/` refuse every request with 403. An open DCR endpoint lets anyone create an OAuth client against your authorization server — one with no owning user, which is why only the `authorization_code` grant is registerable here. |
 | `DCR_INITIAL_ACCESS_TOKEN` | `None` | Default for `build_oauth_urlpatterns(dcr_initial_access_token=)`. The RFC 7591 §3 initial access token clients must present as `Authorization: Bearer …`. `None` means no token check — anyone who can reach the endpoint can register. |
 | `SIMPLEJWT_ACCESS_COOKIE` | `"access"` | Default for `SimpleJWTCookieAdapter(cookie_name=)` (`[jwt]` extra) — the cookie it reads access tokens from. Matches `djangorestframework-simplejwt`'s documented `AUTH_COOKIE` default. |
 

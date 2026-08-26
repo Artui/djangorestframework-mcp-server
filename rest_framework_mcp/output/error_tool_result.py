@@ -3,6 +3,8 @@ from __future__ import annotations
 from collections.abc import Mapping
 from typing import Any
 
+from rest_framework_services import UNSET
+
 from rest_framework_mcp.output.encode_json import encode_json
 from rest_framework_mcp.protocol.types.tool_content_block import ToolContentBlock
 from rest_framework_mcp.protocol.types.tool_result import ToolResult
@@ -40,7 +42,7 @@ def build_error_tool_result(
     payload: dict[str, Any] = {"error": error}
     return ToolResult(
         content=[ToolContentBlock.text_block(encode_json(payload))],
-        structured_content=None,
+        structured_content=UNSET,
         is_error=True,
     )
 

@@ -568,3 +568,82 @@ class _IdentifiedUser(str):
 
 
 _ALICE = _IdentifiedUser("alice")
+
+
+# ---------- an explicit null is not a supplied value ----------
+
+
+def _presence_provider(view: Any) -> dict[str, Any]:
+    """Report whether the key reached ``view.kwargs`` at all, not just its value."""
+    return {"scope": "present" if "project_pk" in view.kwargs else "absent"}
+
+
+def _required_binding(**kwargs: Any) -> ToolRegistry:
+    tools = ToolRegistry()
+    tools.register(
+        ToolBinding(
+            name="t",
+            description=None,
+            spec=ServiceSpec(service=_echo_scope_service, atomic=False, kwargs=_scope_provider),
+            url_kwargs=(UrlKwarg("project_pk", **kwargs),),
+        )
+    )
+    return tools
+
+
+def test_explicit_null_does_not_satisfy_a_required_url_kwarg() -> None:
+    # A route capture can never be null over HTTP; off-HTTP a model emitting
+    # ``{"project_pk": null}`` is saying it has no value. Accepting it as
+    # supplied both defeats ``required`` and reaches the ORM as ``IS NULL`` — an
+    # unscoped read that answers successfully with the wrong rows.
+    out = handle_tools_call(
+        {"name": "t", "arguments": {"project_pk": None}},
+        _ctx(tools=_required_binding(required=True)),
+    )
+    assert isinstance(out, dict)
+    assert out["isError"] is True
+    assert "project_pk" in out["content"][0]["text"]
+
+
+async def test_explicit_null_does_not_satisfy_a_required_url_kwarg_async() -> None:
+    out = await handle_tools_call_async(
+        {"name": "t", "arguments": {"project_pk": None}},
+        _ctx(tools=_required_binding(required=True)),
+    )
+    assert isinstance(out, dict)
+    assert out["isError"] is True
+    assert "project_pk" in out["content"][0]["text"]
+
+
+def test_explicit_null_falls_through_to_the_declared_default() -> None:
+    out = handle_tools_call(
+        {"name": "t", "arguments": {"project_pk": None}},
+        _ctx(tools=_required_binding(default="DEFLT")),
+    )
+    assert isinstance(out, dict)
+    assert out["structuredContent"] == {"scope": "DEFLT"}
+
+
+def test_explicit_null_without_a_default_never_reaches_view_kwargs() -> None:
+    tools = ToolRegistry()
+    tools.register(
+        ToolBinding(
+            name="t",
+            description=None,
+            spec=ServiceSpec(service=_echo_scope_service, atomic=False, kwargs=_presence_provider),
+            url_kwargs=(UrlKwarg("project_pk"),),
+        )
+    )
+    out = handle_tools_call({"name": "t", "arguments": {"project_pk": None}}, _ctx(tools=tools))
+    assert isinstance(out, dict)
+    # Seeding ``None`` here is what turns ``.filter(project_id=None)`` into an
+    # unscoped ``IS NULL`` read, so the key stays out of the mapping entirely.
+    assert out["structuredContent"] == {"scope": "absent"}
+
+
+def test_a_falsy_but_real_url_kwarg_value_is_still_supplied() -> None:
+    out = handle_tools_call(
+        {"name": "t", "arguments": {"project_pk": 0}}, _ctx(tools=_required_binding(required=True))
+    )
+    assert isinstance(out, dict)
+    assert out["structuredContent"] == {"scope": 0}

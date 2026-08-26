@@ -14,6 +14,7 @@ from typing import Any
 import pytest
 from rest_framework.exceptions import PermissionDenied
 from rest_framework.permissions import BasePermission
+from rest_framework_services import UNSET
 from rest_framework_services.exceptions.service_error import ServiceError
 from rest_framework_services.exceptions.service_validation_error import ServiceValidationError
 from rest_framework_services.types.selector_kind import SelectorKind
@@ -90,7 +91,8 @@ def test_include_structured_content_false_omits_the_structured_field() -> None:
         include_output_schema=False,
     )
     result = server.call_tool("things.quiet", user=None)
-    assert result.structured_content is None
+    assert result.structured_content is UNSET
+    assert "structuredContent" not in result.to_dict()
     assert result.content  # the text projection still carries the payload
 
 
