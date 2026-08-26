@@ -128,20 +128,55 @@ Validation, output-serializer rendering, and kwarg-pool construction are **not**
 reproduced locally. The `handlers/` layer delegates to the sister repo's
 transport-neutral dispatch surface — `dispatch_spec` + `render_spec_output` — so a
 single implementation of validation and output rendering serves both the DRF view
-path and this MCP transport. **Every** dispatch path goes through it: service tools
-(`call_spec_tool.py`, `handle_tools_call*.py`), selector tools
-(`selector_tool_dispatch.py`), and chain steps (`chain_tool_dispatch.py`).
+path and this MCP transport.
 
-This is load-bearing, not tidiness. The selector and chain paths once had their own
-renderer + context resolver "for transport-shaped equivalence", and the two copies
+**Which paths call `dispatch_spec`, and what the rest do instead.** This list is the
+contract; keep it accurate, because it is what a maintainer adding a spec-level
+behaviour upstream reads to decide where to wire it. Getting it wrong once already
+cost four separate authorization gaps, each on a path this paragraph claimed was
+covered.
+
+| Path | Dispatch |
+| --- | --- |
+| Service tools (`call_spec_tool.py`, `handle_tools_call*.py`) | `dispatch_spec` |
+| Selector tools (`selector_tool_dispatch.py`) | `dispatch_spec` |
+| Chain steps (`chain_tool_dispatch.py`) | **direct** `run_service` / `run_selector` |
+| `resources/read` (`handle_resources_read*.py`) | **direct** `run_selector` |
+| `prompts/get` (`handle_prompts_get*.py`) | **direct** call of `render` |
+| `completion/complete` (`handle_completion_complete.py`) | **direct** call of the completer |
+
+The three direct paths are direct for structural reasons, not by neglect:
+
+- **Chain steps.** A chain owns the transaction (`binding.atomic`), the argument
+  binding, and the pool each step receives — `inputs(ctx)` returns the callable's
+  kwargs, which is not the flat client `params` mapping `dispatch_spec` takes. What
+  `dispatch_spec` would have contributed is therefore run explicitly per step:
+  `enforce_permissions` against the resolved target, and the spec's `preconditions`.
+- **`resources/read`.** A `ResourceBinding` holds a bare selector callable, not the
+  spec it was lifted from, so there is no spec to dispatch. It composes
+  `base_serializer_context` for rendering, applies the reserved seeds over the
+  URI-template variables, honours the `kwargs` provider's `UNSET` decline, and runs
+  object-level permissions through `guard_resource_object`, which lifts the binding's
+  wrapped permission classes back into a spec for `enforce_permissions`. Queryset
+  shaping and `preconditions` are **not** reproduced — the adapter drops them at
+  registration, so there is nothing to run.
+- **`prompts/get` and `completion/complete`.** Neither target is a spec: a prompt's
+  `render` and a completer are bare callables. They dispatch through
+  `resolve_callable_kwargs` and seed the pool in the same precedence
+  `RESERVED_POOL_SEEDS` gives it on the dispatch path — transport seeds outrank
+  client-supplied names, always.
+
+**Anything a direct path re-implements must be named at the call site**, with the
+upstream helper it stands in for. A direct path that quietly grows a private copy of
+something `dispatch_spec` does is the drift this section exists to prevent.
+
+Delegating is load-bearing, not tidiness. The selector and chain paths once had their
+own renderer + context resolver "for transport-shaped equivalence", and the two copies
 drifted: they bound serializer-context providers positionally where the sister repo
 binds by name (a `TypeError` for any provider not leading with `view, request`), and
 they never applied DRF's baseline context (a `KeyError: 'request'` for any serializer
 reading it). Both were consumer-reported. If a path needs something rendering doesn't
 give it, extend `render_spec_output` upstream rather than growing a second copy here.
-A binding that is genuinely not a spec — a `ResourceBinding`, whose selector is a bare
-callable — is the one exception, and it composes `base_serializer_context` instead of
-re-deriving it.
 
 ## Tests
 

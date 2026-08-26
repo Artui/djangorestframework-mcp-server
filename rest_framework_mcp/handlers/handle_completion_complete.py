@@ -8,7 +8,11 @@ from typing import Any
 from rest_framework_services import build_offline_context, resolve_callable_kwargs
 
 from rest_framework_mcp._compat.tracing import span
-from rest_framework_mcp.constants import MAX_COMPLETION_VALUES, JsonRpcErrorCode
+from rest_framework_mcp.constants import (
+    MAX_COMPLETION_VALUES,
+    RESERVED_POOL_SEEDS,
+    JsonRpcErrorCode,
+)
 from rest_framework_mcp.handlers.handle_tools_call import _span_attrs
 from rest_framework_mcp.handlers.types.context import MCPCallContext
 from rest_framework_mcp.handlers.utils import check_permissions, consume_rate_limits
@@ -28,6 +32,8 @@ def handle_completion_complete(
     they complete, and dispatched through ``resolve_callable_kwargs``, so
     one declares whichever of ``value`` / ``arguments`` / ``request`` / ``user``
     it needs (plus any already-resolved sibling by name) and gets nothing else.
+    A sibling named after a dispatcher-owned seed is dropped from that spread,
+    so no client-chosen value ever binds to one of those parameter names.
 
     **A completion is a read of the thing being completed**, so the binding's
     permission and rate-limit stacks run before the completer. Without that, a
@@ -111,11 +117,18 @@ def handle_completion_complete(
             # never leak into a completer if that changes.
             query_params={},
         ).request
-        # The transport's seeds are applied *after* the client-supplied
-        # siblings, so a sibling named ``user`` or ``value`` shadows nothing —
-        # the precedence ``RESERVED_POOL_SEEDS`` enforces on the dispatch path.
+        # Every dispatcher-owned name is dropped from the client's siblings
+        # before the spread, then the transport's own seeds are applied on top.
+        # Re-seeding by hand covered only the names this handler happens to
+        # supply, so a sibling called ``instance`` or ``collection`` — reserved
+        # everywhere else, seeded nowhere here — still reached a completer under
+        # a name the rest of the package treats as dispatcher-owned. Stripping
+        # tracks ``RESERVED_POOL_SEEDS`` instead of a hand-picked subset of it.
+        # ``arguments`` stays the client's mapping verbatim: it is documented as
+        # the siblings the client resolved, and a completer reading it knows it
+        # is reading caller input.
         pool: dict[str, Any] = {
-            **resolved_siblings,
+            **{key: v for key, v in resolved_siblings.items() if key not in RESERVED_POOL_SEEDS},
             "request": drf_request,
             "user": context.token.user,
             "value": value,

@@ -64,6 +64,9 @@ def build_server() -> MCPServer:
             kind=SelectorKind.RETRIEVE,
             selector=get_job,
             output_serializer=JobOutputSerializer,
+            # A resource is as reachable as a tool, so it declares its
+            # permissions the same way. Swap AllowAny for the real gate.
+            permission_classes=[AllowAny],
         ),
         description="Read the latest status of a single job.",
     )

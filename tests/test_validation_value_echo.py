@@ -147,6 +147,13 @@ async def test_async_tools_call_service_validation_echo(settings) -> None:
 # ---------- prompts/get missing required args ----------
 
 
+class _AlwaysAllow:
+    """Minimal MCP permission — a prompt must declare one to register."""
+
+    def has_permission(self, *_args: object, **_kwargs: object) -> bool:
+        return True
+
+
 def _server_with_required_prompt() -> MCPServer:
     server = MCPServer(
         name="t", auth_backend=AllowAnyBackend(), session_store=InMemorySessionStore()
@@ -155,6 +162,7 @@ def _server_with_required_prompt() -> MCPServer:
         name="echo",
         render=lambda *, who: f"hi {who}",
         arguments=[PromptArgument(name="who", required=True)],
+        permissions=[_AlwaysAllow()],
     )
     return server
 

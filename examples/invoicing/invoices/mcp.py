@@ -23,6 +23,7 @@ from invoices.serializers import (
 from invoices.services import create_invoice, mark_invoice_sent
 from rest_framework_mcp import MCPServer, PromptArgument, PromptMessage
 from rest_framework_mcp.auth.backends.allow_any_backend import AllowAnyBackend
+from rest_framework_mcp.auth.permissions.drf_permission_adapter import DRFPermissionAdapter
 from rest_framework_mcp.transport.in_memory_session_store import InMemorySessionStore
 
 
@@ -102,6 +103,9 @@ def build_server() -> MCPServer:
             kind=SelectorKind.RETRIEVE,
             selector=get_invoice,
             output_serializer=InvoiceOutputSerializer,
+            # A resource is as reachable as a tool, so it declares its
+            # permissions the same way. Swap AllowAny for the real gate.
+            permission_classes=[AllowAny],
         ),
         description="A single invoice by primary key.",
     )
@@ -127,6 +131,9 @@ def build_server() -> MCPServer:
         arguments=[
             PromptArgument(name="pk", description="Invoice primary key", required=True),
         ],
+        # A prompt reads the database here, so it is gated like everything
+        # else on this server. Swap AllowAny for the real gate.
+        permissions=[DRFPermissionAdapter(AllowAny)],
     )
 
     return server

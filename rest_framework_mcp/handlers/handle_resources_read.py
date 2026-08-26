@@ -2,8 +2,9 @@ from __future__ import annotations
 
 from typing import Any
 
+from rest_framework.exceptions import PermissionDenied
 from rest_framework_services import (
-    OfflineServiceView,
+    UNSET,
     build_offline_context,
     resolve_callable_kwargs,
     run_selector,
@@ -11,6 +12,7 @@ from rest_framework_services import (
 
 from rest_framework_mcp._compat.tracing import span
 from rest_framework_mcp.constants import JsonRpcErrorCode
+from rest_framework_mcp.handlers.guard_resource_object import guard_resource_object
 from rest_framework_mcp.handlers.handle_tools_call import _span_attrs
 from rest_framework_mcp.handlers.types.context import MCPCallContext
 from rest_framework_mcp.handlers.utils import (
@@ -33,8 +35,20 @@ def handle_resources_read(
 
     Resolves the URI through the registry, builds a kwarg pool from the template
     variables and request context, runs the selector via ``run_selector``
-    (which bridges async selectors), and returns one ``ResourceContents`` block
-    rendered and encoded by ``build_resource_contents``.
+    (which bridges async selectors), guards the resolved value with the
+    resource's object-level permissions, and returns one ``ResourceContents``
+    block rendered and encoded by ``build_resource_contents``.
+
+    **This method does not route through ``dispatch_spec``.** A
+    [`ResourceBinding`][rest_framework_mcp.registry.types.resource_binding.ResourceBinding]
+    holds a bare selector callable, not the spec it was lifted from, so there
+    is no spec to dispatch. What ``dispatch_spec`` would have contributed is
+    named explicitly here instead: the reserved seeds outrank the client's
+    URI-template variables, the ``kwargs`` provider honours its ``UNSET``
+    decline contract, and
+    [`guard_resource_object`][rest_framework_mcp.handlers.guard_resource_object.guard_resource_object]
+    stands in for ``on_target_resolved``. Queryset shaping and the spec's
+    ``preconditions`` are **not** reproduced — they never survive registration.
     """
     if not isinstance(params, dict):
         return JsonRpcError(
@@ -82,36 +96,55 @@ def handle_resources_read(
                 data={"retryAfter": retry_after},
             )
 
-        drf_request = build_offline_context(
+        offline = build_offline_context(
             context.token.user,
             None,
             http_request=context.http_request,
+            action=binding.name,
+            # URI-template variables ride on ``view.kwargs`` so a provider (and
+            # the output serializer's context) reads them without re-parsing
+            # the URI.
+            kwargs=dict(vars_),
             # Resources close the undeclared channel and take nothing more: a
             # resource URI *is* a locator, so per-call read-shaping belongs in
             # its URI template, whose variables already route to ``view.kwargs``.
             query_params={},
-        ).request
+        )
+        drf_request = offline.request
+        view = offline.view
 
+        # The transport's seeds land *after* the URI-template variables, so a
+        # template variable named ``user`` or ``request`` cannot stand in for
+        # the authenticated identity. ``register_resource`` already refuses
+        # such a template; this is the second lock, for a binding registered
+        # straight onto the registry.
         pool: dict[str, Any] = {
+            **vars_,
             "request": drf_request,
             "user": context.token.user,
-            **vars_,
         }
-        # URI-template variables ride on ``view.kwargs`` so a provider (and the
-        # output serializer's context) reads them without re-parsing the URI.
-        view = OfflineServiceView(request=drf_request, action=binding.name, kwargs=dict(vars_))
         if binding.kwargs_provider is not None:
             # ``SelectorSpec.kwargs``, invoked through the keyword pool exactly
             # as drf-services invokes it on the HTTP path: by name, so
-            # ``def kwargs(request): ...`` works here too.
+            # ``def kwargs(request): ...`` works here too — including its
+            # decline contract, so a provider that cannot resolve a key
+            # off-HTTP returns ``UNSET`` and leaves the URI's own value
+            # standing, rather than overwriting it with the sentinel.
             provider_pool: dict[str, Any] = {"view": view, "request": drf_request}
-            pool.update(
-                binding.kwargs_provider(
-                    **resolve_callable_kwargs(binding.kwargs_provider, provider_pool)
-                )
+            provided: dict[str, Any] = binding.kwargs_provider(
+                **resolve_callable_kwargs(binding.kwargs_provider, provider_pool)
             )
+            pool.update({key: value for key, value in provided.items() if value is not UNSET})
         kwargs: dict[str, Any] = resolve_callable_kwargs(binding.selector, pool)
         raw: Any = run_selector(binding.selector, kwargs)
+
+        # Object-level permissions, on the row the selector actually resolved.
+        # The class-level pass above cannot see it, and this method has no
+        # ``dispatch_spec`` to carry ``on_target_resolved`` for it.
+        try:
+            guard_resource_object(binding, raw, offline)
+        except PermissionDenied:
+            return JsonRpcError(JsonRpcErrorCode.FORBIDDEN, "Insufficient permission")
 
         contents = build_resource_contents(
             binding=binding, uri=uri, raw=raw, view=view, request=drf_request

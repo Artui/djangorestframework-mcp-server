@@ -14,6 +14,7 @@ from rest_framework_mcp.handlers.utils import (
     check_permissions,
     consume_rate_limits,
 )
+from rest_framework_mcp.output.enforce_result_bytes import enforce_result_bytes
 from rest_framework_mcp.protocol.types.get_prompt_result import GetPromptResult
 from rest_framework_mcp.protocol.types.json_rpc_error import JsonRpcError
 
@@ -87,10 +88,13 @@ async def handle_prompts_get_async(
             # and the empty mapping keeps the endpoint's own out if that changes.
             query_params={},
         ).request
+        # See the sync sibling: the transport's seeds land *after* the
+        # client-supplied arguments, so an argument named ``user`` or
+        # ``request`` shadows nothing.
         pool: dict[str, Any] = {
+            **arguments_raw,
             "request": drf_request,
             "user": context.token.user,
-            **arguments_raw,
         }
         kwargs: dict[str, Any] = resolve_callable_kwargs(binding.render, pool)
         raw: Any = await acall(binding.render, **kwargs)
@@ -100,7 +104,17 @@ async def handle_prompts_get_async(
         except TypeError as exc:
             return JsonRpcError(JsonRpcErrorCode.INTERNAL_ERROR, str(exc))
 
-        return GetPromptResult(messages=messages, description=binding.description).to_dict()
+        result: dict[str, Any] = GetPromptResult(
+            messages=messages, description=binding.description
+        ).to_dict()
+        # See the sync sibling: a rendered prompt is bounded by
+        # ``MAX_RESULT_BYTES`` like every other result surface.
+        oversize: str | None = enforce_result_bytes(
+            result, context.config.max_result_bytes, label=f"Prompt {binding.name!r}"
+        )
+        if oversize is not None:
+            return JsonRpcError(JsonRpcErrorCode.SERVER_ERROR, oversize)
+        return result
 
 
 __all__ = ["handle_prompts_get_async"]

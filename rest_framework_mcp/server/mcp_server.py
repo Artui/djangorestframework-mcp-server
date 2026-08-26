@@ -14,6 +14,7 @@ from rest_framework_services.registry.spec_registry import SpecRegistry
 from rest_framework_services.types.selector_kind import SelectorKind
 from rest_framework_services.types.selector_spec import SelectorSpec
 from rest_framework_services.types.service_spec import ServiceSpec
+from rest_framework_services.types.validate_channel_names import validate_channel_names
 
 from rest_framework_mcp.adapters.chain_to_tool import chain_steps_to_tool
 from rest_framework_mcp.adapters.selector_to_resource import selector_to_resource
@@ -1003,6 +1004,15 @@ class MCPServer:
         ``mime_type`` is not JSON — Markdown, CSV, plain text — wants ``TEXT``,
         or the document comes back wrapped in a quoted string literal. For an
         HTML view use ``register_ui_resource``, which sets both.
+
+        A ``uri_template`` variable is a caller-controlled name that reaches the
+        selector's kwarg pool, so one named after a dispatcher seed (``user``,
+        ``request``, ``data`` …) or declared twice raises here rather than
+        letting a URI segment stand in for the authenticated identity.
+
+        A resource with no permissions at all is refused for the same reason a
+        tool is — see ``REQUIRE_TOOL_PERMISSIONS``. The same selector exposed
+        as a resource is as reachable as it is exposed as a tool.
         """
         binding = selector_to_resource(
             name=name,
@@ -1022,9 +1032,26 @@ class MCPServer:
             cache_ttl_ms=cache_ttl_ms,
             completions=completions,
         )
+        template_variables: tuple[str, ...] = _template_variables(uri_template)
+        # A URI-template variable is a caller-controlled name routed into the
+        # selector's kwarg pool, exactly like a tool's ``UrlKwarg`` — so it goes
+        # through the same shared check, which owns the reserved-seed set and
+        # catches a name declared twice. The transport's own post-fetch names
+        # (``page`` / ``limit`` / ``ordering``) are deliberately *not* reserved
+        # here: a resource has no post-fetch pipeline, so ``docs://{page}`` is a
+        # legitimate locator.
+        validate_channel_names(
+            label=f"Resource {name!r}",
+            kind="uri_template variable",
+            declarations=tuple(UrlKwarg(name=variable) for variable in template_variables),
+        )
         # Template variables are the only completable arguments a resource has.
-        check_completions_declared(
-            f"Resource {name!r}", binding.completions, _template_variables(uri_template)
+        check_completions_declared(f"Resource {name!r}", binding.completions, template_variables)
+        check_tool_permissions_declared(
+            binding.name,
+            binding.permissions,
+            require=self._config.require_tool_permissions,
+            kind="resource",
         )
         self._resources.register(binding)
         return binding
@@ -1097,6 +1124,12 @@ class MCPServer:
             always_listed=always_listed,
             cache_ttl_ms=cache_ttl_ms,
         )
+        # No ``check_tool_permissions_declared`` here, unlike every other
+        # registration on this server. A view's content sources are a template
+        # rendered with no context, a literal document, or a zero-argument
+        # callable — none of which can read the caller's data, so an unguarded
+        # view exposes nothing an authenticated session may not already see.
+        # Requiring permissions on it would be noise on every MCP Apps install.
         self._resources.register(binding)
         return binding
 
@@ -1124,6 +1157,15 @@ class MCPServer:
         [`PromptMessage`][rest_framework_mcp.protocol.types.prompt_message.PromptMessage],
         or a coroutine yielding any of those — the dispatch layer normalises the result.
 
+        ``request`` and ``user`` are seeded **over** the client's arguments at
+        ``prompts/get``, so an argument named after one of them never reaches
+        ``render`` in the seed's place.
+
+        A prompt with no permissions at all is refused like a tool — see
+        ``REQUIRE_TOOL_PERMISSIONS``. A ``render`` callable reads whatever its
+        author gave it access to, so nothing about a prompt makes it safe by
+        construction.
+
         ``meta`` is the generic ``_meta`` bundle for this prompt's
         ``prompts/list`` entry — see ``register_service_tool``.
         """
@@ -1143,6 +1185,12 @@ class MCPServer:
         )
         check_completions_declared(
             f"Prompt {name!r}", binding.completions, (arg.name for arg in binding.arguments)
+        )
+        check_tool_permissions_declared(
+            binding.name,
+            binding.permissions,
+            require=self._config.require_tool_permissions,
+            kind="prompt",
         )
         self._prompts.register(binding)
         return binding

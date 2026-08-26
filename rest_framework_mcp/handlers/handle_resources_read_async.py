@@ -2,8 +2,9 @@ from __future__ import annotations
 
 from typing import Any
 
+from rest_framework.exceptions import PermissionDenied
 from rest_framework_services import (
-    OfflineServiceView,
+    UNSET,
     build_offline_context,
     resolve_callable_kwargs,
 )
@@ -12,6 +13,7 @@ from rest_framework_mcp._compat.acall import acall
 from rest_framework_mcp._compat.tracing import span
 from rest_framework_mcp._compat.utils import arun_selector_sync_safe
 from rest_framework_mcp.constants import JsonRpcErrorCode
+from rest_framework_mcp.handlers.guard_resource_object import guard_resource_object
 from rest_framework_mcp.handlers.handle_tools_call import _span_attrs
 from rest_framework_mcp.handlers.types.context import MCPCallContext
 from rest_framework_mcp.handlers.utils import (
@@ -36,7 +38,11 @@ async def handle_resources_read_async(
     selector goes through ``arun_selector_sync_safe`` (async selectors run
     native, sync ones are bridged) and the render + encode step through
     ``acall``, because a selector returning a queryset returns it **lazy**
-    and the serializer is what evaluates it.
+    and the serializer is what evaluates it. The object-permission guard runs
+    off the loop for the same reason: ``has_object_permission`` may query.
+
+    See the sync sibling for why this method does not route through
+    ``dispatch_spec`` and what stands in for it.
     """
     if not isinstance(params, dict):
         return JsonRpcError(
@@ -82,37 +88,48 @@ async def handle_resources_read_async(
                 data={"retryAfter": retry_after},
             )
 
-        drf_request = build_offline_context(
+        offline = build_offline_context(
             context.token.user,
             None,
             http_request=context.http_request,
+            action=binding.name,
+            # See the sync sibling: URI-template variables ride on
+            # ``view.kwargs``.
+            kwargs=dict(vars_),
             # See the sync sibling: a resource URI *is* a locator, so per-call
             # read-shaping belongs in its URI template.
             query_params={},
-        ).request
+        )
+        drf_request = offline.request
+        view = offline.view
 
+        # See the sync sibling: the transport's seeds land after the
+        # URI-template variables, so neither can be shadowed from the URI.
         pool: dict[str, Any] = {
+            **vars_,
             "request": drf_request,
             "user": context.token.user,
-            **vars_,
         }
-        # URI-template variables ride on ``view.kwargs`` so a provider (and the
-        # output serializer's context) reads them without re-parsing the URI.
-        view = OfflineServiceView(request=drf_request, action=binding.name, kwargs=dict(vars_))
         if binding.kwargs_provider is not None:
             # ``SelectorSpec.kwargs``, invoked by name through the keyword pool
-            # as on the HTTP path. It is sync — a spec is written once for both
-            # transports — and its headline use is a scoping tenant / role
-            # query, so it runs off the loop.
+            # as on the HTTP path, ``UNSET`` decline included. It is sync — a
+            # spec is written once for both transports — and its headline use
+            # is a scoping tenant / role query, so it runs off the loop.
             provider_pool: dict[str, Any] = {"view": view, "request": drf_request}
-            pool.update(
-                await acall(
-                    binding.kwargs_provider,
-                    **resolve_callable_kwargs(binding.kwargs_provider, provider_pool),
-                )
+            provided: dict[str, Any] = await acall(
+                binding.kwargs_provider,
+                **resolve_callable_kwargs(binding.kwargs_provider, provider_pool),
             )
+            pool.update({key: value for key, value in provided.items() if value is not UNSET})
         kwargs: dict[str, Any] = resolve_callable_kwargs(binding.selector, pool)
         raw: Any = await arun_selector_sync_safe(binding.selector, kwargs)
+
+        # See the sync sibling: object-level permissions on the resolved row.
+        # ``has_object_permission`` may query, so it runs off the loop.
+        try:
+            await acall(guard_resource_object, binding, raw, offline)
+        except PermissionDenied:
+            return JsonRpcError(JsonRpcErrorCode.FORBIDDEN, "Insufficient permission")
 
         # Rendering is ORM work: ``output_serializer(...).data`` iterates the
         # value, evaluating a lazy queryset right here. Off the loop, like the
