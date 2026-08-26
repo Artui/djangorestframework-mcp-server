@@ -19,7 +19,7 @@ pytestmark = pytest.mark.asyncio
 
 
 def _client() -> FakeAsyncRedis:
-    return FakeAsyncRedis()
+    return FakeAsyncRedis(server=FakeServer())
 
 
 async def _await_subscriber(client: Any, channel: str, *, timeout: float = 1.0) -> None:

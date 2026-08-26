@@ -1,15 +1,23 @@
 from __future__ import annotations
 
 import pytest
-from fakeredis import FakeAsyncRedis
+from fakeredis import FakeAsyncRedis, FakeServer
 
 from rest_framework_mcp.transport.redis_sse_replay_buffer import RedisSSEReplayBuffer
 from rest_framework_mcp.transport.types.sse_replay_buffer import SSEReplayBuffer
 
 
 def _client() -> FakeAsyncRedis:
-    """Fresh ``fakeredis`` client per test."""
-    return FakeAsyncRedis()
+    """Fresh ``fakeredis`` client per test.
+
+    The explicit ``FakeServer`` is load-bearing, not ceremony: before
+    fakeredis 2.21 a bare ``FakeAsyncRedis()`` shares one process-wide
+    server, so keys survive between tests and an assertion about a key
+    that should not exist reads whatever the previous test left. Our
+    declared floor is older than that, so this held on the ceiling and
+    not at the floor.
+    """
+    return FakeAsyncRedis(server=FakeServer())
 
 
 async def _drain(it) -> list[tuple[str, object]]:

@@ -3,14 +3,14 @@ from __future__ import annotations
 import asyncio
 
 import pytest
-from fakeredis import FakeAsyncRedis
+from fakeredis import FakeAsyncRedis, FakeServer
 
 from rest_framework_mcp.transport.redis_sse_broker import RedisSSEBroker
 
 
 def _client() -> FakeAsyncRedis:
     """Fresh ``fakeredis`` instance per test — no shared state across tests."""
-    return FakeAsyncRedis()
+    return FakeAsyncRedis(server=FakeServer())
 
 
 async def _wait_for_subscriber(client, channel: str, *, timeout: float = 0.5) -> None:
