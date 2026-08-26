@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import hashlib
+import re
 import secrets
 import time
 from dataclasses import dataclass
@@ -27,6 +28,10 @@ _KEY_PREFIX: str = "drf-mcp:session:"
 # implausible while keeping the key readable. Not a security boundary — the
 # namespace is a partition, not a secret.
 _NAMESPACE_DIGEST_CHARS: int = 12
+# The alphabet ``secrets.token_urlsafe`` draws from, with a ceiling well under
+# the 250-byte cache-key limit memcached enforces: the shape of every id
+# ``create`` hands out, and so the only shape worth a cache round-trip.
+_SESSION_ID_SHAPE = re.compile(r"\A[A-Za-z0-9_-]{1,128}\Z")
 
 
 class DjangoCacheSessionStore:
@@ -89,6 +94,18 @@ class DjangoCacheSessionStore:
     def _key(self, session_id: str) -> str:
         return f"{self._prefix}{session_id}"
 
+    def _readable(self, session_id: str) -> bool:
+        """Whether the id could be one this store minted.
+
+        The same reasoning as the digest above, from the other direction: an
+        ``Mcp-Session-Id`` arrives off the wire and goes straight into a cache
+        key, and the memcached backends raise on a key holding a space or a
+        control character, or one over 250 bytes. An id that cannot be one of
+        ours names no session either, so it is answered as the miss it is
+        rather than as an unhandled 500.
+        """
+        return bool(_SESSION_ID_SHAPE.match(session_id))
+
     def create(self, *, principal_id: str) -> str:
         token: str = secrets.token_urlsafe(24)
         cache.set(
@@ -105,7 +122,7 @@ class DjangoCacheSessionStore:
         keys on ``owner``. Reading through ``owner`` here would also
         refresh the idle window, making a liveness probe extend what it probes.
         """
-        return cache.get(self._key(session_id)) is not None
+        return self._readable(session_id) and cache.get(self._key(session_id)) is not None
 
     def owner(self, session_id: str) -> str | None:
         """Resolve the owning principal, refreshing the idle window on the way.
@@ -117,6 +134,8 @@ class DjangoCacheSessionStore:
         checked once, at ``initialize``, so an unbounded sliding window would
         keep a *revoked* principal alive for as long as it kept talking.
         """
+        if not self._readable(session_id):
+            return None
         entry = cache.get(self._key(session_id))
         if isinstance(entry, str):
             # Written by a version that stored the bare principal. Honoured and
@@ -140,6 +159,8 @@ class DjangoCacheSessionStore:
         return min(self._ttl_seconds, left)
 
     def destroy(self, session_id: str) -> None:
+        if not self._readable(session_id):
+            return
         cache.delete(self._key(session_id))
 
 

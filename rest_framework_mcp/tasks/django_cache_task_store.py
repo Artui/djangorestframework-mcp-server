@@ -9,6 +9,7 @@ from django.core.cache import cache
 from rest_framework_mcp.constants import TaskStatus
 from rest_framework_mcp.protocol.types.task import Task
 from rest_framework_mcp.tasks.types.task_record import TaskRecord
+from rest_framework_mcp.tasks.utils import is_wellformed_task_id
 
 _KEY_PREFIX: str = "drf-mcp:task:"
 _NAMESPACE_DIGEST_CHARS: int = 12
@@ -42,6 +43,12 @@ class DjangoCacheTaskStore:
     carried in the envelope, so ``save`` renews the cache timeout to the
     *remaining* lifetime rather than restarting the clock — otherwise a task
     reporting progress often would never expire.
+
+    **A malformed id is a miss, not an exception.** ``taskId`` comes off the
+    wire and lands in a cache key, and the memcached backends reject keys with
+    spaces or control characters and keys over 250 bytes — raising out of a
+    handler with no arm for it. An id that cannot be one this package minted
+    cannot name a record either, so it is answered as the absence it is.
     """
 
     def __init__(self, *, namespace: str | None = None) -> None:
@@ -58,6 +65,8 @@ class DjangoCacheTaskStore:
         self._write(record, expires_at)
 
     def get(self, task_id: str) -> TaskRecord | None:
+        if not is_wellformed_task_id(task_id):
+            return None
         raw: Any = cache.get(self._key(task_id))
         if not isinstance(raw, dict):
             return None
@@ -69,6 +78,8 @@ class DjangoCacheTaskStore:
         self._write(record, expires_at if isinstance(expires_at, (int, float)) else None)
 
     def delete(self, task_id: str) -> None:
+        if not is_wellformed_task_id(task_id):
+            return
         cache.delete(self._key(task_id))
 
     def _write(self, record: TaskRecord, expires_at: float | None) -> None:

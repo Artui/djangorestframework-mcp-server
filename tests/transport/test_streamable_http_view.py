@@ -116,7 +116,7 @@ def test_post_with_list_params_treated_as_no_params(
     assert "result" in body
 
 
-def test_initialize_with_unsupported_protocol_header_falls_back(client: Client) -> None:
+def test_initialize_with_unsupported_protocol_header_is_rejected(client: Client) -> None:
     server = build_server(
         config=build_mcp_config(allowed_origins=["*"], protocol_versions=["2025-11-25"])
     )
@@ -138,7 +138,7 @@ def test_initialize_with_unsupported_protocol_header_falls_back(client: Client) 
             content_type="application/json",
             HTTP_MCP_PROTOCOL_VERSION="9999-99-99",
         )
-    # Even with a bogus header on initialize, the server falls back to its
-    # configured default — initialize is the one method allowed without a
-    # known protocol-version header.
-    assert response.status_code == 200
+    # ``initialize`` may omit the header; it may not name a version this
+    # server does not speak. Falling back would answer a different protocol
+    # than the one asked for and say nothing about it.
+    assert response.status_code == 400

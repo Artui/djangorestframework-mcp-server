@@ -1,5 +1,10 @@
 from __future__ import annotations
 
+import warnings
+
+import pytest
+from django.core.cache.backends.base import CacheKeyWarning
+
 from rest_framework_mcp.transport.django_cache_session_store import DjangoCacheSessionStore
 from rest_framework_mcp.transport.in_memory_session_store import InMemorySessionStore
 
@@ -127,3 +132,40 @@ class TestSessionExpiryWindows:
         store = DjangoCacheSessionStore(namespace="upgrade")
         cache.set(store._key("legacy"), "alice", timeout=60)  # noqa: SLF001
         assert store.owner("legacy") == "alice"
+
+
+@pytest.mark.parametrize(
+    "session_id",
+    [
+        pytest.param("a b", id="space"),
+        pytest.param("a\x7fb", id="control-character"),
+        pytest.param("x" * 300, id="over-the-key-length-limit"),
+    ],
+)
+def test_a_malformed_session_id_is_a_miss_not_an_exception(session_id: str) -> None:
+    """The same defect as the task store's, from the header side.
+
+    ``Mcp-Session-Id`` arrives off the wire and goes straight into a cache key,
+    and the memcached backends raise on a key holding a space or a control
+    character, or one over 250 bytes. ``CacheKeyWarning`` is the rejection
+    Django's own validator reports, promoted to an error here to stand in for
+    such a backend. An id that cannot be one this store minted names no session
+    either, so it is the miss it looks like.
+    """
+    store = DjangoCacheSessionStore(namespace="ns")
+    with warnings.catch_warnings():
+        warnings.simplefilter("error", CacheKeyWarning)
+        assert store.owner(session_id) is None
+        assert store.exists(session_id) is False
+        store.destroy(session_id)
+
+
+def test_a_minted_session_id_still_round_trips() -> None:
+    store = DjangoCacheSessionStore(namespace="ns")
+    sid = store.create(principal_id="user:1")
+    with warnings.catch_warnings():
+        warnings.simplefilter("error", CacheKeyWarning)
+        assert store.exists(sid) is True
+        assert store.owner(sid) == "user:1"
+        store.destroy(sid)
+    assert store.owner(sid) is None

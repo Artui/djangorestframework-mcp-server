@@ -205,3 +205,34 @@ async def test_active_subscriptions_counts_this_workers_streams() -> None:
     assert broker.active_subscriptions == 1
     broker.unsubscribe(two)
     await client.aclose()
+
+
+async def test_two_servers_on_one_redis_do_not_share_a_topic_space() -> None:
+    """Topic names are built from caller-supplied values — a notification kind,
+    a resource URI — so two servers that register the same ``SelectorSpec``
+    under the same URI derive the *same* topic. On a shared default prefix a
+    subscriber authorized on the public server then receives the internal
+    server's change signals, learning the change cadence of a resource it was
+    never granted, past the ``resources/read`` check ``grant_subscription``
+    gates subscriptions on. The cache-backed stores fold the server name into
+    their key prefix for exactly this reason."""
+    shared = FakeServer()
+    public = RedisSubscriptionBroker(FakeAsyncRedis(server=shared), namespace="public")
+    internal = RedisSubscriptionBroker(FakeAsyncRedis(server=shared), namespace="internal")
+
+    queue = await public.subscribe(frozenset({"resource:invoices://1"}))
+    await _await_subscriber(
+        public._client,  # noqa: SLF001
+        public._channel("resource:invoices://1"),  # noqa: SLF001
+    )
+    # The other server publishes the identical topic name.
+    assert await internal.publish("resource:invoices://1", {"n": 1}) == 0
+    assert queue.empty()
+
+    # ...and the same server still reaches its own subscriber.
+    assert await public.publish("resource:invoices://1", {"n": 2}) == 1
+    assert await _drain(queue) == {"n": 2}
+
+    public.unsubscribe(queue)
+    await public._client.aclose()  # noqa: SLF001
+    await internal._client.aclose()  # noqa: SLF001

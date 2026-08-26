@@ -24,6 +24,10 @@ DEFAULTS: dict[str, Any] = {
     "TASK_POLL_INTERVAL_MS": 5_000,
     "SUBSCRIPTION_MAX_SECONDS": 3600,
     "MAX_CONCURRENT_SUBSCRIPTIONS": 100,
+    # The same two bounds for the legacy era's GET session stream, which parks
+    # an ASGI task on exactly the same terms.
+    "SSE_STREAM_MAX_SECONDS": 3600,
+    "MAX_CONCURRENT_SSE_STREAMS": 100,
     # Expiry is one of the three replay defences the spec asks for; the other
     # two — principal and originating request — are enforced unconditionally
     # rather than configured.

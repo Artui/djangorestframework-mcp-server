@@ -7,6 +7,151 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- **A tool call answered as a task now charges its rate limits.** It charged
+  them exactly zero times: `maybe_create_task` answers *before* dispatch, which
+  is where the inline charge lives, and the worker replays the call under
+  `enforce_rate_limits=False`. Each side's docstring said the other one paid.
+  A client that declared the tasks extension therefore opted itself out of every
+  quota a `task_policy=OPTIONAL`/`REQUIRED` tool configured — by declaring a
+  capability — and the enqueue loop was unbounded. The charge now happens in
+  `maybe_create_task`, after the permission check and before anything durable
+  exists, so an exhausted quota is refused with `-32005` and leaves no record
+  and no queued job behind. The worker still charges nothing, which is what
+  keeps it exactly one charge per client call.
+
+  **Upgrade note.** This is a behaviour change for any deployment already
+  running task-shaped tools with `rate_limits=`: those calls were free and are
+  now billed. If a quota was sized against the inline path only, it will now
+  also see the task-shaped traffic.
+
+- **`tasks/*` no longer runs on the event loop under ASGI.** `adispatch` fell
+  through to the sync handler table inline, so `tasks/get` — the only way to
+  collect a task result — read the task store from the loop. With the default
+  `DjangoCacheTaskStore` over a `DatabaseCache` that raises
+  `SynchronousOnlyOperation`, leaving a client able to create tasks it could
+  never collect. The fall-through now goes through the thread-sensitive
+  executor, which also covers the list handlers, where a consumer's
+  `DjangoPermRequired` runs a query.
+
+- **The WSGI transport can now publish `invalidates=` announcements.** The sync
+  viewset built its `MCPCallContext` without a subscription broker, so
+  `publish_invalidations` returned without touching one and every subscriber was
+  told nothing — indistinguishable from the resource never having changed —
+  while `MCPServer`'s own sync contexts (`call_tool`, the task worker) have
+  always carried the broker. `StreamableHttpViewSet` now takes
+  `subscription_broker=` and threads it through both of its context
+  constructions, so a tool mutating over WSGI reaches subscribers whose streams
+  are parked on an ASGI process: the split a cross-process broker exists for.
+  Publishing only — serving `subscriptions/listen` still needs the async
+  transport, which is what can hold a stream open.
+
+- **A DRF permission reading `request.auth` no longer resets the user to
+  `AnonymousUser`.** `DRFPermissionAdapter` set `.user` but left `_auth`
+  unresolved, so the first read of `request.auth` ran DRF's (empty)
+  authenticator chain, which ends in `_not_authenticated()` and overwrites both
+  the wrapper's user and the underlying `HttpRequest`'s. Permissions as ordinary
+  as django-oauth-toolkit's `TokenHasScope` therefore denied properly scoped
+  callers over MCP with no diagnostic. The adapter now assigns
+  `request.auth = token.raw` alongside the user.
+
+- **A task worker honours a deactivated account.** `build_worker_token` re-read
+  the user so a revocation would be caught at run time, but nothing downstream
+  consults `is_active` — `IsAuthenticated` is true of an inactive user — so the
+  re-read honoured deactivation in appearance only. An inactive user now
+  degrades to `AnonymousUser`, as a deleted one already did. The docstring also
+  now states plainly what is *not* re-derived: `scopes` and `audience` are
+  replayed as frozen at creation, because the backend handle that could
+  re-validate them is deliberately not persisted; `TASK_TTL_MS` bounds that
+  window.
+
+- **A present-but-unsupported `MCP-Protocol-Version` is rejected on sessionless
+  requests too.** `negotiate_protocol_version` documented that it always
+  rejects one and then silently downgraded it on `initialize` and
+  `server/discover`. A header naming a version this server does not support in
+  either era is now a `400` on every path. A header naming a *modern* version
+  still takes the legacy fallback: the server does support it, just not through
+  this handshake, and `initialize`'s own era check is where that is explained.
+
+- **A malformed `taskId` or `Mcp-Session-Id` is answered as a miss.** Both go
+  straight into a Django cache key, and the memcached backends reject keys
+  holding a space or a control character, or over 250 bytes — raising out of a
+  handler with no arm for it, so a client got an unhandled `500` where the
+  protocol says "unknown task" / "unknown session". Both cache-backed stores now
+  check the id against the shape they mint before touching the cache. Nothing is
+  leaked: an id that cannot be one they issued names nothing that exists.
+
+- **`build_mcp_config(task_ttl_ms=None)` now means "never expire".** Both task
+  scalars used the `x if x is not None else setting` shape, which reads an
+  explicit `None` as "not supplied" — so asking for tasks that never expire
+  silently got the setting's 24 hours instead, and the only sign was records
+  vanishing a day in. They now use the `UNSET` sentinel the other nullable
+  bounds use. `REST_FRAMEWORK_MCP['TASK_TTL_MS'] = None` was always honoured and
+  still is.
+
+  **Upgrade note.** `build_mcp_config(task_ttl_ms=None)` and
+  `build_mcp_config(task_poll_interval_ms=None)` previously fell back to the
+  setting. If you were passing `None` to mean "use the setting", drop the
+  argument.
+
+### Added
+
+- **The `GET` session stream is bounded, on both axes.** It had neither a
+  concurrency cap nor a lifetime: `stream_events` was a bare `while True` whose
+  only exit was the client leaving, keep-aliving itself past any proxy timeout,
+  while minting sessions stayed uncapped — so an authenticated caller could
+  loop `initialize` and open one parked ASGI task per session. Two new settings,
+  mirroring what `subscriptions/listen` already had:
+
+  - `MAX_CONCURRENT_SSE_STREAMS` (default `100`) — past it a `GET` is refused
+    with `503` / `-32603` rather than queued.
+  - `SSE_STREAM_MAX_SECONDS` (default `3600`) — the stream closes gracefully
+    with a `: stream closed` comment frame, and the client reconnects. It also
+    bounds how long a revoked principal keeps receiving a session's pushes,
+    authentication being checked once at open.
+
+  Both take `None` to disable. **Upgrade note:** these are new limits where
+  there were none. A deployment that deliberately holds more than 100 concurrent
+  streams per worker, or streams open for longer than an hour, should set them
+  explicitly. A client without an `sse_replay_buffer=` may miss notifications
+  published during a reconnect, which was already true of any disconnect.
+
+  Custom `SSEBroker` implementations must now expose an `active_streams`
+  property (the count of local subscribers) — both bundled brokers do.
+
+- **The SSE brokers bound their per-session queue.** `InMemorySSEBroker` and
+  `RedisSSEBroker` take `max_queued_events=` (default `1024`) and drop the
+  oldest payload past it, returning `False` from `publish` to report the drop
+  through the channel that already meant "nobody got this". A client that opened
+  the stream and stopped reading it previously accumulated every published
+  payload in memory with no drop policy and no backpressure. **Upgrade note:** a
+  notification can now be dropped for a stalled reader where it would previously
+  have been retained; delivery was always documented as best-effort.
+
+- **The SSE replay buffers stop accumulating dead sessions.** `forget()` runs
+  only on an explicit `DELETE`, while sessions ordinarily end by expiring or by
+  a client simply dropping the connection, so every session that ever recorded
+  an event kept its ring and its counter for the life of the process (or of the
+  Redis instance). `InMemorySSEReplayBuffer` takes `max_sessions=` (default
+  `1024`) and drops the least recently written; `RedisSSEReplayBuffer` takes
+  `ttl_seconds=` (default one day, matching the session store's idle window),
+  refreshed on every write. **Upgrade note:** a resume for a session evicted or
+  expired this way replays nothing rather than replaying stale events — the same
+  silent gap a client already accepts when its ring overflows.
+
+- **`RedisSubscriptionBroker` and `RedisSSEReplayBuffer` take a `namespace=`.**
+  Both used a fixed key prefix while the cache-backed stores fold the server's
+  `name` into theirs. Subscription topics are built from caller-supplied values
+  — a notification kind, a resource URI — so two servers in one project that
+  register the same resource URI derive the same topic, and a subscriber
+  authorized on one could receive the other's change signals, routing around the
+  `resources/read` check `grant_subscription` gates subscriptions on. Pass
+  `namespace=` (the server's name is the obvious value) whenever one Redis
+  serves more than one server. The default prefix is unchanged, so a
+  single-server deployment sees no key churn.
+
+
 ## [0.33.0] — 2026-08-25
 
 ### Added

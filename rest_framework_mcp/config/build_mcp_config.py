@@ -55,10 +55,12 @@ def build_mcp_config(
     require_list_pagination: bool | None = None,
     catalog_cache_ttl_ms: int | None = None,
     resource_cache_ttl_ms: int | None = None,
-    task_ttl_ms: int | None = None,
-    task_poll_interval_ms: int | None = None,
+    task_ttl_ms: int | None | UnsetType = UNSET,
+    task_poll_interval_ms: int | None | UnsetType = UNSET,
     subscription_max_seconds: float | None | UnsetType = UNSET,
     max_concurrent_subscriptions: int | None | UnsetType = UNSET,
+    sse_stream_max_seconds: float | None | UnsetType = UNSET,
+    max_concurrent_sse_streams: int | None | UnsetType = UNSET,
     input_request_ttl_seconds: int | None = None,
     max_input_rounds: int | None = None,
 ) -> MCPConfig:
@@ -173,14 +175,21 @@ def build_mcp_config(
         # ``None`` is meaningful for both — "no expiry" and "send no poll hint"
         # — so neither can use the ``x if x is not None else setting`` shape the
         # scalars above use, which would read an explicit ``None`` as "not
-        # supplied" and silently pick up the setting instead.
-        task_ttl_ms=_resolve_optional(task_ttl_ms, "TASK_TTL_MS"),
-        task_poll_interval_ms=_resolve_optional(task_poll_interval_ms, "TASK_POLL_INTERVAL_MS"),
+        # supplied" and silently pick up the setting instead. ``_bound`` carries
+        # that distinction on the sentinel, exactly as the outbound bounds do.
+        task_ttl_ms=_nullable_int(_bound(task_ttl_ms, "TASK_TTL_MS")),
+        task_poll_interval_ms=_nullable_int(_bound(task_poll_interval_ms, "TASK_POLL_INTERVAL_MS")),
         subscription_max_seconds=_nullable_float(
             _bound(subscription_max_seconds, "SUBSCRIPTION_MAX_SECONDS")
         ),
         max_concurrent_subscriptions=_nullable_int(
             _bound(max_concurrent_subscriptions, "MAX_CONCURRENT_SUBSCRIPTIONS")
+        ),
+        sse_stream_max_seconds=_nullable_float(
+            _bound(sse_stream_max_seconds, "SSE_STREAM_MAX_SECONDS")
+        ),
+        max_concurrent_sse_streams=_nullable_int(
+            _bound(max_concurrent_sse_streams, "MAX_CONCURRENT_SSE_STREAMS")
         ),
         input_request_ttl_seconds=int(
             input_request_ttl_seconds
@@ -191,19 +200,6 @@ def build_mcp_config(
             max_input_rounds if max_input_rounds is not None else get_setting("MAX_INPUT_ROUNDS")
         ),
     )
-
-
-def _resolve_optional(value: int | None, setting: str) -> int | None:
-    """Resolve a scalar whose ``None`` means something rather than "unset".
-
-    The kwarg is taken when given; otherwise the setting is read, and a ``None``
-    there is passed through as the configured answer. An explicit ``0`` is kept
-    as ``0``, not treated as absent.
-    """
-    if value is not None:
-        return int(value)
-    configured: Any = get_setting(setting)
-    return None if configured is None else int(configured)
 
 
 __all__ = ["build_mcp_config"]

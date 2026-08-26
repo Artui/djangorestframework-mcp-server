@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 from typing import Any
 
 import pytest
@@ -13,6 +14,7 @@ from rest_framework_services.types.service_spec import ServiceSpec
 
 from rest_framework_mcp import MCPServer
 from rest_framework_mcp.auth.backends.allow_any_backend import AllowAnyBackend
+from rest_framework_mcp.config.build_mcp_config import build_mcp_config
 from rest_framework_mcp.handlers.handle_tools_call import handle_tools_call
 from rest_framework_mcp.handlers.handle_tools_call_async import handle_tools_call_async
 from rest_framework_mcp.subscriptions.in_memory_subscription_broker import (
@@ -20,6 +22,7 @@ from rest_framework_mcp.subscriptions.in_memory_subscription_broker import (
 )
 from rest_framework_mcp.subscriptions.render_invalidations import render_invalidations
 from rest_framework_mcp.subscriptions.utils import topic_for_resource
+from rest_framework_mcp.transport.in_memory_session_store import InMemorySessionStore
 from tests.subscriptions.test_subscription_core import _context
 
 # ----- rendering -----
@@ -304,3 +307,58 @@ def test_a_chain_tool_accepts_invalidates() -> None:
         invalidates=("a://",),
     )
     assert binding.invalidates == ("a://",)
+
+
+@pytest.mark.django_db(transaction=True)
+def test_the_wsgi_transport_hands_the_handler_a_broker() -> None:
+    """The announcement is dead on WSGI unless the *transport* passes the broker.
+
+    Every sync ``MCPCallContext`` the server builds itself — ``call_tool``, the
+    task worker — carries ``subscriptions``, so the sync handler chain is
+    expected to publish. The sync viewset built its context without one, and
+    ``publish_invalidations(None, uris)`` returns without touching the broker:
+    a tool declaring ``invalidates=`` committed its write and told nobody, in a
+    way indistinguishable from the resource never having changed. The natural
+    deployment is exactly this split — POSTs served by WSGI while an ASGI
+    process holds the subscribers' streams — which is what a cross-process
+    broker is for.
+    """
+    from asgiref.sync import async_to_sync
+    from django.test import RequestFactory
+
+    from rest_framework_mcp.transport.streamable_http_viewset import (
+        STREAMABLE_HTTP_ACTION_MAP,
+        StreamableHttpViewSet,
+    )
+
+    broker = InMemorySubscriptionBroker()
+    server = _server(broker)
+    queue = async_to_sync(broker.subscribe)(frozenset({topic_for_resource("invoices://")}))
+
+    view = StreamableHttpViewSet.as_view(
+        STREAMABLE_HTTP_ACTION_MAP,
+        tools=server._tools,
+        resources=server._resources,
+        prompts=server._prompts,
+        auth_backend=AllowAnyBackend(),
+        session_store=InMemorySessionStore(),
+        subscription_broker=broker,
+        config=build_mcp_config(allowed_origins=["*"], sessions_enabled=False),
+    )
+    request = RequestFactory().post(
+        "/mcp/",
+        data=json.dumps(
+            {
+                "jsonrpc": "2.0",
+                "id": 1,
+                "method": "tools/call",
+                "params": {"name": "invoices.create", "arguments": {}},
+            }
+        ),
+        content_type="application/json",
+        headers={"Mcp-Protocol-Version": "2025-11-25"},
+    )
+    response = view(request)
+    assert response.status_code == 200
+    assert queue.qsize() == 1
+    assert queue.get_nowait()["params"]["uri"] == "invoices://"

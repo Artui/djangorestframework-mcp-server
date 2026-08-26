@@ -383,9 +383,11 @@ async def test_async_list_params_treated_as_no_params(async_urlconf) -> None:
     assert "result" in body
 
 
-async def test_async_initialize_with_unsupported_version_falls_back(
+async def test_async_initialize_with_unsupported_version_is_rejected(
     async_urlconf, settings
 ) -> None:
+    """Parity with the sync transport: a header naming a version this server
+    does not speak is a mismatch on every method, ``initialize`` included."""
     settings.REST_FRAMEWORK_MCP = {
         "ALLOWED_ORIGINS": ["*"],
         "PROTOCOL_VERSIONS": ["2025-11-25"],
@@ -409,7 +411,7 @@ async def test_async_initialize_with_unsupported_version_falls_back(
         content_type="application/json",
         headers={"Mcp-Protocol-Version": "9999-99-99"},
     )
-    assert response.status_code == 200
+    assert response.status_code == 400
 
 
 async def test_async_dispatch_error_envelope(async_urlconf) -> None:

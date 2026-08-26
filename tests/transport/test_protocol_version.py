@@ -44,9 +44,21 @@ def test_negotiate_initialize_missing_header_uses_default() -> None:
     assert negotiate_protocol_version(None, is_sessionless=True, config=config) == "2025-11-25"
 
 
-def test_negotiate_initialize_unsupported_header_uses_default() -> None:
+def test_negotiate_initialize_unsupported_header_is_rejected() -> None:
+    """A sessionless method is latitude about an *absent* header, not licence to
+    downgrade a header that named a version this server does not speak. The
+    client asked for something specific and would otherwise be answered with
+    something else, with nothing saying so."""
     config = _config(versions=["2025-11-25"])
-    assert negotiate_protocol_version("9999-99-99", is_sessionless=True, config=config) == (
+    assert negotiate_protocol_version("9999-99-99", is_sessionless=True, config=config) is None
+
+
+def test_negotiate_initialize_modern_header_still_uses_the_legacy_default() -> None:
+    """Not the same condition: the server *does* support this version, just not
+    through the handshake, so the era check inside ``initialize`` — which can
+    explain itself — is what should answer it."""
+    config = _config(versions=["2026-07-28", "2025-11-25"])
+    assert negotiate_protocol_version("2026-07-28", is_sessionless=True, config=config) == (
         "2025-11-25"
     )
 

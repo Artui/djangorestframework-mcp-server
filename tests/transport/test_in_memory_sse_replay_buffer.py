@@ -101,3 +101,43 @@ def test_invalid_max_events_rejected() -> None:
 
 def test_satisfies_sse_replay_buffer_protocol() -> None:
     assert isinstance(InMemorySSEReplayBuffer(), SSEReplayBuffer)
+
+
+async def test_sessions_that_never_said_goodbye_are_eventually_forgotten() -> None:
+    """``forget`` runs only on an explicit ``DELETE``.
+
+    Sessions ordinarily end by expiring in the session store, which notifies
+    nothing, or by a client dropping the connection — so without a bound across
+    sessions every session that ever recorded an event keeps its ring and its
+    counter for the life of the process, and an authenticated caller looping
+    ``initialize`` plus one notify grows resident memory indefinitely.
+    """
+    buf = InMemorySSEReplayBuffer(max_sessions=2)
+    first = await buf.record("s1", {"n": 1})
+    await buf.record("s2", {"n": 2})
+    await buf.record("s3", {"n": 3})
+    # ``s1`` is the least recently written, so it is what goes.
+    assert await _drain(buf.replay("s1", first)) == []
+    assert await _drain(buf.replay("s3", "0" * 16)) == [("0" * 15 + "1", {"n": 3})]
+
+
+async def test_the_session_evicted_is_the_least_recently_written() -> None:
+    """Writing is what marks a session live: a long-lived stream that is still
+    receiving events must not be dropped for a newer one that arrived once."""
+    buf = InMemorySSEReplayBuffer(max_sessions=2)
+    await buf.record("s1", {"n": 1})
+    await buf.record("s2", {"n": 2})
+    second = await buf.record("s1", {"n": 3})
+    await buf.record("s3", {"n": 4})
+    assert await _drain(buf.replay("s2", "0" * 16)) == []
+    # ``s1``'s own numbering is untouched by the eviction of another session.
+    assert second == "0" * 15 + "2"
+    assert await _drain(buf.replay("s1", "0" * 16)) == [
+        ("0" * 15 + "1", {"n": 1}),
+        ("0" * 15 + "2", {"n": 3}),
+    ]
+
+
+async def test_an_unusable_session_bound_is_refused_at_construction() -> None:
+    with pytest.raises(ValueError, match="max_sessions must be positive"):
+        InMemorySSEReplayBuffer(max_sessions=0)

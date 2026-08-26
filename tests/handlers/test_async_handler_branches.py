@@ -1,7 +1,8 @@
 from __future__ import annotations
 
+import asyncio
 from collections.abc import Mapping
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from typing import Any
 
 from django.http import HttpRequest
@@ -12,6 +13,8 @@ from rest_framework_services.types.selector_spec import SelectorSpec
 from rest_framework_services.types.service_spec import ServiceSpec
 
 from rest_framework_mcp.auth.types.token_info import TokenInfo
+from rest_framework_mcp.constants import TASKS_EXTENSION_ID
+from rest_framework_mcp.handlers.async_dispatch import adispatch
 from rest_framework_mcp.handlers.handle_resources_read_async import handle_resources_read_async
 from rest_framework_mcp.handlers.handle_tools_call_async import handle_tools_call_async
 from rest_framework_mcp.handlers.types.context import MCPCallContext
@@ -412,3 +415,56 @@ async def test_async_output_serializer_context_flows_into_render() -> None:
     out = await handle_tools_call_async({"name": "t", "arguments": {}}, _ctx(tools))
     assert isinstance(out, dict)
     assert out["structuredContent"] == {"tag": "async"}
+
+
+# ---------- the sync fall-through ----------
+
+
+class _LoopSniffingTaskStore:
+    """A task store that records whether it was read from the event loop."""
+
+    def __init__(self) -> None:
+        self.on_loop: bool | None = None
+
+    def _note(self) -> None:
+        try:
+            asyncio.get_running_loop()
+        except RuntimeError:
+            self.on_loop = False
+        else:
+            self.on_loop = True
+
+    def get(self, task_id: str) -> Any:  # noqa: ARG002
+        self._note()
+        return None
+
+    def create(self, record: Any) -> None: ...  # pragma: no cover - unused here
+
+    def save(self, record: Any) -> None: ...  # pragma: no cover - unused here
+
+    def delete(self, task_id: str) -> None: ...  # pragma: no cover - unused here
+
+
+async def test_the_sync_handler_table_does_not_run_on_the_event_loop() -> None:
+    """``tasks/get`` reads the task store, and the default store is the Django
+    cache — which, configured as ``DatabaseCache``, reaches ``django.db`` and
+    raises ``SynchronousOnlyOperation`` off the loop. The client can then create
+    tasks it can never collect, ``tasks/get`` being the only way to collect one.
+    The list handlers have the same shape: they evaluate binding permissions,
+    where a consumer's ``DjangoPermRequired`` runs a query.
+    """
+    store = _LoopSniffingTaskStore()
+    context = replace(
+        _ctx(ToolRegistry()),
+        tasks=store,
+        client_capabilities={"extensions": {TASKS_EXTENSION_ID: {}}},
+    )
+    result = await adispatch("tasks/get", {"taskId": "nope"}, context)
+    # The handler ran and answered; what matters is the thread it ran on.
+    assert isinstance(result, JsonRpcError)
+    assert store.on_loop is False
+
+
+async def test_the_fall_through_still_returns_the_handler_result() -> None:
+    """The thread hop must be invisible to the wire: ``ping`` still answers."""
+    assert await adispatch("ping", None, _ctx(ToolRegistry())) == {}

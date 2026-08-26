@@ -46,6 +46,7 @@ async def stream_events(
     keepalive_interval: float = _KEEPALIVE_INTERVAL_SECONDS,
     replay_buffer: SSEReplayBuffer | None = None,
     last_event_id: str | None = None,
+    max_seconds: float | None = None,
 ) -> AsyncIterator[bytes]:
     """Async generator that yields SSE bytes for one session's stream.
 
@@ -60,8 +61,18 @@ async def stream_events(
     live frames arrive wrapped as ``{"_mcp_event_id", "_mcp_payload"}`` (see
     [`MCPServer.notify`][rest_framework_mcp.server.mcp_server.MCPServer.notify]),
     unpacked here so the wire stays SSE-shaped. Without one, no ``id:`` lines are
-    emitted and ``last_event_id`` is ignored."""
+    emitted and ``last_event_id`` is ignored.
+
+    ``max_seconds`` closes the stream from this end once it elapses, with a
+    comment frame rather than an abrupt cut so an operator reading the wire can
+    tell a lifetime cap from a crash. Checked at the top of each wait, so the
+    close lands within one keep-alive period of the deadline. The client
+    reconnects on its own — that is what SSE clients do — and with a replay
+    buffer the reconnect is gapless."""
     queue: asyncio.Queue[Any] = broker.subscribe(session_id)
+    deadline: float | None = (
+        None if max_seconds is None else asyncio.get_running_loop().time() + max_seconds
+    )
     try:
         yield b": stream open\n\n"
         if replay_buffer is not None and last_event_id is not None:
@@ -70,6 +81,13 @@ async def stream_events(
             ):
                 yield format_event(payload, event_id=event_id)
         while True:
+            if deadline is not None and asyncio.get_running_loop().time() >= deadline:
+                # The authentication check happened once, when the stream
+                # opened. Ending it forces a reconnect, which re-runs that
+                # check, so a revoked principal stops receiving a session's
+                # pushes within one window rather than indefinitely.
+                yield b": stream closed\n\n"
+                return
             try:
                 payload: Any = await asyncio.wait_for(queue.get(), timeout=keepalive_interval)
             except asyncio.TimeoutError:
@@ -95,6 +113,7 @@ def build_sse_response(
     keepalive_interval: float = _KEEPALIVE_INTERVAL_SECONDS,
     replay_buffer: SSEReplayBuffer | None = None,
     last_event_id: str | None = None,
+    max_seconds: float | None = None,
 ) -> StreamingHttpResponse:
     """Build the spec-compliant ``StreamingHttpResponse`` for an SSE GET.
 
@@ -108,6 +127,7 @@ def build_sse_response(
             keepalive_interval=keepalive_interval,
             replay_buffer=replay_buffer,
             last_event_id=last_event_id,
+            max_seconds=max_seconds,
         ),
         content_type="text/event-stream",
     )
