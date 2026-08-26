@@ -7,6 +7,73 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Security
+
+- **Object-level permissions now run on every dispatch path.** A
+  `SelectorSpec` / `ServiceSpec` whose ownership test lives in
+  `has_object_permission` was enforced for its class-level half only over MCP,
+  so a spec that held on every other transport handed one tenant's row to
+  another here. `resources/read` now guards the value its selector resolved,
+  and a chain step guards the target it resolved, both through
+  djangorestframework-services' `enforce_permissions` — the guard the tool
+  paths already pass to `dispatch_spec`. A denial answers `-32006` like any
+  other, and inside an atomic chain it rolls the transaction back. A `LIST` /
+  collection result still gets the class-level check only: object permissions
+  are a per-row concept and a set is authorized per-set.
+
+- **A chain step's `preconditions` run.** They fired only from inside
+  `dispatch_spec`, which a chain does not use, so a state rule declared once on
+  a spec silently did not hold inside a chain tool while holding everywhere
+  else. Ordering matches the rest of the package: permissions on the resolved
+  target, then preconditions, then the service or selector.
+
+- **A client argument can no longer stand in for the authenticated identity.**
+  `prompts/get` spread the caller's arguments *over* the `request` / `user`
+  seeds, so `{"topic": "x", "user": 7}` against the documented
+  `def render(user, topic)` shape rendered the prompt scoped to a principal the
+  caller named. The same held for a URI-template variable on `resources/read`
+  and for a chain step whose `inputs` callable forwards `ctx.args`. On all
+  three the transport's seeds are now applied last. `completion/complete` used
+  to re-seed four of the seven reserved names after the client's siblings; it
+  now drops every reserved name from the spread instead of tracking a
+  hand-picked subset.
+
+- **Resources and prompts are held to `REQUIRE_TOOL_PERMISSIONS`.** The
+  unguarded-binding check covered tool registrations only, so the same selector
+  registered as a resource started clean and answered any principal the
+  transport authenticated, while registered as a tool it raised at startup.
+  `register_resource` and `register_prompt` now report through the same check
+  and the same setting. Interactive views (`register_ui_resource`) stay exempt,
+  deliberately: a view is a template rendered with no context, a literal
+  document, or a zero-argument callable, so it carries no tenant data.
+
+  **Upgrade note.** A project registering resources or prompts without
+  permissions will now fail at startup. Declare `permission_classes` on the
+  spec (or pass `permissions=[...]`), or set
+  `REST_FRAMEWORK_MCP["REQUIRE_TOOL_PERMISSIONS"] = False` to downgrade it to
+  an `UnguardedToolWarning` while migrating.
+
+- **A URI-template variable is validated at registration.** It is a
+  caller-controlled name routed into the selector's kwarg pool, and unlike a
+  tool's `url_kwargs` / `query_params` it went through no check at all — so
+  `notes://{user}/{pk}` compiled to a regex group named `user`. Template
+  variables now go through the same shared `validate_channel_names` as every
+  other name channel, which also catches a variable declared twice. The
+  pagination names are deliberately not reserved here: a resource has no
+  post-fetch pipeline, so `docs://{page}` stays a legitimate locator.
+
+### Fixed
+
+- **A `SelectorSpec.kwargs` provider's `UNSET` decline is honoured on
+  `resources/read`.** Returning `UNSET` means "I am not setting this key", and
+  the sentinel was being written into the pool instead — inverting a decline
+  into an override, and handing the ORM a sentinel for a well-formed request.
+
+- **`MAX_RESULT_BYTES` applies to `prompts/get`.** It was enforced on
+  `tools/call` and `resources/read` and silently skipped for the one method
+  whose body is whatever a consumer's `render` callable returned, so an
+  operator who set the ceiling believed every result surface was bounded.
+
 ## [0.33.0] — 2026-08-25
 
 ### Added

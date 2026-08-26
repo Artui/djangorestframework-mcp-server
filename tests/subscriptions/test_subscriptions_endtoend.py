@@ -219,7 +219,12 @@ async def test_the_brokerless_stream_ends_too() -> None:
 async def test_a_capped_server_refuses_a_further_subscription() -> None:
     """Each open subscription parks a worker, so past the cap a clear error
     beats a server that stops answering anything."""
-    with override_settings(REST_FRAMEWORK_MCP={"MAX_CONCURRENT_SUBSCRIPTIONS": 0}):
+    # ``REQUIRE_TOOL_PERMISSIONS`` is carried through because replacing the dict
+    # drops the suite-wide opt-out, and the resource registered below is a
+    # throwaway; the subject here is the subscription cap.
+    with override_settings(
+        REST_FRAMEWORK_MCP={"MAX_CONCURRENT_SUBSCRIPTIONS": 0, "REQUIRE_TOOL_PERMISSIONS": False}
+    ):
         import types as _t
 
         from rest_framework_mcp.subscriptions.in_memory_subscription_broker import (

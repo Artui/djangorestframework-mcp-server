@@ -4,10 +4,19 @@ Flow (sync; the async sibling bridges the whole thing through ``acall``):
 
     auth + rate limit
       → validate(arguments, resolved_input_serializer)   → ctx.args
-      → for each step:  inputs(ctx) → pool → run service/selector
+      → for each step:  inputs(ctx) → pool → the step spec's own
+                        permission_classes + preconditions
+                        → run service/selector
                         → store result under step.alias
         (the loop runs inside transaction.atomic() when binding.atomic)
       → render the output step (or every step, when output_all)
+
+A step's spec is dispatched directly rather than through ``dispatch_spec``:
+a chain owns the transaction, the argument binding and the pool, and hands each
+callable the mapping ``inputs`` built. The two things ``dispatch_spec`` would
+otherwise contribute are therefore run here explicitly — ``enforce_permissions``
+against the step's resolved target, and the spec's ``preconditions`` — so a
+rule written once on a spec holds on this path as well.
 
 A step raising ``ServiceValidationError`` / ``ServiceError`` is mapped to an
 error carrying ``failedStep``; under an atomic chain the mapped error is
@@ -26,10 +35,12 @@ from typing import Any
 
 from django.db import transaction
 from rest_framework import serializers as drf_serializers
+from rest_framework.exceptions import PermissionDenied
 from rest_framework_services import (
     OfflineServiceView,
     base_serializer_context,
     build_offline_context,
+    enforce_permissions,
     render_for_agent,
     resolve_callable_kwargs,
     run_selector,
@@ -37,6 +48,7 @@ from rest_framework_services import (
 )
 from rest_framework_services.exceptions.service_error import ServiceError
 from rest_framework_services.exceptions.service_validation_error import ServiceValidationError
+from rest_framework_services.types.offline_context import OfflineContext
 from rest_framework_services.types.selector_kind import SelectorKind
 from rest_framework_services.types.selector_spec import SelectorSpec
 from rest_framework_services.types.service_spec import ServiceSpec
@@ -137,7 +149,15 @@ def dispatch_chain_tool(
         user=context.token.user,
     )
 
-    error = _run_chain(binding, ctx, otel_span, context.config)
+    try:
+        error = _run_chain(binding, ctx, otel_span, context.config)
+    except PermissionDenied:
+        # A step's object-level permission said no. The same envelope a service
+        # tool answers with, and mapped here rather than upstream because
+        # ``handle_tools_call`` wraps only its own dispatch arm — an escape from
+        # this one would surface as an unhandled 500. Under ``binding.atomic``
+        # the exception already unwound the transaction on its way out.
+        return JsonRpcError(JsonRpcErrorCode.FORBIDDEN, "Insufficient permission")
     if error is not None:
         return error
 
@@ -213,19 +233,40 @@ def _run_step(
 ) -> dict[str, Any] | None:
     """Run one step and store its result under ``step.alias``.
 
-    The pool is ``{request, user}`` plus the step's ``inputs(ctx)`` mapping
-    (or ``{"data": ctx.args}`` when ``inputs`` is ``None``);
+    The pool is the step's ``inputs(ctx)`` mapping (or ``{"data": ctx.args}``
+    when ``inputs`` is ``None``) with ``request`` / ``user`` seeded **over** it;
     ``resolve_callable_kwargs`` then filters it to the callable's signature.
+
+    Seeded last, deliberately. Forwarding the tool's own ``ctx.args`` is the
+    natural way to write an ``inputs`` callable, and with the seeds merged
+    first a client argument called ``user`` outranked the caller's identity and
+    scoped the step to whoever the caller named. The other reserved names are
+    left to ``inputs``, which owns ``data`` / ``instance`` by contract — that is
+    how one step feeds the next.
+
+    The step's own ``permission_classes`` and ``preconditions`` fire here, in
+    drf-services' order (permissions on the resolved target, then
+    preconditions, then the callable). A chain dispatches each step's spec
+    directly rather than through ``dispatch_spec``, which is where those two
+    run on every other path.
     """
     provided: Mapping[str, Any] = (
         step.inputs(ctx) if step.inputs is not None else {"data": ctx.args}
     )
-    pool: dict[str, Any] = {"request": ctx.request, "user": ctx.user, **provided}
+    pool: dict[str, Any] = {**provided, "request": ctx.request, "user": ctx.user}
+    offline = OfflineContext(
+        user=ctx.user,
+        request=ctx.request,
+        # The step's alias is its action name, matching what ``_render_step``
+        # hands the renderer, so a permission reading ``view.action`` sees the
+        # step it is judging.
+        view=OfflineServiceView(request=ctx.request, action=step.alias),
+    )
     try:
         if isinstance(step.spec, ServiceSpec):
-            result: Any = _run_service_step(step.spec, pool)
+            result: Any = _run_service_step(step.spec, pool, offline)
         else:
-            result = _run_selector_step(step.spec, pool)
+            result = _run_selector_step(step.spec, pool, offline)
     except ServiceValidationError as exc:
         # Tool-level failure, so an ``isError`` result carrying ``failedStep``;
         # an atomic chain still rolls back via ``_ChainAbort``.
@@ -251,7 +292,15 @@ def _run_step(
     return None
 
 
-def _run_service_step(spec: ServiceSpec[Any, Any, Any], pool: dict[str, Any]) -> Any:
+def _run_service_step(
+    spec: ServiceSpec[Any, Any, Any], pool: dict[str, Any], offline: OfflineContext
+) -> Any:
+    # Target first, as ``dispatch_spec`` does before a mutation: whatever
+    # ``inputs`` put in the pool as ``instance`` is the row an object-level
+    # permission judges. A step with no target still runs the class-level pass,
+    # which is a no-op unless the spec declares ``permission_classes``.
+    enforce_permissions(spec, offline, instance=pool.get("instance"))
+    _run_preconditions(spec, pool)
     # atomic=False: the chain owns the transaction (binding.atomic). The
     # service's own spec.atomic is subordinate under a chain.
     result: Any = run_service(
@@ -266,10 +315,35 @@ def _run_service_step(spec: ServiceSpec[Any, Any, Any], pool: dict[str, Any]) ->
     return result
 
 
-def _run_selector_step(spec: SelectorSpec[Any, Any], pool: dict[str, Any]) -> Any:
+def _run_selector_step(
+    spec: SelectorSpec[Any, Any], pool: dict[str, Any], offline: OfflineContext
+) -> Any:
     selector = spec.selector
     assert selector is not None  # guaranteed by ChainToolBinding validation  # noqa: S101
-    return run_selector(selector, resolve_callable_kwargs(selector, pool))
+    result: Any = run_selector(selector, resolve_callable_kwargs(selector, pool))
+    # After the fetch, because an object-level rule needs the row — the same
+    # point ``dispatch_spec`` guards a read at. A ``LIST`` step resolves a set,
+    # which the guard authorizes per-set, never per-row.
+    enforce_permissions(spec, offline, instance=result)
+    pool["collection" if spec.kind is SelectorKind.LIST else "instance"] = result
+    _run_preconditions(spec, pool)
+    return result
+
+
+def _run_preconditions(
+    spec: ServiceSpec[Any, Any, Any] | SelectorSpec[Any, Any], pool: dict[str, Any]
+) -> None:
+    """Run a spec's ``preconditions`` through the step pool, in order.
+
+    drf-services fires these from inside ``dispatch_spec`` only, and its helper
+    is not part of that package's public surface, so the loop is spelled out
+    here against the same ``resolve_callable_kwargs`` this module already
+    dispatches every step through. Raise-to-abort, exactly as upstream: a
+    predicate's return value is ignored, so one written ``-> bool`` returning
+    ``False`` is a no-op.
+    """
+    for precondition in spec.preconditions or ():
+        precondition(**resolve_callable_kwargs(precondition, pool))
 
 
 def _render_chain_output(binding: ChainToolBinding, ctx: ChainContext, drf_request: Any) -> Any:

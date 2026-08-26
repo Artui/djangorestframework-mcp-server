@@ -24,6 +24,8 @@ from rest_framework_mcp.config.build_mcp_config import build_mcp_config
 from rest_framework_mcp.config.types.mcp_config import MCPConfig
 from rest_framework_mcp.constants import JsonRpcErrorCode
 from rest_framework_mcp.handlers.async_dispatch import adispatch
+from rest_framework_mcp.handlers.handle_prompts_get import handle_prompts_get
+from rest_framework_mcp.handlers.handle_prompts_get_async import handle_prompts_get_async
 from rest_framework_mcp.handlers.handle_resources_read import handle_resources_read
 from rest_framework_mcp.handlers.handle_resources_read_async import handle_resources_read_async
 from rest_framework_mcp.handlers.handle_tools_call import handle_tools_call
@@ -287,6 +289,48 @@ async def test_async_resource_read_enforces_the_same_ceiling() -> None:
     _register_big_resource(server)
     out = await handle_resources_read_async(
         {"uri": "big://all"}, _ctx(server, build_mcp_config(max_result_bytes=200))
+    )
+    assert isinstance(out, JsonRpcError)
+    assert out.code == JsonRpcErrorCode.SERVER_ERROR
+
+
+# ---------- result-size ceiling: prompts/get ----------
+
+
+def _register_big_prompt(server: MCPServer) -> None:
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore")
+        server.register_prompt(name="big", render=lambda **_: "x" * 5_000)
+
+
+def test_oversized_prompt_render_is_a_protocol_error() -> None:
+    """A rendered prompt is a result surface like any other. It used to be the
+    one method the ceiling skipped, so an operator who set MAX_RESULT_BYTES
+    believed every surface was bounded while this one was not."""
+    server = _server()
+    _register_big_prompt(server)
+    out = handle_prompts_get({"name": "big"}, _ctx(server, build_mcp_config(max_result_bytes=200)))
+    assert isinstance(out, JsonRpcError)
+    assert out.code == JsonRpcErrorCode.SERVER_ERROR
+    assert "byte ceiling" in out.message
+    assert "Prompt 'big'" in out.message
+
+
+def test_prompt_render_under_the_ceiling_is_returned() -> None:
+    server = _server()
+    _register_big_prompt(server)
+    out = handle_prompts_get(
+        {"name": "big"}, _ctx(server, build_mcp_config(max_result_bytes=1_000_000))
+    )
+    assert isinstance(out, dict)
+    assert out["messages"][0]["content"]["text"].startswith("xxx")
+
+
+async def test_async_prompt_render_enforces_the_same_ceiling() -> None:
+    server = _server()
+    _register_big_prompt(server)
+    out = await handle_prompts_get_async(
+        {"name": "big"}, _ctx(server, build_mcp_config(max_result_bytes=200))
     )
     assert isinstance(out, JsonRpcError)
     assert out.code == JsonRpcErrorCode.SERVER_ERROR
