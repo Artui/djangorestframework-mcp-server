@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import hashlib
 import importlib
 import json
 from collections.abc import AsyncIterator
@@ -18,6 +19,10 @@ AsyncRedis: Any = _resolve_async_redis()
 
 
 _DEFAULT_KEY_PREFIX: str = "drf-mcp:sse-replay"
+_NAMESPACE_DIGEST_CHARS: int = 12
+# A stream is only worth keeping while its session could still reconnect to it,
+# and the session store's own idle window is that horizon.
+_DEFAULT_TTL_SECONDS: int = 60 * 60 * 24
 
 
 class RedisSSEReplayBuffer:
@@ -42,8 +47,21 @@ class RedisSSEReplayBuffer:
         )
 
         client = Redis.from_url("redis://localhost:6379/0")
-        buffer = RedisSSEReplayBuffer(client, max_events=2048)
+        buffer = RedisSSEReplayBuffer(client, max_events=2048, namespace="my-app")
         server = MCPServer(name="my-app", sse_broker=..., sse_replay_buffer=buffer)
+
+    **Every stream carries a TTL.** ``forget`` runs only on an explicit
+    ``DELETE``, while sessions ordinarily end by expiring or by a client simply
+    dropping the connection, so without an expiry each such session leaves its
+    stream in Redis for good. ``ttl_seconds`` is refreshed on every write and
+    defaults to a day, matching the session store's idle window: past it the
+    session the stream belongs to could not reconnect anyway.
+
+    Pass ``namespace`` when one Redis serves more than one server, as the
+    cache-backed stores do with the server's ``name``. Keys here are addressed
+    by session id, so a collision needs an id minted by the other server, but
+    the separation keeps a shared Redis inspectable and matches the
+    subscription broker, where topics genuinely do collide.
 
     The Redis client is the consumer's responsibility — close it during
     ASGI lifespan shutdown.
@@ -55,6 +73,8 @@ class RedisSSEReplayBuffer:
         *,
         max_events: int = 1024,
         key_prefix: str = _DEFAULT_KEY_PREFIX,
+        namespace: str | None = None,
+        ttl_seconds: int | None = _DEFAULT_TTL_SECONDS,
     ) -> None:
         if AsyncRedis is None:  # pragma: no cover - exercised by the no-extras smoke job
             raise ImportError(
@@ -63,9 +83,14 @@ class RedisSSEReplayBuffer:
             )
         if max_events <= 0:
             raise ValueError("max_events must be positive")
+        if ttl_seconds is not None and ttl_seconds <= 0:
+            raise ValueError("ttl_seconds must be positive, or None to keep streams forever")
         self._client: Any = client
         self._max_events: int = max_events
-        self._prefix: str = key_prefix
+        self._prefix: str = (
+            key_prefix if namespace is None else f"{key_prefix}:{_digest(namespace)}"
+        )
+        self._ttl_seconds: int | None = ttl_seconds
 
     def _key(self, session_id: str) -> str:
         return f"{self._prefix}:{session_id}"
@@ -80,12 +105,17 @@ class RedisSSEReplayBuffer:
         body: str = json.dumps(payload)
         # Decoded from bytes so the ID survives JSON round-trips and SSE
         # framing.
+        key: str = self._key(session_id)
         raw_id: Any = await self._client.xadd(
-            self._key(session_id),
+            key,
             {"data": body},
             maxlen=self._max_events,
             approximate=True,
         )
+        if self._ttl_seconds is not None:
+            # Renewed per write, so an active stream never expires under a
+            # client that is still there and a dead one goes on its own.
+            await self._client.expire(key, self._ttl_seconds)
         if isinstance(raw_id, bytes | bytearray):
             return raw_id.decode()
         return str(raw_id)  # pragma: no cover - real & fake redis both return bytes
@@ -109,6 +139,11 @@ class RedisSSEReplayBuffer:
 
     async def forget(self, session_id: str) -> None:
         await self._client.delete(self._key(session_id))
+
+
+def _digest(namespace: str) -> str:
+    """Hash a free-form server name into something a Redis key can hold."""
+    return hashlib.sha256(namespace.encode("utf-8")).hexdigest()[:_NAMESPACE_DIGEST_CHARS]
 
 
 __all__ = ["RedisSSEReplayBuffer"]

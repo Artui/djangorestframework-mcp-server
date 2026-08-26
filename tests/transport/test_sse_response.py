@@ -3,6 +3,8 @@ from __future__ import annotations
 import asyncio
 import json
 
+import pytest
+
 from rest_framework_mcp.transport.in_memory_sse_broker import InMemorySSEBroker
 from rest_framework_mcp.transport.in_memory_sse_replay_buffer import InMemorySSEReplayBuffer
 from rest_framework_mcp.transport.sse_response import (
@@ -178,4 +180,28 @@ async def test_no_replay_when_last_event_id_omitted() -> None:
     # Next frame must be a keep-alive — no replay, no live events queued.
     frame = await asyncio.wait_for(gen.__anext__(), timeout=0.5)
     assert frame == b": keepalive\n\n"
+    await gen.aclose()
+
+
+async def test_the_stream_closes_itself_once_its_lifetime_elapses() -> None:
+    """Without a cap the generator is a bare ``while True`` whose only exit is
+    the client leaving — and it keep-alives itself past every proxy timeout, so
+    the client never has to. Ending it forces a reconnect, which re-runs the
+    authentication the stream was opened under."""
+    broker = InMemorySSEBroker()
+    gen = stream_events(broker, "s", keepalive_interval=60.0, max_seconds=0.0)
+    assert await gen.__anext__() == b": stream open\n\n"
+    # A comment frame rather than an abrupt cut, so the wire says which it was.
+    assert await asyncio.wait_for(gen.__anext__(), timeout=1.0) == b": stream closed\n\n"
+    with pytest.raises(StopAsyncIteration):
+        await gen.__anext__()
+    assert broker.has_subscriber("s") is False
+
+
+async def test_no_lifetime_cap_leaves_the_stream_open() -> None:
+    """``None`` disables, as every other bound here does."""
+    broker = InMemorySSEBroker()
+    gen = stream_events(broker, "s", keepalive_interval=0.01, max_seconds=None)
+    assert await gen.__anext__() == b": stream open\n\n"
+    assert await asyncio.wait_for(gen.__anext__(), timeout=1.0) == b": keepalive\n\n"
     await gen.aclose()

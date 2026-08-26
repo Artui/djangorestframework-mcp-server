@@ -199,3 +199,71 @@ async def test_get_blocked_origin_returns_403() -> None:
     with override_settings(ROOT_URLCONF=urlconf_for(server, is_async=True)):
         response = await AsyncClient().get("/mcp/", headers={"Origin": "https://blocked.example"})
     assert response.status_code == 403
+
+
+def _get_stream_view(broker: InMemorySSEBroker, store: InMemorySessionStore, **config: object):
+    """The GET view, wired to a broker and session store the test owns."""
+    return AsyncStreamableHttpViewSet.as_view(
+        ASYNC_STREAMABLE_HTTP_ACTION_MAP,
+        tools=ToolRegistry(),
+        resources=ResourceRegistry(),
+        auth_backend=AllowAnyBackend(),
+        session_store=store,
+        sse_broker=broker,
+        config=build_mcp_config(**config),
+    )
+
+
+async def test_a_worker_refuses_a_stream_past_its_concurrency_cap() -> None:
+    """Minting sessions is uncapped and each one addresses its own stream, so a
+    caller looping ``initialize`` and then ``GET`` parks an ASGI task per
+    session — each keep-aliving itself past any proxy's idle timeout.
+    ``subscriptions/listen`` is bounded on exactly these terms; this is the
+    surface that is on by default."""
+    broker = InMemorySSEBroker()
+    store = InMemorySessionStore()
+    sid = store.create(principal_id="anonymous")
+    # One stream already running on this worker.
+    broker.subscribe("someone-else")
+
+    view = _get_stream_view(broker, store, max_concurrent_sse_streams=1)
+    request = RequestFactory().get(
+        "/mcp/", headers={"Mcp-Protocol-Version": "2025-11-25", "Mcp-Session-Id": sid}
+    )
+    response = await view(request)
+    assert response.status_code == 503
+    assert "MAX_CONCURRENT_SSE_STREAMS" in json.loads(response.content)["error"]["message"]
+
+
+async def test_the_cap_can_be_lifted() -> None:
+    """``None`` disables, as every other bound here does."""
+    broker = InMemorySSEBroker()
+    store = InMemorySessionStore()
+    sid = store.create(principal_id="anonymous")
+    broker.subscribe("someone-else")
+
+    view = _get_stream_view(broker, store, max_concurrent_sse_streams=None)
+    request = RequestFactory().get(
+        "/mcp/", headers={"Mcp-Protocol-Version": "2025-11-25", "Mcp-Session-Id": sid}
+    )
+    response = await view(request)
+    assert response.status_code == 200
+    await response.streaming_content.aclose()
+
+
+async def test_the_stream_carries_the_configured_lifetime() -> None:
+    """The GET handler opened streams with no ``max_seconds`` at all, so the
+    cap has to reach the generator, not just exist in the config."""
+    broker = InMemorySSEBroker()
+    store = InMemorySessionStore()
+    sid = store.create(principal_id="anonymous")
+
+    view = _get_stream_view(broker, store, sse_stream_max_seconds=0.0)
+    request = RequestFactory().get(
+        "/mcp/", headers={"Mcp-Protocol-Version": "2025-11-25", "Mcp-Session-Id": sid}
+    )
+    response = await view(request)
+    assert response.status_code == 200
+    streaming = response.streaming_content
+    assert await streaming.__anext__() == b": stream open\n\n"
+    assert await asyncio.wait_for(streaming.__anext__(), timeout=1.0) == b": stream closed\n\n"

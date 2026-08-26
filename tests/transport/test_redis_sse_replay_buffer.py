@@ -114,3 +114,54 @@ async def test_import_error_when_redis_absent(monkeypatch) -> None:
     monkeypatch.setattr(mod, "AsyncRedis", None)
     with pytest.raises(ImportError, match="djangorestframework-mcp-server\\[redis\\]"):
         RedisSSEReplayBuffer(client=object())
+
+
+async def test_a_recorded_stream_carries_an_expiry() -> None:
+    """``forget`` runs only on an explicit ``DELETE``, and sessions ordinarily
+    end by expiring or by a client dropping the connection — so without a TTL
+    every such session leaves its stream in Redis for good."""
+    client = _client()
+    buf = RedisSSEReplayBuffer(client, ttl_seconds=120)
+    await buf.record("s", {"n": 1})
+    ttl = await client.ttl("drf-mcp:sse-replay:s")
+    assert 0 < ttl <= 120
+    await client.aclose()
+
+
+async def test_the_expiry_is_renewed_by_every_write() -> None:
+    """An active stream must not expire under a client that is still there."""
+    client = _client()
+    buf = RedisSSEReplayBuffer(client, ttl_seconds=120)
+    await buf.record("s", {"n": 1})
+    await client.expire("drf-mcp:sse-replay:s", 5)
+    await buf.record("s", {"n": 2})
+    assert await client.ttl("drf-mcp:sse-replay:s") > 5
+    await client.aclose()
+
+
+async def test_the_expiry_can_be_disabled() -> None:
+    client = _client()
+    buf = RedisSSEReplayBuffer(client, ttl_seconds=None)
+    await buf.record("s", {"n": 1})
+    # ``-1`` is Redis for "the key exists and never expires".
+    assert await client.ttl("drf-mcp:sse-replay:s") == -1
+    await client.aclose()
+
+
+def test_an_unusable_expiry_is_refused_at_construction() -> None:
+    with pytest.raises(ValueError, match="ttl_seconds must be positive"):
+        RedisSSEReplayBuffer(client=_client(), ttl_seconds=0)
+
+
+async def test_two_servers_can_keep_separate_key_spaces() -> None:
+    """The cache-backed stores fold the server's ``name`` into their key prefix
+    so two servers in one project cannot read each other's state. A Redis
+    client is the consumer's to construct, so here the namespace is an argument
+    — but the property it buys is the same one."""
+    client = _client()
+    public = RedisSSEReplayBuffer(client, namespace="public")
+    internal = RedisSSEReplayBuffer(client, namespace="internal")
+    recorded = await public.record("shared-id", {"n": 1})
+    assert await _drain(internal.replay("shared-id", "0-0")) == []
+    assert await _drain(public.replay("shared-id", "0-0")) == [(recorded, {"n": 1})]
+    await client.aclose()

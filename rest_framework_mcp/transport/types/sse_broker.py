@@ -24,6 +24,11 @@ class SSEBroker(Protocol):
     ``False`` if no subscriber was attached. Whether ``publish`` is
     fire-and-forget or awaits confirmation is the implementation's choice; the
     transport treats it as best-effort either way.
+
+    Implementations must also bound what an undrained subscriber can accumulate.
+    A stream the client stops reading is not an error, and there is no
+    backpressure channel to the publisher, so an unbounded queue turns one
+    paused consumer into unbounded resident memory.
     """
 
     def subscribe(self, session_id: str) -> asyncio.Queue[Any]: ...
@@ -33,6 +38,16 @@ class SSEBroker(Protocol):
     async def publish(self, session_id: str, payload: Any) -> bool: ...
 
     def has_subscriber(self, session_id: str) -> bool: ...
+
+    @property
+    def active_streams(self) -> int:
+        """How many session streams this worker is currently serving.
+
+        What ``MAX_CONCURRENT_SSE_STREAMS`` is measured against, so it is a
+        per-worker count of local subscribers rather than a cluster-wide one:
+        the resource being protected is this process's task pool.
+        """
+        ...
 
 
 __all__ = ["SSEBroker"]

@@ -135,8 +135,19 @@ call.
   clamped honestly — the result has nowhere to record that rows were dropped.
   Registering one emits `UnboundedListWarning`; `REQUIRE_LIST_PAGINATION=True`
   makes it an error.
-- **Concurrency.** Bounding one call says nothing about how many run at once.
-  Rate limits (`rate_limits=` per binding) are the lever there.
+- **Concurrency of *dispatch*.** Bounding one call says nothing about how many
+  run at once. Rate limits (`rate_limits=` per binding) are the lever there, and
+  they are charged once per client call whether it runs inline or as a task.
+  Long-lived *streams* are bounded separately, per worker:
+  `MAX_CONCURRENT_SUBSCRIPTIONS` for `subscriptions/listen` and
+  `MAX_CONCURRENT_SSE_STREAMS` for the `GET` session stream, each paired with a
+  lifetime cap (`SUBSCRIPTION_MAX_SECONDS`, `SSE_STREAM_MAX_SECONDS`).
+- **Notification backlog for a client that stops reading.** The SSE brokers hold
+  a bounded per-session queue (`max_queued_events=`, 1024 by default) and drop
+  the oldest payload past it, reporting the drop as `publish` returning `False`.
+  Delivery was always best-effort — a client that missed a notification re-reads
+  — so dropping is the honest bound; blocking would park the publisher on a
+  reader that may never return.
 
 ## Adding profile points
 
