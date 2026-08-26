@@ -118,8 +118,9 @@ def check_list_pagination_declared(name: str, *, paginate: bool, require: bool) 
     clamps safely because ``totalPages`` / ``hasNext`` tell the model rows were
     left behind; an unpaginated result carries no such metadata, so a clamped
     one would look complete. There is nowhere honest to put the truth except
-    the registration, hence a warning here and ``MAX_RESULT_BYTES`` as the
-    backstop at dispatch.
+    the registration, hence a warning here and ``MAX_PAGE_SIZE`` as the backstop
+    at dispatch -- applied as a ``LIMIT`` before the rows are rendered, so an
+    oversized result is refused rather than fetched whole and then measured.
     """
     if paginate:
         return
@@ -128,7 +129,9 @@ def check_list_pagination_declared(name: str, *, paginate: bool, require: bool) 
         "call returns every row the selector resolves to. Unlike a paginated tool "
         "there is no honest way to clamp that at dispatch — the result carries no "
         "metadata that would tell the model rows were dropped — so an oversized "
-        "result can only fail the call (see REST_FRAMEWORK_MCP['MAX_RESULT_BYTES']). "
+        "result can only fail the call (see REST_FRAMEWORK_MCP['MAX_PAGE_SIZE'], "
+        "which bounds the row count, and ['MAX_RESULT_BYTES'], which bounds the "
+        "encoded payload). "
         "Pass paginate=True, or set REST_FRAMEWORK_MCP['REQUIRE_LIST_PAGINATION'] = "
         "True to make this an error."
     )

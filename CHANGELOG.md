@@ -124,6 +124,20 @@ behind a cursor that never terminates.
 
 ### Fixed
 
+- **A tool's `invalidates=` announcements now reach subscribers on WSGI when the
+  server is mounted through `.urls`.** The sync transport had nowhere to publish
+  them, so a tool that declared `invalidates=` committed its write and told
+  nobody — indistinguishable, from a subscriber's side, from the resource never
+  having changed. `async_urls` always passed the broker through, so the gap was
+  visible on ASGI and invisible on WSGI.
+
+- **`prompts/get` names a malformed `arguments` field instead of treating it as
+  empty.** `[]`, `""`, `0` and `False` were folded into "no arguments" by the
+  line immediately above the one that exists to reject a non-object, so a prompt
+  whose arguments are all optional rendered a call the client never made in that
+  shape, and every other prompt answered with a confusing missing-argument error
+  rather than naming the real fault. Matches the same correction on `tools/call`.
+
 - **A selector tool's object-level permissions never ran.** A `SelectorSpec`
   carrying `permission_classes` had only its class-level `has_permission`
   enforced over MCP: the spec's `has_object_permission` needs the resolved row,

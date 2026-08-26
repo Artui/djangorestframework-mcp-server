@@ -362,3 +362,48 @@ def test_the_wsgi_transport_hands_the_handler_a_broker() -> None:
     assert response.status_code == 200
     assert queue.qsize() == 1
     assert queue.get_nowait()["params"]["uri"] == "invoices://"
+
+
+@pytest.mark.django_db(transaction=True)
+def test_the_mounted_wsgi_urls_hand_the_handler_a_broker() -> None:
+    """The same guarantee, reached the way a project actually mounts the server.
+
+    The sibling test above builds the viewset by hand, so it passes as soon as
+    ``StreamableHttpViewSet`` accepts the broker -- and stays passing while
+    ``MCPServer.urls`` forgets to pass it, which is the only path a project
+    takes. ``async_urls`` always passed it, so the gap was visible on ASGI and
+    invisible on WSGI: the announcement was dropped for every mounted sync
+    deployment while both suites stayed green.
+    """
+    import json as _json
+
+    from asgiref.sync import async_to_sync
+    from django.test import RequestFactory
+
+    broker = InMemorySubscriptionBroker()
+    server = _server(broker)
+    # Same permissive config the hand-wired sibling passes, so this test isolates
+    # the broker wiring rather than re-testing the origin and session policies.
+    server._config = build_mcp_config(allowed_origins=["*"], sessions_enabled=False)
+    queue = async_to_sync(broker.subscribe)(frozenset({topic_for_resource("invoices://")}))
+
+    patterns, _app_name, _namespace = server.urls
+    view = next(p.callback for p in patterns if p.callback is not None)
+
+    request = RequestFactory().post(
+        "/mcp/",
+        data=_json.dumps(
+            {
+                "jsonrpc": "2.0",
+                "id": 1,
+                "method": "tools/call",
+                "params": {"name": "invoices.create", "arguments": {}},
+            }
+        ),
+        content_type="application/json",
+        headers={"Mcp-Protocol-Version": "2025-11-25"},
+    )
+    response = view(request)
+    assert response.status_code == 200
+    assert queue.qsize() == 1
+    assert queue.get_nowait()["params"]["uri"] == "invoices://"

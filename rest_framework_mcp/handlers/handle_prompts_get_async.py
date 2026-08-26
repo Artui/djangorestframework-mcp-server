@@ -42,7 +42,12 @@ async def handle_prompts_get_async(
         # invalid prompt name.
         return JsonRpcError(JsonRpcErrorCode.INVALID_PARAMS, f"Unknown prompt: {name!r}")
 
-    arguments_raw: Any = params.get("arguments") or {}
+    arguments_raw: Any = params.get("arguments")
+    if arguments_raw is None:
+        arguments_raw = {}
+    # Not ``or {}``: that folds every falsy value into the default, so a ``[]``,
+    # ``""``, ``0`` or ``False`` would be accepted as "no arguments" by the very
+    # line below that exists to reject a non-object.
     if not isinstance(arguments_raw, dict):
         return JsonRpcError(JsonRpcErrorCode.INVALID_PARAMS, "'arguments' must be an object")
 

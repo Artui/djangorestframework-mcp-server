@@ -1566,6 +1566,11 @@ class MCPServer:
             session_store=self._session_store,
             task_store=self._task_store,
             task_executor=self._task_executor,
+            # Without this a tool's ``invalidates=`` announcements are silently
+            # dropped on WSGI: the viewset has nowhere to publish them, and a
+            # dropped announcement looks exactly like a tool that changed nothing.
+            # ``async_urls`` has always passed it.
+            subscription_broker=self._subscription_broker,
             server_info=self._server_info,
             instructions=self.description,
             config=self._config,
