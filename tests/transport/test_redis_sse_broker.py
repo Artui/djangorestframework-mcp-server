@@ -3,14 +3,14 @@ from __future__ import annotations
 import asyncio
 
 import pytest
-from fakeredis import FakeAsyncRedis
+from fakeredis import FakeAsyncRedis, FakeServer
 
 from rest_framework_mcp.transport.redis_sse_broker import RedisSSEBroker
 
 
 def _client() -> FakeAsyncRedis:
     """Fresh ``fakeredis`` instance per test — no shared state across tests."""
-    return FakeAsyncRedis()
+    return FakeAsyncRedis(server=FakeServer())
 
 
 async def _wait_for_subscriber(client, channel: str, *, timeout: float = 0.5) -> None:
@@ -133,3 +133,49 @@ async def test_import_error_when_redis_absent(monkeypatch) -> None:
     monkeypatch.setattr(mod, "AsyncRedis", None)
     with pytest.raises(ImportError, match="djangorestframework-mcp-server\\[redis\\]"):
         RedisSSEBroker(client=object())
+
+
+async def test_a_stalled_reader_cannot_grow_the_listener_queue_without_limit() -> None:
+    """The Redis broker has the same shape as the in-memory one: a listener task
+    pumps the channel into a local queue nobody is draining. Blocking there
+    would be worse than dropping — it stops the pump, so one unread stream
+    becomes backpressure on the Redis connection itself."""
+    client = _client()
+    broker = RedisSSEBroker(client, max_queued_events=1)
+    queue = broker.subscribe("s1")
+    await _wait_for_subscriber(client, "drf-mcp:sse:s1")
+
+    for n in (1, 2, 3):
+        await broker.publish("s1", {"n": n})
+
+    # The pump is a background task, so settle on the bound rather than racing
+    # it: the queue can never exceed one, and the newest payload is what stays.
+    deadline: float = asyncio.get_running_loop().time() + 1.0
+    while asyncio.get_running_loop().time() < deadline:
+        assert queue.qsize() <= 1
+        if queue.qsize() == 1 and queue._queue[0] == {"n": 3}:  # noqa: SLF001
+            break
+        await asyncio.sleep(0.005)
+    else:  # pragma: no cover - the pump is local and fast
+        raise AssertionError("the newest payload never arrived")
+
+    broker.unsubscribe("s1", queue)
+    await client.aclose()
+
+
+def test_an_unusable_queue_bound_is_refused_at_construction() -> None:
+    with pytest.raises(ValueError, match="max_queued_events must be positive"):
+        RedisSSEBroker(_client(), max_queued_events=0)
+
+
+async def test_active_streams_counts_this_workers_subscribers() -> None:
+    """A cluster-wide count would neither measure the thing the cap protects —
+    this process's task pool — nor be worth a round-trip per GET."""
+    client = _client()
+    broker = RedisSSEBroker(client)
+    assert broker.active_streams == 0
+    queue = broker.subscribe("s1")
+    assert broker.active_streams == 1
+    broker.unsubscribe("s1", queue)
+    assert broker.active_streams == 0
+    await client.aclose()

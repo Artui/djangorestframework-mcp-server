@@ -17,7 +17,7 @@ from rest_framework_services.types.service_spec import ServiceSpec
 from rest_framework_mcp import MCPServer, TaskPolicy
 from rest_framework_mcp.auth.backends.allow_any_backend import AllowAnyBackend
 from rest_framework_mcp.config.build_mcp_config import build_mcp_config
-from rest_framework_mcp.constants import TaskStatus
+from rest_framework_mcp.constants import JsonRpcErrorCode, TaskStatus
 from rest_framework_mcp.handlers.handle_tools_call_async import handle_tools_call_async
 from rest_framework_mcp.handlers.task_dispatch import maybe_create_task
 from rest_framework_mcp.protocol.types.json_rpc_error import JsonRpcError
@@ -217,3 +217,98 @@ def test_none_in_settings_means_none_rather_than_unset() -> None:
     config = build_mcp_config()
     assert config.task_ttl_ms is None
     assert config.task_poll_interval_ms is None
+
+
+def test_an_explicit_none_disables_expiry_rather_than_reading_the_setting() -> None:
+    """The other half of the same distinction, from the caller's side.
+
+    ``build_mcp_config(task_ttl_ms=None)`` is a consumer asking for tasks that
+    never expire. Reading ``None`` as "not supplied" answered it with the
+    setting's 24 hours instead, and the only sign was records vanishing a day
+    in. ``UNSET`` is what carries "omitted" for every other nullable bound
+    here, and now for these two.
+    """
+    assert build_mcp_config(task_ttl_ms=None).task_ttl_ms is None
+    assert build_mcp_config(task_poll_interval_ms=None).task_poll_interval_ms is None
+    # Omitted still means the setting, which is what makes the two distinct.
+    assert build_mcp_config().task_ttl_ms == 86_400_000
+    assert build_mcp_config().task_poll_interval_ms == 5_000
+
+
+# ----- rate limits -----
+
+
+class _CountingLimiter:
+    """Records each charge; refuses once ``deny_after`` charges have landed."""
+
+    def __init__(self, *, deny_after: int | None = None) -> None:
+        self.charges: int = 0
+        self._deny_after = deny_after
+
+    def consume(self, request: Any, token: Any) -> int | None:
+        self.charges += 1
+        if self._deny_after is not None and self.charges > self._deny_after:
+            return 42
+        return None
+
+
+def _limited_server(limiter: Any, **kwargs: Any) -> MCPServer:
+    store = kwargs.pop("store", None) or InMemoryTaskStore()
+    server = MCPServer(
+        name="limited",
+        auth_backend=AllowAnyBackend(),
+        task_store=store,
+        task_executor=kwargs.pop("executor", None) or RecordingExecutor(store),
+    )
+    server.register_service_tool(
+        name="p.limited",
+        description="x",
+        spec=ServiceSpec(service=slow_service, atomic=False),
+        task_policy=TaskPolicy.OPTIONAL,
+        rate_limits=[limiter],
+    )
+    return server
+
+
+def test_a_task_shaped_call_charges_its_rate_limit() -> None:
+    """The charge has nowhere else to happen.
+
+    ``maybe_create_task`` answers *before* dispatch, which is where the inline
+    charge lives, and the worker replays under ``enforce_rate_limits=False``.
+    Without a charge here a client that declares the tasks extension opts itself
+    out of every quota the tool configures — by declaring a capability — and the
+    enqueue loop is unbounded.
+    """
+    limiter = _CountingLimiter()
+    server = _limited_server(limiter)
+    result = maybe_create_task(server._tools.get("p.limited"), {}, context(server))
+    assert result is not None
+    assert result["resultType"] == "task"
+    assert limiter.charges == 1
+
+
+def test_an_exhausted_quota_refuses_before_a_task_exists() -> None:
+    """Refused, and refused *early*: a caller told to retry must not also have
+    left a queued record and an executor job behind."""
+    limiter = _CountingLimiter(deny_after=0)
+    store = InMemoryTaskStore()
+    executor = RecordingExecutor(store)
+    server = _limited_server(limiter, store=store, executor=executor)
+    result = maybe_create_task(server._tools.get("p.limited"), {}, context(server))
+    assert isinstance(result, JsonRpcError)
+    assert result.code == JsonRpcErrorCode.RATE_LIMITED
+    assert result.data == {"retryAfter": 42}
+    assert executor.enqueued == []
+
+
+def test_a_call_that_runs_inline_is_still_charged_exactly_once() -> None:
+    """The fallback path must not double-charge: a client that did not declare
+    the extension runs the tool inline, where the ordinary charge already
+    happens, and this function has to leave that alone."""
+    limiter = _CountingLimiter()
+    server = _limited_server(limiter)
+    assert (
+        maybe_create_task(server._tools.get("p.limited"), {}, context(server, declares=False))
+        is None
+    )
+    assert limiter.charges == 0

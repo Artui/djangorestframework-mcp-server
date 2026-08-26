@@ -26,8 +26,18 @@ async def adispatch(
 
     Only the I/O-bound handlers (``tools/call``, ``resources/read``,
     ``prompts/get``) have async-native variants; ``completion/complete``
-    borrows the executor instead. The rest are CPU-only and run inline through
-    the sync ``dispatch`` table.
+    borrows the executor instead.
+
+    **The rest go through the thread-sensitive executor rather than running
+    inline on the loop.** They were once described as CPU-only, and they are
+    not: ``tasks/*`` read the task store, whose default
+    (``DjangoCacheTaskStore``) is the Django cache — a ``DatabaseCache``
+    configuration reaches ``django.db`` and Django raises
+    ``SynchronousOnlyOperation`` straight off the loop — and the four list
+    handlers evaluate binding permissions, which is where a consumer's
+    ``DjangoPermRequired`` runs a query. The thread hop costs a handful of
+    microseconds on the handlers that genuinely need nothing; a task the client
+    can create but never collect is not recoverable at all.
     """
     if method == "tools/call":
         # Not wrapped: a tool call resolves its own deadline from the binding,
@@ -45,7 +55,7 @@ async def adispatch(
             sync_to_async(handle_completion_complete, thread_sensitive=True)(params, context),
             context,
         )
-    return dispatch(method, params, context)
+    return await sync_to_async(dispatch, thread_sensitive=True)(method, params, context)
 
 
 async def _with_deadline(coro: Awaitable[Any], context: MCPCallContext) -> Any:

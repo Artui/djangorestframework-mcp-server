@@ -92,7 +92,10 @@ def test_prompts_list_advertises_arguments() -> None:
 
 
 def test_prompts_list_paginates(settings) -> None:
-    settings.REST_FRAMEWORK_MCP = {"PAGE_SIZE": 2}
+    # Replacing the dict drops the suite-wide opt-out in conftest_settings, and
+    # this test's throwaway prompts are unguarded; carried through so the
+    # subject stays pagination.
+    settings.REST_FRAMEWORK_MCP = {"PAGE_SIZE": 2, "REQUIRE_TOOL_PERMISSIONS": False}
     server = _server()
     for i in range(3):
         server.register_prompt(name=f"p{i}", render=lambda **_: "x")

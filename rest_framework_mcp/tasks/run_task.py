@@ -37,10 +37,16 @@ def run_task(
     wants an idempotent service.
 
     **Permissions run again here, in full.** The stored scopes and user rebuild
-    the same ``TokenInfo`` the request carried, so the binding's permissions,
-    rate limits and object-permission hook run exactly as they did inline. That
-    is why the record stores the authorization context rather than a bare
-    principal id: a re-check with a token that proves nothing is not a re-check.
+    the same ``TokenInfo`` the request carried, so the binding's permissions and
+    its object-permission hook run exactly as they did inline. That is why the
+    record stores the authorization context rather than a bare principal id: a
+    re-check with a token that proves nothing is not a re-check.
+
+    **Rate limits are the one guard that does not run again**, and deliberately:
+    they are consumed rather than tested, and the request that asked for the
+    task already paid (see ``maybe_create_task``). The worker's context carries
+    ``enforce_rate_limits=False`` so a replay cannot bill the same client call
+    twice.
 
     A denial or any other JSON-RPC error becomes a ``failed`` task — those are
     protocol faults with no protocol response left to carry them. A tool-level

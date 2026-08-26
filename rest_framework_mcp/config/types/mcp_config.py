@@ -135,6 +135,20 @@ class MCPConfig:
     Each parks an ASGI task for its lifetime, so this is what stops an
     authenticated caller exhausting the worker pool."""
 
+    sse_stream_max_seconds: float | None
+    """How long one GET session stream may stay open, or ``None`` for no cap.
+    The session stream's counterpart to ``subscription_max_seconds``, and it
+    bounds the same thing: authentication is checked once, when the stream
+    opens, so this is how long a revoked principal can keep receiving a
+    session's pushes. An SSE client reconnects on its own, and with a replay
+    buffer wired in the reconnect is gapless."""
+
+    max_concurrent_sse_streams: int | None
+    """Ceiling on concurrent GET session streams **per worker**, or ``None``.
+    Each parks an ASGI task for its lifetime and minting sessions is
+    uncapped, so without this an authenticated caller exhausts the worker pool
+    by opening one stream per session it minted."""
+
     input_request_ttl_seconds: int
     """How long a ``requestState`` stays redeemable. Bounds the replay window on
     the one value here that travels through the client and comes back trusted."""

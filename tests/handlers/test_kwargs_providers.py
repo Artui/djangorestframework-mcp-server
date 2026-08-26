@@ -8,6 +8,7 @@ the right shape (request, action name, URI-template variables on resources).
 
 from __future__ import annotations
 
+import json
 from typing import Any
 
 import pytest
@@ -438,3 +439,60 @@ class _IdentifiedUser(str):
 
 
 _ALICE = _IdentifiedUser("alice")
+
+
+# ---------- the provider's UNSET decline contract (resources/read) ----------
+
+
+def _declining_resource(provider: Any) -> ResourceRegistry:
+    """A templated resource whose provider owns the same key the URI carries."""
+    from rest_framework_mcp.registry.types.resource_binding import ResourceBinding
+
+    resources = ResourceRegistry()
+    resources.register(
+        ResourceBinding(
+            name="r",
+            uri_template="r://{project_pk}",
+            description=None,
+            selector=lambda *, project_pk: {"project_pk": project_pk},
+            kind=SelectorKind.RETRIEVE,
+            kwargs_provider=provider,
+        )
+    )
+    return resources
+
+
+def test_a_provider_returning_unset_declines_rather_than_overriding() -> None:
+    """``UNSET`` means "I am not setting this key", not "set it to the
+    sentinel" — so the URI's own value stands, as it does on the HTTP and tool
+    paths. Handing the sentinel to the selector turns a well-formed read into
+    an internal error, or worse silently drops a scope."""
+    from rest_framework_services import UNSET
+
+    resources = _declining_resource(lambda view: {"project_pk": UNSET})
+
+    out = handle_resources_read({"uri": "r://42"}, _ctx(resources=resources))
+
+    assert isinstance(out, dict)
+    assert json.loads(out["contents"][0]["text"]) == {"project_pk": "42"}
+
+
+def test_a_provider_returning_a_value_still_wins() -> None:
+    """Declining is opt-in; a resolved value is still authoritative."""
+    resources = _declining_resource(lambda view: {"project_pk": "provider"})
+
+    out = handle_resources_read({"uri": "r://42"}, _ctx(resources=resources))
+
+    assert isinstance(out, dict)
+    assert json.loads(out["contents"][0]["text"]) == {"project_pk": "provider"}
+
+
+async def test_async_provider_returning_unset_declines_too() -> None:
+    from rest_framework_services import UNSET
+
+    resources = _declining_resource(lambda view: {"project_pk": UNSET})
+
+    out = await handle_resources_read_async({"uri": "r://42"}, _ctx(resources=resources))
+
+    assert isinstance(out, dict)
+    assert json.loads(out["contents"][0]["text"]) == {"project_pk": "42"}

@@ -12,6 +12,7 @@ from typing import Any
 import django_filters
 import pytest
 from django.http import HttpRequest
+from rest_framework import permissions as drf_permissions
 from rest_framework import serializers as drf_serializers
 from rest_framework_services.exceptions.service_error import ServiceError
 from rest_framework_services.exceptions.service_validation_error import ServiceValidationError
@@ -21,6 +22,7 @@ from rest_framework_services.types.selector_spec import SelectorSpec
 from rest_framework_mcp import MCPServer
 from rest_framework_mcp.auth.backends.allow_any_backend import AllowAnyBackend
 from rest_framework_mcp.auth.types.token_info import TokenInfo
+from rest_framework_mcp.constants import JsonRpcErrorCode
 from rest_framework_mcp.handlers.handle_tools_call import handle_tools_call
 from rest_framework_mcp.handlers.handle_tools_list import handle_tools_list
 from rest_framework_mcp.handlers.types.context import MCPCallContext
@@ -570,9 +572,10 @@ def test_selector_returning_none_renders_as_empty() -> None:
     out = handle_tools_call({"name": "x", "arguments": {}}, _ctx(server))
     assert isinstance(out, dict)
     # ``list(None)`` would crash; the path uses ``hasattr(__iter__)`` guard.
-    # ``ToolResult.to_dict`` omits ``structuredContent`` when the payload
-    # is ``None``, so the key isn't on the response.
-    assert "structuredContent" not in out
+    # The tool does emit structured content, and its answer is null, so the key
+    # is present and null — omitting it would be indistinguishable from a tool
+    # that offers no structured channel at all.
+    assert out["structuredContent"] is None
 
 
 # ---------- Auth / rate limit / errors ----------
@@ -885,3 +888,91 @@ def test_pagination_over_non_sized_return_raises_clear_error() -> None:
     )
     with pytest.raises(TypeError, match="must return a QuerySet or a sized"):
         handle_tools_call({"name": "invoices.list", "arguments": {}}, _ctx(server))
+
+
+# ---------- object-level permissions on the resolved row ----------
+#
+# A spec's ``permission_classes`` are two checks, not one. The class-level
+# ``has_permission`` is wrapped into the binding and runs before dispatch; the
+# object-level ``has_object_permission`` needs the row, which only dispatch
+# resolves — so it runs through ``dispatch_spec``'s ``on_target_resolved``
+# hook. Over HTTP a DRF view runs both. This transport must too, or a spec
+# whose ownership test lives in ``has_object_permission`` is enforced
+# everywhere except here.
+
+
+class _OnlyMine(drf_permissions.BasePermission):
+    """Anyone may call the tool; only the owner may see the row."""
+
+    def has_permission(self, request: Any, view: Any) -> bool:  # noqa: ARG002
+        return True
+
+    def has_object_permission(self, request: Any, view: Any, obj: Any) -> bool:  # noqa: ARG002
+        return obj.number == "MINE"
+
+
+def _invoice_by_pk(*, pk: int) -> Any:
+    return Invoice.objects.filter(pk=pk)
+
+
+def _register_guarded_retrieve(server: MCPServer) -> None:
+    server.register_selector_tool(
+        name="invoices.get",
+        spec=SelectorSpec(
+            kind=SelectorKind.RETRIEVE,
+            selector=_invoice_by_pk,
+            output_serializer=InvoiceOutputSerializer,
+            permission_classes=[_OnlyMine],
+        ),
+    )
+
+
+@pytest.mark.django_db
+def test_object_permissions_run_against_the_resolved_row() -> None:
+    """Another principal's row is refused, not rendered."""
+    theirs = Invoice.objects.create(number="THEIRS", amount_cents=100)
+    server = _server()
+    _register_guarded_retrieve(server)
+
+    out = handle_tools_call({"name": "invoices.get", "arguments": {"pk": theirs.pk}}, _ctx(server))
+
+    assert isinstance(out, JsonRpcError)
+    assert out.code == JsonRpcErrorCode.FORBIDDEN
+
+
+@pytest.mark.django_db
+def test_object_permissions_still_serve_a_permitted_row() -> None:
+    """The guard is a check, not a blanket denial."""
+    mine = Invoice.objects.create(number="MINE", amount_cents=100)
+    server = _server()
+    _register_guarded_retrieve(server)
+
+    out = handle_tools_call({"name": "invoices.get", "arguments": {"pk": mine.pk}}, _ctx(server))
+
+    assert isinstance(out, dict)
+    assert out["structuredContent"]["number"] == "MINE"
+
+
+@pytest.mark.django_db
+def test_a_list_target_runs_only_the_class_level_check() -> None:
+    """``has_object_permission`` is a per-row concept; a LIST resolves a set.
+
+    The guard is handed the queryset, not a model, so it must not try a row
+    check against it — otherwise every guarded LIST tool would deny.
+    """
+    Invoice.objects.create(number="THEIRS", amount_cents=100)
+    server = _server()
+    server.register_selector_tool(
+        name="invoices.list",
+        spec=SelectorSpec(
+            kind=SelectorKind.LIST,
+            selector=_list_invoices,
+            output_serializer=InvoiceOutputSerializer,
+            permission_classes=[_OnlyMine],
+        ),
+    )
+
+    out = handle_tools_call({"name": "invoices.list", "arguments": {}}, _ctx(server))
+
+    assert isinstance(out, dict)
+    assert [row["number"] for row in out["structuredContent"]] == ["THEIRS"]

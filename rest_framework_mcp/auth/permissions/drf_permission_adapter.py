@@ -26,6 +26,18 @@ class DRFPermissionAdapter:
     ``build_offline_context``, which forces
     ``POST`` for mutation dispatch — because permission evaluation is
     method-agnostic.
+
+    **``auth`` is set alongside ``user``, and has to be.** DRF resolves
+    ``request.auth`` lazily: reading it on a request that has never
+    authenticated runs the (here empty) authenticator chain, which ends in
+    ``_not_authenticated()`` and *overwrites* ``request.user`` with
+    ``UNAUTHENTICATED_USER`` — on the wrapper and on the ``HttpRequest``
+    underneath it. A permission class as ordinary as
+    ``TokenHasScope`` reads ``request.auth`` first and every ``request.user``
+    read after it would see ``AnonymousUser``, denying a properly scoped caller
+    with nothing in the response explaining why. Assigning the backend's opaque
+    payload — DRF's own convention for what ``auth`` holds — means the getter
+    never reaches for the chain.
     """
 
     def __init__(self, permission_class: type[BasePermission]) -> None:
@@ -37,7 +49,7 @@ class DRFPermissionAdapter:
         return self._permission_class
 
     def has_permission(self, request: HttpRequest, token: TokenInfo) -> bool:
-        drf_request: Request = _wrap_request(request, user=token.user)
+        drf_request: Request = _wrap_request(request, user=token.user, auth=token.raw)
         view: Any = _PermissionView(request=drf_request)
         # The DRF stub types the second argument as ``APIView``; the stand-in is
         # structural, so it is typed ``Any`` at this one boundary to keep the
@@ -64,17 +76,25 @@ class _PermissionView:
         self.kwargs: dict[str, Any] = {}
 
 
-def _wrap_request(http_request: HttpRequest, *, user: Any) -> Request:
-    """Wrap an ``HttpRequest`` as a DRF ``Request`` with the supplied user.
+def _wrap_request(http_request: HttpRequest, *, user: Any, auth: Any) -> Request:
+    """Wrap an ``HttpRequest`` as a DRF ``Request`` with the supplied auth state.
 
-    ``Request(http_request)`` is the canonical DRF upgrade path; ``.user`` is
-    set explicitly so MCP-supplied auth state flows through without DRF
-    re-running its own ``authenticators`` chain.
+    ``Request(http_request)`` is the canonical DRF upgrade path; ``.user`` and
+    ``.auth`` are both set explicitly so MCP-supplied auth state flows through
+    without DRF re-running its own ``authenticators`` chain. Setting only
+    ``user`` leaves ``auth`` unresolved, and the first read of it runs that
+    chain and resets ``user`` to ``AnonymousUser``.
+
+    ``auth`` is the token backend's opaque payload, which is what a DRF
+    permission expects to find there — an ``AccessToken`` row for
+    django-oauth-toolkit, a claims dict for a JWT backend. ``None`` for a
+    backend that publishes none, which is a value rather than a trigger.
     """
     # Constructed via ``Any`` and cast back to keep the static type.
     raw: Any = Request(http_request)
     drf_request: Request = cast(Request, raw)
     drf_request.user = user
+    drf_request.auth = auth
     return drf_request
 
 

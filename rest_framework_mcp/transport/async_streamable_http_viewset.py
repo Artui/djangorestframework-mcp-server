@@ -439,8 +439,18 @@ class AsyncStreamableHttpViewSet(ViewSet):
           spec is silent on GET here; this is parity with POST.
         - 404 if the session id is unknown **or owned by a different
           principal** (indistinguishable on purpose).
+        - 503 if this worker is already serving
+          ``MAX_CONCURRENT_SSE_STREAMS`` streams.
         - Otherwise ``text/event-stream``, with idle keep-alives and whatever
-          ``MCPServer.notify`` enqueues.
+          ``MCPServer.notify`` enqueues, for at most
+          ``SSE_STREAM_MAX_SECONDS``.
+
+        **Both bounds exist because this stream is the cheapest thing an
+        authenticated caller can hold.** Minting sessions is uncapped and each
+        one addresses its own stream, so a caller looping ``initialize`` and
+        then ``GET`` parks an ASGI task per session, each keep-aliving itself
+        past any proxy's idle timeout. ``subscriptions/listen`` is bounded on
+        exactly these two axes for exactly this reason.
         """
         http_request = request._request  # noqa: SLF001
         guard: HttpResponse | None = self._check_origin(http_request)
@@ -480,6 +490,22 @@ class AsyncStreamableHttpViewSet(ViewSet):
                 status=404,
             )
 
+        config: MCPConfig = self._require_config()
+        cap: int | None = config.max_concurrent_sse_streams
+        if cap is not None and self.sse_broker.active_streams >= cap:
+            # Refused rather than queued, as a subscription past its own cap
+            # is: accepting trades a clear error for a worker that stops
+            # answering anything at all.
+            return _error_response(
+                code=JsonRpcErrorCode.INTERNAL_ERROR,
+                message=(
+                    f"This server is already serving its maximum of {cap} concurrent "
+                    "SSE streams. Retry shortly, or raise "
+                    "REST_FRAMEWORK_MCP['MAX_CONCURRENT_SSE_STREAMS']."
+                ),
+                status=503,
+            )
+
         # ``Last-Event-ID`` is honoured only with a replay buffer wired in;
         # otherwise there is nothing buffered to replay and it is ignored.
         last_event_id: str | None = (
@@ -492,6 +518,7 @@ class AsyncStreamableHttpViewSet(ViewSet):
             session_id,
             replay_buffer=self.sse_replay_buffer,
             last_event_id=last_event_id,
+            max_seconds=config.sse_stream_max_seconds,
         )
 
     async def terminate_session(self, request: Request) -> HttpResponse:

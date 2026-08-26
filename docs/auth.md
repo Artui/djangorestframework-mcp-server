@@ -102,6 +102,13 @@ The `SERVER_INFO` keys flow into both:
     Set `REST_FRAMEWORK_MCP["REQUIRE_TOOL_PERMISSIONS"] = False` to downgrade
     that to an `UnguardedToolWarning` while migrating a large surface.
 
+    The same check runs on `register_resource` and `register_prompt`: the
+    identical selector reaches the identical rows whichever surface exposes
+    it. Interactive **views** (`register_ui_resource`) are the one exemption,
+    and a deliberate one — a view is a template rendered with no context, a
+    literal document, or a zero-argument callable, none of which can read the
+    caller's data.
+
 Per-binding permissions are AND-combined. Two ship in v1:
 
 - `ScopeRequired(["a", "b"])` — token must carry every listed OAuth scope. A
@@ -180,6 +187,15 @@ attribute. Any DRF permission classes declared on the spec are
 auto-wrapped and prepended to the per-binding `permissions` tuple —
 the same spec that backs your HTTP view governs the MCP binding
 without you restating the contract at the MCP call site.
+
+### Object-level permissions
+
+`has_object_permission` runs on every path, against the row the dispatch
+resolved: the tool paths pass `enforce_permissions` to `dispatch_spec` as
+`on_target_resolved`, `resources/read` runs it on the selector's return, and a
+chain step runs it on the target the step resolved. A `LIST` / collection result
+gets the class-level check only — object permissions are a per-row concept, and
+a set is authorized per-set.
 
 ### Filtering listings by permissions
 
@@ -403,11 +419,40 @@ agree; a contradiction (`token_endpoint_auth_method: none` with
 silent winner. DOT models one grant per application, so `grant_types` may name
 at most one primary grant — `refresh_token` rides along and is not counted.
 
+### `authorization_code` is the only grant you can register here
+
+A dynamically registered client has **no owning user**: the row is created by an
+unauthenticated caller, with no consent screen and no review step. So the grant
+it may hold has to be one that cannot mint a token without a user at the other
+end, which leaves `authorization_code` (plus `refresh_token` riding along).
+`client_credentials`, `password` and `implicit` are refused with a
+`400 invalid_client_metadata`, in either vocabulary.
+
+`client_credentials` is the one that matters. Its token carries no user at all,
+and `ScopeRequired` tests only the token's scopes — so a token minted from a
+dynamically registered client-credentials application satisfies every
+scope-gated tool. With `DCR_ENABLED = True` and no initial access token (the
+default), that path starts at an unauthenticated `POST /oauth/register/`.
+`password` and `implicit` are removed from OAuth 2.1 outright.
+`grant_types_supported` in the metadata document never advertised any of the
+three.
+
+Machine-to-machine clients still belong in your deployment — create them through
+Django admin or a management command, where an owner and a review step exist.
+
 `response_types` is derived from the grant per RFC 7591 §2.1 rather than chosen
-independently: `authorization_code` → `["code"]`, `implicit` → `["token"]`, and
-the `client_credentials` / `password` grants never reach the authorization
-endpoint, so `[]`. Supply it to assert the same thing and it is accepted;
-supply something inconsistent and you get a `400`.
+independently: `authorization_code` → `["code"]`. Supply it to assert the same
+thing and it is accepted; supply something inconsistent and you get a `400`.
+
+### Redirect URIs
+
+`redirect_uris` must be absolute URIs, on a scheme the authorization server will
+actually redirect to — which is DOT's own
+`OAUTH2_PROVIDER["ALLOWED_REDIRECT_URI_SCHEMES"]`, `["http", "https"]` by
+default. A native client registering an RFC 8252 §7.1 private-use scheme
+(`com.example.app:/oauth2redirect`) needs that setting widened; it is the same
+list the authorization request is checked against, so a registration is refused
+only where the flow would have failed anyway.
 
 ### ID tokens and `openid`
 

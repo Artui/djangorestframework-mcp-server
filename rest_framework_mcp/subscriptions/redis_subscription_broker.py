@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import contextlib
+import hashlib
 import importlib
 import json
 from typing import Any
@@ -24,6 +25,7 @@ def _resolve_async_redis() -> Any:
 AsyncRedis: Any = _resolve_async_redis()
 
 _DEFAULT_CHANNEL_PREFIX: str = "drf-mcp:sub"
+_NAMESPACE_DIGEST_CHARS: int = 12
 
 
 class RedisSubscriptionBroker:
@@ -41,8 +43,21 @@ class RedisSubscriptionBroker:
 
         server = MCPServer(
             name="my-app",
-            subscription_broker=RedisSubscriptionBroker(Redis.from_url("redis://…")),
+            subscription_broker=RedisSubscriptionBroker(
+                Redis.from_url("redis://…"), namespace="my-app"
+            ),
         )
+
+    **Pass ``namespace`` whenever one Redis serves more than one server.**
+    Topic names are built from caller-supplied values — a notification kind, a
+    resource URI — so two servers that register the same ``SelectorSpec`` under
+    the same URI derive the same topic. Sharing a broker (or two brokers on the
+    same default prefix) then routes one server's change signals to the other's
+    subscribers, past the ``resources/read`` permission ``grant_subscription``
+    gates them on. The cache-backed session and task stores fold the server's
+    ``name`` into their key prefix for exactly this reason; a Redis client is
+    the consumer's to construct, so here it is a constructor argument. The value
+    is hashed into the prefix, since ``name`` is free-form.
 
     **One Redis channel per topic, one listener task per subscription.** The
     mapping is many-to-many — a subscription watches several topics and several
@@ -55,14 +70,22 @@ class RedisSubscriptionBroker:
     lifespan shutdown, as with the other Redis collaborators here.
     """
 
-    def __init__(self, client: Any, *, channel_prefix: str = _DEFAULT_CHANNEL_PREFIX) -> None:
+    def __init__(
+        self,
+        client: Any,
+        *,
+        channel_prefix: str = _DEFAULT_CHANNEL_PREFIX,
+        namespace: str | None = None,
+    ) -> None:
         if AsyncRedis is None:  # pragma: no cover - exercised by the no-extras smoke job
             raise ImportError(
                 "RedisSubscriptionBroker requires the `redis` package. "
                 'Install with `pip install "djangorestframework-mcp-server[redis]"`.'
             )
         self._client: Any = client
-        self._prefix: str = channel_prefix
+        self._prefix: str = (
+            channel_prefix if namespace is None else f"{channel_prefix}:{_digest(namespace)}"
+        )
         self._tasks: dict[int, asyncio.Task[None]] = {}
         self._pubsubs: dict[int, tuple[Any, list[str]]] = {}
 
@@ -141,6 +164,11 @@ class RedisSubscriptionBroker:
             if isinstance(data, bytes | bytearray):  # pragma: no branch - always bytes
                 data = data.decode()
             await queue.put(json.loads(data))
+
+
+def _digest(namespace: str) -> str:
+    """Hash a free-form server name into something a channel name can hold."""
+    return hashlib.sha256(namespace.encode("utf-8")).hexdigest()[:_NAMESPACE_DIGEST_CHARS]
 
 
 __all__ = ["RedisSubscriptionBroker"]

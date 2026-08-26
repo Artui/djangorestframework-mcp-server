@@ -31,6 +31,14 @@ class ResourceRegistry:
     Concrete resources are matched by exact URI, templates by a regex derived
     from the template. ``resolve`` returns the binding plus the variables
     extracted from the URI.
+
+    **Specificity, not registration order.** A template's ``{var}`` matches any
+    single segment, so ``reports://{report_id}`` also matches
+    ``reports://all-tenants-summary``. Resolving in registration order would
+    make *which permission stack guards a URI* a function of the order the two
+    were registered in — and the wrong answer is the permissive one, since the
+    template is the general case. Concrete URIs are therefore tried first, and
+    only then templates.
     """
 
     def __init__(self) -> None:
@@ -45,7 +53,10 @@ class ResourceRegistry:
         self._patterns[binding.uri_template] = _template_to_pattern(binding.uri_template)
 
     def resolve(self, uri: str) -> tuple[ResourceBinding, dict[str, str]] | None:
-        for binding in self._bindings:
+        # Concrete before template — see the class docstring. Within each group
+        # registration order still decides, which is only reachable for two
+        # templates whose patterns overlap.
+        for binding in (*self.concrete(), *self.templates()):
             pattern: re.Pattern[str] = self._patterns[binding.uri_template]
             match: re.Match[str] | None = pattern.match(uri)
             if match is not None:

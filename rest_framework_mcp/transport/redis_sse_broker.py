@@ -51,6 +51,10 @@ class RedisSSEBroker:
 
     - Same single-subscriber-per-session contract as the in-memory broker:
       re-subscribing replaces the old subscriber's queue.
+    - Same bounded per-session queue, for the same reason: the listener task
+      pumps Redis into a local queue, so a client that stops reading the socket
+      would otherwise accumulate every published payload in this worker's
+      memory. Past ``max_queued_events`` the oldest is dropped.
     - Replay is a separate, opt-in collaborator — pair this with
       [`RedisSSEReplayBuffer`][rest_framework_mcp.transport.redis_sse_replay_buffer.RedisSSEReplayBuffer]
       for cross-worker ``Last-Event-ID`` resume.
@@ -58,14 +62,23 @@ class RedisSSEBroker:
       lifespan shutdown.
     """
 
-    def __init__(self, client: Any, *, channel_prefix: str = _DEFAULT_CHANNEL_PREFIX) -> None:
+    def __init__(
+        self,
+        client: Any,
+        *,
+        channel_prefix: str = _DEFAULT_CHANNEL_PREFIX,
+        max_queued_events: int = 1024,
+    ) -> None:
         if AsyncRedis is None:  # pragma: no cover - exercised by the no-extras smoke job
             raise ImportError(
                 "RedisSSEBroker requires the `redis` package. "
                 'Install with `pip install "djangorestframework-mcp-server[redis]"`.'
             )
+        if max_queued_events <= 0:
+            raise ValueError("max_queued_events must be positive")
         self._client: Any = client
         self._prefix: str = channel_prefix
+        self._max_queued_events: int = max_queued_events
         # Per-session listener tasks plus the queues they feed. Re-subscribe
         # cancels the previous task, so background coroutines cannot leak.
         self._tasks: dict[str, asyncio.Task[None]] = {}
@@ -80,7 +93,7 @@ class RedisSSEBroker:
         if existing is not None:
             existing.cancel()
 
-        queue: asyncio.Queue[Any] = asyncio.Queue()
+        queue: asyncio.Queue[Any] = asyncio.Queue(maxsize=self._max_queued_events)
         self._queues[session_id] = queue
         # The listener task owns the Redis pubsub object; the handle is what
         # lets unsubscribe cancel it.
@@ -115,6 +128,16 @@ class RedisSSEBroker:
         """
         return session_id in self._queues
 
+    @property
+    def active_streams(self) -> int:
+        """Local subscribers only, matching what the cap protects.
+
+        The ceiling exists to stop one worker's task pool being exhausted, and
+        a cluster-wide count would neither measure that nor be worth a Redis
+        round-trip per GET.
+        """
+        return len(self._queues)
+
     async def _listen(self, session_id: str, queue: asyncio.Queue[Any]) -> None:
         """Pump messages from Redis pub/sub into the per-session queue.
 
@@ -133,7 +156,7 @@ class RedisSSEBroker:
                     data, bytes | bytearray
                 ):  # pragma: no branch - fakeredis always bytes
                     data = data.decode()
-                await queue.put(json.loads(data))
+                _offer(queue, json.loads(data))
         except asyncio.CancelledError:
             raise
         finally:
@@ -143,6 +166,18 @@ class RedisSSEBroker:
                 await pubsub.unsubscribe(self._channel(session_id))
             with contextlib.suppress(Exception):  # pragma: no cover
                 await pubsub.aclose()
+
+
+def _offer(queue: asyncio.Queue[Any], payload: Any) -> None:
+    """Enqueue ``payload``, evicting the oldest if the reader has stalled.
+
+    The listener task must not block: it is the only consumer of this session's
+    Redis subscription, so parking it on a full queue stops draining Redis and
+    turns one unread stream into backpressure on the connection itself.
+    """
+    if queue.full():
+        queue.get_nowait()
+    queue.put_nowait(payload)
 
 
 __all__ = ["RedisSSEBroker"]

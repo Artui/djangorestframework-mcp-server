@@ -86,3 +86,52 @@ def test_adapter_instance_constructed_once() -> None:
     # instance (verified by no AttributeError + permission flag).
     assert len(_RecordingPermission.captured) == 2
     assert len(instances) == 2  # two distinct DRF Request objects
+
+
+class _ReadsAuthThenUser(BasePermission):
+    """The shape of every stock token permission: ``auth`` first, ``user`` after.
+
+    ``TokenHasScope`` from django-oauth-toolkit reads ``request.auth`` to find
+    the token, then falls through to the user.
+    """
+
+    seen: list[tuple[Any, Any]] = []  # noqa: RUF012 — test-only registry
+
+    def has_permission(self, request: Any, view: Any) -> bool:  # noqa: ARG002
+        _ReadsAuthThenUser.seen.append((request.auth, request.user))
+        return True
+
+
+def test_reading_auth_does_not_reset_the_user_to_anonymous() -> None:
+    """DRF resolves ``request.auth`` lazily.
+
+    On a request that has never authenticated, reading it runs the (here empty)
+    authenticator chain, which ends in ``_not_authenticated()`` and overwrites
+    ``request.user`` with ``AnonymousUser`` — on the wrapper *and* on the
+    ``HttpRequest`` underneath. A permission as ordinary as ``TokenHasScope``
+    therefore denied a properly scoped caller, with nothing in the response
+    saying why, and the plausible workaround was to drop the permission.
+    """
+    _ReadsAuthThenUser.seen.clear()
+    user = _DummyUser(authenticated=True)
+    raw = object()
+    http_request = _http_request()
+    adapter = DRFPermissionAdapter(_ReadsAuthThenUser)
+
+    assert adapter.has_permission(http_request, TokenInfo(user=user, raw=raw)) is True
+    seen_auth, seen_user = _ReadsAuthThenUser.seen[0]
+    # The backend's opaque payload is what DRF permissions expect to find here.
+    assert seen_auth is raw
+    assert seen_user is user
+    # And the mutation does not reach the shared HttpRequest either.
+    assert not isinstance(getattr(http_request, "user", None), AnonymousUser)
+
+
+def test_a_backend_publishing_no_payload_still_leaves_the_user_alone() -> None:
+    """``auth`` is ``None`` as a *value* — the point is that it is set at all,
+    so the getter never reaches for the authenticator chain."""
+    _ReadsAuthThenUser.seen.clear()
+    user = _DummyUser(authenticated=True)
+    adapter = DRFPermissionAdapter(_ReadsAuthThenUser)
+    adapter.has_permission(_http_request(), TokenInfo(user=user))
+    assert _ReadsAuthThenUser.seen[0] == (None, user)

@@ -7,6 +7,440 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.34.0] — 2026-08-26
+
+### Upgrade notes
+
+**The page ceiling now bounds a selector tool's rows, not only its `limit`.**
+`MAX_PAGE_SIZE` (default 100, per-binding `max_page_size=`) has always been the
+most rows one page of a `paginate=True` tool may carry. It now means the most
+rows *any* selector-tool result carries, which brings two previously unbounded
+calls inside it:
+
+- A `paginate=False` LIST tool whose selector resolves to more rows than the
+  ceiling now returns an `isError` result instead of the whole table. It is
+  refused rather than truncated, for the reason the registration-time
+  `UnboundedListWarning` has always given: an unpaginated payload carries no
+  metadata that could say rows were dropped, so a clamped one reads as
+  complete to the model reasoning from it.
+- A `page` argument past the last page now clamps to the last page instead of
+  compiling into an arbitrarily large SQL `OFFSET`.
+
+Both are configured through the knob that already existed: pass
+`max_page_size=None` at registration to serve one tool unbounded, or set
+`REST_FRAMEWORK_MCP['MAX_PAGE_SIZE'] = None` for the server. A deployment
+relying on an unpaginated tool that returns more than 100 rows must do one of
+those, or register it with `paginate=True`.
+
+**`REST_FRAMEWORK_MCP['PAGE_SIZE']` below 1 is now refused.** A catalog listing
+raises `ImproperlyConfigured` naming the setting instead of serving empty pages
+behind a cursor that never terminates.
+
+
+- **Dynamic client registration.** If you relied on `/oauth/register/` to issue
+  `client_credentials`, `password` or `implicit` clients, those registrations
+  now return `400 invalid_client_metadata`. Create such applications through
+  Django admin or a management command, where an owner and a review step exist,
+  and keep DCR for the interactive `authorization_code` clients it is for. Note
+  that `AuthorizationServerMetadata.grant_types_supported` never advertised the
+  other three.
+
+- **DCR redirect URIs.** The accepted schemes now come from
+  `OAUTH2_PROVIDER["ALLOWED_REDIRECT_URI_SCHEMES"]` (django-oauth-toolkit's
+  default is `["http", "https"]`). Native clients registering a private-use
+  scheme need that setting widened — the same setting the authorization request
+  already checked. Conversely, `ftp://` and `ftps://` redirect URIs, which
+  DRF's `URLField` used to admit, are now refused unless the setting names them.
+
+- **`resource_link` tools.** A tool with `content_kind=RESOURCE_LINK` whose
+  payload can carry a `file:`, `data:` or other non-fetchable URI now returns an
+  `isError` result for that call instead of emitting the block. If your resource
+  URIs use a custom scheme (`reports://`, `docs://`), they are unaffected —
+  only the script-bearing and local-content schemes are refused.
+
+- **Resources registered from a rich `SelectorSpec`.** A registration that sets
+  any of the ten fields listed above now raises at startup rather than silently
+  dropping them. Register the spec as a selector tool, or move the behaviour
+  into the selector callable.
+
+- **`structuredContent` on a null payload.** A tool whose answer is `null` now
+  emits `"structuredContent": null` instead of omitting the key. Clients that
+  treated the key's absence as "no value" see no change in meaning; clients that
+  treated it as "this tool has no structured output" were being misled.
+
+### Added
+
+- **The `GET` session stream is bounded, on both axes.** It had neither a
+  concurrency cap nor a lifetime: `stream_events` was a bare `while True` whose
+  only exit was the client leaving, keep-aliving itself past any proxy timeout,
+  while minting sessions stayed uncapped — so an authenticated caller could
+  loop `initialize` and open one parked ASGI task per session. Two new settings,
+  mirroring what `subscriptions/listen` already had:
+
+  - `MAX_CONCURRENT_SSE_STREAMS` (default `100`) — past it a `GET` is refused
+    with `503` / `-32603` rather than queued.
+  - `SSE_STREAM_MAX_SECONDS` (default `3600`) — the stream closes gracefully
+    with a `: stream closed` comment frame, and the client reconnects. It also
+    bounds how long a revoked principal keeps receiving a session's pushes,
+    authentication being checked once at open.
+
+  Both take `None` to disable. **Upgrade note:** these are new limits where
+  there were none. A deployment that deliberately holds more than 100 concurrent
+  streams per worker, or streams open for longer than an hour, should set them
+  explicitly. A client without an `sse_replay_buffer=` may miss notifications
+  published during a reconnect, which was already true of any disconnect.
+
+  Custom `SSEBroker` implementations must now expose an `active_streams`
+  property (the count of local subscribers) — both bundled brokers do.
+
+- **The SSE brokers bound their per-session queue.** `InMemorySSEBroker` and
+  `RedisSSEBroker` take `max_queued_events=` (default `1024`) and drop the
+  oldest payload past it, returning `False` from `publish` to report the drop
+  through the channel that already meant "nobody got this". A client that opened
+  the stream and stopped reading it previously accumulated every published
+  payload in memory with no drop policy and no backpressure. **Upgrade note:** a
+  notification can now be dropped for a stalled reader where it would previously
+  have been retained; delivery was always documented as best-effort.
+
+- **The SSE replay buffers stop accumulating dead sessions.** `forget()` runs
+  only on an explicit `DELETE`, while sessions ordinarily end by expiring or by
+  a client simply dropping the connection, so every session that ever recorded
+  an event kept its ring and its counter for the life of the process (or of the
+  Redis instance). `InMemorySSEReplayBuffer` takes `max_sessions=` (default
+  `1024`) and drops the least recently written; `RedisSSEReplayBuffer` takes
+  `ttl_seconds=` (default one day, matching the session store's idle window),
+  refreshed on every write. **Upgrade note:** a resume for a session evicted or
+  expired this way replays nothing rather than replaying stale events — the same
+  silent gap a client already accepts when its ring overflows.
+
+- **`RedisSubscriptionBroker` and `RedisSSEReplayBuffer` take a `namespace=`.**
+  Both used a fixed key prefix while the cache-backed stores fold the server's
+  `name` into theirs. Subscription topics are built from caller-supplied values
+  — a notification kind, a resource URI — so two servers in one project that
+  register the same resource URI derive the same topic, and a subscriber
+  authorized on one could receive the other's change signals, routing around the
+  `resources/read` check `grant_subscription` gates subscriptions on. Pass
+  `namespace=` (the server's name is the obvious value) whenever one Redis
+  serves more than one server. The default prefix is unchanged, so a
+  single-server deployment sees no key churn.
+
+### Fixed
+
+- **A tool's `invalidates=` announcements now reach subscribers on WSGI when the
+  server is mounted through `.urls`.** The sync transport had nowhere to publish
+  them, so a tool that declared `invalidates=` committed its write and told
+  nobody — indistinguishable, from a subscriber's side, from the resource never
+  having changed. `async_urls` always passed the broker through, so the gap was
+  visible on ASGI and invisible on WSGI.
+
+- **`prompts/get` names a malformed `arguments` field instead of treating it as
+  empty.** `[]`, `""`, `0` and `False` were folded into "no arguments" by the
+  line immediately above the one that exists to reject a non-object, so a prompt
+  whose arguments are all optional rendered a call the client never made in that
+  shape, and every other prompt answered with a confusing missing-argument error
+  rather than naming the real fault. Matches the same correction on `tools/call`.
+
+- **A selector tool's object-level permissions never ran.** A `SelectorSpec`
+  carrying `permission_classes` had only its class-level `has_permission`
+  enforced over MCP: the spec's `has_object_permission` needs the resolved row,
+  which only dispatch sees, and this path passed no `on_target_resolved` guard —
+  so a spec whose ownership test lives there was enforced behind a DRF view and
+  on the service-tool path, and not here. A `kind=RETRIEVE` tool would render
+  another principal's row to any caller the class-level check let through.
+  Both dispatch paths now pass `enforce_permissions` as the guard and map its
+  denial to a JSON-RPC `-32006`, as the service-tool path does. A LIST target is
+  a queryset rather than a model, so it runs the class-level check only, which
+  is what object permissions mean per row.
+
+- **An unpaginated LIST tool fetched and serialised the entire queryset.**
+  `MAX_RESULT_BYTES` was the only backstop and it measures a payload that has
+  already been fetched and rendered in full, so the whole table was in memory
+  before the ceiling could fire. The rows are now bounded in SQL, one past the
+  ceiling, before anything is rendered. See the upgrade notes.
+
+- **A doubled sign in `ordering` escaped as an unhandled 500.** The allowlist
+  normalised the value with `lstrip("-")`, which strips *characters* rather than
+  one sign, so `--created_at` matched an allowed `created_at` and reached
+  `order_by()` verbatim — where Django's ordering pattern rejects it with a
+  `ValueError` that no handler on the tool-call path catches. The client got a
+  traceback instead of a JSON-RPC envelope for a mistyped argument. Exactly one
+  leading `-` is stripped now, so a doubled sign fails the allowlist and is
+  ignored like any other unrecognised ordering.
+
+- **A paginated tool's `page` argument had no upper clamp.** `(page - 1) *
+  limit` was whatever the caller asked for, so a large `page` compiled to an
+  `OFFSET` the backend either scanned towards or rejected with a `DatabaseError`
+  that is neither exception this path catches — another unhandled 500, and a
+  `count()` on every such call regardless. See the upgrade notes.
+
+- **A `PAGE_SIZE` below 1 produced a cursor that never terminated.** Every page
+  came back empty, so `nextCursor` re-encoded the offset it was handed for as
+  long as the registry was non-empty, and a conformant client following it saw a
+  catalog that looked permanently empty and never finished paging. See the
+  upgrade notes.
+
+- **A `SelectorSpec.kwargs` provider's `UNSET` decline is honoured on
+  `resources/read`.** Returning `UNSET` means "I am not setting this key", and
+  the sentinel was being written into the pool instead — inverting a decline
+  into an override, and handing the ORM a sentinel for a well-formed request.
+
+- **`MAX_RESULT_BYTES` applies to `prompts/get`.** It was enforced on
+  `tools/call` and `resources/read` and silently skipped for the one method
+  whose body is whatever a consumer's `render` callable returned, so an
+  operator who set the ceiling believed every result surface was bounded.
+
+
+- **A tool call answered as a task now charges its rate limits.** It charged
+  them exactly zero times: `maybe_create_task` answers *before* dispatch, which
+  is where the inline charge lives, and the worker replays the call under
+  `enforce_rate_limits=False`. Each side's docstring said the other one paid.
+  A client that declared the tasks extension therefore opted itself out of every
+  quota a `task_policy=OPTIONAL`/`REQUIRED` tool configured — by declaring a
+  capability — and the enqueue loop was unbounded. The charge now happens in
+  `maybe_create_task`, after the permission check and before anything durable
+  exists, so an exhausted quota is refused with `-32005` and leaves no record
+  and no queued job behind. The worker still charges nothing, which is what
+  keeps it exactly one charge per client call.
+
+  **Upgrade note.** This is a behaviour change for any deployment already
+  running task-shaped tools with `rate_limits=`: those calls were free and are
+  now billed. If a quota was sized against the inline path only, it will now
+  also see the task-shaped traffic.
+
+- **`tasks/*` no longer runs on the event loop under ASGI.** `adispatch` fell
+  through to the sync handler table inline, so `tasks/get` — the only way to
+  collect a task result — read the task store from the loop. With the default
+  `DjangoCacheTaskStore` over a `DatabaseCache` that raises
+  `SynchronousOnlyOperation`, leaving a client able to create tasks it could
+  never collect. The fall-through now goes through the thread-sensitive
+  executor, which also covers the list handlers, where a consumer's
+  `DjangoPermRequired` runs a query.
+
+- **The WSGI transport can now publish `invalidates=` announcements.** The sync
+  viewset built its `MCPCallContext` without a subscription broker, so
+  `publish_invalidations` returned without touching one and every subscriber was
+  told nothing — indistinguishable from the resource never having changed —
+  while `MCPServer`'s own sync contexts (`call_tool`, the task worker) have
+  always carried the broker. `StreamableHttpViewSet` now takes
+  `subscription_broker=` and threads it through both of its context
+  constructions, so a tool mutating over WSGI reaches subscribers whose streams
+  are parked on an ASGI process: the split a cross-process broker exists for.
+  Publishing only — serving `subscriptions/listen` still needs the async
+  transport, which is what can hold a stream open.
+
+- **A DRF permission reading `request.auth` no longer resets the user to
+  `AnonymousUser`.** `DRFPermissionAdapter` set `.user` but left `_auth`
+  unresolved, so the first read of `request.auth` ran DRF's (empty)
+  authenticator chain, which ends in `_not_authenticated()` and overwrites both
+  the wrapper's user and the underlying `HttpRequest`'s. Permissions as ordinary
+  as django-oauth-toolkit's `TokenHasScope` therefore denied properly scoped
+  callers over MCP with no diagnostic. The adapter now assigns
+  `request.auth = token.raw` alongside the user.
+
+- **A task worker honours a deactivated account.** `build_worker_token` re-read
+  the user so a revocation would be caught at run time, but nothing downstream
+  consults `is_active` — `IsAuthenticated` is true of an inactive user — so the
+  re-read honoured deactivation in appearance only. An inactive user now
+  degrades to `AnonymousUser`, as a deleted one already did. The docstring also
+  now states plainly what is *not* re-derived: `scopes` and `audience` are
+  replayed as frozen at creation, because the backend handle that could
+  re-validate them is deliberately not persisted; `TASK_TTL_MS` bounds that
+  window.
+
+- **A present-but-unsupported `MCP-Protocol-Version` is rejected on sessionless
+  requests too.** `negotiate_protocol_version` documented that it always
+  rejects one and then silently downgraded it on `initialize` and
+  `server/discover`. A header naming a version this server does not support in
+  either era is now a `400` on every path. A header naming a *modern* version
+  still takes the legacy fallback: the server does support it, just not through
+  this handshake, and `initialize`'s own era check is where that is explained.
+
+- **A malformed `taskId` or `Mcp-Session-Id` is answered as a miss.** Both go
+  straight into a Django cache key, and the memcached backends reject keys
+  holding a space or a control character, or over 250 bytes — raising out of a
+  handler with no arm for it, so a client got an unhandled `500` where the
+  protocol says "unknown task" / "unknown session". Both cache-backed stores now
+  check the id against the shape they mint before touching the cache. Nothing is
+  leaked: an id that cannot be one they issued names nothing that exists.
+
+- **`build_mcp_config(task_ttl_ms=None)` now means "never expire".** Both task
+  scalars used the `x if x is not None else setting` shape, which reads an
+  explicit `None` as "not supplied" — so asking for tasks that never expire
+  silently got the setting's 24 hours instead, and the only sign was records
+  vanishing a day in. They now use the `UNSET` sentinel the other nullable
+  bounds use. `REST_FRAMEWORK_MCP['TASK_TTL_MS'] = None` was always honoured and
+  still is.
+
+  **Upgrade note.** `build_mcp_config(task_ttl_ms=None)` and
+  `build_mcp_config(task_poll_interval_ms=None)` previously fell back to the
+  setting. If you were passing `None` to mean "use the setting", drop the
+  argument.
+
+
+- **`tools/list` no longer advertises `additionalProperties: false` on a
+  guarantee the runtime does not provide.** For a service tool the
+  unknown-argument check runs against the key set the spec declares, and that
+  set is not always enumerable — a nested selector taking a bare `**kwargs`, or
+  carrying a `filter_set`, leaves it open, and an open set is answered by
+  accepting and silently dropping every undeclared key. Those tools now
+  advertise an open schema, so a client is no longer told a typo'd field will be
+  refused while the server takes it and throws it away.
+
+- **A client-supplied `outputFormat` is validated before the tool runs.** An
+  unrecognised value reached `OutputFormat.coerce` at the *end* of dispatch,
+  past the last `except`, so it raised out of the handler as a bare HTTP 500
+  with no JSON-RPC envelope — after the mutation had committed, leaving the
+  caller unable to tell whether a retry would apply the write twice. It is now
+  a `-32602` returned ahead of task creation and dispatch, on both the sync and
+  the async path.
+
+- **A malformed `arguments` field is named as the fault.** `params.get(
+  "arguments") or {}` collapsed `[]`, `""`, `0` and `false` into an empty dict
+  before the guard on the next line could see them, so a tool whose inputs are
+  all optional ran a call the client never intended in that shape, and every
+  other tool answered with a confusing missing-field error. Only a missing key
+  or an explicit `null` now means "no arguments". Both `tools/call` paths.
+
+- **An explicit `null` no longer satisfies a `required=True` `UrlKwarg`.** A URL
+  kwarg stands in for a route capture, which can never be null over HTTP;
+  off-HTTP `{"pk": null}` was treated as supplied, so the required check never
+  fired and the `None` was seeded into `view.kwargs`, where `.filter(pk=None)`
+  becomes SQL `IS NULL` — an unscoped read that answers successfully with the
+  wrong rows. A null now falls through to the declared default and then to the
+  required check, exactly as an omitted key does.
+
+- **`structuredContent` distinguishes a null answer from no structured channel.**
+  A tool called with `include_structured_content=True` whose payload was
+  genuinely `None` produced the same wire shape as one that had opted out, so a
+  client branching on the key's presence was told the server offers no
+  structured output. A null payload is now emitted as `"structuredContent":
+  null`; the key is omitted only when structured content was not requested.
+
+- **The `# format: toon` marker is stamped only when TOON produced the text.**
+  Without the optional `[toon]` extra the encoder warns and falls back to JSON,
+  and that warning goes to the server's log, not onto the wire — so a client
+  selecting its parser from the marker line was handed JSON labelled as TOON.
+  The fallback now ships as plain, unmarked JSON.
+
+- **`ResourceRegistry.resolve` prefers a concrete URI over a template.**
+  Resolution walked registration order, and a template's `{var}` matches any
+  single segment — so `reports://{report_id}` also matched
+  `reports://all-tenants-summary`, and which permission stack guarded a URI
+  depended on the order the two were registered in. Concrete URIs are tried
+  first, then templates.
+
+- **The DCR initial access token is compared in constant time.** `!=` returns at
+  the first differing byte, which over enough requests leaks a bearer credential
+  one prefix at a time; recovering it turns a gated registration endpoint into
+  an open one. Now `secrets.compare_digest`, on bytes so a non-ASCII header is a
+  401 rather than a crash.
+
+- **`scripts/benchmark.py` runs again.** It imported `handlers.context` and
+  `auth.token_info`, both moved under `types/` sub-packages, and mounted
+  `server.urls` through `include()`, which no longer accepts the namespaced
+  triple. A new smoke test checks every script's package imports still resolve,
+  since nothing else in the gates covers `scripts/`.
+
+### Changed
+
+- **Dynamic client registration accepts only the `authorization_code` grant.**
+  A dynamically registered client has no owning user and no human in the loop,
+  so the grant it holds must be one that cannot mint a token without one.
+  `client_credentials` can: the resulting token carries no user at all, and the
+  scope permission tests only the token's scopes, so it satisfies every
+  scope-gated tool — an open registration endpoint became an unauthenticated
+  path onto the whole tool surface. `password` and `implicit` are removed from
+  OAuth 2.1 outright. The narrowing applies to DOT's `authorization_grant_type`
+  spelling too, and matches what `grant_types_supported` already advertised.
+
+- **DCR `redirect_uris` accepts any absolute URI on a scheme the authorization
+  server will honour.** DRF's `URLField` allowlists the http family, so the
+  endpoint refused exactly the private-use schemes RFC 8252 §7.1 defines for the
+  native clients its own `application_type` exists to describe — while admitting
+  `ftp`, which no OAuth client redirects to. The accepted set is now
+  django-oauth-toolkit's own `ALLOWED_REDIRECT_URI_SCHEMES`, so a registration
+  is refused only where the authorization request would have been refused
+  anyway.
+
+- **`resource_link` content blocks refuse script-bearing URI schemes.** The
+  payload field holding a URI is frequently a row an end user wrote, and the
+  block was emitted verbatim to a host that may render it as a clickable anchor
+  in its own origin or fetch it to build a preview. `javascript:`, `data:`,
+  `vbscript:`, `blob:`, `file:` and `about:` URIs, and anything that is not an
+  absolute URI, now come back as the same explanatory tool-level error the other
+  payload mismatches use.
+
+- **Registering a resource from a `SelectorSpec` that sets a field the read path
+  cannot apply is refused.** `resources/read` dispatches the selector callable
+  directly, so `preconditions`, `select_related`, `prefetch_related`,
+  `annotations`, `extend_queryset`, `filter_set`, `output_serializer_context`,
+  `allow_none`, `progress_reporter` and `metadata` were dropped with no warning
+  — and a `preconditions` gate that holds on every other transport while simply
+  not running here is indistinguishable from success. Registration now names the
+  fields and points at the selector *tool* surface, which honours them.
+
+- **`UrlKwarg` / `QueryParam` defaults tolerate either spelling of "no
+  default".** The declarations live in djangorestframework-services, where the
+  sentinel is moving from `None` to that package's `UNSET`. Both are read as
+  "no default", so this package is correct against either release and needs no
+  version floor raise.
+
+### Security
+
+- **Object-level permissions now run on every dispatch path.** A
+  `SelectorSpec` / `ServiceSpec` whose ownership test lives in
+  `has_object_permission` was enforced for its class-level half only over MCP,
+  so a spec that held on every other transport handed one tenant's row to
+  another here. `resources/read` now guards the value its selector resolved,
+  and a chain step guards the target it resolved, both through
+  djangorestframework-services' `enforce_permissions` — the guard the tool
+  paths already pass to `dispatch_spec`. A denial answers `-32006` like any
+  other, and inside an atomic chain it rolls the transaction back. A `LIST` /
+  collection result still gets the class-level check only: object permissions
+  are a per-row concept and a set is authorized per-set.
+
+- **A chain step's `preconditions` run.** They fired only from inside
+  `dispatch_spec`, which a chain does not use, so a state rule declared once on
+  a spec silently did not hold inside a chain tool while holding everywhere
+  else. Ordering matches the rest of the package: permissions on the resolved
+  target, then preconditions, then the service or selector.
+
+- **A client argument can no longer stand in for the authenticated identity.**
+  `prompts/get` spread the caller's arguments *over* the `request` / `user`
+  seeds, so `{"topic": "x", "user": 7}` against the documented
+  `def render(user, topic)` shape rendered the prompt scoped to a principal the
+  caller named. The same held for a URI-template variable on `resources/read`
+  and for a chain step whose `inputs` callable forwards `ctx.args`. On all
+  three the transport's seeds are now applied last. `completion/complete` used
+  to re-seed four of the seven reserved names after the client's siblings; it
+  now drops every reserved name from the spread instead of tracking a
+  hand-picked subset.
+
+- **Resources and prompts are held to `REQUIRE_TOOL_PERMISSIONS`.** The
+  unguarded-binding check covered tool registrations only, so the same selector
+  registered as a resource started clean and answered any principal the
+  transport authenticated, while registered as a tool it raised at startup.
+  `register_resource` and `register_prompt` now report through the same check
+  and the same setting. Interactive views (`register_ui_resource`) stay exempt,
+  deliberately: a view is a template rendered with no context, a literal
+  document, or a zero-argument callable, so it carries no tenant data.
+
+  **Upgrade note.** A project registering resources or prompts without
+  permissions will now fail at startup. Declare `permission_classes` on the
+  spec (or pass `permissions=[...]`), or set
+  `REST_FRAMEWORK_MCP["REQUIRE_TOOL_PERMISSIONS"] = False` to downgrade it to
+  an `UnguardedToolWarning` while migrating.
+
+- **A URI-template variable is validated at registration.** It is a
+  caller-controlled name routed into the selector's kwarg pool, and unlike a
+  tool's `url_kwargs` / `query_params` it went through no check at all — so
+  `notes://{user}/{pk}` compiled to a regex group named `user`. Template
+  variables now go through the same shared `validate_channel_names` as every
+  other name channel, which also catches a variable declared twice. The
+  pagination names are deliberately not reserved here: a resource has no
+  post-fetch pipeline, so `docs://{page}` stays a legitimate locator.
+
+
 ## [0.33.0] — 2026-08-25
 
 ### Added
@@ -3473,7 +3907,8 @@ Pinned to `djangorestframework-services==0.6.0`.
 - 100% line + branch coverage enforced by pytest (**451 tests** at
   release).
 
-[Unreleased]: https://github.com/Artui/djangorestframework-mcp-server/compare/v0.33.0...HEAD
+[Unreleased]: https://github.com/Artui/djangorestframework-mcp-server/compare/v0.34.0...HEAD
+[0.34.0]: https://github.com/Artui/djangorestframework-mcp-server/compare/v0.33.0...v0.34.0
 [0.33.0]: https://github.com/Artui/djangorestframework-mcp-server/compare/v0.32.1...v0.33.0
 [0.32.1]: https://github.com/Artui/djangorestframework-mcp-server/compare/v0.32.0...v0.32.1
 [0.32.0]: https://github.com/Artui/djangorestframework-mcp-server/compare/v0.31.0...v0.32.0

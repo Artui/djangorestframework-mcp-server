@@ -15,17 +15,19 @@ from rest_framework_mcp.registry.types.ui_tool_meta import UIToolMeta
 
 
 class UnguardedToolWarning(UserWarning):
-    """A tool was registered with no MCP permissions at all.
+    """A tool, resource or prompt was registered with no MCP permissions at all.
 
     Its own category so consumers can filter it precisely via
-    ``warnings.filterwarnings``.
+    ``warnings.filterwarnings``. Named for tools, which is where the check
+    started; one category keeps a consumer's existing filter working now that
+    every registration kind reports through it.
     """
 
 
 def check_tool_permissions_declared(
-    name: str, permissions: tuple[Any, ...], *, require: bool
+    name: str, permissions: tuple[Any, ...], *, require: bool, kind: str = "tool"
 ) -> None:
-    """Warn (or raise) when a tool binding carries no permissions.
+    """Warn (or raise) when a registered binding carries no permissions.
 
     ``permissions`` is the binding's *effective* tuple — author-declared
     ``spec.permission_classes`` (wrapped in ``DRFPermissionAdapter``) plus any
@@ -33,7 +35,13 @@ def check_tool_permissions_declared(
     call beyond transport authentication. The trap: DRF viewset-level and
     ``REST_FRAMEWORK`` default permission classes do **not** apply over MCP,
     so a spec guarded the usual way, with passing HTTP tests, otherwise ships
-    as an unguarded tool with no signal.
+    as an unguarded binding with no signal.
+
+    ``kind`` names the registration in the message — ``tool``, ``resource`` or
+    ``prompt``. All three reach data the same way and are governed by the one
+    ``REQUIRE_TOOL_PERMISSIONS`` setting, because the exposure is identical:
+    the same selector registered as a resource rather than a tool used to start
+    clean and answer any authenticated principal.
 
     Emits on every unguarded registration — no warn-once module state, per the
     repo's no-module-level-mutable-state rule.
@@ -41,10 +49,10 @@ def check_tool_permissions_declared(
     if permissions:
         return
     problem = (
-        f"MCP tool {name!r} is registered with no permissions: neither "
+        f"MCP {kind} {name!r} is registered with no permissions: neither "
         "spec.permission_classes nor a per-binding permissions=[...] is set. "
         "DRF viewset-level and REST_FRAMEWORK default permission classes do "
-        "NOT apply over MCP, so this tool is callable by any principal the "
+        f"NOT apply over MCP, so this {kind} is callable by any principal the "
         "transport authenticates. Set spec.permission_classes, or pass "
         "permissions=[...] at registration."
     )
@@ -110,8 +118,9 @@ def check_list_pagination_declared(name: str, *, paginate: bool, require: bool) 
     clamps safely because ``totalPages`` / ``hasNext`` tell the model rows were
     left behind; an unpaginated result carries no such metadata, so a clamped
     one would look complete. There is nowhere honest to put the truth except
-    the registration, hence a warning here and ``MAX_RESULT_BYTES`` as the
-    backstop at dispatch.
+    the registration, hence a warning here and ``MAX_PAGE_SIZE`` as the backstop
+    at dispatch -- applied as a ``LIMIT`` before the rows are rendered, so an
+    oversized result is refused rather than fetched whole and then measured.
     """
     if paginate:
         return
@@ -120,7 +129,9 @@ def check_list_pagination_declared(name: str, *, paginate: bool, require: bool) 
         "call returns every row the selector resolves to. Unlike a paginated tool "
         "there is no honest way to clamp that at dispatch — the result carries no "
         "metadata that would tell the model rows were dropped — so an oversized "
-        "result can only fail the call (see REST_FRAMEWORK_MCP['MAX_RESULT_BYTES']). "
+        "result can only fail the call (see REST_FRAMEWORK_MCP['MAX_PAGE_SIZE'], "
+        "which bounds the row count, and ['MAX_RESULT_BYTES'], which bounds the "
+        "encoded payload). "
         "Pass paginate=True, or set REST_FRAMEWORK_MCP['REQUIRE_LIST_PAGINATION'] = "
         "True to make this an error."
     )

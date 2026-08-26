@@ -252,6 +252,83 @@ def test_selector_tool_reject_rejects_truly_unknown_keys() -> None:
     assert out.code == -32602
 
 
+# ---------- A service tool whose declared key set is not enumerable ----------
+
+
+def _widget_by_pk(user: Any, pk: Any, **kwargs: Any) -> dict[str, Any]:
+    """A nested instance selector taking a bare ``**kwargs`` — an open surface.
+
+    The sister package cannot enumerate what such a callable declares, so its
+    unknown-argument check has nothing to compare against and lets every
+    undeclared key through, silently.
+    """
+    return {"pk": pk}
+
+
+def test_service_schema_stays_open_when_the_declared_key_set_is_not_enumerable() -> None:
+    # REJECT plus a serializer is not on its own enough for a *service* tool:
+    # the enforcement runs in the sister package against the key set the spec
+    # declares, and a nested selector with a bare ``**kwargs`` leaves that set
+    # open. Advertising ``additionalProperties: false`` there tells the client
+    # a typo'd field will be refused while the server accepts and drops it.
+    server = _server()
+    server.register_service_tool(
+        name="x",
+        spec=ServiceSpec(
+            service=_svc,
+            input_serializer=_OneFieldInput,
+            atomic=False,
+            instance_selector_spec=SelectorSpec(kind=SelectorKind.RETRIEVE, selector=_widget_by_pk),
+        ),
+        unknown_arguments=UnknownArguments.REJECT,
+    )
+    out = handle_tools_list(None, _ctx(server))
+    assert isinstance(out, dict)
+    assert out["tools"][0]["inputSchema"]["additionalProperties"] is True
+
+
+def test_the_open_service_schema_matches_what_dispatch_actually_does() -> None:
+    """The advertisement and the runtime must agree — which way round is secondary."""
+    server = _server()
+    server.register_service_tool(
+        name="x",
+        spec=ServiceSpec(
+            service=_svc,
+            input_serializer=_OneFieldInput,
+            atomic=False,
+            instance_selector_spec=SelectorSpec(kind=SelectorKind.RETRIEVE, selector=_widget_by_pk),
+        ),
+        unknown_arguments=UnknownArguments.REJECT,
+    )
+    out = handle_tools_call(
+        {"name": "x", "arguments": {"known": "k", "pk": 1, "typo": "?"}}, _ctx(server)
+    )
+    # Accepted and dropped, not refused: exactly the behaviour the open schema
+    # now advertises.
+    assert isinstance(out, dict)
+    assert "isError" not in out
+
+
+def test_service_schema_closes_when_the_nested_selector_declares_its_keys() -> None:
+    def _widget(user: Any, pk: Any) -> dict[str, Any]:
+        return {"pk": pk}
+
+    server = _server()
+    server.register_service_tool(
+        name="x",
+        spec=ServiceSpec(
+            service=_svc,
+            input_serializer=_OneFieldInput,
+            atomic=False,
+            instance_selector_spec=SelectorSpec(kind=SelectorKind.RETRIEVE, selector=_widget),
+        ),
+        unknown_arguments=UnknownArguments.REJECT,
+    )
+    out = handle_tools_list(None, _ctx(server))
+    assert isinstance(out, dict)
+    assert out["tools"][0]["inputSchema"]["additionalProperties"] is False
+
+
 # ---------- Selector schema reflects the policy on the merged inputSchema ----------
 
 

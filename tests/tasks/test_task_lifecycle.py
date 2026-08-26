@@ -319,6 +319,71 @@ def test_a_deleted_user_degrades_to_anonymous_rather_than_crashing(
     assert isinstance(build_worker_token(record).user, AnonymousUser)
 
 
+@pytest.mark.django_db
+def test_a_deactivated_user_degrades_to_anonymous_too(django_user_model: Any) -> None:
+    """Re-reading the row is only half of honouring a revocation.
+
+    Nothing downstream consults ``is_active`` — ``IsAuthenticated`` is true of
+    an inactive user — so a task queued before an account was disabled would
+    have run under it, and the re-read would have honoured the deactivation in
+    appearance only. This is the check Django's own ``ModelBackend`` makes
+    before it will authenticate anyone, applied at the moment the work runs.
+    """
+    user = django_user_model.objects.create_user(username="gone-away")
+    record = TaskRecord(
+        task=Task(
+            task_id="t",
+            status=TaskStatus.WORKING,
+            created_at="x",
+            last_updated_at="x",
+            ttl_ms=None,
+        ),
+        tool_name="t",
+        arguments={},
+        principal_id=f"user:{user.pk}",
+        user_pk=user.pk,
+        scopes=("s",),
+    )
+    assert build_worker_token(record).user.pk == user.pk
+
+    user.is_active = False
+    user.save(update_fields=["is_active"])
+    assert isinstance(build_worker_token(record).user, AnonymousUser)
+
+
+@pytest.mark.django_db
+def test_the_scopes_a_worker_replays_are_the_ones_frozen_at_creation(
+    django_user_model: Any,
+) -> None:
+    """Stated because it is the asymmetry, not an oversight to be read past.
+
+    ``raw`` — the backend handle that could be re-validated — is deliberately
+    not persisted, so there is nothing here to re-check a token against: a
+    grant narrowed or revoked after creation still buys the task the scopes it
+    was created with. ``TASK_TTL_MS`` is what bounds that window.
+    """
+    user = django_user_model.objects.create_user(username="still-here")
+    record = TaskRecord(
+        task=Task(
+            task_id="t",
+            status=TaskStatus.WORKING,
+            created_at="x",
+            last_updated_at="x",
+            ttl_ms=None,
+        ),
+        tool_name="t",
+        arguments={},
+        principal_id=f"user:{user.pk}",
+        user_pk=user.pk,
+        scopes=("invoices:write",),
+        audience="https://example.test/mcp",
+    )
+    token = build_worker_token(record)
+    assert token.scopes == ("invoices:write",)
+    assert token.audience == "https://example.test/mcp"
+    assert token.raw is None
+
+
 def test_a_task_created_by_an_anonymous_caller_stays_anonymous() -> None:
     record = TaskRecord(
         task=Task(

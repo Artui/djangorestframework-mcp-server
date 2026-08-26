@@ -31,6 +31,7 @@ from rest_framework_mcp.protocol.types.json_rpc_response import JsonRpcResponse
 from rest_framework_mcp.registry.prompt_registry import PromptRegistry
 from rest_framework_mcp.registry.resource_registry import ResourceRegistry
 from rest_framework_mcp.registry.tool_registry import ToolRegistry
+from rest_framework_mcp.subscriptions.types.subscription_broker import SubscriptionBroker
 from rest_framework_mcp.tasks.types.task_executor import TaskExecutor
 from rest_framework_mcp.tasks.types.task_store import TaskStore
 from rest_framework_mcp.transport.negotiate_protocol_version import negotiate_protocol_version
@@ -160,6 +161,13 @@ class StreamableHttpViewSet(ViewSet):
     # ``None`` on both means this server runs no tasks.
     task_store: TaskStore | None = None
     task_executor: TaskExecutor | None = None
+    # **Publishing only.** Serving ``subscriptions/listen`` needs a stream that
+    # stays open, which a sync WSGI view cannot hold, so that action is the
+    # async viewset's alone. Announcing an ``invalidates=`` change is the other
+    # direction and costs nothing but a publish, so a tool mutating over WSGI
+    # while subscribers hold their streams on an ASGI process still reaches
+    # them - the exact split a cross-process broker exists for.
+    subscription_broker: SubscriptionBroker | None = None
     # Identity the owning server resolved at construction. Unlike the
     # collaborators above these stay optional at dispatch: a hand-wired viewset
     # with no server still answers ``initialize``, falling back to
@@ -282,6 +290,7 @@ class StreamableHttpViewSet(ViewSet):
             instructions=self.instructions,
             tasks=self.task_store,
             task_executor=self.task_executor,
+            subscriptions=self.subscription_broker,
             config=self._require_config(),
         )
 
@@ -377,6 +386,7 @@ class StreamableHttpViewSet(ViewSet):
             instructions=self.instructions,
             tasks=self.task_store,
             task_executor=self.task_executor,
+            subscriptions=self.subscription_broker,
             config=config,
         )
 

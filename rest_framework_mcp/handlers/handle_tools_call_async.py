@@ -36,6 +36,7 @@ from rest_framework_mcp.handlers.utils import (
     services_dispatch_policies,
     split_query_params,
     split_url_kwargs,
+    validate_output_format,
     validation_error_data,
 )
 from rest_framework_mcp.output.error_tool_result import build_error_tool_result
@@ -74,9 +75,19 @@ async def handle_tools_call_async(
         # ``-32602``.
         return JsonRpcError(JsonRpcErrorCode.INVALID_PARAMS, f"Unknown tool: {tool_name!r}")
 
-    arguments_raw: Any = params.get("arguments") or {}
+    # See the sync sibling: only a missing key or an explicit ``null`` means
+    # "no arguments"; every other non-object is named as the fault.
+    arguments_raw: Any = params.get("arguments")
+    if arguments_raw is None:
+        arguments_raw = {}
     if not isinstance(arguments_raw, dict):
         return JsonRpcError(JsonRpcErrorCode.INVALID_PARAMS, "'arguments' must be an object")
+
+    # See the sync sibling: checked here so an unrenderable format cannot become
+    # a 500 after the tool has run.
+    bad_format: JsonRpcError | None = validate_output_format(params)
+    if bad_format is not None:
+        return bad_format
 
     # Placed as in the sync sibling, and deliberately *outside* the deadline:
     # creating a task is a store write and a queue hand-off, not the work, and

@@ -10,16 +10,19 @@ from __future__ import annotations
 
 import dataclasses
 import time
+import warnings
 from typing import Any
 
 import pytest
 from django.core.cache import cache
+from django.core.cache.backends.base import CacheKeyWarning
 
 from rest_framework_mcp.constants import TaskStatus
 from rest_framework_mcp.protocol.types.task import Task
 from rest_framework_mcp.tasks.django_cache_task_store import DjangoCacheTaskStore
 from rest_framework_mcp.tasks.in_memory_task_store import InMemoryTaskStore
 from rest_framework_mcp.tasks.types.task_record import TaskRecord
+from rest_framework_mcp.tasks.utils import new_task_id
 
 
 def _record(task_id: str = "t1", **task_kwargs: Any) -> TaskRecord:
@@ -325,3 +328,45 @@ def test_the_cache_codec_preserves_every_field() -> None:
         assert getattr(loaded, f.name) == getattr(original, f.name), f"lost TaskRecord.{f.name}"
     for f in dataclasses.fields(original.task):
         assert getattr(loaded.task, f.name) == getattr(original.task, f.name), f"lost Task.{f.name}"
+
+
+# ----- ids that could not be ours -----
+
+
+@pytest.mark.parametrize(
+    "task_id",
+    [
+        pytest.param("a b", id="space"),
+        pytest.param("a\x7fb", id="control-character"),
+        pytest.param("x" * 300, id="over-the-key-length-limit"),
+    ],
+)
+def test_a_malformed_id_is_answered_as_a_miss_not_an_exception(task_id: str) -> None:
+    """``taskId`` comes off the wire and lands in a cache key.
+
+    The memcached backends reject keys holding a space or a control character,
+    and keys over 250 bytes — raising out of a handler that has no arm for it,
+    so a client gets an unhandled 500 where the protocol says "unknown task".
+    ``CacheKeyWarning`` is the same rejection Django's own key validator
+    reports, promoted to an error here to stand in for a memcached backend.
+    Nothing is leaked by checking: an id that cannot be one we minted cannot
+    name a task that exists.
+    """
+    store = DjangoCacheTaskStore(namespace="ns")
+    with warnings.catch_warnings():
+        warnings.simplefilter("error", CacheKeyWarning)
+        assert store.get(task_id) is None
+        # And the same for the write side, which a cancel reaches.
+        store.delete(task_id)
+
+
+def test_a_wellformed_id_still_round_trips() -> None:
+    """The guard has to admit every id this package actually issues."""
+    store = DjangoCacheTaskStore(namespace="ns")
+    record = _record(task_id=new_task_id())
+    store.create(record)
+    with warnings.catch_warnings():
+        warnings.simplefilter("error", CacheKeyWarning)
+        assert store.get(record.task_id) is not None
+        store.delete(record.task_id)
+    assert store.get(record.task_id) is None
