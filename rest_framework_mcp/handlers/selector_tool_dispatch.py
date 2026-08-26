@@ -6,7 +6,9 @@ and then ``dispatch_spec`` (the selector plus queryset shaping and
 
 - ``LIST`` orders when ``ordering_fields`` is set (deprecated — an
   ``OrderingFilter`` on the ``filter_set`` is the canonical way to declare
-  ordering), paginates when ``paginate=True``, and renders ``many=True``.
+  ordering), paginates when ``paginate=True``, and renders ``many=True``. The
+  effective page ceiling bounds the rows either way: a page clamps to it and
+  says so in its envelope, an unpaginated result refuses rather than truncate.
 - ``RETRIEVE`` takes ``.first()`` and renders ``many=False``; the binding
   rejects the ordering / pagination knobs at construction.
 
@@ -16,15 +18,18 @@ owned by the tool layer, not the selector: selectors return raw, unscoped data.
 
 from __future__ import annotations
 
+from itertools import islice
 from typing import Any
 
 from rest_framework import serializers as drf_serializers
+from rest_framework.exceptions import PermissionDenied
 from rest_framework_services import (
     OfflineServiceView,
     adispatch_spec,
     base_serializer_context,
     build_offline_context,
     dispatch_spec,
+    enforce_permissions,
     is_queryset,
     render_for_agent,
     spec_to_json_schema,
@@ -53,11 +58,14 @@ from rest_framework_mcp.handlers.utils import (
     validate_input_against_serializer,
     validation_error_data,
 )
+from rest_framework_mcp.observability import get_logger
 from rest_framework_mcp.output.error_tool_result import build_error_tool_result
 from rest_framework_mcp.output.resolve_structured_output import resolve_structured_output
 from rest_framework_mcp.output.tool_result import build_tool_result
 from rest_framework_mcp.protocol.types.json_rpc_error import JsonRpcError
 from rest_framework_mcp.registry.types.selector_tool_binding import SelectorToolBinding
+
+logger = get_logger(__name__)
 
 
 def dispatch_selector_tool(
@@ -87,6 +95,12 @@ def dispatch_selector_tool(
             # sibling. ``None`` on an ordinary request.
             progress=context.progress,
         )
+    except PermissionDenied:
+        # Raised by the ``on_target_resolved`` guard against the resolved row.
+        # A protocol-level FORBIDDEN, matching the service-tool path — an
+        # ``isError`` result would tell the model to retry an authorization
+        # decision that will not change.
+        return JsonRpcError(JsonRpcErrorCode.FORBIDDEN, "Insufficient permission")
     except ServiceValidationError as exc:
         # Tool-level failure, so an ``isError`` result the model can read and
         # self-correct from. JSON-RPC errors stay reserved for protocol faults.
@@ -152,6 +166,9 @@ async def dispatch_selector_tool_async(
             # is shared between the two siblings.
             progress=context.progress,
         )
+    except PermissionDenied:
+        # See the sync sibling: the object-permission guard's denial.
+        return JsonRpcError(JsonRpcErrorCode.FORBIDDEN, "Insufficient permission")
     except ServiceValidationError as exc:
         # See the sync sibling for the protocol-vs-tool error boundary.
         return build_error_tool_result(
@@ -367,14 +384,18 @@ def _post_fetch_and_render(
         if isinstance(ordering, str) and _is_valid_ordering(ordering, binding.ordering_fields):
             qs = qs.order_by(ordering)
 
+    # One ceiling covers both arms below: it is the most rows a selector tool
+    # puts in a single result, paged or not. Only the enforcement differs — a
+    # page clamps to it, an unpaginated result refuses. See
+    # ``_bound_unpaginated_rows``.
+    row_ceiling: int | None = resolve_bound(binding.max_page_size, config.max_page_size)
+
     # Rendering happens *after* the page is materialised, so a provider
     # declaring ``page`` receives the exact objects being serialised — and the
     # same object the renderer iterates, so an id-keyed batched query reuses the
     # queryset's result cache instead of issuing a second query.
     if binding.paginate:
-        page_no, limit, page_items, total = _slice_for_pagination(
-            qs, arguments_raw, resolve_bound(binding.max_page_size, config.max_page_size)
-        )
+        page_no, limit, page_items, total = _slice_for_pagination(qs, arguments_raw, row_ceiling)
         # The projection lands on the *items*, not on the envelope that
         # wraps them: ``page`` / ``totalPages`` / ``hasNext`` are this
         # transport's own keys and belong to no serializer.
@@ -395,14 +416,17 @@ def _post_fetch_and_render(
             "hasNext": page_no < total_pages,
         }
     else:
+        rows, exceeded = _bound_unpaginated_rows(qs, row_ceiling)
+        if exceeded is not None:
+            return _render_over_row_ceiling(binding, exceeded)
         payload = render_for_agent(
             binding.spec,
-            qs,
+            rows,
             projection=binding.agent_projection,
             many=True,
             view=view,
             request=drf_request,
-            extras={"page": qs},
+            extras={"page": rows},
         )
     return build_tool_result(
         payload,
@@ -423,6 +447,58 @@ def _render_missing_instance(binding: SelectorToolBinding) -> dict[str, Any]:
     return build_error_tool_result(
         f"{binding.name}: no matching instance found",
         error_type="not_found",
+    ).to_dict()
+
+
+def _bound_unpaginated_rows(qs: Any, max_rows: int | None) -> tuple[Any, int | None]:
+    """Take at most ``max_rows`` rows off an unpaginated LIST result.
+
+    Returns ``(rows, exceeded)``; ``exceeded`` is the ceiling when there were
+    more rows than it allows, and ``None`` when the whole result fits. ``None``
+    for ``max_rows`` is *no ceiling* — the value passes through untouched, which
+    is what keeps a deliberately unbounded tool unbounded.
+
+    One row past the ceiling is read, so "exactly at the ceiling" is
+    distinguishable from "over it", and it is read as a **slice** so a QuerySet
+    bounds the fetch in SQL. That is the point of doing this before rendering
+    rather than leaning on the byte ceiling: ``MAX_RESULT_BYTES`` measures a
+    payload that has already been fetched and serialised in full, so the whole
+    table is in memory by the time it fires.
+
+    Over-ceiling is a refusal rather than a silent clamp, unlike the paginated
+    arm: nothing in an unpaginated payload could say that rows were dropped, so
+    a truncated one reads as complete to the model reasoning from it.
+    """
+    if max_rows is None or not hasattr(qs, "__iter__"):
+        # No ceiling, or a scalar: a selector may return one value for a LIST
+        # spec, which the renderer passes through on the same ``__iter__``
+        # predicate. One value is bounded already, and ``iter(None)`` is not.
+        return qs, None
+    # ``qs[:n]`` on a QuerySet is a LIMIT; ``len()`` then evaluates it once and
+    # fills the result cache the renderer iterates. Any other iterable — a list
+    # from a non-ORM selector, or a generator — is windowed with ``islice``.
+    window: Any = qs[: max_rows + 1] if is_queryset(qs) else list(islice(iter(qs), max_rows + 1))
+    if len(window) > max_rows:
+        return window, max_rows
+    return window, None
+
+
+def _render_over_row_ceiling(binding: SelectorToolBinding, max_rows: int) -> dict[str, Any]:
+    """Refuse an unpaginated result that would carry more rows than the ceiling."""
+    # The caller is told by the result; the operator only by this. A bound that
+    # fires invisibly reads to everyone else as "the tool is broken".
+    logger.warning(
+        "Row bound exceeded: unpaginated tool %r resolved more than the %d row ceiling",
+        binding.name,
+        max_rows,
+    )
+    return build_error_tool_result(
+        f"Tool {binding.name!r} is unpaginated and resolved more than this server's "
+        f"{max_rows} row ceiling. Narrow the request — add or tighten a filter — and "
+        "call again. The result was not truncated: an unpaginated payload carries "
+        "nothing to say rows were dropped, so a partial one would look complete. "
+        "Registering the tool with paginate=True lets it be read a page at a time.",
+        error_type="result_too_large",
     ).to_dict()
 
 
@@ -455,6 +531,13 @@ def _dispatch_kwargs(
         "view": view,
         "argument_binding": argument_binding,
         "unknown_arguments": unknown_arguments,
+        # The object-permission hook, as on the service-tool path. Without it a
+        # spec whose ownership test lives in ``has_object_permission`` is
+        # enforced over HTTP and not here: the class-level check the binding's
+        # wrapped permissions run says nothing about the *row* a RETRIEVE
+        # resolved. The guard runs class-level only for a LIST, whose target is
+        # a queryset rather than a model.
+        "on_target_resolved": enforce_permissions,
     }
 
 
@@ -485,8 +568,17 @@ def _selector_dispatch_params(
 
 
 def _is_valid_ordering(value: str, allowed: tuple[str, ...]) -> bool:
-    """``ordering=created_at`` and ``ordering=-created_at`` both pass."""
-    return value.lstrip("-") in allowed
+    """``ordering=created_at`` and ``ordering=-created_at`` both pass.
+
+    Exactly one leading ``-`` is stripped, because that is the whole of what
+    Django's ordering syntax means by a sign. ``lstrip("-")`` strips *characters*
+    rather than a prefix, so ``--created_at`` normalised to an allowed field
+    name, passed this allowlist and reached ``order_by`` verbatim — where
+    Django's ordering pattern rejects it with a ``ValueError`` no handler on
+    this path catches. A double sign now simply fails the allowlist and the
+    ordering argument is ignored, as any other unrecognised one is.
+    """
+    return (value[1:] if value.startswith("-") else value) in allowed
 
 
 def _slice_for_pagination(
@@ -494,11 +586,18 @@ def _slice_for_pagination(
 ) -> tuple[int, int, Any, int]:
     """Return ``(page, limit, page_slice, total)``.
 
-    ``page`` / ``limit`` default to 1 / 100, non-positive values clamp to 1, and
-    ``limit`` clamps *down* to ``max_page_size``. That upper clamp is silent, and
-    safe in a way truncating an unpaginated result would not be: ``totalPages`` /
-    ``hasNext`` are computed from the clamped ``limit``, so a model that asked
-    for 500 rows and got 100 is told there are more pages.
+    ``page`` / ``limit`` default to 1 / 100, out-of-range values clamp into
+    range at *both* ends — ``limit`` down to ``max_page_size`` and up to 1,
+    ``page`` up to 1 and down to the last page that exists — and the clamps are
+    silent in a way truncating an unpaginated result would not be:
+    ``totalPages`` / ``hasNext`` are computed from the clamped ``limit`` and the
+    returned ``page`` is the one actually served, so a model that asked for 500
+    rows and got 100, or for page 10 of 3, is told what it received.
+
+    The upper clamp on ``page`` is why ``total`` is counted before the slice:
+    ``(page - 1) * limit`` on an unclamped page is an arbitrarily large SQL
+    ``OFFSET``, which a backend either scans towards or rejects outright with a
+    ``DatabaseError`` this path does not catch.
 
     The shape is discriminated with ``is_queryset``, **not**
     ``hasattr(qs, "count")``: ``list`` / ``tuple`` expose ``.count`` too, but it
@@ -519,6 +618,9 @@ def _slice_for_pagination(
             f"sliceable sequence (list / tuple); got {type(qs).__name__}. Set "
             "paginate=False or return a sliceable collection."
         )
+    # Matches the ``totalPages`` the envelope reports, so the clamped page is
+    # never one the caller is then told does not exist.
+    page_no = min(page_no, max(1, -(-total // limit)))
     start: int = (page_no - 1) * limit
     page_items: Any = qs[start : start + limit]
     return page_no, limit, page_items, total

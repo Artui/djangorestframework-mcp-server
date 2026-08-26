@@ -294,3 +294,61 @@ def test_the_legacy_channel_still_orders() -> None:
     )
 
     assert [row["number"] for row in _rows(out)] == ["mid", "low"]
+
+
+@pytest.mark.django_db
+def test_a_doubled_sign_is_not_an_allowed_ordering() -> None:
+    """``--amount_cents`` is rejected by the allowlist, not passed to the ORM.
+
+    Stripping the sign with ``lstrip("-")`` strips *characters*, so a doubled
+    sign normalised to an allowed field name and reached ``order_by`` verbatim,
+    where Django's ordering pattern raises a ``ValueError`` that no handler on
+    the tool-call path catches — an unhandled 500 with no JSON-RPC envelope for
+    a client that only mistyped an argument.
+    """
+    Invoice.objects.create(number="mid", amount_cents=200)
+    Invoice.objects.create(number="low", amount_cents=100)
+    server = _server()
+    with pytest.warns(DeprecationWarning):
+        server.register_selector_tool(
+            name="invoices.list",
+            spec=SelectorSpec(
+                kind=SelectorKind.LIST,
+                selector=_list_invoices,
+                output_serializer=InvoiceOutputSerializer,
+            ),
+            ordering_fields=["amount_cents"],
+        )
+
+    out = handle_tools_call(
+        {"name": "invoices.list", "arguments": {"ordering": "--amount_cents"}},
+        _ctx(server),
+    )
+
+    # Ignored like any other unrecognised ordering: the call still answers.
+    assert {row["number"] for row in _rows(out)} == {"mid", "low"}
+
+
+@pytest.mark.django_db
+def test_a_single_sign_still_orders_after_the_strip_is_narrowed() -> None:
+    """The narrowed strip must not cost the one prefix that is legitimate."""
+    Invoice.objects.create(number="mid", amount_cents=200)
+    Invoice.objects.create(number="low", amount_cents=100)
+    server = _server()
+    with pytest.warns(DeprecationWarning):
+        server.register_selector_tool(
+            name="invoices.list",
+            spec=SelectorSpec(
+                kind=SelectorKind.LIST,
+                selector=_list_invoices,
+                output_serializer=InvoiceOutputSerializer,
+            ),
+            ordering_fields=["amount_cents"],
+        )
+
+    out = handle_tools_call(
+        {"name": "invoices.list", "arguments": {"ordering": "-amount_cents"}},
+        _ctx(server),
+    )
+
+    assert [row["number"] for row in _rows(out)] == ["mid", "low"]

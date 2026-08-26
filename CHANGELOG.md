@@ -7,6 +7,74 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Upgrade notes
+
+**The page ceiling now bounds a selector tool's rows, not only its `limit`.**
+`MAX_PAGE_SIZE` (default 100, per-binding `max_page_size=`) has always been the
+most rows one page of a `paginate=True` tool may carry. It now means the most
+rows *any* selector-tool result carries, which brings two previously unbounded
+calls inside it:
+
+- A `paginate=False` LIST tool whose selector resolves to more rows than the
+  ceiling now returns an `isError` result instead of the whole table. It is
+  refused rather than truncated, for the reason the registration-time
+  `UnboundedListWarning` has always given: an unpaginated payload carries no
+  metadata that could say rows were dropped, so a clamped one reads as
+  complete to the model reasoning from it.
+- A `page` argument past the last page now clamps to the last page instead of
+  compiling into an arbitrarily large SQL `OFFSET`.
+
+Both are configured through the knob that already existed: pass
+`max_page_size=None` at registration to serve one tool unbounded, or set
+`REST_FRAMEWORK_MCP['MAX_PAGE_SIZE'] = None` for the server. A deployment
+relying on an unpaginated tool that returns more than 100 rows must do one of
+those, or register it with `paginate=True`.
+
+**`REST_FRAMEWORK_MCP['PAGE_SIZE']` below 1 is now refused.** A catalog listing
+raises `ImproperlyConfigured` naming the setting instead of serving empty pages
+behind a cursor that never terminates.
+
+### Fixed
+
+- **A selector tool's object-level permissions never ran.** A `SelectorSpec`
+  carrying `permission_classes` had only its class-level `has_permission`
+  enforced over MCP: the spec's `has_object_permission` needs the resolved row,
+  which only dispatch sees, and this path passed no `on_target_resolved` guard —
+  so a spec whose ownership test lives there was enforced behind a DRF view and
+  on the service-tool path, and not here. A `kind=RETRIEVE` tool would render
+  another principal's row to any caller the class-level check let through.
+  Both dispatch paths now pass `enforce_permissions` as the guard and map its
+  denial to a JSON-RPC `-32006`, as the service-tool path does. A LIST target is
+  a queryset rather than a model, so it runs the class-level check only, which
+  is what object permissions mean per row.
+
+- **An unpaginated LIST tool fetched and serialised the entire queryset.**
+  `MAX_RESULT_BYTES` was the only backstop and it measures a payload that has
+  already been fetched and rendered in full, so the whole table was in memory
+  before the ceiling could fire. The rows are now bounded in SQL, one past the
+  ceiling, before anything is rendered. See the upgrade notes.
+
+- **A doubled sign in `ordering` escaped as an unhandled 500.** The allowlist
+  normalised the value with `lstrip("-")`, which strips *characters* rather than
+  one sign, so `--created_at` matched an allowed `created_at` and reached
+  `order_by()` verbatim — where Django's ordering pattern rejects it with a
+  `ValueError` that no handler on the tool-call path catches. The client got a
+  traceback instead of a JSON-RPC envelope for a mistyped argument. Exactly one
+  leading `-` is stripped now, so a doubled sign fails the allowlist and is
+  ignored like any other unrecognised ordering.
+
+- **A paginated tool's `page` argument had no upper clamp.** `(page - 1) *
+  limit` was whatever the caller asked for, so a large `page` compiled to an
+  `OFFSET` the backend either scanned towards or rejected with a `DatabaseError`
+  that is neither exception this path catches — another unhandled 500, and a
+  `count()` on every such call regardless. See the upgrade notes.
+
+- **A `PAGE_SIZE` below 1 produced a cursor that never terminated.** Every page
+  came back empty, so `nextCursor` re-encoded the offset it was handed for as
+  long as the registry was non-empty, and a conformant client following it saw a
+  catalog that looked permanently empty and never finished paging. See the
+  upgrade notes.
+
 ## [0.33.0] — 2026-08-25
 
 ### Added

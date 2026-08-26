@@ -163,6 +163,194 @@ def test_tools_list_omits_maximum_when_unbounded() -> None:
     assert "maximum" not in out["tools"][0]["inputSchema"]["properties"]["limit"]
 
 
+# ---------- the page ceiling on an unpaginated list ----------
+#
+# The ceiling is the most rows one selector-tool result carries, paged or not.
+# Only the enforcement differs by arm: a page clamps and says so in its
+# envelope, while an unpaginated result — which carries nothing that could say
+# rows were dropped — refuses, exactly as the byte ceiling does.
+
+
+def _register_unpaginated(server: MCPServer, **kwargs: Any) -> Any:
+    """The same LIST tool, registered with the default ``paginate=False``."""
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore")
+        return server.register_selector_tool(
+            name="invoices.list",
+            spec=SelectorSpec(
+                kind=SelectorKind.LIST,
+                selector=_list_invoices,
+                output_serializer=InvoiceOutputSerializer,
+            ),
+            **kwargs,
+        )
+
+
+@pytest.mark.django_db
+def test_unpaginated_list_over_the_ceiling_is_refused() -> None:
+    """Previously the whole table was fetched, serialised and returned."""
+    _seed(5)
+    server = _server()
+    _register_unpaginated(server)
+    out = _call(server, {}, build_mcp_config(max_page_size=2))
+    assert isinstance(out, dict)
+    message = tool_error(out)["message"]
+    assert "2 row ceiling" in message
+    # Same contract as the byte ceiling: refuse, never truncate.
+    assert "not truncated" in message
+    assert tool_error(out)["type"] == "result_too_large"
+
+
+@pytest.mark.django_db
+def test_a_result_exactly_at_the_ceiling_is_served_whole() -> None:
+    """The boundary is inclusive — the ceiling is a servable result."""
+    _seed(2)
+    server = _server()
+    _register_unpaginated(server)
+    out = _call(server, {}, build_mcp_config(max_page_size=2))
+    assert isinstance(out, dict)
+    assert len(out["structuredContent"]) == 2
+
+
+@pytest.mark.django_db
+def test_the_ceiling_bounds_the_fetch_and_not_just_the_payload(
+    django_assert_num_queries: Any,
+) -> None:
+    """The rows are bounded in SQL, so the table is never in memory.
+
+    This is what the byte ceiling cannot do: ``MAX_RESULT_BYTES`` measures a
+    payload that has already been fetched and rendered in full.
+    """
+    _seed(5)
+    server = _server()
+    _register_unpaginated(server)
+    with django_assert_num_queries(1) as captured:
+        _call(server, {}, build_mcp_config(max_page_size=2))
+    # Ceiling + 1, the one extra row being how "over" is told from "exactly at".
+    assert "LIMIT 3" in captured.captured_queries[0]["sql"]
+
+
+@pytest.mark.django_db
+def test_per_binding_none_serves_an_unpaginated_list_unbounded() -> None:
+    """The existing opt-out covers the new arm: a tool can still be unbounded."""
+    _seed(5)
+    server = _server()
+    _register_unpaginated(server, max_page_size=None)
+    out = _call(server, {}, build_mcp_config(max_page_size=2))
+    assert isinstance(out, dict)
+    assert len(out["structuredContent"]) == 5
+
+
+@pytest.mark.django_db
+def test_server_ceiling_of_none_serves_an_unpaginated_list_unbounded() -> None:
+    _seed(5)
+    server = _server()
+    _register_unpaginated(server)
+    out = _call(server, {}, build_mcp_config(max_page_size=None))
+    assert isinstance(out, dict)
+    assert len(out["structuredContent"]) == 5
+
+
+@pytest.mark.django_db
+def test_a_non_orm_list_result_is_bounded_by_the_same_ceiling() -> None:
+    """A selector returning a plain sequence is bounded without a queryset."""
+
+    def _rows(*, user: Any) -> Any:  # noqa: ARG001
+        return [{"number": f"N-{i}"} for i in range(5)]
+
+    server = _server()
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore")
+        server.register_selector_tool(
+            name="invoices.list",
+            spec=SelectorSpec(kind=SelectorKind.LIST, selector=_rows),
+        )
+    out = _call(server, {}, build_mcp_config(max_page_size=2))
+    assert isinstance(out, dict)
+    assert "2 row ceiling" in tool_error(out)["message"]
+
+
+@pytest.mark.django_db(transaction=True)
+async def test_async_path_enforces_the_same_row_ceiling() -> None:
+    from asgiref.sync import sync_to_async
+
+    await sync_to_async(_seed)(5)
+    server = _server()
+    await sync_to_async(_register_unpaginated)(server)
+    out = await handle_tools_call_async(
+        {"name": "invoices.list", "arguments": {}},
+        _ctx(server, build_mcp_config(max_page_size=2)),
+    )
+    assert isinstance(out, dict)
+    assert "2 row ceiling" in tool_error(out)["message"]
+
+
+# ---------- the page argument's upper clamp ----------
+
+
+@pytest.mark.django_db
+def test_a_page_past_the_end_clamps_to_the_last_page() -> None:
+    """An unclamped ``page`` becomes an arbitrarily large SQL OFFSET.
+
+    A backend either scans towards it or rejects it outright with a
+    ``DatabaseError`` that is neither of the two exceptions this path catches,
+    so it escaped as an unhandled 500. Clamping is the treatment the low end
+    already had, and the envelope reports the page actually served.
+    """
+    _seed(5)
+    server = _server()
+    _register_list(server)
+    out = _call(server, {"page": 10**20, "limit": 2}, build_mcp_config(max_page_size=100))
+    assert isinstance(out, dict)
+    payload = out["structuredContent"]
+    assert (payload["page"], payload["totalPages"], payload["hasNext"]) == (3, 3, False)
+    assert [item["number"] for item in payload["items"]] == ["INV-4"]
+
+
+@pytest.mark.django_db
+def test_a_page_inside_the_range_is_untouched() -> None:
+    _seed(5)
+    server = _server()
+    _register_list(server)
+    out = _call(server, {"page": 2, "limit": 2}, build_mcp_config(max_page_size=100))
+    assert isinstance(out, dict)
+    payload = out["structuredContent"]
+    assert (payload["page"], payload["hasNext"]) == (2, True)
+    assert [item["number"] for item in payload["items"]] == ["INV-2", "INV-3"]
+
+
+@pytest.mark.django_db
+def test_a_page_past_the_end_of_an_empty_result_stays_at_one() -> None:
+    """Nothing to clamp to: page 1 of 1, empty, rather than page 0."""
+    server = _server()
+    _register_list(server)
+    out = _call(server, {"page": 500}, build_mcp_config(max_page_size=100))
+    assert isinstance(out, dict)
+    payload = out["structuredContent"]
+    assert (payload["page"], payload["totalPages"], payload["items"]) == (1, 1, [])
+
+
+@pytest.mark.django_db
+def test_an_in_memory_paginated_result_clamps_its_page_too() -> None:
+    """The sequence arm shares the clamp with the queryset arm."""
+
+    def _rows(*, user: Any) -> Any:  # noqa: ARG001
+        return [{"number": f"N-{i}"} for i in range(5)]
+
+    server = _server()
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore")
+        server.register_selector_tool(
+            name="invoices.list",
+            spec=SelectorSpec(kind=SelectorKind.LIST, selector=_rows),
+            paginate=True,
+        )
+    out = _call(server, {"page": 99, "limit": 2}, build_mcp_config(max_page_size=100))
+    assert isinstance(out, dict)
+    payload = out["structuredContent"]
+    assert (payload["page"], payload["items"]) == (3, [{"number": "N-4"}])
+
+
 # ---------- result-size ceiling ----------
 
 

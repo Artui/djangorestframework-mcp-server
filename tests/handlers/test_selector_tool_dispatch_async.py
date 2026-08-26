@@ -11,12 +11,14 @@ from typing import Any
 import django_filters
 import pytest
 from django.http import HttpRequest
+from rest_framework import permissions as drf_permissions
 from rest_framework_services.types.selector_kind import SelectorKind
 from rest_framework_services.types.selector_spec import SelectorSpec
 
 from rest_framework_mcp import MCPServer
 from rest_framework_mcp.auth.backends.allow_any_backend import AllowAnyBackend
 from rest_framework_mcp.auth.types.token_info import TokenInfo
+from rest_framework_mcp.constants import JsonRpcErrorCode
 from rest_framework_mcp.handlers.handle_tools_call_async import handle_tools_call_async
 from rest_framework_mcp.handlers.types.context import MCPCallContext
 from rest_framework_mcp.protocol.types.json_rpc_error import JsonRpcError
@@ -234,3 +236,65 @@ async def test_async_selector_provider_receives_resolved_data_extra() -> None:
     out = await handle_tools_call_async({"name": "invoices.list", "arguments": {}}, _ctx(server))
     assert isinstance(out, dict)
     assert seen["numbers"] == ["INV-0", "INV-1", "INV-2"]
+
+
+# ---------- object-level permissions, async twin ----------
+
+
+class _OnlyMine(drf_permissions.BasePermission):
+    """Anyone may call the tool; only the owner may see the row."""
+
+    def has_permission(self, request: Any, view: Any) -> bool:  # noqa: ARG002
+        return True
+
+    def has_object_permission(self, request: Any, view: Any, obj: Any) -> bool:  # noqa: ARG002
+        return obj.number == "MINE"
+
+
+def _invoice_by_pk(*, pk: int) -> Any:
+    return Invoice.objects.filter(pk=pk)
+
+
+def _register_guarded_retrieve(server: MCPServer) -> None:
+    server.register_selector_tool(
+        name="invoices.get",
+        spec=SelectorSpec(
+            kind=SelectorKind.RETRIEVE,
+            selector=_invoice_by_pk,
+            output_serializer=InvoiceOutputSerializer,
+            permission_classes=[_OnlyMine],
+        ),
+    )
+
+
+@pytest.mark.django_db(transaction=True)
+async def test_async_object_permissions_run_against_the_resolved_row() -> None:
+    """The async path enforces the row check its sync sibling does."""
+    from asgiref.sync import sync_to_async
+
+    theirs = await sync_to_async(Invoice.objects.create)(number="THEIRS", amount_cents=100)
+    server = _server()
+    _register_guarded_retrieve(server)
+
+    out = await handle_tools_call_async(
+        {"name": "invoices.get", "arguments": {"pk": theirs.pk}}, _ctx(server)
+    )
+
+    assert isinstance(out, JsonRpcError)
+    assert out.code == JsonRpcErrorCode.FORBIDDEN
+
+
+@pytest.mark.django_db(transaction=True)
+async def test_async_object_permissions_still_serve_a_permitted_row() -> None:
+    from asgiref.sync import sync_to_async
+
+    mine = await sync_to_async(Invoice.objects.create)(number="MINE", amount_cents=100)
+    server = _server()
+    _register_guarded_retrieve(server)
+
+    out = await handle_tools_call_async(
+        {"name": "invoices.get", "arguments": {"pk": mine.pk}}, _ctx(server)
+    )
+
+    assert isinstance(out, dict)
+    assert out["structuredContent"]["number"] == "MINE"
