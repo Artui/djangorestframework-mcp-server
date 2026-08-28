@@ -9,7 +9,7 @@ from django.core.exceptions import ImproperlyConfigured
 from django.http import HttpRequest
 from django.urls import URLPattern, path
 from rest_framework.serializers import Serializer
-from rest_framework_services import UNSET, UnsetType
+from rest_framework_services import UNSET, AgentField, UnsetType
 from rest_framework_services.registry.spec_registry import SpecRegistry
 from rest_framework_services.types.selector_kind import SelectorKind
 from rest_framework_services.types.selector_spec import SelectorSpec
@@ -256,6 +256,7 @@ class MCPServer:
         rate_limits: list[Any] | None = None,
         annotations: dict[str, Any] | None = None,
         meta: dict[str, Any] | None = None,
+        field_audiences: Mapping[str, AgentField] | None = None,
         ui: UIToolMeta | None = None,
         include_structured_content: bool | None = None,
         include_output_schema: bool | None = None,
@@ -300,6 +301,7 @@ class MCPServer:
         )
         binding = service_spec_to_tool(
             name=name,
+            field_audiences=field_audiences,
             spec=spec,
             description=description,
             title=title,
@@ -365,6 +367,7 @@ class MCPServer:
         rate_limits: list[Any] | None = None,
         annotations: dict[str, Any] | None = None,
         meta: dict[str, Any] | None = None,
+        field_audiences: Mapping[str, AgentField] | None = None,
         ui: UIToolMeta | None = None,
         ordering_fields: list[str] | tuple[str, ...] | None = None,
         paginate: bool = False,
@@ -424,6 +427,7 @@ class MCPServer:
         )
         binding = selector_spec_to_tool(
             name=name,
+            field_audiences=field_audiences,
             spec=spec,
             description=description,
             title=title,
@@ -566,6 +570,7 @@ class MCPServer:
         rate_limits: list[Any] | None = None,
         annotations: dict[str, Any] | None = None,
         meta: dict[str, Any] | None = None,
+        field_audiences: Mapping[str, AgentField] | None = None,
         ui: UIToolMeta | None = None,
         include_structured_content: bool | None = None,
         include_output_schema: bool | None = None,
@@ -616,6 +621,7 @@ class MCPServer:
         )
         binding = chain_steps_to_tool(
             name=name,
+            field_audiences=field_audiences,
             steps=tuple(steps),
             description=description,
             title=title,
@@ -1219,6 +1225,7 @@ class MCPServer:
         rate_limits: list[Any] | None = None,
         annotations: dict[str, Any] | None = None,
         meta: dict[str, Any] | None = None,
+        field_audiences: Mapping[str, AgentField] | None = None,
         ui: UIToolMeta | None = None,
         include_structured_content: bool | None = None,
         include_output_schema: bool | None = None,
@@ -1269,6 +1276,7 @@ class MCPServer:
                 rate_limits=rate_limits,
                 annotations=annotations,
                 meta=meta,
+                field_audiences=field_audiences,
                 ui=ui,
                 include_structured_content=include_structured_content,
                 include_output_schema=include_output_schema,
@@ -1302,6 +1310,7 @@ class MCPServer:
         rate_limits: list[Any] | None = None,
         annotations: dict[str, Any] | None = None,
         meta: dict[str, Any] | None = None,
+        field_audiences: Mapping[str, AgentField] | None = None,
         ui: UIToolMeta | None = None,
         ordering_fields: list[str] | tuple[str, ...] | None = None,
         paginate: bool = False,
@@ -1356,6 +1365,7 @@ class MCPServer:
                 rate_limits=rate_limits,
                 annotations=annotations,
                 meta=meta,
+                field_audiences=field_audiences,
                 ui=ui,
                 ordering_fields=ordering_fields,
                 paginate=paginate,

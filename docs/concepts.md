@@ -340,10 +340,25 @@ forms) accept three behavior knobs:
   declared field set are handled.
   - `UnknownArguments.REJECT` (default) — the validator rejects unknown
     keys with `-32602`, and the outer `inputSchema` advertises
-    `"additionalProperties": false`. This holds only when the binding has an
-    `input_serializer` to validate against: a serializer-less binding has no
-    declared field set, so `REJECT` can't fire and its schema stays open
-    (`"additionalProperties": true`) to match the runtime.
+    `"additionalProperties": false`.
+
+    **The closed schema is advertised only where the runtime actually closes
+    the set**, which takes three things, not one:
+
+    1. `REJECT` itself;
+    2. an `input_serializer` to validate against — a serializer-less binding
+       has no declared field set, so `REJECT` cannot fire;
+    3. for a **service** tool, a key set the spec can enumerate. A nested
+       selector taking a bare `**kwargs`, or one carrying a `filter_set`,
+       leaves it open, and an open set is answered by accepting and silently
+       dropping every undeclared key.
+
+    Any of the three missing leaves the schema open
+    (`"additionalProperties": true`), on purpose: where nothing is enforced,
+    nothing closed may be advertised. Telling a client a typo'd field will be
+    refused, while the server takes it and throws it away, is the worse
+    failure. Selector and chain bindings enforce the closed set in this
+    package, so the third condition is a service-tool concern only.
   - `UnknownArguments.PASSTHROUGH` — `"additionalProperties": true`;
     unknown keys survive validation and are merged onto the validated
     payload before binding.

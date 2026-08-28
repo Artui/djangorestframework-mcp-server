@@ -11,7 +11,7 @@
 
 Expose [`djangorestframework-services`](https://github.com/Artui/djangorestframework-services)
 services and selectors as a [Model Context Protocol](https://modelcontextprotocol.io)
-(MCP) server, conforming to MCP **2025-11-25** (Streamable HTTP).
+(MCP) server, conforming to MCP **2026-07-28** and **2025-11-25** (Streamable HTTP).
 
 ## Idea
 
@@ -109,7 +109,11 @@ See the [quickstart](docs/quickstart.md) for the full end-to-end recipe.
   `mcp.resources.read`, `mcp.prompts.get` spans (no-op without the
   `[otel]` extra installed).
 - **Origin allowlist + protocol-version validation + session
-  lifecycle** per the 2025-11-25 transport rules.
+  lifecycle** per the transport rules of both revisions. `2026-07-28` and later
+  declare version, identity and capabilities on every request and hold no
+  session; `2025-11-25` and earlier negotiate once through `initialize`. Both
+  are served concurrently on one endpoint, because a legacy client has no
+  fall-forward mechanism.
 
 ## Install
 

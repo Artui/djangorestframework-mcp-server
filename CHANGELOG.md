@@ -7,6 +7,57 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- **`field_audiences=` was documented as a registration argument and accepted by
+  no entry point.** The documented call raised
+  `TypeError: MCPServer.register_selector_tool() got an unexpected keyword
+  argument 'field_audiences'`. It existed on the three tool bindings and nowhere
+  else: 0 of 7 `register_*` methods accepted it, none declared `**kwargs`, and
+  `SelectorToolBinding` is not exported from the package root, so the capability
+  had no public route in at all.
+
+  It is now accepted by `register_selector_tool`, `register_service_tool` and
+  `register_chain_tool`, by the `selector_tool` / `service_tool` decorators, and
+  as an `overrides` key on `register_specs` — the last needing no plumbing of
+  its own, since override keys are checked against the target method's
+  signature.
+
+  **CI was green because the only test constructed `SelectorToolBinding(...)`
+  directly**, bypassing every entry point: the feature was exercised on the
+  object the docs never mention and unreachable through the API the docs do. The
+  new tests go through the public surface, because a test that instantiates past
+  it cannot fail when it is missing.
+
+### Documentation
+
+- **The MCP conformance claim named only the older revision, at four sites.**
+  `README.md` and `docs/index.md` each said "conforming to MCP 2025-11-25" in
+  the intro *and* described the transport rules as that revision's, while the
+  server has been dual-era since 0.34.0 — `2026-07-28` and later declare version,
+  identity and capabilities per request and hold no session; `2025-11-25` and
+  earlier negotiate through `initialize`. Both are served concurrently on one
+  endpoint.
+
+- **`docs/reference/output.md` documented no output.** Eight lines: a heading,
+  one sentence and four mkdocstrings directives, with the string `outputSchema`
+  appearing nowhere. It now states the asymmetric rule between
+  `structuredContent` and `outputSchema`, both toggles, and links the canonical
+  passage in `concepts.md`.
+
+- **`additionalProperties` has three drivers, and `concepts.md` named two.** The
+  third arrived in 0.34.0: a **service** tool whose declared key set is not
+  enumerable — a nested selector taking bare `**kwargs`, or carrying a
+  `filter_set` — advertises an open schema even under `REJECT` with a
+  serializer, because an open set is answered by accepting and silently dropping
+  undeclared keys. Where nothing is enforced, nothing closed may be advertised.
+
+- **The `field_audiences` clash raises on first use, not at registration.** The
+  recipe implied startup. The projection is resolved lazily, deliberately —
+  resolving a serializer at registration would run before the app registry is
+  necessarily ready — so the recipe now says when, and suggests a smoke test
+  that lists the tools once.
+
 ## [0.34.0] — 2026-08-26
 
 ### Upgrade notes
