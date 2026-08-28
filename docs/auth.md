@@ -219,17 +219,36 @@ independently of `has_permission(request, token)`.
 in protected-resource metadata, and it is what the `WWW-Authenticate` challenge
 points clients at. Setting it does **not**, on its own, reject anything.
 
-!!! warning "Enforcement is a separate, opt-in knob — and stock DOT cannot satisfy it"
+!!! warning "Enforcement is a separate, opt-in knob — and you probably want it on"
     Audience enforcement needs the access token to record which resource it was
-    issued for. **django-oauth-toolkit has no such field and implements no RFC
-    8707 resource indicators**, so `getattr(token, "resource", None)` is always
-    `None` for a DOT-issued token.
+    issued for.
+
+    **django-oauth-toolkit 3.4.0 (2026-07-23) added RFC 8707 resource
+    indicators**: stock `AccessToken` carries a `resource` field and an
+    `allows_audience()` check, and `resource` is accepted at both the authorize
+    and token endpoints. On 3.4.0 or later, `ENFORCE_AUDIENCE = True` needs
+    nothing else.
+
+    It is **off by default** only because the `[oauth]` extra floors DOT at
+    `>=2.3`, and on an older DOT no token records a resource — a default of
+    `True` would reject every request for anyone who has not upgraded. The check
+    is capability-based rather than version-based, so it asks your configured
+    token model rather than DOT's version number.
 
     Enforcement used to be implied by `resource_url` alone. That made the
     bundled backend unusable: configuring the resource URL a resource server is
     supposed to publish rejected *every* token, and clearing it published
     invalid metadata — there was no configuration that did both. Enforcement is
     now `ENFORCE_AUDIENCE`, default `False`.
+
+!!! danger "The MCP spec makes this a MUST, so treat the default as a floor, not a recommendation"
+    `2026-07-28` says a resource server **MUST** validate that access tokens were
+    issued specifically for it. Leaving `ENFORCE_AUDIENCE` off on DOT 3.4.0+ is a
+    conformance gap, and the failure mode is cross-resource token replay: a token
+    minted for a different resource on the same authorization server is accepted
+    here.
+
+    Turn it on unless you are pinned below DOT 3.4.0.
 
 To enforce, tell the backend where the audience actually lives — either a
 swapped `OAUTH2_PROVIDER["ACCESS_TOKEN_MODEL"]` carrying a `resource` field, or
@@ -308,6 +327,29 @@ RFC 9728 marks REQUIRED, so the metadata carries a `_warning` saying why.
     Token audiences are URLs, not patterns. Substring matches and prefix
     matches are unsafe (a token bound to `…/mcp` would otherwise satisfy a
     server expecting `…/mcp-admin`). The implementation enforces equality only.
+
+### If you are writing a resource server against the official `mcp` SDK
+
+!!! danger "The SDK publishes the metadata for you and never validates the audience"
+    This is the single easiest thing to get wrong in this area, and it is not
+    specific to this package — it is worth knowing wherever you build an MCP
+    resource server in Python.
+
+    `mcp.shared.auth_utils` provides `resource_url_from_server_url()` and
+    `check_resource_allowed()`, and in the shipped wheel they are called **only
+    from client paths**. `AccessToken` carries a `resource` field, but
+    `BearerAuthBackend.authenticate()` checks the bearer prefix, the verifier's
+    verdict and `expires_at` — and nothing else.
+
+    So a `TokenVerifier` that merely checks a signature is **non-compliant with
+    the audience MUST, and cross-resource token replay works**: a token minted
+    for another resource on the same authorization server is accepted. FastMCP's
+    `JWTVerifier` does validate audience out of the box; the official SDK's
+    verifiers do not.
+
+    If you are using this package's `DjangoOAuthToolkitBackend`, that is what
+    `ENFORCE_AUDIENCE` is for and the check runs server-side. If you are writing
+    your own verifier anywhere, validate the audience in it.
 
 ## OAuth contrib mount
 
@@ -511,8 +553,9 @@ INSTALLED_APPS = [
 ]
 
 OAUTH2_PROVIDER = {
-    # NB: DOT implements no RFC 8707 resource indicators, so there is nothing to
-    # set here to bind tokens to a resource — see "Audience binding" above.
+    # DOT 3.4.0+ accepts an RFC 8707 `resource` at the authorize and token
+    # endpoints and records it on the token, so audience binding needs nothing
+    # here — turn on ENFORCE_AUDIENCE instead. See "Audience binding" above.
     "SCOPES": {
         "invoices:read": "Read invoices",
         "invoices:write": "Mutate invoices",

@@ -43,20 +43,29 @@ class DjangoOAuthToolkitBackend:
     Audience enforcement (RFC 8707) is controlled by ``enforce_audience``,
     **not** by ``resource_url``. ``resource_url`` is the identity this server
     publishes in its protected-resource metadata; enforcement is whether a
-    token that doesn't carry that identity is rejected. It defaults off because
-    enforcement needs the access token to record the resource it was issued
-    for, and **DOT's stock ``AccessToken`` has no such field** — so switching
-    it on against stock DOT rejects every token, while ``resource_url`` is
-    effectively required by RFC 9728. Enforcement works when the token really
-    does carry the resource:
+    token that doesn't carry that identity is rejected. ``resource_url`` is
+    effectively required by RFC 9728; enforcement is a separate decision.
+
+    **On django-oauth-toolkit 3.4.0 and later this works out of the box.** That
+    release added RFC 8707 resource indicators: stock ``AccessToken`` carries a
+    ``resource`` field and an ``allows_audience`` check, so turning enforcement
+    on needs nothing else. The default stays off because the floor of the
+    ``[oauth]`` extra is ``>=2.3``, and on an older DOT no token records a
+    resource — so a default of ``True`` would reject every request for anyone
+    who has not upgraded.
+
+    Below 3.4.0, or with a swapped model that drops the field, enforcement still
+    works if the resource is somewhere else:
 
     - a swapped ``OAUTH2_PROVIDER["ACCESS_TOKEN_MODEL"]`` carrying a
       ``resource`` field (DOT supports substituting the model), or
     - an explicit ``audience_getter=`` reading it from wherever it lives — a
       JWT claim, an upstream gateway header, a related row.
 
-    Turning it on without either raises ``ImproperlyConfigured`` at
-    construction, naming both ways out, instead of 401-ing every request.
+    The check is capability-based rather than version-based: it asks the
+    configured token model whether it has the field. Turning enforcement on with
+    no route to the resource raises ``ImproperlyConfigured`` at construction,
+    naming every way out, instead of 401-ing every request.
 
     **One resource URL per server.** RFC 8707 binds a token to *a* resource,
     and that binding is precisely what stops a token issued for one resource
@@ -111,6 +120,8 @@ class DjangoOAuthToolkitBackend:
             self._check_enforcement_is_satisfiable(
                 has_custom_getter=audience_getter is not None,
             )
+        else:
+            self._warn_if_enforcement_is_available()
         self._authorization_servers: list[str] = list(
             authorization_servers
             if authorization_servers is not None
@@ -226,6 +237,54 @@ class DjangoOAuthToolkitBackend:
             "REST_FRAMEWORK_MCP['ENFORCE_AUDIENCE'] and keep resource_url= for metadata only."
         )
 
+    def _warn_if_enforcement_is_available(self) -> None:
+        """Say so when a deployment could satisfy the audience MUST and has not.
+
+        The MCP ``2026-07-28`` spec requires a resource server to validate that
+        a token was issued for it, and the failure mode of not doing so is
+        cross-resource token replay: a token minted for another resource on the
+        same authorization server is accepted here.
+
+        The default is off, and stays off, because the ``[oauth]`` extra floors
+        django-oauth-toolkit at ``>=2.3`` -- below 3.4.0 no token records a
+        resource, so a default of ``True`` would reject every request for anyone
+        who has not upgraded. But that reason expires per deployment rather than
+        per release, and it expires silently: a project that upgrades DOT
+        becomes able to conform and is never told.
+
+        So this fires only where enforcement would actually work -- the token
+        model carries the field and a resource URL is configured -- which makes
+        it a fact about *this* deployment rather than advice about the package.
+        It cannot fire on the older DOT the default exists to protect.
+
+        Warns rather than raises, and rather than flipping the default: a
+        project may have decided against enforcement for a single-resource
+        server it fully controls, and that is a legitimate choice this package
+        should not overrule at construction.
+        """
+        if self._resource_url is None:
+            return
+        try:
+            from oauth2_provider.models import (
+                get_access_token_model,
+            )
+        except ImportError:  # pragma: no cover - exercised by smoke job w/o DOT
+            return
+        token_model: Any = get_access_token_model()
+        if not any(field.name == _RESOURCE_FIELD for field in token_model._meta.get_fields()):
+            return
+        warnings.warn(
+            "DjangoOAuthToolkitBackend: audience enforcement is off, but "
+            f"{token_model.__name__} records the resource a token was issued for, so this "
+            "deployment could enforce it. The MCP 2026-07-28 spec makes that validation a "
+            "MUST for a resource server, and without it a token minted for another resource "
+            "on the same authorization server is accepted here. Set "
+            "REST_FRAMEWORK_MCP['ENFORCE_AUDIENCE'] = True, or silence "
+            "UnenforcedAudienceWarning if this server is deliberately unenforced.",
+            UnenforcedAudienceWarning,
+            stacklevel=3,
+        )
+
     def protected_resource_metadata(self) -> ProtectedResourceMetadata:
         # RFC 9728 makes ``resource`` REQUIRED, so an unconfigured server
         # publishes an empty one either way. Say so in the payload rather than
@@ -324,7 +383,16 @@ def _derive_metadata_url(resource_url: str | None) -> str | None:
     return f"{resource_url.rstrip('/')}/.well-known/oauth-protected-resource"
 
 
-__all__ = ["DjangoOAuthToolkitBackend"]
+__all__ = ["DjangoOAuthToolkitBackend", "UnenforcedAudienceWarning"]
+
+
+class UnenforcedAudienceWarning(UserWarning):
+    """Audience enforcement is off on a deployment that could switch it on.
+
+    Dedicated category so a project that has decided against enforcement -- a
+    single-resource authorization server it fully controls, say -- can silence
+    exactly this via ``warnings.filterwarnings``.
+    """
 
 
 class MountedAuthorizationServerWarning(UserWarning):
