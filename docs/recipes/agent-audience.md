@@ -72,25 +72,42 @@ cost its keys twice over and hide nothing.
 
 The serializer stays authoritative — it is the one declaration your REST API,
 this server, and any in-process toolset all read. When a single tool genuinely
-needs what its sibling hides, override it at registration:
+needs what its sibling hides, that is an override, and it belongs on the
+registry entry rather than on this mount:
+
+```python
+registry.register(
+    "lookup_invoice",
+    invoice_spec,
+    # This tool returns the etag after all.
+    agent_contract=AgentContract(field_audiences={"etag": AgentField()}),
+)
+
+server.register_specs(registry.by_tag("billing"))
+```
+
+`AgentContract` is drf-services' carrier for what a caller with **no HTTP
+request** has to be told — the URL kwargs and query params an agent must supply
+by hand, and this. Declaring it on the entry is what keeps an in-process
+Pydantic-AI toolset and this server projecting the *same* field set: an audience
+is not a transport, so a field hidden from one agent caller and visible to
+another is a bug you would find in a transcript rather than in a test.
+
+A server registering a spec directly, with no registry in front of it, passes
+the same object:
 
 ```python
 server.register_selector_tool(
     name="lookup_invoice",
     spec=invoice_spec,
-    field_audiences={"etag": AgentField()},  # this tool returns it after all
+    agent_contract=AgentContract(field_audiences={"etag": AgentField()}),
 )
 ```
 
-It works the same on `register_service_tool` and `register_chain_tool`, and as an
-`overrides` key on `register_specs`:
-
-```python
-server.register_specs(
-    registry.by_tag("billing"),
-    overrides={"lookup_invoice": {"field_audiences": {"etag": AgentField()}}},
-)
-```
+It works the same on `register_service_tool` and `register_chain_tool` — a chain
+has no registry entry, so this is its only route — and as an `overrides` key on
+`register_specs`, which **replaces** the entry's contract rather than merging
+into it.
 
 Two fields left claiming `AgentField.label()` raises `ImproperlyConfigured`
 naming the tool: a record has one name, and picking one silently is the kind of

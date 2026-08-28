@@ -89,6 +89,31 @@ Each value is the keyword arguments for that entry's registration method, so
 anything those methods accept works — `title`, `output_format`,
 `include_output_schema`, `rate_limits`, `url_kwargs`, and the rest.
 
+## What the entry already says
+
+An entry may carry an
+[`AgentContract`][rest_framework_services.types.agent_contract.AgentContract]:
+the `url_kwargs`, `query_params` and `field_audiences` a caller with **no HTTP
+request** has to be told, because the URLconf and query string tell an HTTP one
+for free. `register_specs` reads it as this mount's default, so the same entry
+mounted here and in an in-process Pydantic-AI toolset synthesises the same
+absent request:
+
+```python
+registry.register(
+    "list_project_orders",
+    orders_spec,
+    agent_contract=AgentContract(url_kwargs=(UrlKwarg("project_pk", type="integer"),)),
+)
+
+server.register_specs(registry)  # the tool takes project_pk, declared once
+```
+
+A per-tool `url_kwargs` / `query_params` override wins over it. Overriding
+`agent_contract` itself replaces the entry's outright — the only way to mount an
+entry with *fewer* channels than it declares, since an empty tuple at the mount
+reads as saying nothing rather than saying none.
+
 Two things fail loudly rather than quietly:
 
 - An `overrides` key naming a spec the registry doesn't hold raises
