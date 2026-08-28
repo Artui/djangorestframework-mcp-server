@@ -1,8 +1,9 @@
 from __future__ import annotations
 
+from collections.abc import Mapping
 from typing import Any
 
-from rest_framework_services import UNSET, UnsetType
+from rest_framework_services import UNSET, AgentField, UnsetType
 from rest_framework_services.types.selector_spec import SelectorSpec
 
 from rest_framework_mcp.adapters.utils import merge_meta, merge_tool_annotations
@@ -40,6 +41,7 @@ def chain_steps_to_tool(
     rate_limits: tuple[Any, ...] = (),
     annotations: dict[str, Any] | None = None,
     meta: dict[str, Any] | None = None,
+    field_audiences: Mapping[str, AgentField] | None = None,
     include_structured_content: bool | None = None,
     include_output_schema: bool | None = None,
     unknown_arguments: UnknownArguments = UnknownArguments.REJECT,
@@ -75,6 +77,7 @@ def chain_steps_to_tool(
     read_only: bool = all(isinstance(step.spec, SelectorSpec) for step in steps)
     return ChainToolBinding(
         name=name,
+        field_audiences=field_audiences,
         description=description,
         title=title,
         icons=icons,

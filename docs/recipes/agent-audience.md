@@ -82,9 +82,27 @@ server.register_selector_tool(
 )
 ```
 
+It works the same on `register_service_tool` and `register_chain_tool`, and as an
+`overrides` key on `register_specs`:
+
+```python
+server.register_specs(
+    registry.by_tag("billing"),
+    overrides={"lookup_invoice": {"field_audiences": {"etag": AgentField()}}},
+)
+```
+
 Two fields left claiming `AgentField.label()` raises `ImproperlyConfigured`
 naming the tool: a record has one name, and picking one silently is the kind of
 thing you find in a transcript weeks later.
+
+!!! note "It raises on first use, not at registration"
+
+    The projection is resolved lazily, so a clash surfaces the first time the
+    tool is listed or called rather than aborting startup. That is deliberate —
+    resolving a serializer at registration would run before the app registry is
+    necessarily ready — but it means a mistyped override reaches a request. A
+    smoke test that lists your tools once catches it at deploy time.
 
 ## Chains and pagination
 

@@ -1,8 +1,9 @@
 from __future__ import annotations
 
+from collections.abc import Mapping
 from typing import Any
 
-from rest_framework_services import UNSET, UnsetType
+from rest_framework_services import UNSET, AgentField, UnsetType
 from rest_framework_services.types.selector_spec import SelectorSpec
 
 from rest_framework_mcp.adapters.utils import (
@@ -44,6 +45,7 @@ def selector_spec_to_tool(
     rate_limits: tuple[Any, ...] = (),
     annotations: dict[str, Any] | None = None,
     meta: dict[str, Any] | None = None,
+    field_audiences: Mapping[str, AgentField] | None = None,
     ordering_fields: tuple[str, ...] = (),
     paginate: bool = False,
     include_structured_content: bool | None = None,
@@ -98,6 +100,7 @@ def selector_spec_to_tool(
     effective_perms: tuple[Any, ...] = spec_perms + tuple(permissions)
     return SelectorToolBinding(
         name=name,
+        field_audiences=field_audiences,
         description=description,
         title=title,
         icons=icons,
