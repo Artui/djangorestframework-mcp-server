@@ -112,6 +112,10 @@ Import these — do not parallel them:
 - `run_selector` / `arun_selector` — selector dispatch with sync/async transparency.
 - `run_service` / `arun_service` — service dispatch with optional `transaction.atomic()`.
 - `is_async`, `is_queryset`, `apply_queryset_shaping` — the remaining dispatch leaves.
+- `paginate_output` + `OutputPage.envelope` — the page a `LIST` selector tool serves and
+  the `{items, page, totalPages, hasNext}` envelope around it. Only the coercion of the
+  untyped `page` / `limit` arguments into ints stays here (`_coerce_int`), because
+  answering a malformed argument is a transport's policy while what a page *is* is not.
 - `rest_framework_services.exceptions.service_error.ServiceError` and
   `service_validation_error.ServiceValidationError` — caught at the MCP boundary and
   mapped to `isError: true` tool results via `build_error_tool_result(...)`

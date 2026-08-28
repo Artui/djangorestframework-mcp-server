@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from rest_framework import serializers
-from rest_framework_services import AGENT, AgentField
+from rest_framework_services import MARKING, FieldMarking
 
 from tests.testapp.models import Invoice
 
@@ -29,7 +29,7 @@ class AgentInvoiceSerializer(serializers.ModelSerializer):
         model = Invoice
         fields = ["id", "number", "amount_cents", "sent", "status"]
         extra_kwargs = {
-            "id": {"style": {AGENT: AgentField.handle("Invoice handle.")}},
-            "number": {"style": {AGENT: AgentField.label()}},
-            "sent": {"style": {AGENT: AgentField.hidden()}},
+            "id": {"style": {MARKING: FieldMarking.handle("Invoice handle.")}},
+            "number": {"style": {MARKING: FieldMarking.label()}},
+            "sent": {"style": {MARKING: FieldMarking.hidden()}},
         }

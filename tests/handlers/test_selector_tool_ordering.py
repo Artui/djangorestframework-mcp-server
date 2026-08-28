@@ -1,10 +1,15 @@
 """Ordering on a selector tool, and which channel owns it.
 
 A ``FilterSet``'s ``OrderingFilter`` is the canonical declaration. It
-subclasses ``ChoiceFilter``, so drf-services' reflection maps it to an enum
-exactly like any other choice filter — which means a spec carrying one
-advertises ``ordering`` in the tool's ``inputSchema`` with nothing declared at
+subclasses ``ChoiceFilter``, so drf-services' reflection maps it exactly like
+any other choice filter — which means a spec carrying one advertises
+``ordering`` in the tool's ``inputSchema`` with nothing declared at
 registration.
+
+Since drf-services 0.47.0 that mapping is a labelled ``oneOf`` rather than a
+bare ``enum``: the choice labels travel with their constants, so a model reading
+the schema is told that ``-amount`` means "Amount (descending)" instead of
+having to infer it from a leading minus sign.
 
 That advertisement used to be a lie. ``ordering`` sat in
 ``RESERVED_POST_FETCH_KEYS`` and was stripped from the single mapping that
@@ -120,9 +125,15 @@ def test_the_filters_ordering_is_advertised_with_nothing_declared() -> None:
     properties = tool["inputSchema"]["properties"]
     assert "ordering" in properties, (
         "an OrderingFilter subclasses ChoiceFilter, so the reflection should "
-        f"surface it as an enum; got {sorted(properties)}"
+        f"surface it as a choice schema; got {sorted(properties)}"
     )
-    assert set(properties["ordering"]["enum"]) == {"amount", "-amount"}
+    # The labels are asserted, not just the constants: they are what makes the
+    # descending direction readable, and dropping them would leave the tool
+    # advertising two opaque strings with a sign between them.
+    assert properties["ordering"]["oneOf"] == [
+        {"const": "amount", "title": "Amount"},
+        {"const": "-amount", "title": "Amount (descending)"},
+    ]
 
 
 @pytest.mark.django_db

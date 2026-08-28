@@ -1,4 +1,4 @@
-"""An entry's ``AgentContract`` reaches the binding through every registrar.
+"""An entry's ``OfflineContract`` reaches the binding through every registrar.
 
 The declarations here -- ``url_kwargs``, ``query_params``, ``field_audiences``
 -- are what a caller with no HTTP request has to be told, and every agent
@@ -15,8 +15,8 @@ from __future__ import annotations
 
 import pytest
 from rest_framework_services import (
-    AgentContract,
-    AgentField,
+    FieldMarking,
+    OfflineContract,
     QueryParam,
     SelectorKind,
     SelectorSpec,
@@ -54,10 +54,10 @@ class TestTheRegistrarsReadIt:
         binding = server.register_selector_tool(
             name="lookup_invoice",
             spec=_selector_spec(),
-            agent_contract=AgentContract(field_audiences={"sent": AgentField()}),
+            agent_contract=OfflineContract(field_audiences={"sent": FieldMarking()}),
         )
 
-        assert binding.agent_projection.audience("sent") is not FieldAudience.HIDDEN
+        assert binding.audience_projection.audience("sent") is not FieldAudience.HIDDEN
 
     def test_register_service_tool_accepts_it(self) -> None:
         server = MCPServer(name="probe")
@@ -65,10 +65,10 @@ class TestTheRegistrarsReadIt:
         binding = server.register_service_tool(
             name="send_invoice",
             spec=_service_spec(),
-            agent_contract=AgentContract(field_audiences={"sent": AgentField()}),
+            agent_contract=OfflineContract(field_audiences={"sent": FieldMarking()}),
         )
 
-        assert binding.agent_projection.audience("sent") is not FieldAudience.HIDDEN
+        assert binding.audience_projection.audience("sent") is not FieldAudience.HIDDEN
 
     def test_register_chain_tool_accepts_it(self) -> None:
         # A chain has no registry entry to inherit from, so the contract is the
@@ -80,17 +80,17 @@ class TestTheRegistrarsReadIt:
         binding = server.register_chain_tool(
             name="issue_then_send",
             steps=[ChainStep(alias="issued", spec=_service_spec())],
-            agent_contract=AgentContract(field_audiences={"sent": AgentField()}),
+            agent_contract=OfflineContract(field_audiences={"sent": FieldMarking()}),
         )
 
-        assert binding.agent_projection.audience("sent") is not FieldAudience.HIDDEN
+        assert binding.audience_projection.audience("sent") is not FieldAudience.HIDDEN
 
     def test_the_serializer_still_decides_when_nothing_overrides(self) -> None:
         server = MCPServer(name="probe")
 
         binding = server.register_selector_tool(name="lookup", spec=_selector_spec())
 
-        assert binding.agent_projection.audience("sent") is FieldAudience.HIDDEN
+        assert binding.audience_projection.audience("sent") is FieldAudience.HIDDEN
 
     def test_the_decorator_form_forwards_it(self) -> None:
         # The decorators are a second public surface onto the same registrars,
@@ -101,13 +101,13 @@ class TestTheRegistrarsReadIt:
         @server.selector_tool(
             name="lookup_invoice",
             spec=_selector_spec(),
-            agent_contract=AgentContract(field_audiences={"sent": AgentField()}),
+            agent_contract=OfflineContract(field_audiences={"sent": FieldMarking()}),
         )
         def _lookup() -> None: ...
 
         binding = server.tools.get("lookup_invoice")
         assert binding is not None
-        assert binding.agent_projection.audience("sent") is not FieldAudience.HIDDEN
+        assert binding.audience_projection.audience("sent") is not FieldAudience.HIDDEN
 
 
 class TestRegisterSpecsCarriesTheEntrysOwn:
@@ -118,17 +118,17 @@ class TestRegisterSpecsCarriesTheEntrysOwn:
         registry.register(
             "lookup_invoice",
             _selector_spec(),
-            agent_contract=AgentContract(
+            agent_contract=OfflineContract(
                 url_kwargs=(UrlKwarg("invoice_pk"),),
                 query_params=(QueryParam("since"),),
-                field_audiences={"sent": AgentField()},
+                field_audiences={"sent": FieldMarking()},
             ),
         )
         server = MCPServer(name="probe")
 
         (binding,) = server.register_specs(registry)
 
-        assert binding.agent_projection.audience("sent") is not FieldAudience.HIDDEN
+        assert binding.audience_projection.audience("sent") is not FieldAudience.HIDDEN
         assert [k.name for k in binding.url_kwargs] == ["invoice_pk"]
         assert [q.name for q in binding.query_params] == ["since"]
 
@@ -137,7 +137,7 @@ class TestRegisterSpecsCarriesTheEntrysOwn:
         registry.register(
             "lookup_invoice",
             _selector_spec(),
-            agent_contract=AgentContract(url_kwargs=(UrlKwarg("invoice_pk"),)),
+            agent_contract=OfflineContract(url_kwargs=(UrlKwarg("invoice_pk"),)),
         )
         server = MCPServer(name="probe")
 
@@ -154,19 +154,19 @@ class TestRegisterSpecsCarriesTheEntrysOwn:
         registry.register(
             "lookup_invoice",
             _selector_spec(),
-            agent_contract=AgentContract(
+            agent_contract=OfflineContract(
                 url_kwargs=(UrlKwarg("invoice_pk"),),
-                field_audiences={"sent": AgentField()},
+                field_audiences={"sent": FieldMarking()},
             ),
         )
         server = MCPServer(name="probe")
 
         (binding,) = server.register_specs(
-            registry, overrides={"lookup_invoice": {"agent_contract": AgentContract()}}
+            registry, overrides={"lookup_invoice": {"agent_contract": OfflineContract()}}
         )
 
         assert binding.url_kwargs == ()
-        assert binding.agent_projection.audience("sent") is FieldAudience.HIDDEN
+        assert binding.audience_projection.audience("sent") is FieldAudience.HIDDEN
 
     def test_an_entry_with_no_contract_registers_unchanged(self) -> None:
         registry = SpecRegistry()
@@ -176,7 +176,7 @@ class TestRegisterSpecsCarriesTheEntrysOwn:
         (binding,) = server.register_specs(registry)
 
         assert binding.url_kwargs == ()
-        assert binding.agent_projection.audience("sent") is FieldAudience.HIDDEN
+        assert binding.audience_projection.audience("sent") is FieldAudience.HIDDEN
 
 
 class TestItStillValidates:
@@ -184,7 +184,7 @@ class TestItStillValidates:
         # The guarantee the recipe makes right after the snippet, checked
         # through the entry point rather than on the dataclass.
         #
-        # It raises on first use, not at registration: ``agent_projection`` is a
+        # It raises on first use, not at registration: ``audience_projection`` is a
         # cached_property, so a mistyped override survives startup and breaks a
         # request instead. Deliberate -- resolving a serializer eagerly at
         # binding construction would run before the app registry is necessarily
@@ -198,8 +198,8 @@ class TestItStillValidates:
             # ``number`` is already the serializer's label, so claiming it for
             # ``id`` as well leaves two -- the clash the recipe promises is
             # caught. Overriding ``number`` too would merely *move* the label.
-            agent_contract=AgentContract(field_audiences={"id": AgentField.label()}),
+            agent_contract=OfflineContract(field_audiences={"id": FieldMarking.label()}),
         )
 
         with pytest.raises(ImproperlyConfigured, match="lookup_invoice"):
-            _ = binding.agent_projection
+            _ = binding.audience_projection

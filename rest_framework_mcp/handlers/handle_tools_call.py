@@ -8,7 +8,7 @@ from rest_framework_services import (
     build_offline_context,
     dispatch_spec,
     enforce_permissions,
-    render_for_agent,
+    render_for_audience,
 )
 from rest_framework_services.exceptions.additional_input_required import AdditionalInputRequired
 from rest_framework_services.exceptions.service_error import ServiceError
@@ -270,7 +270,7 @@ def _dispatch_tool_call(
 def _render(binding: Any, result: Any, offline: Any) -> Any:
     """Render a service ``DispatchResult`` through the spec's output serializer.
 
-    ``render_for_agent`` reads the output serializer off
+    ``render_for_audience`` reads the output serializer off
     ``spec.output_selector_spec`` and resolves its ``output_serializer_context``
     provider with the extras it declares (``page`` for a list result,
     ``instance`` / ``result`` for a single one).
@@ -279,10 +279,10 @@ def _render(binding: Any, result: Any, offline: Any) -> Any:
     extras: dict[str, Any] = (
         {"page": result.value} if many else {"instance": result.value, "result": result.value}
     )
-    payload = render_for_agent(
+    payload = render_for_audience(
         binding.spec,
         result.value,
-        projection=binding.agent_projection,
+        projection=binding.audience_projection,
         many=many,
         view=offline.view,
         request=offline.request,

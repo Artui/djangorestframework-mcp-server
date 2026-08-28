@@ -92,7 +92,7 @@ anything those methods accept works — `title`, `output_format`,
 ## What the entry already says
 
 An entry may carry an
-[`AgentContract`][rest_framework_services.types.agent_contract.AgentContract]:
+[`OfflineContract`][rest_framework_services.types.offline_contract.OfflineContract]:
 the `url_kwargs`, `query_params` and `field_audiences` a caller with **no HTTP
 request** has to be told, because the URLconf and query string tell an HTTP one
 for free. `register_specs` reads it as this mount's default, so the same entry
@@ -103,7 +103,7 @@ absent request:
 registry.register(
     "list_project_orders",
     orders_spec,
-    agent_contract=AgentContract(url_kwargs=(UrlKwarg("project_pk", type="integer"),)),
+    agent_contract=OfflineContract(url_kwargs=(UrlKwarg("project_pk", type="integer"),)),
 )
 
 server.register_specs(registry)  # the tool takes project_pk, declared once

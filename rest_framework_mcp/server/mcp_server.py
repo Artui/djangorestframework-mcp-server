@@ -9,7 +9,7 @@ from django.core.exceptions import ImproperlyConfigured
 from django.http import HttpRequest
 from django.urls import URLPattern, path
 from rest_framework.serializers import Serializer
-from rest_framework_services import UNSET, AgentContract, UnsetType
+from rest_framework_services import UNSET, OfflineContract, UnsetType
 from rest_framework_services.registry.spec_registry import SpecRegistry
 from rest_framework_services.types.selector_kind import SelectorKind
 from rest_framework_services.types.selector_spec import SelectorSpec
@@ -256,7 +256,7 @@ class MCPServer:
         rate_limits: list[Any] | None = None,
         annotations: dict[str, Any] | None = None,
         meta: dict[str, Any] | None = None,
-        agent_contract: AgentContract | None = None,
+        agent_contract: OfflineContract | None = None,
         ui: UIToolMeta | None = None,
         include_structured_content: bool | None = None,
         include_output_schema: bool | None = None,
@@ -306,7 +306,7 @@ class MCPServer:
             include_structured_content=include_structured_content,
             default_structured_content=self._config.include_structured_content,
         )
-        contract = agent_contract or AgentContract()
+        contract = agent_contract or OfflineContract()
         binding = service_spec_to_tool(
             name=name,
             field_audiences=contract.field_audiences,
@@ -379,7 +379,7 @@ class MCPServer:
         rate_limits: list[Any] | None = None,
         annotations: dict[str, Any] | None = None,
         meta: dict[str, Any] | None = None,
-        agent_contract: AgentContract | None = None,
+        agent_contract: OfflineContract | None = None,
         ui: UIToolMeta | None = None,
         ordering_fields: list[str] | tuple[str, ...] | None = None,
         paginate: bool = False,
@@ -444,7 +444,7 @@ class MCPServer:
             include_structured_content=include_structured_content,
             default_structured_content=self._config.include_structured_content,
         )
-        contract = agent_contract or AgentContract()
+        contract = agent_contract or OfflineContract()
         binding = selector_spec_to_tool(
             name=name,
             field_audiences=contract.field_audiences,
@@ -540,7 +540,7 @@ class MCPServer:
 
 
         Each entry's
-        [`AgentContract`][rest_framework_services.types.agent_contract.AgentContract]
+        [`OfflineContract`][rest_framework_services.types.offline_contract.OfflineContract]
         comes across as the mount's default — the ``url_kwargs``,
         ``query_params`` and ``field_audiences`` an off-HTTP caller needs and an
         HTTP one gets from the URLconf and query string for free. A per-tool
@@ -608,7 +608,7 @@ class MCPServer:
         rate_limits: list[Any] | None = None,
         annotations: dict[str, Any] | None = None,
         meta: dict[str, Any] | None = None,
-        agent_contract: AgentContract | None = None,
+        agent_contract: OfflineContract | None = None,
         ui: UIToolMeta | None = None,
         include_structured_content: bool | None = None,
         include_output_schema: bool | None = None,
@@ -664,7 +664,7 @@ class MCPServer:
         )
         binding = chain_steps_to_tool(
             name=name,
-            field_audiences=(agent_contract or AgentContract()).field_audiences,
+            field_audiences=(agent_contract or OfflineContract()).field_audiences,
             steps=tuple(steps),
             description=description,
             title=title,
@@ -1268,7 +1268,7 @@ class MCPServer:
         rate_limits: list[Any] | None = None,
         annotations: dict[str, Any] | None = None,
         meta: dict[str, Any] | None = None,
-        agent_contract: AgentContract | None = None,
+        agent_contract: OfflineContract | None = None,
         ui: UIToolMeta | None = None,
         include_structured_content: bool | None = None,
         include_output_schema: bool | None = None,
@@ -1353,7 +1353,7 @@ class MCPServer:
         rate_limits: list[Any] | None = None,
         annotations: dict[str, Any] | None = None,
         meta: dict[str, Any] | None = None,
-        agent_contract: AgentContract | None = None,
+        agent_contract: OfflineContract | None = None,
         ui: UIToolMeta | None = None,
         ordering_fields: list[str] | tuple[str, ...] | None = None,
         paginate: bool = False,

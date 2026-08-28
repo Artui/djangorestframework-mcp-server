@@ -10,7 +10,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 
 - **`agent_contract=` on every registrar, and `register_specs` reads each
-  entry's own.** drf-services 0.46 carries an `AgentContract` on the registry
+  entry's own.** drf-services carries an `OfflineContract` on the registry
   entry: the `url_kwargs`, `query_params` and `field_audiences` a caller with
   **no HTTP request** has to be told, because the URLconf and query string tell
   an HTTP one for free.
@@ -19,7 +19,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   registry.register(
       "list_project_orders",
       orders_spec,
-      agent_contract=AgentContract(url_kwargs=(UrlKwarg("project_pk"),)),
+      agent_contract=OfflineContract(url_kwargs=(UrlKwarg("project_pk"),)),
   )
 
   server.register_specs(registry)  # the tool takes project_pk, declared once
@@ -41,6 +41,57 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   audience is not a transport, and a field hidden from one agent caller and
   visible to another is something you find in a transcript rather than a test.
 
+### Changed
+
+- **Floor raised to `djangorestframework-services>=0.48`, and it is a hard
+  floor.** 0.48 renamed ten public symbols with **no deprecation aliases**, so
+  the names this package imports at module level do not exist below it. Nothing
+  in this package's own API changed shape as a result — only which upstream
+  names it reaches for:
+
+  | Was | Now |
+  | --- | --- |
+  | `AgentField` | `FieldMarking` |
+  | `AGENT` | `MARKING` |
+  | `AgentProjection` | `AudienceProjection` |
+  | `AgentContract` | `OfflineContract` |
+  | `build_agent_projection` | `build_audience_projection` |
+  | `render_for_agent` | `render_for_audience` |
+
+  The `agent_contract=` argument on every registrar keeps its name — it is
+  still what the registry entry's field is called — and only its type moved.
+  Prose that says "agent" because an agent is what is being described is left
+  alone; the rule upstream applied is that "agent" is earned where a name marks
+  an audience the serializer author declares, and a leak where it marks only
+  which callers happen to use it. This package **is** an agent transport, so
+  `field_audiences`, `append_agent_conventions` and the `agent_contract=`
+  argument all keep theirs.
+
+- **`ToolBinding.agent_projection` is now `audience_projection`**, on all three
+  tool bindings, following the type it returns. A breaking rename of a public
+  attribute, with no alias for the same reason upstream declined one: every
+  known reader is in this family and moves in the same pass.
+
+- **A `FilterSet`'s choice labels now reach the `inputSchema`.** With
+  drf-services 0.47+, a `ChoiceFilter` whose labels differ from its values is
+  published as `{"oneOf": [{"const": …, "title": …}, …]}` instead of a bare
+  `enum`, and a filter gains `title` from its `label` and `description` from
+  its `help_text` — or a derived ``"Matches `views` with the `gte` lookup."``
+  where the argument's own name gives neither the column nor the comparison
+  away.
+
+  **`OrderingFilter` subclasses `ChoiceFilter`, so a FilterSet-declared
+  `ordering` changes shape**, and that is the case most likely to reach an
+  existing client: it now says that `-amount` means "Amount (descending)"
+  rather than leaving a model to infer direction from a leading minus sign. A
+  client reading `properties["ordering"]["enum"]` off `tools/list` needs
+  updating; the accepted value set is unchanged, since `title` annotates and
+  constrains nothing.
+
+  The deprecated `ordering_fields=` registration knob is unaffected — this
+  transport builds that schema itself out of bare ORM paths and has no labels
+  to attach.
+
 ### Removed
 
 - **The `field_audiences=` registration argument, superseded before it shipped.**
@@ -55,9 +106,30 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **`resolve_agent_projection`, moved upstream.** The merge of a mount's
   overrides over the serializer's own markings — and the two-labels clash an
   override can introduce — now lives in drf-services'
-  `build_agent_projection(overrides=…, name=…)`, so both agent transports layer
-  the shared declaration by the same rule instead of each carrying a copy. It
-  was private to the three tool bindings; no import path changes.
+  `build_audience_projection(overrides=…, name=…)`, so both agent transports
+  layer the shared declaration by the same rule instead of each carrying a
+  copy. It was private to the three tool bindings; no import path changes.
+
+- **`_slice_for_pagination`, moved upstream.** A paginated selector tool's page
+  is now shaped by drf-services' `paginate_output`, and its envelope by
+  `OutputPage.envelope` — the clamps (`limit` down to the ceiling and up to 1,
+  `page` up to 1 and down to the last page that exists), the count taken before
+  the slice, and the `totalPages` / `hasNext` arithmetic, all in one place.
+
+  The two implementations were compared over 13 argument shapes against 4 row
+  collections before the local one was deleted: 52 comparisons, no differences.
+  Behaviour is unchanged apart from the wording of the `TypeError` a paginated
+  selector returning a generator raises, which is now drf-services' and says
+  "serve this selector unpaginated" where this package said "set
+  `paginate=False`".
+
+  **`page` and `limit` are still parsed here**, and deliberately so. Turning an
+  untyped JSON argument into an integer is where transports legitimately
+  differ — a public MCP endpoint clamps a malformed value and answers, while an
+  in-process toolset can hand the model its mistake back and ask again — so
+  that stays a policy this transport owns, and only already-parsed ints cross
+  the boundary. It is why the default page size now comes from
+  `DEFAULT_PAGE_SIZE` rather than a literal `100` in two packages.
 
 ### Security
 

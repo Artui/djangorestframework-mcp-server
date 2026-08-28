@@ -124,8 +124,20 @@ def test_tools_list_emits_filter_args_in_input_schema() -> None:
     properties = schema["properties"]
     # Filter properties merged in:
     assert properties["sent"] == {"type": "boolean"}
-    assert properties["min_amount"] == {"type": "number"}
-    # Ordering as enum of "<f>" / "-<f>":
+    # ``min_amount`` is declared ``field_name="amount_cents", lookup_expr="gte"``,
+    # so its own name gives away neither the column nor the comparison. Reflection
+    # states both, because a model reading only the argument name would otherwise
+    # have to guess whether "min" means ``gt`` or ``gte`` and against which field.
+    # ``sent`` above says nothing extra: name, field and lookup already agree.
+    assert properties["min_amount"] == {
+        "type": "number",
+        "description": "Matches `amount_cents` with the `gte` lookup.",
+    }
+    # Ordering as enum of "<f>" / "-<f>": this one comes from the deprecated
+    # ``ordering_fields=`` knob, which this transport builds itself out of bare
+    # ORM paths and has no labels for. A FilterSet's ``OrderingFilter`` carries
+    # them and is published as a labelled ``oneOf`` — see
+    # ``test_selector_tool_ordering.py``.
     assert properties["ordering"]["enum"] == ["amount_cents", "-amount_cents"]
     # Pagination args:
     assert properties["page"] == {"type": "integer", "minimum": 1}
@@ -433,6 +445,61 @@ def test_pagination_accepts_string_int() -> None:
     )
     assert isinstance(out, dict)
     assert out["structuredContent"]["page"] == 1
+
+
+@pytest.mark.django_db
+def test_pagination_is_shaped_upstream_from_already_parsed_ints(monkeypatch) -> None:
+    """The page arithmetic is drf-services', and only the parsing is ours.
+
+    Asserted as a handover rather than only as an outcome. The two
+    implementations agreed exactly — 52 comparisons, no differences — on the day
+    this transport's copy was deleted, so an outcome test alone would keep
+    passing if a private copy grew back here, right up until drf-services moved
+    a clamp and the two silently disagreed again. ``monkeypatch.setattr`` fails
+    outright if the module stops reaching for the upstream shaper at all.
+
+    The string arguments are the other half of the contract: ``_coerce_int``
+    stays on this side because answering a malformed argument is a transport's
+    policy, so what crosses the boundary is ``3`` and ``2``, never ``"3"``.
+    """
+    from rest_framework_mcp.handlers import selector_tool_dispatch
+
+    for number in ("A", "B", "C", "D", "E"):
+        Invoice.objects.create(number=number, amount_cents=10)
+
+    handovers: list[dict[str, Any]] = []
+    upstream = selector_tool_dispatch.paginate_output
+
+    def _spy(rows: Any, **kwargs: Any) -> Any:
+        handovers.append(kwargs)
+        return upstream(rows, **kwargs)
+
+    monkeypatch.setattr(selector_tool_dispatch, "paginate_output", _spy)
+
+    server = _server()
+    server.register_selector_tool(
+        name="invoices.list",
+        spec=SelectorSpec(
+            kind=SelectorKind.LIST,
+            selector=_list_invoices,
+            output_serializer=InvoiceOutputSerializer,
+        ),
+        paginate=True,
+        max_page_size=4,
+    )
+
+    out = handle_tools_call(
+        {"name": "invoices.list", "arguments": {"page": "3", "limit": "2"}},
+        _ctx(server),
+    )
+
+    assert handovers == [{"page": 3, "limit": 2, "max_page_size": 4}]
+    # And the envelope around the rendered rows is the one the page built, not a
+    # second copy of the same ceil-divide living at this call site.
+    assert isinstance(out, dict)
+    payload = out["structuredContent"]
+    assert [row["number"] for row in payload["items"]] == ["E"]
+    assert (payload["page"], payload["totalPages"], payload["hasNext"]) == (3, 3, False)
 
 
 # ---------- Filter + order + paginate combined ----------

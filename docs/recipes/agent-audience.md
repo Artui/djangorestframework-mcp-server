@@ -12,13 +12,13 @@ both the payload and the advertised `outputSchema`.
 
 ## Mark the fields
 
-The marking is `AgentField`, from
+The marking is `FieldMarking`, from
 [djangorestframework-services](https://artui.github.io/djangorestframework-services/),
 in DRF's per-field `style` bag:
 
 ```python
 from rest_framework import serializers
-from rest_framework_services import AGENT, AgentField
+from rest_framework_services import MARKING, FieldMarking
 
 
 class InvoiceSerializer(serializers.ModelSerializer):
@@ -26,9 +26,9 @@ class InvoiceSerializer(serializers.ModelSerializer):
         model = Invoice
         fields = ["id", "number", "status", "etag", "amount_cents"]
         extra_kwargs = {
-            "id": {"style": {AGENT: AgentField.handle("Invoice handle.")}},
-            "etag": {"style": {AGENT: AgentField.hidden()}},
-            "number": {"style": {AGENT: AgentField.label()}},
+            "id": {"style": {MARKING: FieldMarking.handle("Invoice handle.")}},
+            "etag": {"style": {MARKING: FieldMarking.hidden()}},
+            "number": {"style": {MARKING: FieldMarking.label()}},
         }
 ```
 
@@ -80,13 +80,13 @@ registry.register(
     "lookup_invoice",
     invoice_spec,
     # This tool returns the etag after all.
-    agent_contract=AgentContract(field_audiences={"etag": AgentField()}),
+    agent_contract=OfflineContract(field_audiences={"etag": FieldMarking()}),
 )
 
 server.register_specs(registry.by_tag("billing"))
 ```
 
-`AgentContract` is drf-services' carrier for what a caller with **no HTTP
+`OfflineContract` is drf-services' carrier for what a caller with **no HTTP
 request** has to be told — the URL kwargs and query params an agent must supply
 by hand, and this. Declaring it on the entry is what keeps an in-process
 Pydantic-AI toolset and this server projecting the *same* field set: an audience
@@ -100,7 +100,7 @@ the same object:
 server.register_selector_tool(
     name="lookup_invoice",
     spec=invoice_spec,
-    agent_contract=AgentContract(field_audiences={"etag": AgentField()}),
+    agent_contract=OfflineContract(field_audiences={"etag": FieldMarking()}),
 )
 ```
 
@@ -109,7 +109,7 @@ has no registry entry, so this is its only route — and as an `overrides` key o
 `register_specs`, which **replaces** the entry's contract rather than merging
 into it.
 
-Two fields left claiming `AgentField.label()` raises `ImproperlyConfigured`
+Two fields left claiming `FieldMarking.label()` raises `ImproperlyConfigured`
 naming the tool: a record has one name, and picking one silently is the kind of
 thing you find in a transcript weeks later.
 
