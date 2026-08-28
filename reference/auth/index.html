@@ -2713,20 +2713,27 @@ actually reaches authentication.</p>
 <p>Audience enforcement (RFC 8707) is controlled by <code>enforce_audience</code>,
 <strong>not</strong> by <code>resource_url</code>. <code>resource_url</code> is the identity this server
 publishes in its protected-resource metadata; enforcement is whether a
-token that doesn't carry that identity is rejected. It defaults off because
-enforcement needs the access token to record the resource it was issued
-for, and <strong>DOT's stock <code>AccessToken</code> has no such field</strong> — so switching
-it on against stock DOT rejects every token, while <code>resource_url</code> is
-effectively required by RFC 9728. Enforcement works when the token really
-does carry the resource:</p>
+token that doesn't carry that identity is rejected. <code>resource_url</code> is
+effectively required by RFC 9728; enforcement is a separate decision.</p>
+<p><strong>On django-oauth-toolkit 3.4.0 and later this works out of the box.</strong> That
+release added RFC 8707 resource indicators: stock <code>AccessToken</code> carries a
+<code>resource</code> field and an <code>allows_audience</code> check, so turning enforcement
+on needs nothing else. The default stays off because the floor of the
+<code>[oauth]</code> extra is <code>&gt;=2.3</code>, and on an older DOT no token records a
+resource — so a default of <code>True</code> would reject every request for anyone
+who has not upgraded.</p>
+<p>Below 3.4.0, or with a swapped model that drops the field, enforcement still
+works if the resource is somewhere else:</p>
 <ul>
 <li>a swapped <code>OAUTH2_PROVIDER["ACCESS_TOKEN_MODEL"]</code> carrying a
   <code>resource</code> field (DOT supports substituting the model), or</li>
 <li>an explicit <code>audience_getter=</code> reading it from wherever it lives — a
   JWT claim, an upstream gateway header, a related row.</li>
 </ul>
-<p>Turning it on without either raises <code>ImproperlyConfigured</code> at
-construction, naming both ways out, instead of 401-ing every request.</p>
+<p>The check is capability-based rather than version-based: it asks the
+configured token model whether it has the field. Turning enforcement on with
+no route to the resource raises <code>ImproperlyConfigured</code> at construction,
+naming every way out, instead of 401-ing every request.</p>
 <p><strong>One resource URL per server.</strong> RFC 8707 binds a token to <em>a</em> resource,
 and that binding is precisely what stops a token issued for one resource
 being replayed against another: two servers sharing a single URL would let

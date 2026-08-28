@@ -501,6 +501,23 @@
     </span>
   </a>
   
+    <nav class="md-nav" aria-label="Audience binding (RFC 8707)">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#if-you-are-writing-a-resource-server-against-the-official-mcp-sdk" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        If you are writing a resource server against the official mcp SDK
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
 </li>
       
         <li class="md-nav__item">
@@ -1717,6 +1734,23 @@
     </span>
   </a>
   
+    <nav class="md-nav" aria-label="Audience binding (RFC 8707)">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#if-you-are-writing-a-resource-server-against-the-official-mcp-sdk" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        If you are writing a resource server against the official mcp SDK
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
 </li>
       
         <li class="md-nav__item">
@@ -2063,16 +2097,33 @@ independently of <code>has_permission(request, token)</code>.</p>
 in protected-resource metadata, and it is what the <code>WWW-Authenticate</code> challenge
 points clients at. Setting it does <strong>not</strong>, on its own, reject anything.</p>
 <div class="admonition warning">
-<p class="admonition-title">Enforcement is a separate, opt-in knob — and stock DOT cannot satisfy it</p>
+<p class="admonition-title">Enforcement is a separate, opt-in knob — and you probably want it on</p>
 <p>Audience enforcement needs the access token to record which resource it was
-issued for. <strong>django-oauth-toolkit has no such field and implements no RFC
-8707 resource indicators</strong>, so <code>getattr(token, "resource", None)</code> is always
-<code>None</code> for a DOT-issued token.</p>
+issued for.</p>
+<p><strong>django-oauth-toolkit 3.4.0 (2026-07-23) added RFC 8707 resource
+indicators</strong>: stock <code>AccessToken</code> carries a <code>resource</code> field and an
+<code>allows_audience()</code> check, and <code>resource</code> is accepted at both the authorize
+and token endpoints. On 3.4.0 or later, <code>ENFORCE_AUDIENCE = True</code> needs
+nothing else.</p>
+<p>It is <strong>off by default</strong> only because the <code>[oauth]</code> extra floors DOT at
+<code>&gt;=2.3</code>, and on an older DOT no token records a resource — a default of
+<code>True</code> would reject every request for anyone who has not upgraded. The check
+is capability-based rather than version-based, so it asks your configured
+token model rather than DOT's version number.</p>
 <p>Enforcement used to be implied by <code>resource_url</code> alone. That made the
 bundled backend unusable: configuring the resource URL a resource server is
 supposed to publish rejected <em>every</em> token, and clearing it published
 invalid metadata — there was no configuration that did both. Enforcement is
 now <code>ENFORCE_AUDIENCE</code>, default <code>False</code>.</p>
+</div>
+<div class="admonition danger">
+<p class="admonition-title">The MCP spec makes this a MUST, so treat the default as a floor, not a recommendation</p>
+<p><code>2026-07-28</code> says a resource server <strong>MUST</strong> validate that access tokens were
+issued specifically for it. Leaving <code>ENFORCE_AUDIENCE</code> off on DOT 3.4.0+ is a
+conformance gap, and the failure mode is cross-resource token replay: a token
+minted for a different resource on the same authorization server is accepted
+here.</p>
+<p>Turn it on unless you are pinned below DOT 3.4.0.</p>
 </div>
 <p>To enforce, tell the backend where the audience actually lives — either a
 swapped <code>OAUTH2_PROVIDER["ACCESS_TOKEN_MODEL"]</code> carrying a <code>resource</code> field, or
@@ -2139,6 +2190,26 @@ RFC 9728 marks REQUIRED, so the metadata carries a <code>_warning</code> saying 
 <p>Token audiences are URLs, not patterns. Substring matches and prefix
 matches are unsafe (a token bound to <code>…/mcp</code> would otherwise satisfy a
 server expecting <code>…/mcp-admin</code>). The implementation enforces equality only.</p>
+</div>
+<h3 id="if-you-are-writing-a-resource-server-against-the-official-mcp-sdk">If you are writing a resource server against the official <code>mcp</code> SDK<a class="headerlink" href="#if-you-are-writing-a-resource-server-against-the-official-mcp-sdk" title="Permanent link">&para;</a></h3>
+<div class="admonition danger">
+<p class="admonition-title">The SDK publishes the metadata for you and never validates the audience</p>
+<p>This is the single easiest thing to get wrong in this area, and it is not
+specific to this package — it is worth knowing wherever you build an MCP
+resource server in Python.</p>
+<p><code>mcp.shared.auth_utils</code> provides <code>resource_url_from_server_url()</code> and
+<code>check_resource_allowed()</code>, and in the shipped wheel they are called <strong>only
+from client paths</strong>. <code>AccessToken</code> carries a <code>resource</code> field, but
+<code>BearerAuthBackend.authenticate()</code> checks the bearer prefix, the verifier's
+verdict and <code>expires_at</code> — and nothing else.</p>
+<p>So a <code>TokenVerifier</code> that merely checks a signature is <strong>non-compliant with
+the audience MUST, and cross-resource token replay works</strong>: a token minted
+for another resource on the same authorization server is accepted. FastMCP's
+<code>JWTVerifier</code> does validate audience out of the box; the official SDK's
+verifiers do not.</p>
+<p>If you are using this package's <code>DjangoOAuthToolkitBackend</code>, that is what
+<code>ENFORCE_AUDIENCE</code> is for and the check runs server-side. If you are writing
+your own verifier anywhere, validate the audience in it.</p>
 </div>
 <h2 id="oauth-contrib-mount">OAuth contrib mount<a class="headerlink" href="#oauth-contrib-mount" title="Permanent link">&para;</a></h2>
 <p><code>rest_framework_mcp.contrib.oauth.build_oauth_urlpatterns(*, server,
@@ -2324,27 +2395,28 @@ Inspector) discover them through PRM → AS metadata.</p>
 </span><span id="__span-14-4"><a id="__codelineno-14-4" name="__codelineno-14-4" href="#__codelineno-14-4"></a><span class="p">]</span>
 </span><span id="__span-14-5"><a id="__codelineno-14-5" name="__codelineno-14-5" href="#__codelineno-14-5"></a>
 </span><span id="__span-14-6"><a id="__codelineno-14-6" name="__codelineno-14-6" href="#__codelineno-14-6"></a><span class="n">OAUTH2_PROVIDER</span> <span class="o">=</span> <span class="p">{</span>
-</span><span id="__span-14-7"><a id="__codelineno-14-7" name="__codelineno-14-7" href="#__codelineno-14-7"></a>    <span class="c1"># NB: DOT implements no RFC 8707 resource indicators, so there is nothing to</span>
-</span><span id="__span-14-8"><a id="__codelineno-14-8" name="__codelineno-14-8" href="#__codelineno-14-8"></a>    <span class="c1"># set here to bind tokens to a resource — see &quot;Audience binding&quot; above.</span>
-</span><span id="__span-14-9"><a id="__codelineno-14-9" name="__codelineno-14-9" href="#__codelineno-14-9"></a>    <span class="s2">&quot;SCOPES&quot;</span><span class="p">:</span> <span class="p">{</span>
-</span><span id="__span-14-10"><a id="__codelineno-14-10" name="__codelineno-14-10" href="#__codelineno-14-10"></a>        <span class="s2">&quot;invoices:read&quot;</span><span class="p">:</span> <span class="s2">&quot;Read invoices&quot;</span><span class="p">,</span>
-</span><span id="__span-14-11"><a id="__codelineno-14-11" name="__codelineno-14-11" href="#__codelineno-14-11"></a>        <span class="s2">&quot;invoices:write&quot;</span><span class="p">:</span> <span class="s2">&quot;Mutate invoices&quot;</span><span class="p">,</span>
-</span><span id="__span-14-12"><a id="__codelineno-14-12" name="__codelineno-14-12" href="#__codelineno-14-12"></a>    <span class="p">},</span>
-</span><span id="__span-14-13"><a id="__codelineno-14-13" name="__codelineno-14-13" href="#__codelineno-14-13"></a>    <span class="c1"># Token lifetimes appropriate for an MCP session — short access tokens,</span>
-</span><span id="__span-14-14"><a id="__codelineno-14-14" name="__codelineno-14-14" href="#__codelineno-14-14"></a>    <span class="c1"># refresh on demand.</span>
-</span><span id="__span-14-15"><a id="__codelineno-14-15" name="__codelineno-14-15" href="#__codelineno-14-15"></a>    <span class="s2">&quot;ACCESS_TOKEN_EXPIRE_SECONDS&quot;</span><span class="p">:</span> <span class="mi">600</span><span class="p">,</span>
-</span><span id="__span-14-16"><a id="__codelineno-14-16" name="__codelineno-14-16" href="#__codelineno-14-16"></a>    <span class="s2">&quot;REFRESH_TOKEN_EXPIRE_SECONDS&quot;</span><span class="p">:</span> <span class="mi">60</span> <span class="o">*</span> <span class="mi">60</span> <span class="o">*</span> <span class="mi">24</span><span class="p">,</span>
-</span><span id="__span-14-17"><a id="__codelineno-14-17" name="__codelineno-14-17" href="#__codelineno-14-17"></a><span class="p">}</span>
-</span><span id="__span-14-18"><a id="__codelineno-14-18" name="__codelineno-14-18" href="#__codelineno-14-18"></a>
-</span><span id="__span-14-19"><a id="__codelineno-14-19" name="__codelineno-14-19" href="#__codelineno-14-19"></a><span class="n">REST_FRAMEWORK_MCP</span> <span class="o">=</span> <span class="p">{</span>
-</span><span id="__span-14-20"><a id="__codelineno-14-20" name="__codelineno-14-20" href="#__codelineno-14-20"></a>    <span class="s2">&quot;RESOURCE_URL&quot;</span><span class="p">:</span> <span class="s2">&quot;https://example.com/mcp/&quot;</span><span class="p">,</span>
-</span><span id="__span-14-21"><a id="__codelineno-14-21" name="__codelineno-14-21" href="#__codelineno-14-21"></a>    <span class="s2">&quot;ALLOWED_ORIGINS&quot;</span><span class="p">:</span> <span class="p">[</span><span class="s2">&quot;https://app.example.com&quot;</span><span class="p">],</span>
-</span><span id="__span-14-22"><a id="__codelineno-14-22" name="__codelineno-14-22" href="#__codelineno-14-22"></a>    <span class="s2">&quot;SERVER_INFO&quot;</span><span class="p">:</span> <span class="p">{</span>
-</span><span id="__span-14-23"><a id="__codelineno-14-23" name="__codelineno-14-23" href="#__codelineno-14-23"></a>        <span class="s2">&quot;authorization_servers&quot;</span><span class="p">:</span> <span class="p">[</span><span class="s2">&quot;https://example.com/oauth/&quot;</span><span class="p">],</span>
-</span><span id="__span-14-24"><a id="__codelineno-14-24" name="__codelineno-14-24" href="#__codelineno-14-24"></a>        <span class="s2">&quot;scopes_supported&quot;</span><span class="p">:</span> <span class="p">[</span><span class="s2">&quot;invoices:read&quot;</span><span class="p">,</span> <span class="s2">&quot;invoices:write&quot;</span><span class="p">],</span>
-</span><span id="__span-14-25"><a id="__codelineno-14-25" name="__codelineno-14-25" href="#__codelineno-14-25"></a>        <span class="s2">&quot;resource_metadata_url&quot;</span><span class="p">:</span> <span class="s2">&quot;https://example.com/mcp/.well-known/oauth-protected-resource&quot;</span><span class="p">,</span>
-</span><span id="__span-14-26"><a id="__codelineno-14-26" name="__codelineno-14-26" href="#__codelineno-14-26"></a>    <span class="p">},</span>
-</span><span id="__span-14-27"><a id="__codelineno-14-27" name="__codelineno-14-27" href="#__codelineno-14-27"></a><span class="p">}</span>
+</span><span id="__span-14-7"><a id="__codelineno-14-7" name="__codelineno-14-7" href="#__codelineno-14-7"></a>    <span class="c1"># DOT 3.4.0+ accepts an RFC 8707 `resource` at the authorize and token</span>
+</span><span id="__span-14-8"><a id="__codelineno-14-8" name="__codelineno-14-8" href="#__codelineno-14-8"></a>    <span class="c1"># endpoints and records it on the token, so audience binding needs nothing</span>
+</span><span id="__span-14-9"><a id="__codelineno-14-9" name="__codelineno-14-9" href="#__codelineno-14-9"></a>    <span class="c1"># here — turn on ENFORCE_AUDIENCE instead. See &quot;Audience binding&quot; above.</span>
+</span><span id="__span-14-10"><a id="__codelineno-14-10" name="__codelineno-14-10" href="#__codelineno-14-10"></a>    <span class="s2">&quot;SCOPES&quot;</span><span class="p">:</span> <span class="p">{</span>
+</span><span id="__span-14-11"><a id="__codelineno-14-11" name="__codelineno-14-11" href="#__codelineno-14-11"></a>        <span class="s2">&quot;invoices:read&quot;</span><span class="p">:</span> <span class="s2">&quot;Read invoices&quot;</span><span class="p">,</span>
+</span><span id="__span-14-12"><a id="__codelineno-14-12" name="__codelineno-14-12" href="#__codelineno-14-12"></a>        <span class="s2">&quot;invoices:write&quot;</span><span class="p">:</span> <span class="s2">&quot;Mutate invoices&quot;</span><span class="p">,</span>
+</span><span id="__span-14-13"><a id="__codelineno-14-13" name="__codelineno-14-13" href="#__codelineno-14-13"></a>    <span class="p">},</span>
+</span><span id="__span-14-14"><a id="__codelineno-14-14" name="__codelineno-14-14" href="#__codelineno-14-14"></a>    <span class="c1"># Token lifetimes appropriate for an MCP session — short access tokens,</span>
+</span><span id="__span-14-15"><a id="__codelineno-14-15" name="__codelineno-14-15" href="#__codelineno-14-15"></a>    <span class="c1"># refresh on demand.</span>
+</span><span id="__span-14-16"><a id="__codelineno-14-16" name="__codelineno-14-16" href="#__codelineno-14-16"></a>    <span class="s2">&quot;ACCESS_TOKEN_EXPIRE_SECONDS&quot;</span><span class="p">:</span> <span class="mi">600</span><span class="p">,</span>
+</span><span id="__span-14-17"><a id="__codelineno-14-17" name="__codelineno-14-17" href="#__codelineno-14-17"></a>    <span class="s2">&quot;REFRESH_TOKEN_EXPIRE_SECONDS&quot;</span><span class="p">:</span> <span class="mi">60</span> <span class="o">*</span> <span class="mi">60</span> <span class="o">*</span> <span class="mi">24</span><span class="p">,</span>
+</span><span id="__span-14-18"><a id="__codelineno-14-18" name="__codelineno-14-18" href="#__codelineno-14-18"></a><span class="p">}</span>
+</span><span id="__span-14-19"><a id="__codelineno-14-19" name="__codelineno-14-19" href="#__codelineno-14-19"></a>
+</span><span id="__span-14-20"><a id="__codelineno-14-20" name="__codelineno-14-20" href="#__codelineno-14-20"></a><span class="n">REST_FRAMEWORK_MCP</span> <span class="o">=</span> <span class="p">{</span>
+</span><span id="__span-14-21"><a id="__codelineno-14-21" name="__codelineno-14-21" href="#__codelineno-14-21"></a>    <span class="s2">&quot;RESOURCE_URL&quot;</span><span class="p">:</span> <span class="s2">&quot;https://example.com/mcp/&quot;</span><span class="p">,</span>
+</span><span id="__span-14-22"><a id="__codelineno-14-22" name="__codelineno-14-22" href="#__codelineno-14-22"></a>    <span class="s2">&quot;ALLOWED_ORIGINS&quot;</span><span class="p">:</span> <span class="p">[</span><span class="s2">&quot;https://app.example.com&quot;</span><span class="p">],</span>
+</span><span id="__span-14-23"><a id="__codelineno-14-23" name="__codelineno-14-23" href="#__codelineno-14-23"></a>    <span class="s2">&quot;SERVER_INFO&quot;</span><span class="p">:</span> <span class="p">{</span>
+</span><span id="__span-14-24"><a id="__codelineno-14-24" name="__codelineno-14-24" href="#__codelineno-14-24"></a>        <span class="s2">&quot;authorization_servers&quot;</span><span class="p">:</span> <span class="p">[</span><span class="s2">&quot;https://example.com/oauth/&quot;</span><span class="p">],</span>
+</span><span id="__span-14-25"><a id="__codelineno-14-25" name="__codelineno-14-25" href="#__codelineno-14-25"></a>        <span class="s2">&quot;scopes_supported&quot;</span><span class="p">:</span> <span class="p">[</span><span class="s2">&quot;invoices:read&quot;</span><span class="p">,</span> <span class="s2">&quot;invoices:write&quot;</span><span class="p">],</span>
+</span><span id="__span-14-26"><a id="__codelineno-14-26" name="__codelineno-14-26" href="#__codelineno-14-26"></a>        <span class="s2">&quot;resource_metadata_url&quot;</span><span class="p">:</span> <span class="s2">&quot;https://example.com/mcp/.well-known/oauth-protected-resource&quot;</span><span class="p">,</span>
+</span><span id="__span-14-27"><a id="__codelineno-14-27" name="__codelineno-14-27" href="#__codelineno-14-27"></a>    <span class="p">},</span>
+</span><span id="__span-14-28"><a id="__codelineno-14-28" name="__codelineno-14-28" href="#__codelineno-14-28"></a><span class="p">}</span>
 </span></code></pre></div>
 <div class="language-python highlight"><span class="filename">urls.py</span><pre><span></span><code><span id="__span-15-1"><a id="__codelineno-15-1" name="__codelineno-15-1" href="#__codelineno-15-1"></a><span class="kn">from</span><span class="w"> </span><span class="nn">django.urls</span><span class="w"> </span><span class="kn">import</span> <span class="n">include</span><span class="p">,</span> <span class="n">path</span>
 </span><span id="__span-15-2"><a id="__codelineno-15-2" name="__codelineno-15-2" href="#__codelineno-15-2"></a>

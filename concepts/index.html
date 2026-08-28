@@ -2947,17 +2947,33 @@ forms) accept three behavior knobs:</p>
 <ul>
 <li><strong><code>unknown_arguments=</code></strong> — how <code>arguments</code> keys outside the binding's
   declared field set are handled.</li>
-<li><code>UnknownArguments.REJECT</code> (default) — the validator rejects unknown
+<li>
+<p><code>UnknownArguments.REJECT</code> (default) — the validator rejects unknown
     keys with <code>-32602</code>, and the outer <code>inputSchema</code> advertises
-    <code>"additionalProperties": false</code>. This holds only when the binding has an
-    <code>input_serializer</code> to validate against: a serializer-less binding has no
-    declared field set, so <code>REJECT</code> can't fire and its schema stays open
-    (<code>"additionalProperties": true</code>) to match the runtime.</li>
-<li><code>UnknownArguments.PASSTHROUGH</code> — <code>"additionalProperties": true</code>;
-    unknown keys survive validation and are merged onto the validated
-    payload before binding.</li>
-<li><code>UnknownArguments.IGNORE</code> — <code>"additionalProperties": true</code>; unknown
-    keys are silently dropped (the historic DRF default).</li>
+    <code>"additionalProperties": false</code>.</p>
+<p><strong>The closed schema is advertised only where the runtime actually closes
+the set</strong>, which takes three things, not one:</p>
+<ol>
+<li><code>REJECT</code> itself;</li>
+<li>an <code>input_serializer</code> to validate against — a serializer-less binding
+   has no declared field set, so <code>REJECT</code> cannot fire;</li>
+<li>for a <strong>service</strong> tool, a key set the spec can enumerate. A nested
+   selector taking a bare <code>**kwargs</code>, or one carrying a <code>filter_set</code>,
+   leaves it open, and an open set is answered by accepting and silently
+   dropping every undeclared key.</li>
+</ol>
+<p>Any of the three missing leaves the schema open
+(<code>"additionalProperties": true</code>), on purpose: where nothing is enforced,
+nothing closed may be advertised. Telling a client a typo'd field will be
+refused, while the server takes it and throws it away, is the worse
+failure. Selector and chain bindings enforce the closed set in this
+package, so the third condition is a service-tool concern only.
+  - <code>UnknownArguments.PASSTHROUGH</code> — <code>"additionalProperties": true</code>;
+unknown keys survive validation and are merged onto the validated
+payload before binding.
+  - <code>UnknownArguments.IGNORE</code> — <code>"additionalProperties": true</code>; unknown
+keys are silently dropped (the historic DRF default).</p>
+</li>
 </ul>
 <p>Selector tools' pipeline-reserved keys are always treated as "known",
   so the policy doesn't fight the post-fetch pipeline.</p>

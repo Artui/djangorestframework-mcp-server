@@ -1567,6 +1567,21 @@
 
 <h1 id="output">Output<a class="headerlink" href="#output" title="Permanent link">&para;</a></h1>
 <p><code>OutputFormat</code>, encoders, and the <code>ToolResult</code> builder.</p>
+<p>A tool's result has two halves and they are toggled independently:
+<code>structuredContent</code> on the call result, and <code>outputSchema</code> on the <code>tools/list</code>
+entry. The MCP spec imposes one asymmetric rule between them — <strong>a tool that
+advertises <code>outputSchema</code> must return conforming <code>structuredContent</code></strong>, while
+the reverse is allowed — so they are not a single switch.</p>
+<p>Both are on by default, server-wide via
+<code>REST_FRAMEWORK_MCP["INCLUDE_STRUCTURED_CONTENT"]</code> and
+<code>["INCLUDE_OUTPUT_SCHEMA"]</code>, and per tool via <code>include_structured_content=</code> and
+<code>include_output_schema=</code> at registration. The asymmetric rule is enforced:
+<code>include_output_schema=True</code> with <code>include_structured_content=False</code> raises at
+registration rather than advertising a schema nothing will satisfy.</p>
+<p>See <a href="../../concepts/#omitting-structuredcontent-and-outputschema">Omitting <code>structuredContent</code> and <code>outputSchema</code></a>
+for when to turn either off, and
+<a href="../../concepts/#what-an-agent-sees">the schema an agent sees</a> for what shapes
+the advertised schema.</p>
 
 
 <div class="doc doc-object doc-class">

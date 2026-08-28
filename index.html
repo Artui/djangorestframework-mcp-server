@@ -1563,7 +1563,7 @@
 <a href="https://github.com/Artui/djangorestframework-mcp-server/blob/main/LICENSE"><img alt="License" src="https://img.shields.io/pypi/l/djangorestframework-mcp-server.svg" /></a></p>
 <p>Expose <a href="https://github.com/Artui/djangorestframework-services"><code>djangorestframework-services</code></a>
 services and selectors as a <a href="https://modelcontextprotocol.io">Model Context Protocol</a>
-(MCP) server, conforming to MCP <strong>2025-11-25</strong> (Streamable HTTP).</p>
+(MCP) server, conforming to MCP <strong>2026-07-28</strong> and <strong>2025-11-25</strong> (Streamable HTTP).</p>
 <h2 id="what-this-is">What this is<a class="headerlink" href="#what-this-is" title="Permanent link">&para;</a></h2>
 <p><code>djangorestframework-services</code> lets a Django project expose <strong>services</strong> (mutations,
 side-effecting callables) and <strong>selectors</strong> (read callables) as a thin layer above
@@ -1622,7 +1622,11 @@ not a view.</p>
   <code>mcp.resources.read</code>, <code>mcp.prompts.get</code> spans (no-op without the
   <code>[otel]</code> extra installed).</li>
 <li><strong>Origin allowlist + protocol-version validation + session
-  lifecycle</strong> per the 2025-11-25 transport rules.</li>
+  lifecycle</strong> per the transport rules of both revisions. <code>2026-07-28</code> and later
+  declare version, identity and capabilities on every request and hold no
+  session; <code>2025-11-25</code> and earlier negotiate once through <code>initialize</code>. Both
+  are served concurrently on one endpoint, because a legacy client has no
+  fall-forward mechanism.</li>
 </ul>
 <h2 id="install">Install<a class="headerlink" href="#install" title="Permanent link">&para;</a></h2>
 <div class="language-bash highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a>pip<span class="w"> </span>install<span class="w"> </span>djangorestframework-mcp-server<span class="w">                              </span><span class="c1"># JSON only</span>

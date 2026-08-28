@@ -1100,6 +1100,17 @@
 </li>
       
         <li class="md-nav__item">
+  <a href="#what-the-entry-already-says" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        What the entry already says
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
   <a href="#two-mounts-two-surfaces" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -1509,6 +1520,17 @@
 </li>
       
         <li class="md-nav__item">
+  <a href="#what-the-entry-already-says" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        What the entry already says
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
   <a href="#two-mounts-two-surfaces" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -1628,6 +1650,26 @@ via <code>overrides</code>:</p>
 <p>Each value is the keyword arguments for that entry's registration method, so
 anything those methods accept works — <code>title</code>, <code>output_format</code>,
 <code>include_output_schema</code>, <code>rate_limits</code>, <code>url_kwargs</code>, and the rest.</p>
+<h2 id="what-the-entry-already-says">What the entry already says<a class="headerlink" href="#what-the-entry-already-says" title="Permanent link">&para;</a></h2>
+<p>An entry may carry an
+<a class="autorefs autorefs-external" href="https://artui.github.io/djangorestframework-services/reference/registry/#rest_framework_services.types.offline_contract.OfflineContract"><code>OfflineContract</code></a>:
+the <code>url_kwargs</code>, <code>query_params</code> and <code>field_audiences</code> a caller with <strong>no HTTP
+request</strong> has to be told, because the URLconf and query string tell an HTTP one
+for free. <code>register_specs</code> reads it as this mount's default, so the same entry
+mounted here and in an in-process Pydantic-AI toolset synthesises the same
+absent request:</p>
+<div class="language-python highlight"><pre><span></span><code><span id="__span-3-1"><a id="__codelineno-3-1" name="__codelineno-3-1" href="#__codelineno-3-1"></a><span class="n">registry</span><span class="o">.</span><span class="n">register</span><span class="p">(</span>
+</span><span id="__span-3-2"><a id="__codelineno-3-2" name="__codelineno-3-2" href="#__codelineno-3-2"></a>    <span class="s2">&quot;list_project_orders&quot;</span><span class="p">,</span>
+</span><span id="__span-3-3"><a id="__codelineno-3-3" name="__codelineno-3-3" href="#__codelineno-3-3"></a>    <span class="n">orders_spec</span><span class="p">,</span>
+</span><span id="__span-3-4"><a id="__codelineno-3-4" name="__codelineno-3-4" href="#__codelineno-3-4"></a>    <span class="n">agent_contract</span><span class="o">=</span><span class="n">OfflineContract</span><span class="p">(</span><span class="n">url_kwargs</span><span class="o">=</span><span class="p">(</span><span class="n">UrlKwarg</span><span class="p">(</span><span class="s2">&quot;project_pk&quot;</span><span class="p">,</span> <span class="nb">type</span><span class="o">=</span><span class="s2">&quot;integer&quot;</span><span class="p">),)),</span>
+</span><span id="__span-3-5"><a id="__codelineno-3-5" name="__codelineno-3-5" href="#__codelineno-3-5"></a><span class="p">)</span>
+</span><span id="__span-3-6"><a id="__codelineno-3-6" name="__codelineno-3-6" href="#__codelineno-3-6"></a>
+</span><span id="__span-3-7"><a id="__codelineno-3-7" name="__codelineno-3-7" href="#__codelineno-3-7"></a><span class="n">server</span><span class="o">.</span><span class="n">register_specs</span><span class="p">(</span><span class="n">registry</span><span class="p">)</span>  <span class="c1"># the tool takes project_pk, declared once</span>
+</span></code></pre></div>
+<p>A per-tool <code>url_kwargs</code> / <code>query_params</code> override wins over it. Overriding
+<code>agent_contract</code> itself replaces the entry's outright — the only way to mount an
+entry with <em>fewer</em> channels than it declares, since an empty tuple at the mount
+reads as saying nothing rather than saying none.</p>
 <p>Two things fail loudly rather than quietly:</p>
 <ul>
 <li>An <code>overrides</code> key naming a spec the registry doesn't hold raises
@@ -1640,11 +1682,11 @@ anything those methods accept works — <code>title</code>, <code>output_format<
 <p>The registry does not force one surface. Filtered views (<code>by_tag</code>, <code>subset</code>)
 each return a <strong>new</strong> registry, so a multi-mount deployment feeds each server
 its own projection with no shared state:</p>
-<div class="language-python highlight"><pre><span></span><code><span id="__span-3-1"><a id="__codelineno-3-1" name="__codelineno-3-1" href="#__codelineno-3-1"></a><span class="n">internal</span> <span class="o">=</span> <span class="n">MCPServer</span><span class="p">(</span><span class="n">name</span><span class="o">=</span><span class="s2">&quot;orders-internal&quot;</span><span class="p">)</span>
-</span><span id="__span-3-2"><a id="__codelineno-3-2" name="__codelineno-3-2" href="#__codelineno-3-2"></a><span class="n">public</span> <span class="o">=</span> <span class="n">MCPServer</span><span class="p">(</span><span class="n">name</span><span class="o">=</span><span class="s2">&quot;orders-public&quot;</span><span class="p">)</span>
-</span><span id="__span-3-3"><a id="__codelineno-3-3" name="__codelineno-3-3" href="#__codelineno-3-3"></a>
-</span><span id="__span-3-4"><a id="__codelineno-3-4" name="__codelineno-3-4" href="#__codelineno-3-4"></a><span class="n">internal</span><span class="o">.</span><span class="n">register_specs</span><span class="p">(</span><span class="n">registry</span><span class="p">)</span>  <span class="c1"># everything</span>
-</span><span id="__span-3-5"><a id="__codelineno-3-5" name="__codelineno-3-5" href="#__codelineno-3-5"></a><span class="n">public</span><span class="o">.</span><span class="n">register_specs</span><span class="p">(</span><span class="n">registry</span><span class="o">.</span><span class="n">by_tag</span><span class="p">(</span><span class="s2">&quot;public&quot;</span><span class="p">))</span>  <span class="c1"># reads only</span>
+<div class="language-python highlight"><pre><span></span><code><span id="__span-4-1"><a id="__codelineno-4-1" name="__codelineno-4-1" href="#__codelineno-4-1"></a><span class="n">internal</span> <span class="o">=</span> <span class="n">MCPServer</span><span class="p">(</span><span class="n">name</span><span class="o">=</span><span class="s2">&quot;orders-internal&quot;</span><span class="p">)</span>
+</span><span id="__span-4-2"><a id="__codelineno-4-2" name="__codelineno-4-2" href="#__codelineno-4-2"></a><span class="n">public</span> <span class="o">=</span> <span class="n">MCPServer</span><span class="p">(</span><span class="n">name</span><span class="o">=</span><span class="s2">&quot;orders-public&quot;</span><span class="p">)</span>
+</span><span id="__span-4-3"><a id="__codelineno-4-3" name="__codelineno-4-3" href="#__codelineno-4-3"></a>
+</span><span id="__span-4-4"><a id="__codelineno-4-4" name="__codelineno-4-4" href="#__codelineno-4-4"></a><span class="n">internal</span><span class="o">.</span><span class="n">register_specs</span><span class="p">(</span><span class="n">registry</span><span class="p">)</span>  <span class="c1"># everything</span>
+</span><span id="__span-4-5"><a id="__codelineno-4-5" name="__codelineno-4-5" href="#__codelineno-4-5"></a><span class="n">public</span><span class="o">.</span><span class="n">register_specs</span><span class="p">(</span><span class="n">registry</span><span class="o">.</span><span class="n">by_tag</span><span class="p">(</span><span class="s2">&quot;public&quot;</span><span class="p">))</span>  <span class="c1"># reads only</span>
 </span></code></pre></div>
 <p>Independent registries work too, when the surfaces have nothing in common:
 names are unique <em>within</em> a registry, so two registries may reuse one.</p>
@@ -1658,10 +1700,10 @@ permission-declaration guard still applies to every entry. A spec with no
 <p>Bulk registration is a convenience, not a way to register a surface you
 haven't secured. If a spec can't declare its own <code>permission_classes</code>, guard it
 at the binding:</p>
-<div class="language-python highlight"><pre><span></span><code><span id="__span-4-1"><a id="__codelineno-4-1" name="__codelineno-4-1" href="#__codelineno-4-1"></a><span class="n">server</span><span class="o">.</span><span class="n">register_specs</span><span class="p">(</span>
-</span><span id="__span-4-2"><a id="__codelineno-4-2" name="__codelineno-4-2" href="#__codelineno-4-2"></a>    <span class="n">registry</span><span class="p">,</span>
-</span><span id="__span-4-3"><a id="__codelineno-4-3" name="__codelineno-4-3" href="#__codelineno-4-3"></a>    <span class="n">overrides</span><span class="o">=</span><span class="p">{</span><span class="s2">&quot;refund_order&quot;</span><span class="p">:</span> <span class="p">{</span><span class="s2">&quot;permissions&quot;</span><span class="p">:</span> <span class="p">[</span><span class="n">ScopeRequired</span><span class="p">(</span><span class="s2">&quot;orders:write&quot;</span><span class="p">)]}},</span>
-</span><span id="__span-4-4"><a id="__codelineno-4-4" name="__codelineno-4-4" href="#__codelineno-4-4"></a><span class="p">)</span>
+<div class="language-python highlight"><pre><span></span><code><span id="__span-5-1"><a id="__codelineno-5-1" name="__codelineno-5-1" href="#__codelineno-5-1"></a><span class="n">server</span><span class="o">.</span><span class="n">register_specs</span><span class="p">(</span>
+</span><span id="__span-5-2"><a id="__codelineno-5-2" name="__codelineno-5-2" href="#__codelineno-5-2"></a>    <span class="n">registry</span><span class="p">,</span>
+</span><span id="__span-5-3"><a id="__codelineno-5-3" name="__codelineno-5-3" href="#__codelineno-5-3"></a>    <span class="n">overrides</span><span class="o">=</span><span class="p">{</span><span class="s2">&quot;refund_order&quot;</span><span class="p">:</span> <span class="p">{</span><span class="s2">&quot;permissions&quot;</span><span class="p">:</span> <span class="p">[</span><span class="n">ScopeRequired</span><span class="p">(</span><span class="s2">&quot;orders:write&quot;</span><span class="p">)]}},</span>
+</span><span id="__span-5-4"><a id="__codelineno-5-4" name="__codelineno-5-4" href="#__codelineno-5-4"></a><span class="p">)</span>
 </span></code></pre></div>
 
 
