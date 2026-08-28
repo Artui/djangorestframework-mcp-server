@@ -7,6 +7,58 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- **`agent_contract=` on every registrar, and `register_specs` reads each
+  entry's own.** drf-services 0.46 carries an `AgentContract` on the registry
+  entry: the `url_kwargs`, `query_params` and `field_audiences` a caller with
+  **no HTTP request** has to be told, because the URLconf and query string tell
+  an HTTP one for free.
+
+  ```python
+  registry.register(
+      "list_project_orders",
+      orders_spec,
+      agent_contract=AgentContract(url_kwargs=(UrlKwarg("project_pk"),)),
+  )
+
+  server.register_specs(registry)  # the tool takes project_pk, declared once
+  ```
+
+  This is a **default the mount may override**, not a mandate: a per-tool
+  `url_kwargs` / `query_params` override wins, and overriding `agent_contract`
+  itself replaces the entry's outright — the only way to mount an entry with
+  *fewer* channels than it declares. A server registering a spec directly, with
+  no registry in front of it, passes the same object; a chain has no entry, so
+  this is its only route.
+
+  **The point is what a second agent transport now sees.** These declarations
+  described the same absent request for the same operation, and a project
+  running this server *and* an in-process Pydantic-AI toolset declared them
+  twice, in two shapes, with nothing comparing them. `field_audiences` was the
+  sharp end: it existed here and nowhere in that toolset at all, so one spec
+  projected a different field set depending on which transport served it — an
+  audience is not a transport, and a field hidden from one agent caller and
+  visible to another is something you find in a transcript rather than a test.
+
+### Removed
+
+- **The `field_audiences=` registration argument, superseded before it shipped.**
+  It was wired onto the five registrars in an unreleased change, then replaced
+  by `agent_contract=` — one carrier, of the type the registry entry already
+  holds, rather than a sixth place to declare an audience override. It reached
+  no release, so nothing to deprecate.
+
+  The bindings keep their `field_audiences` field, which is what the contract
+  resolves to.
+
+- **`resolve_agent_projection`, moved upstream.** The merge of a mount's
+  overrides over the serializer's own markings — and the two-labels clash an
+  override can introduce — now lives in drf-services'
+  `build_agent_projection(overrides=…, name=…)`, so both agent transports layer
+  the shared declaration by the same rule instead of each carrying a copy. It
+  was private to the three tool bindings; no import path changes.
+
 ### Security
 
 - **Audience enforcement is available out of the box and the docs said it was
@@ -52,30 +104,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   checks a signature is non-compliant with the audience MUST and cross-resource
   token replay works. Documented in `docs/auth.md` because it is the easiest
   thing to get wrong in this area and is not specific to this package.
-
-### Fixed
-
-- **`field_audiences=` was documented as a registration argument and accepted by
-  no entry point.** The documented call raised
-  `TypeError: MCPServer.register_selector_tool() got an unexpected keyword
-  argument 'field_audiences'`. It existed on the three tool bindings and nowhere
-  else: 0 of 7 `register_*` methods accepted it, none declared `**kwargs`, and
-  `SelectorToolBinding` is not exported from the package root, so the capability
-  had no public route in at all.
-
-  It is now accepted by `register_selector_tool`, `register_service_tool` and
-  `register_chain_tool`, by the `selector_tool` / `service_tool` decorators, and
-  as an `overrides` key on `register_specs` — the last needing no plumbing of
-  its own, since override keys are checked against the target method's
-  signature.
-
-  **CI was green because the only test constructed `SelectorToolBinding(...)`
-  directly**, bypassing every entry point: the feature was exercised on the
-  object the docs never mention and unreachable through the API the docs do. The
-  new tests go through the public surface, because a test that instantiates past
-  it cannot fail when it is missing.
-
-### Documentation
 
 - **The MCP conformance claim named only the older revision, at four sites.**
   `README.md` and `docs/index.md` each said "conforming to MCP 2025-11-25" in

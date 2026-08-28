@@ -7,11 +7,7 @@ type surface.
 
 from __future__ import annotations
 
-from collections.abc import Mapping
-
 from django.core.exceptions import ImproperlyConfigured
-from rest_framework_services import AgentField, AgentProjection, build_agent_projection
-from rest_framework_services.types.field_audience import FieldAudience
 
 from rest_framework_mcp.constants import ToolContentKind
 
@@ -56,39 +52,4 @@ def validate_content_kind(
         )
 
 
-def resolve_agent_projection(
-    output_serializer: type | None,
-    overrides: Mapping[str, AgentField] | None,
-    *,
-    name: str,
-) -> AgentProjection:
-    """The binding's agent markings: the serializer's, plus any per-tool override.
-
-    The serializer is authoritative — it is the one declaration three consumers
-    read. ``overrides`` exists for the case one tool needs what a sibling hides:
-    a lookup tool that must return the identifier its neighbour drops.
-
-    Raises:
-        django.core.exceptions.ImproperlyConfigured: If the overrides leave two
-            fields claiming ``LABEL``. The serializer alone is checked upstream;
-            an override can only introduce the clash here.
-    """
-    projection = build_agent_projection(output_serializer)
-    if not overrides:
-        return projection
-    fields: dict[str, AgentField] = {**projection.fields, **overrides}
-    labels = [n for n, marking in fields.items() if marking.audience is FieldAudience.LABEL]
-    if len(labels) > 1:
-        raise ImproperlyConfigured(
-            f"Tool {name!r}: field_audiences leaves {labels!r} all marked as the "
-            "label. A record has one name -- override the others to something else."
-        )
-    return AgentProjection(
-        fields=fields,
-        label=labels[0] if labels else None,
-        choice_labels=projection.choice_labels,
-        nested=projection.nested,
-    )
-
-
-__all__ = ["resolve_agent_projection", "validate_content_kind"]
+__all__ = ["validate_content_kind"]

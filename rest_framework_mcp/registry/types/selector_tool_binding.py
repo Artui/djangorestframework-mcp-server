@@ -12,6 +12,7 @@ from rest_framework_services import (
     AgentField,
     AgentProjection,
     UnsetType,
+    build_agent_projection,
     spec_to_json_schema,
 )
 from rest_framework_services.types.selector_kind import SelectorKind
@@ -27,10 +28,7 @@ from rest_framework_mcp.constants import (
 from rest_framework_mcp.protocol.types.icon import Icon
 from rest_framework_mcp.registry.types.query_param import QueryParam
 from rest_framework_mcp.registry.types.url_kwarg import UrlKwarg
-from rest_framework_mcp.registry.types.utils import (
-    resolve_agent_projection,
-    validate_content_kind,
-)
+from rest_framework_mcp.registry.types.utils import validate_content_kind
 
 ResultT = TypeVar("ResultT")
 ExtraT = TypeVar("ExtraT", bound=dict[str, Any])
@@ -201,7 +199,12 @@ class SelectorToolBinding(Generic[ResultT, ExtraT]):
     The serializer stays authoritative — it is the one declaration the REST API,
     this transport, and an in-process toolset all read. This exists for the case
     one tool genuinely needs what a sibling hides: a lookup tool returning the
-    identifier its neighbour drops."""
+    identifier its neighbour drops.
+
+    Declared on the registry entry's
+    [`AgentContract`][rest_framework_services.types.agent_contract.AgentContract]
+    and resolved here, so the field set an agent sees does not depend on which
+    agent transport served it."""
 
     @property
     def agent_output_serializer(self) -> type | None:
@@ -214,8 +217,10 @@ class SelectorToolBinding(Generic[ResultT, ExtraT]):
 
         Drives both the projected payload and the advertised ``outputSchema``,
         so the two cannot disagree about which fields a caller will receive."""
-        return resolve_agent_projection(
-            self.agent_output_serializer, self.field_audiences, name=self.name
+        return build_agent_projection(
+            self.agent_output_serializer,
+            overrides=self.field_audiences,
+            name=f"Tool {self.name!r}",
         )
 
     def __post_init__(self) -> None:

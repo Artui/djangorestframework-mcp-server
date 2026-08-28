@@ -9,7 +9,7 @@ from django.core.exceptions import ImproperlyConfigured
 from django.http import HttpRequest
 from django.urls import URLPattern, path
 from rest_framework.serializers import Serializer
-from rest_framework_services import UNSET, AgentField, UnsetType
+from rest_framework_services import UNSET, AgentContract, UnsetType
 from rest_framework_services.registry.spec_registry import SpecRegistry
 from rest_framework_services.types.selector_kind import SelectorKind
 from rest_framework_services.types.selector_spec import SelectorSpec
@@ -256,7 +256,7 @@ class MCPServer:
         rate_limits: list[Any] | None = None,
         annotations: dict[str, Any] | None = None,
         meta: dict[str, Any] | None = None,
-        field_audiences: Mapping[str, AgentField] | None = None,
+        agent_contract: AgentContract | None = None,
         ui: UIToolMeta | None = None,
         include_structured_content: bool | None = None,
         include_output_schema: bool | None = None,
@@ -290,6 +290,13 @@ class MCPServer:
         server, and the tool must emit ``structuredContent`` — what the view
         renders from — or the link is refused at registration rather than
         shipping a view that comes up blank.
+
+        ``agent_contract`` carries what a caller with **no HTTP request** has to
+        be told -- the URL kwargs, query params and field-audience overrides the
+        URLconf and query string give an HTTP caller for free. ``register_specs``
+        passes each entry's own, so the declaration is made once and every agent
+        transport reads it; an explicit ``url_kwargs`` / ``query_params`` here
+        wins over it.
         """
         ui_meta = build_ui_tool_meta(
             name=name,
@@ -299,9 +306,10 @@ class MCPServer:
             include_structured_content=include_structured_content,
             default_structured_content=self._config.include_structured_content,
         )
+        contract = agent_contract or AgentContract()
         binding = service_spec_to_tool(
             name=name,
-            field_audiences=field_audiences,
+            field_audiences=contract.field_audiences,
             spec=spec,
             description=description,
             title=title,
@@ -323,8 +331,12 @@ class MCPServer:
             unknown_arguments=unknown_arguments,
             always_listed=always_listed,
             spec_kwargs_provides=spec_kwargs_provides,
-            url_kwargs=tuple(url_kwargs),
-            query_params=tuple(query_params),
+            # The mount's own declaration wins wherever it makes one; the
+            # contract is what the registry entry says when it does not. An
+            # empty tuple is how a caller says nothing here, not how it says
+            # "none" -- to drop an entry's channels, override the contract.
+            url_kwargs=tuple(url_kwargs) or contract.url_kwargs,
+            query_params=tuple(query_params) or contract.query_params,
             max_result_bytes=max_result_bytes,
             dispatch_timeout=dispatch_timeout,
         )
@@ -367,7 +379,7 @@ class MCPServer:
         rate_limits: list[Any] | None = None,
         annotations: dict[str, Any] | None = None,
         meta: dict[str, Any] | None = None,
-        field_audiences: Mapping[str, AgentField] | None = None,
+        agent_contract: AgentContract | None = None,
         ui: UIToolMeta | None = None,
         ordering_fields: list[str] | tuple[str, ...] | None = None,
         paginate: bool = False,
@@ -416,6 +428,13 @@ class MCPServer:
         ``meta`` is the generic ``_meta`` bundle for this tool's
         ``tools/list`` entry, and ``ui`` links it to an interactive view —
         both as on ``register_service_tool``.
+
+        ``agent_contract`` carries what a caller with **no HTTP request** has to
+        be told -- the URL kwargs, query params and field-audience overrides the
+        URLconf and query string give an HTTP caller for free. ``register_specs``
+        passes each entry's own, so the declaration is made once and every agent
+        transport reads it; an explicit ``url_kwargs`` / ``query_params`` here
+        wins over it.
         """
         ui_meta = build_ui_tool_meta(
             name=name,
@@ -425,9 +444,10 @@ class MCPServer:
             include_structured_content=include_structured_content,
             default_structured_content=self._config.include_structured_content,
         )
+        contract = agent_contract or AgentContract()
         binding = selector_spec_to_tool(
             name=name,
-            field_audiences=field_audiences,
+            field_audiences=contract.field_audiences,
             spec=spec,
             description=description,
             title=title,
@@ -451,8 +471,12 @@ class MCPServer:
             unknown_arguments=unknown_arguments,
             always_listed=always_listed,
             spec_kwargs_provides=spec_kwargs_provides,
-            url_kwargs=tuple(url_kwargs),
-            query_params=tuple(query_params),
+            # The mount's own declaration wins wherever it makes one; the
+            # contract is what the registry entry says when it does not. An
+            # empty tuple is how a caller says nothing here, not how it says
+            # "none" -- to drop an entry's channels, override the contract.
+            url_kwargs=tuple(url_kwargs) or contract.url_kwargs,
+            query_params=tuple(query_params) or contract.query_params,
             max_result_bytes=max_result_bytes,
             dispatch_timeout=dispatch_timeout,
             max_page_size=max_page_size,
@@ -514,6 +538,16 @@ class MCPServer:
                 },
             )
 
+
+        Each entry's
+        [`AgentContract`][rest_framework_services.types.agent_contract.AgentContract]
+        comes across as the mount's default — the ``url_kwargs``,
+        ``query_params`` and ``field_audiences`` an off-HTTP caller needs and an
+        HTTP one gets from the URLconf and query string for free. A per-tool
+        ``url_kwargs`` / ``query_params`` override wins over it; overriding
+        ``agent_contract`` itself replaces it outright, which is the only way to
+        register an entry with *fewer* channels than it declares.
+
         Keys are checked against the target method's own signature, so a knob
         used on the wrong spec kind (``paginate`` on a ``ServiceSpec``) raises
         ``TypeError`` from there. An ``overrides`` key naming a spec the
@@ -537,6 +571,10 @@ class MCPServer:
         bindings: list[ToolBinding | SelectorToolBinding] = []
         for entry in registry.all():
             knobs = dict(override_map.get(entry.name, {}))
+            # An entry's own agent contract, unless this mount replaced it.
+            # ``setdefault`` rather than a merge on purpose: the contract is one
+            # object, and a mount substituting a different one has said so.
+            knobs.setdefault("agent_contract", entry.agent_contract)
             if isinstance(entry.spec, ServiceSpec):
                 bindings.append(
                     self.register_service_tool(name=entry.name, spec=entry.spec, **knobs)
@@ -570,7 +608,7 @@ class MCPServer:
         rate_limits: list[Any] | None = None,
         annotations: dict[str, Any] | None = None,
         meta: dict[str, Any] | None = None,
-        field_audiences: Mapping[str, AgentField] | None = None,
+        agent_contract: AgentContract | None = None,
         ui: UIToolMeta | None = None,
         include_structured_content: bool | None = None,
         include_output_schema: bool | None = None,
@@ -610,6 +648,11 @@ class MCPServer:
         ``meta`` is the generic ``_meta`` bundle for this tool's
         ``tools/list`` entry, and ``ui`` links it to an interactive view —
         both as on ``register_service_tool``.
+
+        ``agent_contract`` is the same carrier the two spec registrars take, and
+        a chain's only route to it: a chain has no registry entry to inherit
+        from. Only its ``field_audiences`` apply -- a chain declares its
+        arguments through its steps.
         """
         ui_meta = build_ui_tool_meta(
             name=name,
@@ -621,7 +664,7 @@ class MCPServer:
         )
         binding = chain_steps_to_tool(
             name=name,
-            field_audiences=field_audiences,
+            field_audiences=(agent_contract or AgentContract()).field_audiences,
             steps=tuple(steps),
             description=description,
             title=title,
@@ -1225,7 +1268,7 @@ class MCPServer:
         rate_limits: list[Any] | None = None,
         annotations: dict[str, Any] | None = None,
         meta: dict[str, Any] | None = None,
-        field_audiences: Mapping[str, AgentField] | None = None,
+        agent_contract: AgentContract | None = None,
         ui: UIToolMeta | None = None,
         include_structured_content: bool | None = None,
         include_output_schema: bool | None = None,
@@ -1276,7 +1319,7 @@ class MCPServer:
                 rate_limits=rate_limits,
                 annotations=annotations,
                 meta=meta,
-                field_audiences=field_audiences,
+                agent_contract=agent_contract,
                 ui=ui,
                 include_structured_content=include_structured_content,
                 include_output_schema=include_output_schema,
@@ -1310,7 +1353,7 @@ class MCPServer:
         rate_limits: list[Any] | None = None,
         annotations: dict[str, Any] | None = None,
         meta: dict[str, Any] | None = None,
-        field_audiences: Mapping[str, AgentField] | None = None,
+        agent_contract: AgentContract | None = None,
         ui: UIToolMeta | None = None,
         ordering_fields: list[str] | tuple[str, ...] | None = None,
         paginate: bool = False,
@@ -1365,7 +1408,7 @@ class MCPServer:
                 rate_limits=rate_limits,
                 annotations=annotations,
                 meta=meta,
-                field_audiences=field_audiences,
+                agent_contract=agent_contract,
                 ui=ui,
                 ordering_fields=ordering_fields,
                 paginate=paginate,
