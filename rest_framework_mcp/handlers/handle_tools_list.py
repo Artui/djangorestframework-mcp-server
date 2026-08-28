@@ -83,7 +83,7 @@ def handle_tools_list(
             default_output_schema=context.config.include_output_schema,
             default_structured_content=context.config.include_structured_content,
         )
-        # ``agent_output_serializer`` reconciles where each binding kind keeps
+        # ``output_serializer`` reconciles where each binding kind keeps
         # its response serializer, and carries the same agent markings the
         # dispatch path projects the payload through -- one declaration, so a
         # schema cannot advertise a field the payload no longer carries.
@@ -92,14 +92,14 @@ def handle_tools_list(
         # envelope — so the selector schema is kind-aware.
         if isinstance(binding, SelectorToolBinding):
             output_schema = build_output_schema(
-                binding.agent_output_serializer,
+                binding.output_serializer,
                 kind=binding.kind,
                 paginate=binding.paginate,
                 projection=binding.audience_projection,
             )
         else:
             output_schema = build_output_schema(
-                binding.agent_output_serializer, projection=binding.audience_projection
+                binding.output_serializer, projection=binding.audience_projection
             )
         # A media tool has no JSON result to describe, so the schema is dropped
         # rather than advertised over a payload arriving as an image block.
