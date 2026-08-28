@@ -7,26 +7,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-### Changed
-
-- **One name for the output serializer, across all four binding kinds.**
-  `ToolBinding`, `SelectorToolBinding` and `ChainToolBinding` exposed
-  `agent_output_serializer`; it is now `output_serializer`, which
-  `ChainToolBinding` and `ResourceBinding` already called it.
-
-  Two reasons, and the second is the better one. It was a leak by the rule
-  drf-services 0.48.0 settled — "agent" is earned where a name marks an audience
-  the serializer author declares, and a leak where it marks only which callers
-  happen to use it — and nothing about *which serializer produces the output* is
-  agent-specific. But it was also **one idea spelled twice**: `ChainToolBinding`
-  already carried an `output_serializer`, and its `agent_output_serializer` was
-  `return self.output_serializer`. So this deletes a member rather than renaming
-  one, and the four binding kinds now answer the same question by the same name.
-
-  These bindings share no base class, so a test pins the agreement rather than a
-  signature.
-
-
 ### Added
 
 - **`agent_contract=` on every registrar, and `register_specs` reads each
@@ -62,6 +42,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   visible to another is something you find in a transcript rather than a test.
 
 ### Changed
+
+- **One name for the output serializer, across all four binding kinds.**
+  `ToolBinding`, `SelectorToolBinding` and `ChainToolBinding` exposed
+  `agent_output_serializer`; it is now `output_serializer`, which
+  `ChainToolBinding` and `ResourceBinding` already called it.
+
+  Two reasons, and the second is the better one. It was a leak by the rule
+  drf-services 0.48.0 settled — "agent" is earned where a name marks an audience
+  the serializer author declares, and a leak where it marks only which callers
+  happen to use it — and nothing about *which serializer produces the output* is
+  agent-specific. But it was also **one idea spelled twice**: `ChainToolBinding`
+  already carried an `output_serializer`, and its `agent_output_serializer` was
+  `return self.output_serializer`. So this deletes a member rather than renaming
+  one, and the four binding kinds now answer the same question by the same name.
+
+  These bindings share no base class, so a test pins the agreement rather than a
+  signature.
+
+
 
 - **Floor raised to `djangorestframework-services>=0.48`, and it is a hard
   floor.** 0.48 renamed ten public symbols with **no deprecation aliases**, so
