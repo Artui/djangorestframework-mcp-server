@@ -189,7 +189,7 @@ class ToolBinding(Generic[InputT, ResultT, ExtraT]):
     agent transport served it."""
 
     @property
-    def agent_output_serializer(self) -> type | None:
+    def output_serializer(self) -> type | None:
         """The serializer whose rendered output reaches the caller, if any."""
         spec = self.spec
         return spec.output_selector_spec.output_serializer if spec.output_selector_spec else None
@@ -201,7 +201,7 @@ class ToolBinding(Generic[InputT, ResultT, ExtraT]):
         Drives both the projected payload and the advertised ``outputSchema``,
         so the two cannot disagree about which fields a caller will receive."""
         return build_audience_projection(
-            self.agent_output_serializer,
+            self.output_serializer,
             overrides=self.field_audiences,
             name=f"Tool {self.name!r}",
         )

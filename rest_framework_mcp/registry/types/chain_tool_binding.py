@@ -137,14 +137,6 @@ class ChainToolBinding:
     and resolved here, so the field set an agent sees does not depend on which
     agent transport served it."""
 
-    @property
-    def agent_output_serializer(self) -> type | None:
-        """The serializer whose rendered output reaches the caller, if any.
-
-        A chain renders through the output step's spec, which
-        ``output_serializer`` already resolves."""
-        return self.output_serializer
-
     @cached_property
     def audience_projection(self) -> AudienceProjection:
         """This tool's resolved audience markings, derived once per binding.
@@ -152,7 +144,7 @@ class ChainToolBinding:
         Drives both the projected payload and the advertised ``outputSchema``,
         so the two cannot disagree about which fields a caller will receive."""
         return build_audience_projection(
-            self.agent_output_serializer,
+            self.output_serializer,
             overrides=self.field_audiences,
             name=f"Tool {self.name!r}",
         )
