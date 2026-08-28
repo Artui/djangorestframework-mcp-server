@@ -7,6 +7,52 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Security
+
+- **Audience enforcement is available out of the box and the docs said it was
+  impossible.** django-oauth-toolkit **3.4.0** (2026-07-23) added RFC 8707
+  resource indicators: stock `AccessToken` carries a `resource` field and an
+  `allows_audience()` check. Four places in this package still told adopters
+  otherwise — `docs/auth.md` twice, `docs/reference/settings.md`, and the
+  `DjangoOAuthToolkitBackend` docstring — all asserting DOT "has no such field
+  and implements no RFC 8707 resource indicators".
+
+  **The consequence was security guidance, not tidiness.** The MCP `2026-07-28`
+  spec makes audience validation a **MUST** for a resource server, and a reader
+  concluded enforcement was impossible with stock DOT — so they left
+  `ENFORCE_AUDIENCE` off, failing that MUST, or built an `audience_getter`
+  workaround they no longer needed.
+
+  The runtime check was already correct and capability-based, and the
+  `ImproperlyConfigured` message already named 3.4.0. **That is the dangerous
+  shape**: someone corrected the error message when DOT 3.4 landed and did not
+  propagate it, and a partially-corrected claim is worse than a uniformly stale
+  one, because the code being right makes the prose look trustworthy.
+
+- **`UnenforcedAudienceWarning` — a deployment that could enforce and does not
+  is now told so.** The default stays `False`, because the `[oauth]` extra
+  floors DOT at `>=2.3` and a default of `True` would reject every request for
+  anyone below 3.4.0. But that reason expires **per deployment**, when a project
+  upgrades DOT, and it expired silently.
+
+  The warning fires only where enforcement would actually work — the configured
+  token model carries the field and a resource URL is set — so it is a fact
+  about *that* deployment rather than advice about the package, and it cannot
+  fire on the older DOT the default exists to protect. It warns rather than
+  raising, and rather than flipping the default: a single-resource server a
+  project fully controls is a legitimate place to skip enforcement.
+
+### Documentation
+
+- **The official `mcp` SDK publishes protected-resource metadata for you and
+  never validates the audience.** `resource_url_from_server_url()` and
+  `check_resource_allowed()` are called only from client paths;
+  `BearerAuthBackend.authenticate()` checks the bearer prefix, the verifier's
+  verdict and `expires_at`, and nothing else. So a `TokenVerifier` that merely
+  checks a signature is non-compliant with the audience MUST and cross-resource
+  token replay works. Documented in `docs/auth.md` because it is the easiest
+  thing to get wrong in this area and is not specific to this package.
+
 ### Fixed
 
 - **`field_audiences=` was documented as a registration argument and accepted by
