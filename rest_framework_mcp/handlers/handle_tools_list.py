@@ -95,11 +95,11 @@ def handle_tools_list(
                 binding.agent_output_serializer,
                 kind=binding.kind,
                 paginate=binding.paginate,
-                projection=binding.agent_projection,
+                projection=binding.audience_projection,
             )
         else:
             output_schema = build_output_schema(
-                binding.agent_output_serializer, projection=binding.agent_projection
+                binding.agent_output_serializer, projection=binding.audience_projection
             )
         # A media tool has no JSON result to describe, so the schema is dropped
         # rather than advertised over a payload arriving as an image block.
@@ -108,7 +108,7 @@ def handle_tools_list(
             output_schema = None
         tool = Tool(
             name=binding.name,
-            description=append_agent_conventions(binding.description, binding.agent_projection),
+            description=append_agent_conventions(binding.description, binding.audience_projection),
             title=binding.title,
             icons=binding.icons,
             input_schema=input_schema,

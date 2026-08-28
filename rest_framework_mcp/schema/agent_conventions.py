@@ -7,7 +7,7 @@ drf-services supplies the markings and no wording at all: what a reader should
 
 from __future__ import annotations
 
-from rest_framework_services.types.agent_projection import AgentProjection
+from rest_framework_services.types.audience_projection import AudienceProjection
 from rest_framework_services.types.field_audience import FieldAudience
 
 HANDLE_DESCRIPTION = (
@@ -25,7 +25,7 @@ _HANDLE_LINE = (
 )
 
 
-def append_agent_conventions(description: str | None, projection: AgentProjection) -> str | None:
+def append_agent_conventions(description: str | None, projection: AudienceProjection) -> str | None:
     """Add the handle convention to a tool's description, when it has handles.
 
     Conditional on something being able to act on it. A tool whose output

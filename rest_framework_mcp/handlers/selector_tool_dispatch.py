@@ -24,6 +24,7 @@ from typing import Any
 from rest_framework import serializers as drf_serializers
 from rest_framework.exceptions import PermissionDenied
 from rest_framework_services import (
+    DEFAULT_PAGE_SIZE,
     OfflineServiceView,
     adispatch_spec,
     base_serializer_context,
@@ -31,7 +32,8 @@ from rest_framework_services import (
     dispatch_spec,
     enforce_permissions,
     is_queryset,
-    render_for_agent,
+    paginate_output,
+    render_for_audience,
     spec_to_json_schema,
 )
 from rest_framework_services.exceptions.service_error import ServiceError
@@ -358,10 +360,10 @@ def _post_fetch_and_render(
                 content_mime_type=binding.content_mime_type,
                 binding_name=binding.name,
             ).to_dict()
-        payload: Any = render_for_agent(
+        payload: Any = render_for_audience(
             binding.spec,
             instance,
-            projection=binding.agent_projection,
+            projection=binding.audience_projection,
             many=False,
             view=view,
             request=drf_request,
@@ -395,34 +397,39 @@ def _post_fetch_and_render(
     # same object the renderer iterates, so an id-keyed batched query reuses the
     # queryset's result cache instead of issuing a second query.
     if binding.paginate:
-        page_no, limit, page_items, total = _slice_for_pagination(qs, arguments_raw, row_ceiling)
+        # The clamps, the count-before-slice and the envelope arithmetic are all
+        # ``paginate_output``'s — this transport contributes only the coercion of
+        # two untyped JSON arguments into the ints it takes. What a page *is* has
+        # one implementation for every transport; how a malformed argument is
+        # answered is the part that legitimately differs, and that is what
+        # ``_coerce_int`` keeps here.
+        page = paginate_output(
+            qs,
+            page=_coerce_int(arguments_raw.get("page"), default=1),
+            limit=_coerce_int(arguments_raw.get("limit"), default=DEFAULT_PAGE_SIZE),
+            max_page_size=row_ceiling,
+        )
         # The projection lands on the *items*, not on the envelope that
         # wraps them: ``page`` / ``totalPages`` / ``hasNext`` are this
         # transport's own keys and belong to no serializer.
-        rendered_items = render_for_agent(
+        rendered_items = render_for_audience(
             binding.spec,
-            page_items,
-            projection=binding.agent_projection,
+            page.items,
+            projection=binding.audience_projection,
             many=True,
             view=view,
             request=drf_request,
-            extras={"page": page_items},
+            extras={"page": page.items},
         )
-        total_pages: int = max(1, -(-total // limit))  # ceil divide
-        payload = {
-            "items": rendered_items,
-            "page": page_no,
-            "totalPages": total_pages,
-            "hasNext": page_no < total_pages,
-        }
+        payload = page.envelope(rendered_items)
     else:
         rows, exceeded = _bound_unpaginated_rows(qs, row_ceiling)
         if exceeded is not None:
             return _render_over_row_ceiling(binding, exceeded)
-        payload = render_for_agent(
+        payload = render_for_audience(
             binding.spec,
             rows,
-            projection=binding.agent_projection,
+            projection=binding.audience_projection,
             many=True,
             view=view,
             request=drf_request,
@@ -581,56 +588,18 @@ def _is_valid_ordering(value: str, allowed: tuple[str, ...]) -> bool:
     return (value[1:] if value.startswith("-") else value) in allowed
 
 
-def _slice_for_pagination(
-    qs: Any, arguments_raw: dict[str, Any], max_page_size: int | None
-) -> tuple[int, int, Any, int]:
-    """Return ``(page, limit, page_slice, total)``.
-
-    ``page`` / ``limit`` default to 1 / 100, out-of-range values clamp into
-    range at *both* ends — ``limit`` down to ``max_page_size`` and up to 1,
-    ``page`` up to 1 and down to the last page that exists — and the clamps are
-    silent in a way truncating an unpaginated result would not be:
-    ``totalPages`` / ``hasNext`` are computed from the clamped ``limit`` and the
-    returned ``page`` is the one actually served, so a model that asked for 500
-    rows and got 100, or for page 10 of 3, is told what it received.
-
-    The upper clamp on ``page`` is why ``total`` is counted before the slice:
-    ``(page - 1) * limit`` on an unclamped page is an arbitrarily large SQL
-    ``OFFSET``, which a backend either scans towards or rejects outright with a
-    ``DatabaseError`` this path does not catch.
-
-    The shape is discriminated with ``is_queryset``, **not**
-    ``hasattr(qs, "count")``: ``list`` / ``tuple`` expose ``.count`` too, but it
-    is ``.count(value)`` and needs an argument, which turned a list-returning
-    paginated selector into an opaque ``count() takes exactly one argument``.
-    """
-    page_no: int = max(1, _coerce_int(arguments_raw.get("page"), default=1))
-    limit: int = max(1, _coerce_int(arguments_raw.get("limit"), default=100))
-    if max_page_size is not None:
-        limit = min(limit, max_page_size)
-    if is_queryset(qs):
-        total: int = qs.count()
-    elif hasattr(qs, "__len__") and hasattr(qs, "__getitem__"):
-        total = len(qs)  # plain sequence — paginate it in-memory
-    else:
-        raise TypeError(
-            "A paginated LIST selector tool must return a QuerySet or a sized, "
-            f"sliceable sequence (list / tuple); got {type(qs).__name__}. Set "
-            "paginate=False or return a sliceable collection."
-        )
-    # Matches the ``totalPages`` the envelope reports, so the clamped page is
-    # never one the caller is then told does not exist.
-    page_no = min(page_no, max(1, -(-total // limit)))
-    start: int = (page_no - 1) * limit
-    page_items: Any = qs[start : start + limit]
-    return page_no, limit, page_items, total
-
-
 def _coerce_int(value: Any, *, default: int) -> int:
     """Best-effort int coercion, falling back to ``default``.
 
     Pagination args come from JSON, which gives ints — but string-shaped clients
     exist, and clamping is friendlier than 400-ing the whole call.
+
+    Deliberately *not* upstream, and the one part of pagination that stays here.
+    ``paginate_output`` takes ``page`` / ``limit`` already parsed because turning
+    an untyped argument into an integer is where transports legitimately differ:
+    a public MCP endpoint answers a malformed value with a clamped page, while an
+    in-process toolset can hand the model its mistake back and ask again. That is
+    a policy about bad input, not a statement about what a page is.
     """
     if isinstance(value, bool):  # ``True`` is an ``int`` in Python; reject
         return default

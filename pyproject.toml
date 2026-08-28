@@ -38,11 +38,14 @@ classifiers = [
 dependencies = [
     "django>=4.2",
     "djangorestframework>=3.14",
-    # 0.43 floor: the agent-audience markings that every dispatch path renders
-    # results through -- ``AgentField``, ``AgentProjection``, ``FieldAudience``
-    # and ``build_agent_projection`` -- landed there, and the registry and both
-    # schema builders import them at module level.
-    "djangorestframework-services>=0.46",
+    # 0.48 floor, and it is a hard one: 0.48 renamed the audience API with no
+    # deprecation aliases, so ``FieldMarking``, ``MARKING``, ``AudienceProjection``,
+    # ``OfflineContract``, ``build_audience_projection`` and ``render_for_audience``
+    # do not exist under 0.47 at all -- and the registry, both schema builders and
+    # every dispatch path import them at module level. ``paginate_output`` /
+    # ``DEFAULT_PAGE_SIZE``, which own the selector pagination this transport used
+    # to shape itself, arrived in 0.47 and are imported the same way.
+    "djangorestframework-services>=0.48",
     "djangorestframework-dataclasses>=1.3.1",
     # ``typing_extensions.Unpack`` is used at runtime by the strict service /
     # selector Protocols (PEP 692) we re-export from the sister package.

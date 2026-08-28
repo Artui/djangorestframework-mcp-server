@@ -9,10 +9,10 @@ from typing import Any, Generic, TypeVar
 from django.core.exceptions import ImproperlyConfigured
 from rest_framework_services import (
     UNSET,
-    AgentField,
-    AgentProjection,
+    AudienceProjection,
+    FieldMarking,
     UnsetType,
-    build_agent_projection,
+    build_audience_projection,
     spec_to_json_schema,
 )
 from rest_framework_services.types.selector_kind import SelectorKind
@@ -192,9 +192,9 @@ class SelectorToolBinding(Generic[ResultT, ExtraT]):
     the sole decider and gives the client no way to ask. See
     [`TaskPolicy`][rest_framework_mcp.constants.TaskPolicy]."""
 
-    field_audiences: Mapping[str, AgentField] | None = None
-    """Per-tool overrides layered over the output serializer's own
-    ``AgentField`` markings.
+    field_audiences: Mapping[str, FieldMarking] | None = None
+    """Per-tool overrides layered over the ``FieldMarking`` declarations the
+    output serializer carries on its own fields.
 
     The serializer stays authoritative — it is the one declaration the REST API,
     this transport, and an in-process toolset all read. This exists for the case
@@ -202,7 +202,7 @@ class SelectorToolBinding(Generic[ResultT, ExtraT]):
     identifier its neighbour drops.
 
     Declared on the registry entry's
-    [`AgentContract`][rest_framework_services.types.agent_contract.AgentContract]
+    [`OfflineContract`][rest_framework_services.types.offline_contract.OfflineContract]
     and resolved here, so the field set an agent sees does not depend on which
     agent transport served it."""
 
@@ -212,12 +212,12 @@ class SelectorToolBinding(Generic[ResultT, ExtraT]):
         return self.spec.output_serializer
 
     @cached_property
-    def agent_projection(self) -> AgentProjection:
-        """This tool's resolved agent markings, derived once per binding.
+    def audience_projection(self) -> AudienceProjection:
+        """This tool's resolved audience markings, derived once per binding.
 
         Drives both the projected payload and the advertised ``outputSchema``,
         so the two cannot disagree about which fields a caller will receive."""
-        return build_agent_projection(
+        return build_audience_projection(
             self.agent_output_serializer,
             overrides=self.field_audiences,
             name=f"Tool {self.name!r}",

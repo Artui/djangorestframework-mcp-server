@@ -3,7 +3,7 @@ from __future__ import annotations
 from typing import Any
 
 from rest_framework_services import output_to_json_schema
-from rest_framework_services.types.agent_projection import AgentProjection
+from rest_framework_services.types.audience_projection import AudienceProjection
 from rest_framework_services.types.selector_kind import SelectorKind
 
 from rest_framework_mcp.schema.agent_conventions import HANDLE_DESCRIPTION
@@ -14,7 +14,7 @@ def build_output_schema(
     *,
     kind: SelectorKind | None = None,
     paginate: bool = False,
-    projection: AgentProjection | None = None,
+    projection: AudienceProjection | None = None,
 ) -> dict[str, Any] | None:
     """Build a JSON Schema for a tool's output, or ``None`` if not declared.
 

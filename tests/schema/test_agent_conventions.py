@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from rest_framework import serializers
-from rest_framework_services import AGENT, AgentField, build_agent_projection
+from rest_framework_services import MARKING, FieldMarking, build_audience_projection
 
 from rest_framework_mcp.schema.agent_conventions import append_agent_conventions
 from tests.testapp.serializers import AgentInvoiceSerializer, InvoiceOutputSerializer
@@ -11,7 +11,7 @@ from tests.testapp.serializers import AgentInvoiceSerializer, InvoiceOutputSeria
 
 def test_a_tool_with_handles_gains_the_line() -> None:
     result = append_agent_conventions(
-        "Fetch an invoice.", build_agent_projection(AgentInvoiceSerializer)
+        "Fetch an invoice.", build_audience_projection(AgentInvoiceSerializer)
     )
 
     assert result is not None
@@ -21,16 +21,16 @@ def test_a_tool_with_handles_gains_the_line() -> None:
 
 
 def test_a_tool_without_handles_is_left_alone() -> None:
-    projection = build_agent_projection(InvoiceOutputSerializer)
+    projection = build_audience_projection(InvoiceOutputSerializer)
 
     assert append_agent_conventions("Fetch an invoice.", projection) == "Fetch an invoice."
 
 
 def test_handles_without_a_label_still_get_the_line() -> None:
     class _Handles(serializers.Serializer):
-        id = serializers.IntegerField(style={AGENT: AgentField.handle()})
+        id = serializers.IntegerField(style={MARKING: FieldMarking.handle()})
 
-    result = append_agent_conventions(None, build_agent_projection(_Handles))
+    result = append_agent_conventions(None, build_audience_projection(_Handles))
 
     assert result is not None
     assert "Identify records by" not in result

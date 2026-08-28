@@ -3,7 +3,7 @@ from __future__ import annotations
 from collections.abc import Mapping
 from typing import Any
 
-from rest_framework_services import UNSET, AgentField, UnsetType
+from rest_framework_services import UNSET, FieldMarking, UnsetType
 from rest_framework_services.types.service_spec import ServiceSpec
 
 from rest_framework_mcp.adapters.utils import (
@@ -45,7 +45,7 @@ def service_spec_to_tool(
     rate_limits: tuple[Any, ...] = (),
     annotations: dict[str, Any] | None = None,
     meta: dict[str, Any] | None = None,
-    field_audiences: Mapping[str, AgentField] | None = None,
+    field_audiences: Mapping[str, FieldMarking] | None = None,
     include_structured_content: bool | None = None,
     include_output_schema: bool | None = None,
     argument_binding: ArgumentBinding = ArgumentBinding.BUNDLE,

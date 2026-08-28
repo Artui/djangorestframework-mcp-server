@@ -96,8 +96,9 @@ class InvoiceFilterSet(django_filters.FilterSet):
     created_after = django_filters.DateTimeFilter(field_name="created_at", lookup_expr="gte")
     # Ordering is declared here, like any other filter. `OrderingFilter`
     # subclasses `ChoiceFilter`, so it is reflected into the tool's
-    # `inputSchema` as an enum of the names on the left — the public
-    # vocabulary, not the ORM paths behind them.
+    # `inputSchema` as a choice over the names on the left — the public
+    # vocabulary, not the ORM paths behind them — each carrying the label
+    # django-filter derives for it.
     ordering = django_filters.OrderingFilter(
         fields=(("created_at", "created"), ("amount_cents", "amount")),
     )
@@ -183,11 +184,27 @@ def list_invoices(*, user):
   "type": "object",
   "properties": {
     "sent": {"type": "boolean"},
-    "min_amount": {"type": "number"},
-    "max_amount": {"type": "number"},
-    "created_after": {"type": "string", "format": "date-time"},
+    "min_amount": {
+      "type": "number",
+      "description": "Matches `amount_cents` with the `gte` lookup."
+    },
+    "max_amount": {
+      "type": "number",
+      "description": "Matches `amount_cents` with the `lte` lookup."
+    },
+    "created_after": {
+      "type": "string",
+      "format": "date-time",
+      "description": "Matches `created_at` with the `gte` lookup."
+    },
     "ordering": {
-      "enum": ["created", "-created", "amount", "-amount"]
+      "oneOf": [
+        {"const": "created", "title": "Created"},
+        {"const": "-created", "title": "Created (descending)"},
+        {"const": "amount", "title": "Amount"},
+        {"const": "-amount", "title": "Amount (descending)"}
+      ],
+      "title": "Ordering"
     },
     "page": {"type": "integer", "minimum": 1},
     "limit": {"type": "integer", "minimum": 1, "maximum": 100}
@@ -197,8 +214,17 @@ def list_invoices(*, user):
 
 Filter properties are always optional — they narrow the queryset but
 aren't required to call the tool. Ordering accepts both ascending
-(`field`) and descending (`-field`) variants. `page` defaults to `1`
-and `limit` to `100` when the model omits it.
+(`field`) and descending (`-field`) variants, and each variant carries
+its label, so a model is told that `-amount` means descending rather
+than having to infer it from the sign. `page` defaults to `1` and
+`limit` to `100` when the model omits it.
+
+The `description` on `min_amount`, `max_amount` and `created_after` is
+derived, not written: where a filter's own name does not give away which
+column it matches or with which lookup, drf-services states both. A
+filter whose name, field and lookup already agree — `sent` — says nothing
+extra, and a `help_text` you write yourself always wins over the derived
+wording. A `label` becomes `title` the same way.
 
 `limit`'s `maximum` is the effective [`MAX_PAGE_SIZE`](../reference/settings.md#outbound-bounds)
 — the server-wide setting, or the `max_page_size=` passed at registration.
@@ -222,8 +248,8 @@ still works. Common filter classes are mapped accurately:
 | `DateTimeFilter`             | `{"type": "string", "format": "date-time"}`       |
 | `TimeFilter`                 | `{"type": "string", "format": "time"}`            |
 | `UUIDFilter`                 | `{"type": "string", "format": "uuid"}`            |
-| `ChoiceFilter`               | `{"enum": [<values>]}` (or `{"type":"string"}` if choices are deferred) |
-| `MultipleChoiceFilter`       | `{"type": "array", "items": {"enum": [...]}}`    |
+| `ChoiceFilter`               | `{"oneOf": [{"const": <value>, "title": <label>}, …]}`, or `{"enum": [<values>]}` when the labels only restate their values (or `{"type":"string"}` if choices are deferred) |
+| `MultipleChoiceFilter`       | `{"type": "array", "items": <the ChoiceFilter shape>}` |
 | `BaseInFilter` (CSV)         | `{"type": "array", "items": <scalar>}`           |
 | `BaseRangeFilter`            | `{"type": "object", "properties": {"min": <scalar>, "max": <scalar>}}` |
 | `ModelChoiceFilter`          | `{"type": "string"}` (FK PK; coerced by FilterSet at dispatch) |
