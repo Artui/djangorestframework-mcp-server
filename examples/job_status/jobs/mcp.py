@@ -19,6 +19,10 @@ from rest_framework_mcp.transport.in_memory_session_store import InMemorySession
 
 class JobFilterSet(django_filters.FilterSet):
     status = django_filters.ChoiceFilter(choices=Job.STATUS_CHOICES)
+    # The tool's only ordering channel: an ``OrderingFilter`` reflects into the
+    # ``inputSchema`` as a labelled choice, so a model asking for the newest
+    # jobs first uses the same vocabulary an HTTP caller does.
+    ordering = django_filters.OrderingFilter(fields=(("created_at", "created"),))
 
     class Meta:
         model = Job
@@ -80,8 +84,7 @@ def build_server() -> MCPServer:
             output_serializer=JobOutputSerializer,
             filter_set=JobFilterSet,
         ),
-        description="List jobs, optionally filtered by status, paginated.",
-        ordering_fields=["created_at"],
+        description="List jobs, optionally filtered by status, ordered, paginated.",
         paginate=True,
     )
 

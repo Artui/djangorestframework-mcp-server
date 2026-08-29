@@ -82,12 +82,10 @@ def test_selector_classmethod_forwards_all_selector_kwargs() -> None:
         name="x",
         spec=SelectorSpec(kind=SelectorKind.LIST, selector=_sel),
         input_serializer=str,
-        ordering_fields=("a",),
         paginate=True,
         argument_binding=ArgumentBinding.SPREAD_CALLER_WINS,
     )
     assert d.input_serializer is str
-    assert d.ordering_fields == ("a",)
     assert d.paginate is True
     assert d.argument_binding is ArgumentBinding.SPREAD_CALLER_WINS
 

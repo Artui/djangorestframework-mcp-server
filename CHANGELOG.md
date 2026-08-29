@@ -7,6 +7,43 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Removed
+
+- **`ordering_fields=` is gone from every selector-tool registration surface.**
+  Deprecated in [0.30.0] (2026-08-11) and removed here, five minors later. It
+  is off `register_selector_tool`, `@selector_tool`, `selector_spec_to_tool`,
+  `SelectorToolBinding`, `ToolDefinition.selector` and `SelectorDefaults`, so a
+  call still passing it raises `TypeError` at registration rather than being
+  quietly ignored.
+
+  Migrate by moving the field list onto the spec's `FilterSet` as an
+  `OrderingFilter`:
+
+  ```python
+  class InvoiceFilterSet(django_filters.FilterSet):
+      ordering = django_filters.OrderingFilter(
+          fields=(("created_at", "created"), ("amount_cents", "amount")),
+      )
+  ```
+
+  ...and dropping `ordering_fields=[...]` from the registration call. The names
+  on the right become the choices the model sees — pick ones you are happy to
+  expose, because the ORM paths on the left stop being public. A model's own
+  `Meta.ordering` still supplies the default order with no argument at all.
+
+  One vocabulary now serves HTTP and every agent transport: the `OrderingFilter`
+  is reflected into the tool's `inputSchema` as a labelled `oneOf` and applied
+  by the `FilterSet`, which is why the knob's own enum, its dispatch-side
+  `order_by(...)`, and the `ImproperlyConfigured` raised when both channels
+  declared `ordering` all go with it.
+
+  **Two behaviour notes for anyone on the retired knob.** The advertised values
+  change from raw ORM paths (`amount_cents` / `-amount_cents`) to the
+  `FilterSet`'s public names, so a client sending the old string gets an
+  unrecognised value; and an unrecognised `ordering` is now *rejected* by the
+  filter's validation, where the knob silently dropped it and answered with
+  rows in an order nobody asked for.
+
 ## [0.35.0] — 2026-08-28
 
 ### Added

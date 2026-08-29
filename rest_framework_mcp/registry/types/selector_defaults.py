@@ -23,7 +23,7 @@ class SelectorDefaults:
     The selector-only knobs live here too, so a project wanting every selector
     tool to paginate by default says so once. Filtering is not among them —
     ``filter_set`` is declared on each ``SelectorSpec``, never as a
-    registration default.
+    registration default, and it carries ordering with it.
     """
 
     description: str | None = None
@@ -34,7 +34,6 @@ class SelectorDefaults:
     rate_limits: Sequence[Any] | None = None
     annotations: dict[str, Any] | None = None
     meta: dict[str, Any] | None = None
-    ordering_fields: Sequence[str] | None = None
     paginate: bool | None = None
     include_structured_content: bool | None = None
     include_output_schema: bool | None = None

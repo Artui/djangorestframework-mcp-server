@@ -70,7 +70,6 @@ class ToolDefinition:
     unknown_arguments: UnknownArguments | None = None
     # Selector-only:
     input_serializer: type | None = None
-    ordering_fields: Sequence[str] | None = None
     paginate: bool | None = None
     always_listed: bool | None = None
     """Keep this binding in ``tools/list`` when
@@ -161,7 +160,6 @@ class ToolDefinition:
         rate_limits: Sequence[Any] | None = None,
         annotations: dict[str, Any] | None = None,
         meta: dict[str, Any] | None = None,
-        ordering_fields: Sequence[str] | None = None,
         paginate: bool | None = None,
         include_structured_content: bool | None = None,
         include_output_schema: bool | None = None,
@@ -192,7 +190,6 @@ class ToolDefinition:
             rate_limits=rate_limits,
             annotations=annotations,
             meta=meta,
-            ordering_fields=ordering_fields,
             paginate=paginate,
             include_structured_content=include_structured_content,
             include_output_schema=include_output_schema,

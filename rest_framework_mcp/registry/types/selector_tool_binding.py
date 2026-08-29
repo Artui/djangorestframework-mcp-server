@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import warnings
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass, field
 from functools import cached_property
@@ -13,7 +12,6 @@ from rest_framework_services import (
     FieldMarking,
     UnsetType,
     build_audience_projection,
-    spec_to_json_schema,
 )
 from rest_framework_services.types.selector_kind import SelectorKind
 from rest_framework_services.types.selector_spec import SelectorSpec
@@ -47,30 +45,29 @@ class SelectorToolBinding(Generic[ResultT, ExtraT]):
 
     ```text
     arguments → validate(merged inputSchema) → run_selector
-              → FilterSet(data=...).qs    (if ``filter_set`` set)
-              → order_by(...)             (if ``ordering_fields`` set)
+              → FilterSet(data=...).qs    (if ``filter_set`` set, and it
+                                           orders too when it declares an
+                                           ``OrderingFilter``)
               → paginate                  (if ``paginate=True``)
               → output_serializer(many=True)
               → ToolResult
     ```
 
-    With none of the three set it behaves as a plain RPC read, rendering the
-    selector's return value verbatim.
+    With neither set it behaves as a plain RPC read, rendering the selector's
+    return value verbatim.
 
-    ``kind=RETRIEVE`` skips ordering and pagination but still applies queryset
-    shaping and ``spec.filter_set`` before materializing the instance via
-    ``.first()`` — so a "stats from a filtered set" retrieve works — then
-    renders ``output_serializer(many=False)``. Pairing it with
-    ``ordering_fields`` / ``paginate`` is rejected at construction: those knobs
-    only mean something on a collection.
+    ``kind=RETRIEVE`` skips pagination but still applies queryset shaping and
+    ``spec.filter_set`` before materializing the instance via ``.first()`` — so
+    a "stats from a filtered set" retrieve works — then renders
+    ``output_serializer(many=False)``. Pairing it with ``paginate`` is rejected
+    at construction: that knob only means something on a collection.
 
     ``paginate=True`` generates ``page`` / ``limit`` arguments, slices the
     queryset and wraps the response with ``items`` / ``page`` / ``totalPages``
-    / ``hasNext``. ``ordering_fields`` is **deprecated**: it exposes each name
-    as ``"<name>"`` and ``"-<name>"`` and hands raw ORM paths to
-    ``.order_by()``, a second vocabulary for the same ``ordering`` argument a
-    ``FilterSet``'s ``OrderingFilter`` already advertises. Declaring both is
-    refused; declaring it alone still works for a spec with no ``filter_set``.
+    / ``hasNext``. Ordering has no binding-level knob at all: it is declared as
+    an ``OrderingFilter`` on the spec's ``FilterSet``, reflected into the
+    ``inputSchema`` and applied by the filter, so one vocabulary serves the
+    HTTP transport and every agent transport alike.
 
     ``annotations`` and ``meta`` are emitted verbatim on this tool's
     ``tools/list`` entry, under ``annotations`` and ``_meta`` respectively.
@@ -140,8 +137,8 @@ class SelectorToolBinding(Generic[ResultT, ExtraT]):
     the payload to say so (see ``UnboundedListWarning``)."""
     # ----- read-shaped pipeline knobs -----
     # ``filter_set`` is not stored here; it is sourced from ``spec.filter_set``
-    # via the property below, like ``kind`` and ``selector``.
-    ordering_fields: tuple[str, ...] = ()
+    # via the property below, like ``kind`` and ``selector``. Ordering rides on
+    # it as an ``OrderingFilter``, which is why pagination is the only knob left.
     paginate: bool = False
     argument_binding: ArgumentBinding = ArgumentBinding.SPREAD_AUTHOR_WINS
     """How MCP ``arguments`` flow into the kwarg pool. ``SPREAD_AUTHOR_WINS``
@@ -231,40 +228,16 @@ class SelectorToolBinding(Generic[ResultT, ExtraT]):
                 "requires that any tool advertising outputSchema also return "
                 "conforming structuredContent. Set one of them differently."
             )
-        if self.kind is SelectorKind.RETRIEVE:
+        if self.kind is SelectorKind.RETRIEVE and self.paginate:
             # ``filter_set`` is allowed on RETRIEVE — the dispatcher shapes and
-            # filters the queryset before ``.first()``. Ordering and pagination
-            # still only make sense on a collection.
-            list_only: list[str] = []
-            if self.ordering_fields:
-                list_only.append("ordering_fields")
-            if self.paginate:
-                list_only.append("paginate")
-            if list_only:
-                raise ImproperlyConfigured(
-                    f"Selector tool {self.name!r}: spec.kind=RETRIEVE is incompatible "
-                    f"with list-shaped pipeline knob(s) {sorted(list_only)!r}. A "
-                    "retrieve selector returns a single instance — there is no "
-                    "collection to order or paginate. Either drop the knob(s) or "
-                    "set the spec's kind to LIST."
-                )
-        if self.ordering_fields and self.filter_advertises_ordering:
+            # filters the queryset before ``.first()``, and an ``OrderingFilter``
+            # on it is meaningful there too (which row ``.first()`` picks).
+            # Paging a single instance is the one thing that never is.
             raise ImproperlyConfigured(
-                f"Selector tool {self.name!r}: ordering is declared twice — "
-                "spec.filter_set already advertises an 'ordering' argument, and "
-                f"ordering_fields={list(self.ordering_fields)!r} would overwrite it "
-                "under the same name with a different vocabulary (raw ORM paths "
-                "rather than the FilterSet's public choices). Drop ordering_fields; "
-                "the FilterSet's OrderingFilter is the canonical declaration."
-            )
-        if self.ordering_fields:
-            warnings.warn(
-                f"Selector tool {self.name!r}: ordering_fields is deprecated. Declare "
-                "ordering with an OrderingFilter on the spec's filter_set — it is "
-                "reflected into the inputSchema and applied by the FilterSet, so one "
-                "vocabulary serves both the HTTP and MCP transports.",
-                DeprecationWarning,
-                stacklevel=2,
+                f"Selector tool {self.name!r}: spec.kind=RETRIEVE is incompatible "
+                "with the list-shaped pipeline knob 'paginate'. A retrieve selector "
+                "returns a single instance — there is no collection to paginate. "
+                "Either drop paginate or set the spec's kind to LIST."
             )
         validate_content_kind(
             name=self.name,
@@ -301,23 +274,6 @@ class SelectorToolBinding(Generic[ResultT, ExtraT]):
         ``[filter]`` extra, and narrowing would force a hard import here.
         """
         return self.spec.filter_set
-
-    @property
-    def filter_advertises_ordering(self) -> bool:
-        """Whether the spec's reflected shape already offers an ``ordering`` arg.
-
-        ``django_filters.OrderingFilter`` subclasses ``ChoiceFilter``, so
-        reflection maps it to an enum like any other choice filter: a spec
-        carrying one advertises ``ordering`` with nothing declared here.
-
-        Asked of the **reflected schema** rather than by isinstance-checking
-        ``django_filters`` types, because that extra is optional and because
-        the invariant worth encoding is that whatever the ``inputSchema``
-        advertises, the dispatch delivers. Reading the same reflection the
-        schema builder reads makes promise and delivery agree by construction.
-        """
-        reflected: dict[str, Any] = spec_to_json_schema(self.spec, phase="input") or {}
-        return "ordering" in reflected.get("properties", {})
 
 
 __all__ = ["SelectorToolBinding"]

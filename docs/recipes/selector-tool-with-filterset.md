@@ -141,26 +141,24 @@ rides along with it: nothing about ordering appears on the registration
 call, because the `OrderingFilter` already declared it. `paginate` is
 the one MCP-only pipeline mechanic left here.
 
-!!! warning "`ordering_fields` is deprecated"
+!!! warning "`ordering_fields` was removed"
 
     The registration once took `ordering_fields=[...]`, a list of raw ORM
-    paths handed to `.order_by()`. That is a second vocabulary for the
-    same `ordering` argument, and the two collide on the key: declaring
-    it alongside a `FilterSet` that orders would overwrite the filter's
-    enum with the ORM names — so adding the declaration could break an
-    ordering the filter was already handling. Declaring both is now
-    refused at registration, and declaring it alone warns.
+    paths handed to `.order_by()`. That was a second vocabulary for the
+    same `ordering` argument, deprecated in 0.30.0 and removed since —
+    passing it now raises `TypeError` at registration.
 
     Migrate by moving the field list into an `OrderingFilter` on the
-    `FilterSet`, mapping each ORM path to the public name you want the
-    model to use. A spec with no `filter_set` can keep using
-    `ordering_fields` for now.
+    `FilterSet`, as above, mapping each ORM path to the public name you
+    want the model to use. A spec with no `filter_set` needs one to order;
+    a model's own `Meta.ordering` covers the default order without any
+    argument at all.
 
 The decorator form is symmetric with `@server.service_tool`. It
 auto-builds the `SelectorSpec` from `kind` + the wrapped function, so it
-covers `paginate` (and the deprecated `ordering_fields`) but **not**
-`filter_set` (a
-`FilterSet` belongs on the spec). For a filtered tool, use the explicit
+covers `paginate` but **not** `filter_set` (a
+`FilterSet` belongs on the spec) — and therefore not ordering either. For
+a filtered or ordered tool, use the explicit
 `register_selector_tool` form above, or hand the decorator a ready
 `spec=` that carries the `filter_set`:
 

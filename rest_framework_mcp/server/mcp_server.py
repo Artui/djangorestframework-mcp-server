@@ -381,7 +381,6 @@ class MCPServer:
         meta: dict[str, Any] | None = None,
         agent_contract: OfflineContract | None = None,
         ui: UIToolMeta | None = None,
-        ordering_fields: list[str] | tuple[str, ...] | None = None,
         paginate: bool = False,
         include_structured_content: bool | None = None,
         include_output_schema: bool | None = None,
@@ -404,8 +403,9 @@ class MCPServer:
         ```text
         arguments → validate(merged inputSchema)
                   → run_selector
-                  → FilterSet(data=...).qs    (if spec.filter_set set)
-                  → order_by(...)             (if ordering_fields set)
+                  → FilterSet(data=...).qs    (if spec.filter_set set; it
+                                               orders too when it declares an
+                                               OrderingFilter)
                   → paginate                  (if paginate=True)
                   → output_serializer(many=True)
                   → ToolResult
@@ -414,16 +414,16 @@ class MCPServer:
         Each knob is optional; with none of them set the tool is a plain RPC
         read against the selector.
 
-        Filtering is declared on the spec, not here: set
+        Filtering **and ordering** are declared on the spec, not here: set
         ``SelectorSpec.filter_set`` and both the HTTP and MCP transports honour
-        it. It requires the ``[filter]`` extra (``django-filter``), and schema
-        generation raises a clear ``ImportError`` without it. ``ordering_fields``
-        / ``paginate`` stay here, being MCP pipeline mechanics with no spec
-        analogue.
+        it, ordering included via an ``OrderingFilter``. It requires the
+        ``[filter]`` extra (``django-filter``), and schema generation raises a
+        clear ``ImportError`` without it. ``paginate`` stays here, being an MCP
+        pipeline mechanic with no spec analogue.
 
         The shape comes from ``spec.kind``: ``LIST`` runs the full post-fetch
-        pipeline and renders with ``many=True``; ``RETRIEVE`` rejects those
-        knobs at registration and renders with ``many=False``.
+        pipeline and renders with ``many=True``; ``RETRIEVE`` rejects
+        ``paginate`` at registration and renders with ``many=False``.
 
         ``meta`` is the generic ``_meta`` bundle for this tool's
         ``tools/list`` entry, and ``ui`` links it to an interactive view —
@@ -463,7 +463,6 @@ class MCPServer:
             rate_limits=tuple(rate_limits or ()),
             annotations=annotations,
             meta=merge_meta(ui_meta, meta),
-            ordering_fields=tuple(ordering_fields or ()),
             paginate=paginate,
             include_structured_content=include_structured_content,
             include_output_schema=include_output_schema,
@@ -533,7 +532,7 @@ class MCPServer:
             server.register_specs(
                 registry.by_tag("public"),
                 overrides={
-                    "list_orders": {"paginate": True, "ordering_fields": ["created_at"]},
+                    "list_orders": {"paginate": True, "max_page_size": 25},
                     "refund_order": {"annotations": {"destructiveHint": True}},
                 },
             )
@@ -737,9 +736,10 @@ class MCPServer:
         honours the binding's ``argument_binding`` / ``unknown_arguments``
         policies and the spec's ``permission_classes`` (object-level checks
         included), but not the
-        read-shaped transport extras — pagination, ordering, a selector
-        binding's MCP-only ``input_serializer`` — nor the transport-level MCP
-        permissions and rate limits. For those, and for tool listing, use
+        read-shaped transport extras — pagination, a selector binding's
+        MCP-only ``input_serializer`` — nor the transport-level MCP permissions
+        and rate limits. A ``FilterSet``'s ordering is not one of those extras:
+        it is applied here with the rest of the filtering. For those, and for tool listing, use
         ``acall_tool`` / ``list_tools``. Chain tools orchestrate
         several specs and raise ``TypeError`` here.
 
@@ -1355,7 +1355,6 @@ class MCPServer:
         meta: dict[str, Any] | None = None,
         agent_contract: OfflineContract | None = None,
         ui: UIToolMeta | None = None,
-        ordering_fields: list[str] | tuple[str, ...] | None = None,
         paginate: bool = False,
         include_structured_content: bool | None = None,
         include_output_schema: bool | None = None,
@@ -1410,7 +1409,6 @@ class MCPServer:
                 meta=meta,
                 agent_contract=agent_contract,
                 ui=ui,
-                ordering_fields=ordering_fields,
                 paginate=paginate,
                 include_structured_content=include_structured_content,
                 include_output_schema=include_output_schema,

@@ -12,10 +12,12 @@ Deliberately the **spec core**: instance resolution, ``input_serializer``
 validation, the service / selector run, the output-selector re-fetch, queryset
 shaping and rendering, honouring the binding's ``argument_binding`` /
 ``unknown_arguments`` policies and its ``permission_classes`` in two layers.
-It does *not* layer on the read-shaped transport extras — pagination, ordering
-and a selector binding's MCP-only ``input_serializer`` stay with the wire
-handlers — and the transport-level MCP permissions / rate limits are a wire
-concern not consulted here.
+It does *not* layer on the read-shaped transport extras — pagination and a
+selector binding's MCP-only ``input_serializer`` stay with the wire handlers —
+and the transport-level MCP permissions / rate limits are a wire concern not
+consulted here. Ordering is **not** among the extras: it is declared as an
+``OrderingFilter`` on the spec's ``filter_set``, so it rides in with the
+filtering ``dispatch_spec`` already applies.
 """
 
 from __future__ import annotations

@@ -45,6 +45,9 @@ def _ctx(server: MCPServer) -> MCPCallContext:
 
 class InvoiceFilterSet(django_filters.FilterSet):
     sent = django_filters.BooleanFilter()
+    # Ordering has one declaration channel, and it is this one — so the async
+    # path has to honour it exactly as the sync path does.
+    ordering = django_filters.OrderingFilter(fields=(("amount_cents", "amount"),))
 
     class Meta:
         model = Invoice
@@ -52,8 +55,8 @@ class InvoiceFilterSet(django_filters.FilterSet):
 
 
 @pytest.mark.django_db(transaction=True)
-async def test_async_filter_then_paginate() -> None:
-    """Async dispatch runs the same filter/paginate pipeline as sync."""
+async def test_async_filter_then_order_then_paginate() -> None:
+    """Async dispatch runs the same filter/order/paginate pipeline as sync."""
     from asgiref.sync import sync_to_async
 
     @sync_to_async
@@ -78,14 +81,13 @@ async def test_async_filter_then_paginate() -> None:
             output_serializer=InvoiceOutputSerializer,
             filter_set=InvoiceFilterSet,
         ),
-        ordering_fields=["amount_cents"],
         paginate=True,
     )
 
     out = await handle_tools_call_async(
         {
             "name": "invoices.list",
-            "arguments": {"sent": True, "ordering": "amount_cents", "page": 1, "limit": 2},
+            "arguments": {"sent": True, "ordering": "amount", "page": 1, "limit": 2},
         },
         _ctx(server),
     )
