@@ -240,7 +240,11 @@ def test_the_pagination_knobs_do_not_leak_into_the_selectors_kwargs() -> None:
 
     assert "page" not in seen
     assert "limit" not in seen
-    assert "ordering" not in seen
+    # ``ordering`` is *not* withheld any more. It belongs to whatever declared
+    # it -- here the ``FilterSet`` -- and reaches the callable exactly as every
+    # other filter argument already did. Withholding it by name was what made a
+    # selector unable to own a parameter of that name.
+    assert seen["ordering"] == "amount"
 
 
 # ---------- an unrecognised value ----------
@@ -341,19 +345,19 @@ def _list_invoices_ordering_param(*, user: Any, ordering: str = "-amount_cents")
 
 
 @pytest.mark.django_db
-def test_a_selector_parameter_named_ordering_is_advertised_but_not_delivered() -> None:
-    """The one name that route cannot use on this transport.
+def test_a_selector_may_own_a_parameter_named_ordering() -> None:
+    """No name is reserved for sorting any more, including this one.
 
-    ``ordering`` is in ``RESERVED_POST_FETCH_KEYS``, stripped from the pool the
-    selector is called with so a ``**kwargs`` selector never receives the read
-    pipeline's own arguments. A parameter *named* ``ordering`` is caught by that
-    strip: reflection advertises it, dispatch drops it, and the selector runs on
-    its default — the same promise-without-delivery shape 0.30.0 fixed for the
-    FilterSet channel, still live on this one.
+    While ``ordering_fields`` existed, the pipeline sorted the queryset itself
+    and held ``ordering`` in ``RESERVED_POST_FETCH_KEYS`` so a ``**kwargs``
+    selector would not receive an argument it never declared. A parameter
+    *named* ``ordering`` was caught by that strip by name: reflection advertised
+    it and dispatch dropped it, so the selector ran on its default -- the same
+    promise-without-delivery shape 0.30.0 fixed for the FilterSet channel.
 
-    Pinned as the behaviour that exists, not the behaviour that is wanted. Any
-    fix — narrowing the strip to bindings that own the key, or refusing the
-    collision at registration — should have to edit this test.
+    Removing the knob removed the consumer, so the reservation went with it.
+    Sorting now belongs to whatever declares it, under whatever name it likes:
+    a ``FilterSet``'s ``OrderingFilter``, or a parameter on the callable.
     """
     Invoice.objects.create(number="mid", amount_cents=200)
     Invoice.objects.create(number="low", amount_cents=100)
@@ -377,5 +381,6 @@ def test_a_selector_parameter_named_ordering_is_advertised_but_not_delivered() -
         _ctx(server),
     )
 
-    # Ascending was asked for; the selector's descending default is what ran.
-    assert [row["number"] for row in _rows(out)] == ["high", "mid", "low"]
+    # Ascending was asked for, and ascending is what ran -- the argument now
+    # reaches the callable that declared it.
+    assert [row["number"] for row in _rows(out)] == ["low", "mid", "high"]

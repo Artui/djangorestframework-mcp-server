@@ -7,6 +7,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- **A selector may own a parameter named `ordering` again.** `ordering` sat in
+  `RESERVED_POST_FETCH_KEYS` because the pipeline sorted the queryset itself
+  while `ordering_fields` existed. It does not any more — sorting belongs to
+  whatever declares it — so the name was reserved against a consumer that had
+  gone, and the strip (which goes by name) silently dropped an argument
+  reflection had already advertised. That is the promise-without-delivery shape
+  0.30.0 fixed for the `FilterSet` channel, and it was still live on the
+  selector-parameter channel.
+
+  `page` and `limit` stay reserved: the pipeline genuinely reads those and they
+  never reach the callable. **Every name in that set is a name a selector cannot
+  use for a parameter of its own**, which is the cost of each entry and the
+  reason one that is no longer consumed should not be there.
+
+
 ### Removed
 
 - **`ordering_fields=` is gone from every selector-tool registration surface.**

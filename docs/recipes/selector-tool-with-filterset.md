@@ -166,14 +166,19 @@ declaration serves the HTTP transport and every agent transport.
     constrain it there (an allowlist, or a `ChoiceField` on an
     `input_serializer`) rather than passing it straight through.
 
-!!! warning "Do not name that parameter `ordering`, `page` or `limit`"
+!!! warning "Do not name that parameter `page` or `limit`"
 
-    Those three names belong to the selector-tool read pipeline and are
+    Those two names belong to the selector-tool read pipeline and are
     stripped from the arguments the selector is called with, so that a
-    `**kwargs` selector never receives them. The strip goes by name: a
-    selector declaring `ordering` as a parameter of its own gets it
-    advertised in the schema and then dropped at dispatch, and the
-    default runs instead — silently. Call it `sort` or `order_by`.
+    `**kwargs` selector never receives them. The strip goes by name, so a
+    selector declaring `page` as a parameter of its own gets it advertised
+    in the schema and then dropped at dispatch, with its default running
+    instead — silently.
+
+    **`ordering` is not reserved.** It was, while `ordering_fields`
+    existed and the pipeline sorted the queryset itself. Sorting now
+    belongs to whatever declares it, under whatever name it likes, so
+    name the parameter `ordering` if that reads best.
 
 !!! warning "`ordering_fields` was removed"
 
