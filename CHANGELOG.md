@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.36.0] — 2026-08-29
+
 ### Removed
 
 - **The nine drf-services symbols this package re-exported.** `ServiceSpec`,
@@ -29,24 +31,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   No deprecation window: the symbols are unchanged and one import line away, and
   a test now pins the boundary so the convenience cannot creep back.
 
-### Fixed
-
-- **A selector may own a parameter named `ordering` again.** `ordering` sat in
-  `RESERVED_POST_FETCH_KEYS` because the pipeline sorted the queryset itself
-  while `ordering_fields` existed. It does not any more — sorting belongs to
-  whatever declares it — so the name was reserved against a consumer that had
-  gone, and the strip (which goes by name) silently dropped an argument
-  reflection had already advertised. That is the promise-without-delivery shape
-  0.30.0 fixed for the `FilterSet` channel, and it was still live on the
-  selector-parameter channel.
-
-  `page` and `limit` stay reserved: the pipeline genuinely reads those and they
-  never reach the callable. **Every name in that set is a name a selector cannot
-  use for a parameter of its own**, which is the cost of each entry and the
-  reason one that is no longer consumed should not be there.
-
-
-### Removed
 
 - **`ordering_fields=` is gone from every selector-tool registration surface.**
   Deprecated in [0.30.0] (2026-08-11) and removed here, five minors later. It
@@ -97,6 +81,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   unrecognised value; and an unrecognised `ordering` is now *rejected* by the
   filter's validation, where the knob silently dropped it and answered with
   rows in an order nobody asked for.
+
+### Fixed
+
+- **A selector may own a parameter named `ordering` again.** `ordering` sat in
+  `RESERVED_POST_FETCH_KEYS` because the pipeline sorted the queryset itself
+  while `ordering_fields` existed. It does not any more — sorting belongs to
+  whatever declares it — so the name was reserved against a consumer that had
+  gone, and the strip (which goes by name) silently dropped an argument
+  reflection had already advertised. That is the promise-without-delivery shape
+  0.30.0 fixed for the `FilterSet` channel, and it was still live on the
+  selector-parameter channel.
+
+  `page` and `limit` stay reserved: the pipeline genuinely reads those and they
+  never reach the callable. **Every name in that set is a name a selector cannot
+  use for a parameter of its own**, which is the cost of each entry and the
+  reason one that is no longer consumed should not be there.
 
 ## [0.35.0] — 2026-08-28
 
@@ -4216,7 +4216,8 @@ Pinned to `djangorestframework-services==0.6.0`.
 - 100% line + branch coverage enforced by pytest (**451 tests** at
   release).
 
-[Unreleased]: https://github.com/Artui/djangorestframework-mcp-server/compare/v0.35.0...HEAD
+[Unreleased]: https://github.com/Artui/djangorestframework-mcp-server/compare/v0.36.0...HEAD
+[0.36.0]: https://github.com/Artui/djangorestframework-mcp-server/compare/v0.35.0...v0.36.0
 [0.35.0]: https://github.com/Artui/djangorestframework-mcp-server/compare/v0.34.0...v0.35.0
 [0.34.0]: https://github.com/Artui/djangorestframework-mcp-server/compare/v0.33.0...v0.34.0
 [0.33.0]: https://github.com/Artui/djangorestframework-mcp-server/compare/v0.32.1...v0.33.0
