@@ -7,6 +7,97 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Removed
+
+- **The nine drf-services symbols this package re-exported.** `ServiceSpec`,
+  `SelectorSpec`, `SelectorKind`, `ServiceView` and the five service / selector
+  protocols are no longer importable from `rest_framework_mcp`. Import them from
+  `rest_framework_services`, which is where they are declared:
+
+  ```python
+  from rest_framework_mcp import MCPServer
+  from rest_framework_services import SelectorKind, SelectorSpec, ServiceSpec
+  ```
+
+  The convenience was that a consumer need not know which sub-package each
+  symbol lives in, the dependency being mandatory anyway. The cost was that it
+  **pinned this package's public API to the sister package's internal layout**:
+  every one of those imports named a module path
+  (`rest_framework_services.types.service_spec`) that drf-services is free to
+  move, and a move over there would have broken an import from *here*.
+
+  No deprecation window: the symbols are unchanged and one import line away, and
+  a test now pins the boundary so the convenience cannot creep back.
+
+### Fixed
+
+- **A selector may own a parameter named `ordering` again.** `ordering` sat in
+  `RESERVED_POST_FETCH_KEYS` because the pipeline sorted the queryset itself
+  while `ordering_fields` existed. It does not any more — sorting belongs to
+  whatever declares it — so the name was reserved against a consumer that had
+  gone, and the strip (which goes by name) silently dropped an argument
+  reflection had already advertised. That is the promise-without-delivery shape
+  0.30.0 fixed for the `FilterSet` channel, and it was still live on the
+  selector-parameter channel.
+
+  `page` and `limit` stay reserved: the pipeline genuinely reads those and they
+  never reach the callable. **Every name in that set is a name a selector cannot
+  use for a parameter of its own**, which is the cost of each entry and the
+  reason one that is no longer consumed should not be there.
+
+
+### Removed
+
+- **`ordering_fields=` is gone from every selector-tool registration surface.**
+  Deprecated in [0.30.0] (2026-08-11) and removed here, five minors later. It
+  is off `register_selector_tool`, `@selector_tool`, `selector_spec_to_tool`,
+  `SelectorToolBinding`, `ToolDefinition.selector` and `SelectorDefaults`, so a
+  call still passing it raises `TypeError` at registration rather than being
+  quietly ignored.
+
+  **Migration, preferred route** — move the field list onto the spec's
+  `FilterSet` as an `OrderingFilter`:
+
+  ```python
+  class InvoiceFilterSet(django_filters.FilterSet):
+      ordering = django_filters.OrderingFilter(
+          fields=(("created_at", "created"), ("amount_cents", "amount")),
+      )
+  ```
+
+  ...and drop `ordering_fields=[...]` from the registration call. The names on
+  the right become the choices the model sees — pick ones you are happy to
+  expose, because the ORM paths on the left stop being public.
+
+  **Migration without `django-filter`** — the selector declares a sort
+  parameter of its own, which drf-services reflects into the `inputSchema` like
+  any other parameter, so this needs nothing at registration either:
+
+  ```python
+  def list_invoices(*, user, sort: str = "-created_at"):
+      return Invoice.objects.for_user(user).order_by(sort)
+  ```
+
+  Prefer the `FilterSet` where there is one: it validates the value against a
+  published set of choices before anything reaches the ORM, while a bare
+  parameter is only as safe as what the selector does with it. Do **not** name
+  that parameter `ordering`, `page` or `limit` — those belong to the read
+  pipeline and are stripped from the selector's kwargs, so one named `ordering`
+  is advertised and then silently dropped. And a model's own `Meta.ordering`
+  still supplies the default order with no argument at all.
+
+  One vocabulary now serves HTTP and every agent transport, whichever route you
+  take, which is why the knob's own enum, its dispatch-side `order_by(...)`, and
+  the `ImproperlyConfigured` raised when both channels declared `ordering` all
+  go with it.
+
+  **Two behaviour notes for anyone on the retired knob.** The advertised values
+  change from raw ORM paths (`amount_cents` / `-amount_cents`) to the
+  `FilterSet`'s public names, so a client sending the old string gets an
+  unrecognised value; and an unrecognised `ordering` is now *rejected* by the
+  filter's validation, where the knob silently dropped it and answered with
+  rows in an order nobody asked for.
+
 ## [0.35.0] — 2026-08-28
 
 ### Added

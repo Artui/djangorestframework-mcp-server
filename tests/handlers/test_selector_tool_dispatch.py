@@ -115,7 +115,6 @@ def test_tools_list_emits_filter_args_in_input_schema() -> None:
             output_serializer=InvoiceOutputSerializer,
             filter_set=InvoiceFilterSet,
         ),
-        ordering_fields=["amount_cents"],
         paginate=True,
     )
     out = handle_tools_list(None, _ctx(server))
@@ -133,12 +132,10 @@ def test_tools_list_emits_filter_args_in_input_schema() -> None:
         "type": "number",
         "description": "Matches `amount_cents` with the `gte` lookup.",
     }
-    # Ordering as enum of "<f>" / "-<f>": this one comes from the deprecated
-    # ``ordering_fields=`` knob, which this transport builds itself out of bare
-    # ORM paths and has no labels for. A FilterSet's ``OrderingFilter`` carries
-    # them and is published as a labelled ``oneOf`` — see
-    # ``test_selector_tool_ordering.py``.
-    assert properties["ordering"]["enum"] == ["amount_cents", "-amount_cents"]
+    # Ordering is absent because this FilterSet declares no ``OrderingFilter``:
+    # there is no other channel for it. The labelled ``oneOf`` one produces is
+    # covered in ``test_selector_tool_ordering.py``.
+    assert "ordering" not in properties
     # Pagination args:
     assert properties["page"] == {"type": "integer", "minimum": 1}
     # ``maximum`` mirrors the server's MAX_PAGE_SIZE, so the model sees the
@@ -237,85 +234,6 @@ def test_retrieve_applies_filter_set_before_first() -> None:
     assert out["structuredContent"]["number"] == "B"
 
 
-# ---------- Ordering ----------
-
-
-@pytest.mark.django_db
-def test_ordering_applies_when_value_is_allowed() -> None:
-    Invoice.objects.create(number="C", amount_cents=300)
-    Invoice.objects.create(number="A", amount_cents=100)
-    Invoice.objects.create(number="B", amount_cents=200)
-
-    server = _server()
-    server.register_selector_tool(
-        name="invoices.list",
-        spec=SelectorSpec(
-            kind=SelectorKind.LIST,
-            selector=_list_invoices,
-            output_serializer=InvoiceOutputSerializer,
-        ),
-        ordering_fields=["amount_cents"],
-    )
-
-    out = handle_tools_call(
-        {"name": "invoices.list", "arguments": {"ordering": "amount_cents"}}, _ctx(server)
-    )
-    assert isinstance(out, dict)
-    nums = [item["number"] for item in out["structuredContent"]]
-    assert nums == ["A", "B", "C"]
-
-
-@pytest.mark.django_db
-def test_descending_ordering_is_supported() -> None:
-    Invoice.objects.create(number="A", amount_cents=100)
-    Invoice.objects.create(number="B", amount_cents=200)
-
-    server = _server()
-    server.register_selector_tool(
-        name="invoices.list",
-        spec=SelectorSpec(
-            kind=SelectorKind.LIST,
-            selector=_list_invoices,
-            output_serializer=InvoiceOutputSerializer,
-        ),
-        ordering_fields=["amount_cents"],
-    )
-
-    out = handle_tools_call(
-        {"name": "invoices.list", "arguments": {"ordering": "-amount_cents"}}, _ctx(server)
-    )
-    assert isinstance(out, dict)
-    nums = [item["number"] for item in out["structuredContent"]]
-    assert nums == ["B", "A"]
-
-
-@pytest.mark.django_db
-def test_ordering_with_disallowed_field_is_silently_ignored() -> None:
-    """A client passing an unknown ordering field doesn't crash dispatch."""
-    Invoice.objects.create(number="A", amount_cents=100)
-
-    server = _server()
-    server.register_selector_tool(
-        name="invoices.list",
-        spec=SelectorSpec(
-            kind=SelectorKind.LIST,
-            selector=_list_invoices,
-            output_serializer=InvoiceOutputSerializer,
-        ),
-        ordering_fields=["amount_cents"],
-    )
-
-    # ``number`` isn't in ordering_fields; the dispatch ignores it rather
-    # than raising. A stricter validator could 400 instead, but silent
-    # fall-through matches how the schema enum advertises only allowed
-    # values to begin with.
-    out = handle_tools_call(
-        {"name": "invoices.list", "arguments": {"ordering": "number"}}, _ctx(server)
-    )
-    assert isinstance(out, dict)
-    assert len(out["structuredContent"]) == 1
-
-
 # ---------- Pagination ----------
 
 
@@ -332,15 +250,11 @@ def test_pagination_wraps_response_in_metadata() -> None:
             selector=_list_invoices,
             output_serializer=InvoiceOutputSerializer,
         ),
-        ordering_fields=["amount_cents"],
         paginate=True,
     )
 
     out = handle_tools_call(
-        {
-            "name": "invoices.list",
-            "arguments": {"ordering": "amount_cents", "page": 2, "limit": 3},
-        },
+        {"name": "invoices.list", "arguments": {"page": 2, "limit": 3}},
         _ctx(server),
     )
     assert isinstance(out, dict)
@@ -502,12 +416,17 @@ def test_pagination_is_shaped_upstream_from_already_parsed_ints(monkeypatch) -> 
     assert (payload["page"], payload["totalPages"], payload["hasNext"]) == (3, 3, False)
 
 
-# ---------- Filter + order + paginate combined ----------
+# ---------- Filter + paginate combined ----------
 
 
 @pytest.mark.django_db
-def test_full_pipeline_filter_then_order_then_paginate() -> None:
-    """The pipeline applies in order: filter → order → paginate."""
+def test_full_pipeline_filter_then_paginate() -> None:
+    """The pipeline applies in order: filter → paginate.
+
+    Ordering would sit between the two, declared on the ``FilterSet`` and
+    applied with the rest of the filtering — see ``test_selector_tool_ordering``
+    for the three-channel composition.
+    """
     Invoice.objects.create(number="A", amount_cents=100, sent=True)
     Invoice.objects.create(number="B", amount_cents=200, sent=False)
     Invoice.objects.create(number="C", amount_cents=300, sent=True)
@@ -522,20 +441,14 @@ def test_full_pipeline_filter_then_order_then_paginate() -> None:
             output_serializer=InvoiceOutputSerializer,
             filter_set=InvoiceFilterSet,
         ),
-        ordering_fields=["amount_cents"],
         paginate=True,
     )
 
-    # Filter: sent=True → A, C, D. Order desc → D, C, A. Page 1 limit 2 → D, C.
+    # Filter: sent=True → A, C, D. Page 1 limit 2 → two of the three.
     out = handle_tools_call(
         {
             "name": "invoices.list",
-            "arguments": {
-                "sent": True,
-                "ordering": "-amount_cents",
-                "page": 1,
-                "limit": 2,
-            },
+            "arguments": {"sent": True, "page": 1, "limit": 2},
         },
         _ctx(server),
     )
@@ -543,7 +456,10 @@ def test_full_pipeline_filter_then_order_then_paginate() -> None:
     payload = out["structuredContent"]
     assert payload["totalPages"] == 2  # 3 items / limit 2
     assert payload["hasNext"] is True
-    assert [item["number"] for item in payload["items"]] == ["D", "C"]
+    # The excluded row is the point: ``B`` is filtered out before the slice, so
+    # a full first page still carries only rows the filter kept.
+    assert set(payload["items"][0]) and "B" not in {item["number"] for item in payload["items"]}
+    assert len(payload["items"]) == 2
 
 
 # ---------- input_serializer for non-filter args ----------
@@ -620,7 +536,7 @@ def test_selector_returning_list_skips_queryset_pipeline() -> None:
 
     out = handle_tools_call({"name": "things.list", "arguments": {}}, _ctx(server))
     assert isinstance(out, dict)
-    # No output_serializer → list passes through (ordering / pagination no-op).
+    # No output_serializer → list passes through (pagination no-op).
     assert out["structuredContent"] == [{"number": "A"}, {"number": "B"}]
 
 
@@ -773,13 +689,14 @@ def test_selector_tool_inputschema_with_required_input_serializer_field(settings
         name="x",
         spec=SelectorSpec(kind=SelectorKind.LIST, selector=selector),
         input_serializer=_Args,
-        ordering_fields=["amount_cents"],
+        paginate=True,
     )
     out = handle_tools_list(None, _ctx(server))
     assert isinstance(out, dict)
     schema = out["tools"][0]["inputSchema"]
     assert schema["required"] == ["token"]
-    assert schema["properties"]["ordering"]["enum"] == ["amount_cents", "-amount_cents"]
+    # The pipeline knob's own properties merge in alongside, unrequired.
+    assert schema["properties"]["page"] == {"type": "integer", "minimum": 1}
 
 
 def test_selector_tool_inputschema_minimal_no_optional_pipeline_knobs() -> None:

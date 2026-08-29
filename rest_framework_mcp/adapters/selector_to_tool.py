@@ -46,7 +46,6 @@ def selector_spec_to_tool(
     annotations: dict[str, Any] | None = None,
     meta: dict[str, Any] | None = None,
     field_audiences: Mapping[str, FieldMarking] | None = None,
-    ordering_fields: tuple[str, ...] = (),
     paginate: bool = False,
     include_structured_content: bool | None = None,
     include_output_schema: bool | None = None,
@@ -74,8 +73,9 @@ def selector_spec_to_tool(
     The selector's shape (``LIST`` vs ``RETRIEVE``) and its ``filter_set`` are
     read off the spec, which is the single source of truth — no ``kind`` kwarg is
     accepted here, and the filterable shape is declared once and shared by the
-    HTTP and MCP transports. ``ordering_fields`` / ``paginate`` stay
-    binding-level: they are MCP pipeline mechanics with no spec analogue.
+    HTTP and MCP transports — ordering included, as an ``OrderingFilter`` on
+    that ``filter_set``. ``paginate`` stays binding-level: it is an MCP pipeline
+    mechanic with no spec analogue.
 
     ``meta`` is the base-protocol ``_meta`` bundle the tool's ``tools/list``
     entry carries — see ``service_spec_to_tool``.
@@ -116,7 +116,6 @@ def selector_spec_to_tool(
         rate_limits=rate_limits,
         annotations=merge_tool_annotations(annotations, read_only=True),
         meta=merge_meta(meta),
-        ordering_fields=ordering_fields,
         paginate=paginate,
         include_structured_content=include_structured_content,
         include_output_schema=include_output_schema,

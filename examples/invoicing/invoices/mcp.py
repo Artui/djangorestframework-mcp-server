@@ -90,7 +90,8 @@ def build_server() -> MCPServer:
             filter_set=InvoiceFilterSet,
         ),
         description="List invoices, optionally filtered / ordered / paginated.",
-        ordering_fields=["created_at", "amount_cents"],
+        # Ordering is not a registration knob: ``InvoiceFilterSet`` declares an
+        # ``OrderingFilter``, and that declaration is what the tool advertises.
         paginate=True,
     )
 

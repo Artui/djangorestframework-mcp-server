@@ -12,7 +12,7 @@ instances directly. Same value object as the HTTP transport — same callable ca
 serve both at once.
 
 ```python
-from rest_framework_mcp import SelectorKind, SelectorSpec, ServiceSpec  # re-exported for ergonomics
+from rest_framework_services import SelectorKind, SelectorSpec, ServiceSpec
 
 spec = ServiceSpec(
     service=create_invoice,
@@ -63,7 +63,7 @@ register a spec once and both surfaces get the same shape:
   (`LIST` or `RETRIEVE`). It drives the `many=` flag on the output
   serializer and gates which post-fetch knobs the registration
   accepts (a `RETRIEVE` spec rejects the collection-only
-  `ordering_fields` (deprecated) / `paginate`, but `filter_set` is allowed — it is
+  `paginate`, but `filter_set` is allowed — it is
   shaped + applied before the single-instance `.first()`).
   `SelectorKind` is re-exported from `rest_framework_mcp` for
   convenience.
@@ -287,7 +287,7 @@ is a spec on both surfaces.
 - `.kwargs` becomes the binding's per-request kwargs provider.
 
 ```python
-from rest_framework_mcp import SelectorKind, SelectorSpec
+from rest_framework_services import SelectorKind, SelectorSpec
 
 server.register_resource(
     name="invoice",

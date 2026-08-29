@@ -47,17 +47,6 @@ def test_retrieve_kind_allows_filter_set() -> None:
     assert binding.filter_set is object
 
 
-def test_retrieve_kind_rejects_ordering_fields() -> None:
-    with pytest.raises(ImproperlyConfigured) as excinfo:
-        SelectorToolBinding(
-            name="r",
-            description=None,
-            spec=SelectorSpec(kind=SelectorKind.RETRIEVE, selector=_sel),
-            ordering_fields=("created_at",),
-        )
-    assert "ordering_fields" in str(excinfo.value)
-
-
 def test_retrieve_kind_rejects_paginate() -> None:
     with pytest.raises(ImproperlyConfigured) as excinfo:
         SelectorToolBinding(
@@ -69,22 +58,18 @@ def test_retrieve_kind_rejects_paginate() -> None:
     assert "paginate" in str(excinfo.value)
 
 
-def test_retrieve_kind_lists_every_offending_knob() -> None:
-    """When multiple list-only knobs are set together, the error names all of them.
-
-    ``filter_set`` is allowed on retrieve (it's shaped + applied before
-    ``.first()``), so even alongside it only ordering / pagination are flagged.
-    """
+def test_retrieve_kind_rejects_paginate_even_alongside_a_filter_set() -> None:
+    """``filter_set`` is allowed on retrieve (it's shaped + applied before
+    ``.first()``, ordering included), so only pagination is flagged."""
     with pytest.raises(ImproperlyConfigured) as excinfo:
         SelectorToolBinding(
             name="r",
             description=None,
             spec=SelectorSpec(kind=SelectorKind.RETRIEVE, selector=_sel, filter_set=object),
-            ordering_fields=("x",),
             paginate=True,
         )
     msg = str(excinfo.value)
-    assert "ordering_fields" in msg and "paginate" in msg
+    assert "paginate" in msg
     assert "filter_set" not in msg
 
 

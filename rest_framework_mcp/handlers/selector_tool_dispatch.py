@@ -4,13 +4,13 @@ Both shapes run permission check, rate limit, ``input_serializer`` validation
 and then ``dispatch_spec`` (the selector plus queryset shaping and
 ``filter_set``), before diverging on ``binding.kind``:
 
-- ``LIST`` orders when ``ordering_fields`` is set (deprecated — an
-  ``OrderingFilter`` on the ``filter_set`` is the canonical way to declare
-  ordering), paginates when ``paginate=True``, and renders ``many=True``. The
+- ``LIST`` paginates when ``paginate=True`` and renders ``many=True``. The
   effective page ceiling bounds the rows either way: a page clamps to it and
   says so in its envelope, an unpaginated result refuses rather than truncate.
+  Ordering is not part of this shell — an ``OrderingFilter`` on the
+  ``filter_set`` declares it and ``dispatch_spec`` has already applied it.
 - ``RETRIEVE`` takes ``.first()`` and renders ``many=False``; the binding
-  rejects the ordering / pagination knobs at construction.
+  rejects the pagination knob at construction.
 
 That post-fetch pipeline is the differentiator from service-tool dispatch and is
 owned by the tool layer, not the selector: selectors return raw, unscoped data.
@@ -234,8 +234,8 @@ def _build_request_and_validate(
     ``view.kwargs`` a spec callable reads must be the ones a context provider
     sees too.
 
-    Filter / ordering / pagination args bypass ``input_serializer`` validation —
-    they are shape-checked by the FilterSet, the ordering enum, and ``int(...)``
+    Filter (ordering included) / pagination args bypass ``input_serializer``
+    validation — they are shape-checked by the FilterSet and by ``int(...)``
     coercion respectively — so their names go in as ``additional_known_keys``.
     The serializer gets DRF's baseline context, as it has over HTTP.
     """
@@ -307,9 +307,9 @@ def _selector_tool_additional_known_keys(binding: SelectorToolBinding) -> frozen
     known: set[str] = set()
     # ``phase="input"`` never returns ``None``; ``or {}`` only narrows the type.
     reflected: dict[str, Any] = spec_to_json_schema(binding.spec, phase="input") or {}
+    # ``ordering`` needs no entry of its own: a ``FilterSet`` declaring an
+    # ``OrderingFilter`` reflects it as a property like any other filter field.
     known.update(reflected.get("properties", {}).keys())
-    if binding.ordering_fields:
-        known.add("ordering")
     if binding.paginate:
         known.add("page")
         known.add("limit")
@@ -327,11 +327,12 @@ def _post_fetch_and_render(
     params: dict[str, Any],
     config: MCPConfig,
 ) -> dict[str, Any]:
-    """Order, paginate and render the shaped value ``dispatch_spec`` returned.
+    """Paginate and render the shaped value ``dispatch_spec`` returned.
 
     ``dispatch_spec`` already ran the selector, applied queryset shaping +
-    ``filter_set`` and (for ``RETRIEVE``) materialized via ``.first()``. This is
-    the MCP-only read shell on top.
+    ``filter_set`` (ordering included, when the filter declares an
+    ``OrderingFilter``) and, for ``RETRIEVE``, materialized via ``.first()``.
+    This is the MCP-only read shell on top.
     """
     output_format: OutputFormat = OutputFormat.coerce(
         params.get("outputFormat") or binding.output_format
@@ -378,13 +379,10 @@ def _post_fetch_and_render(
             binding_name=binding.name,
         ).to_dict()
 
+    # Already ordered if it was going to be: an ``OrderingFilter`` on the spec's
+    # ``filter_set`` is applied inside ``dispatch_spec``, alongside the rest of
+    # the filtering, so nothing below re-orders.
     qs: Any = result.value
-
-    # Ordering — only on QS-shapes that support ``.order_by()``.
-    if binding.ordering_fields and is_queryset(qs):
-        ordering: Any = arguments_raw.get("ordering")
-        if isinstance(ordering, str) and _is_valid_ordering(ordering, binding.ordering_fields):
-            qs = qs.order_by(ordering)
 
     # One ceiling covers both arms below: it is the most rows a selector tool
     # puts in a single result, paged or not. Only the enforcement differs — a
@@ -572,20 +570,6 @@ def _selector_dispatch_params(
     if isinstance(validated, dict):
         core.update(validated)
     return core
-
-
-def _is_valid_ordering(value: str, allowed: tuple[str, ...]) -> bool:
-    """``ordering=created_at`` and ``ordering=-created_at`` both pass.
-
-    Exactly one leading ``-`` is stripped, because that is the whole of what
-    Django's ordering syntax means by a sign. ``lstrip("-")`` strips *characters*
-    rather than a prefix, so ``--created_at`` normalised to an allowed field
-    name, passed this allowlist and reached ``order_by`` verbatim — where
-    Django's ordering pattern rejects it with a ``ValueError`` no handler on
-    this path catches. A double sign now simply fails the allowlist and the
-    ordering argument is ignored, as any other unrecognised one is.
-    """
-    return (value[1:] if value.startswith("-") else value) in allowed
 
 
 def _coerce_int(value: Any, *, default: int) -> int:

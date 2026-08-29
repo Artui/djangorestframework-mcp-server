@@ -1,9 +1,15 @@
 """Ordering on a selector tool, and which channel owns it.
 
-A ``FilterSet``'s ``OrderingFilter`` is the canonical declaration. It
-subclasses ``ChoiceFilter``, so drf-services' reflection maps it exactly like
-any other choice filter — which means a spec carrying one advertises
-``ordering`` in the tool's ``inputSchema`` with nothing declared at
+Two channels survive the removal of the ``ordering_fields`` knob, and neither
+is a registration kwarg: a ``FilterSet``'s ``OrderingFilter``, and a sort
+parameter the selector callable declares for itself. The first is preferred —
+it validates against published choices before anything reaches the ORM — and
+the second is what a project with no ``django-filter`` dependency uses. Both
+are exercised below.
+
+An ``OrderingFilter`` subclasses ``ChoiceFilter``, so drf-services' reflection
+maps it exactly like any other choice filter — which means a spec carrying one
+advertises ``ordering`` in the tool's ``inputSchema`` with nothing declared at
 registration.
 
 Since drf-services 0.47.0 that mapping is a labelled ``oneOf`` rather than a
@@ -26,8 +32,8 @@ from typing import Any
 
 import django_filters
 import pytest
-from django.core.exceptions import ImproperlyConfigured
 from django.http import HttpRequest
+from rest_framework import serializers as drf_serializers
 from rest_framework_services.types.selector_kind import SelectorKind
 from rest_framework_services.types.selector_spec import SelectorSpec
 
@@ -45,9 +51,9 @@ from tests.testapp.serializers import InvoiceOutputSerializer
 class OrderedInvoiceFilterSet(django_filters.FilterSet):
     """The public vocabulary is ``amount`` / ``-amount``, not the ORM path.
 
-    ``param_map`` is the whole point of the collision this file guards: the
-    FilterSet's choices are consumer-facing names, while ``ordering_fields``
-    values are raw paths handed to ``.order_by()``. Two vocabularies, one key.
+    The mapping is the point: a consumer-facing name is what the model sees and
+    sends, and the ORM path behind it stays an implementation detail the tool
+    never publishes.
     """
 
     sent = django_filters.BooleanFilter()
@@ -58,14 +64,6 @@ class OrderedInvoiceFilterSet(django_filters.FilterSet):
     ordering = django_filters.OrderingFilter(
         fields=(("amount_cents", "amount"),),
     )
-
-    class Meta:
-        model = Invoice
-        fields = ["sent"]
-
-
-class PlainInvoiceFilterSet(django_filters.FilterSet):
-    sent = django_filters.BooleanFilter()
 
     class Meta:
         model = Invoice
@@ -242,124 +240,147 @@ def test_the_pagination_knobs_do_not_leak_into_the_selectors_kwargs() -> None:
 
     assert "page" not in seen
     assert "limit" not in seen
-    assert "ordering" not in seen
+    # ``ordering`` is *not* withheld any more. It belongs to whatever declared
+    # it -- here the ``FilterSet`` -- and reaches the callable exactly as every
+    # other filter argument already did. Withholding it by name was what made a
+    # selector unable to own a parameter of that name.
+    assert seen["ordering"] == "amount"
 
 
-# ---------- the retired second vocabulary ----------
-
-
-def test_declaring_both_channels_is_refused_at_registration() -> None:
-    """Two vocabularies under one key — the failure has to be at configuration
-    time, because at request time one of them simply wins and says nothing."""
-    server = _server()
-
-    with pytest.raises(ImproperlyConfigured, match="ordering is declared twice"):
-        _register_ordered(server, ordering_fields=["amount_cents"])
-
-
-def test_ordering_fields_alone_still_works_and_warns() -> None:
-    """A spec with no ordering on its filter has no other route yet, so the
-    legacy channel keeps working — loudly."""
-    server = _server()
-
-    with pytest.warns(DeprecationWarning, match="ordering_fields is deprecated"):
-        server.register_selector_tool(
-            name="invoices.list",
-            spec=SelectorSpec(
-                kind=SelectorKind.LIST,
-                selector=_list_invoices,
-                output_serializer=InvoiceOutputSerializer,
-                filter_set=PlainInvoiceFilterSet,
-            ),
-            ordering_fields=["amount_cents"],
-        )
-
-    out = handle_tools_list(None, _ctx(server))
-    assert isinstance(out, dict)
-    tool = next(t for t in out["tools"] if t["name"] == "invoices.list")
-    assert set(tool["inputSchema"]["properties"]["ordering"]["enum"]) == {
-        "amount_cents",
-        "-amount_cents",
-    }
+# ---------- an unrecognised value ----------
 
 
 @pytest.mark.django_db
-def test_the_legacy_channel_still_orders() -> None:
-    Invoice.objects.create(number="mid", amount_cents=200)
-    Invoice.objects.create(number="low", amount_cents=100)
-    server = _server()
-    with pytest.warns(DeprecationWarning):
-        server.register_selector_tool(
-            name="invoices.list",
-            spec=SelectorSpec(
-                kind=SelectorKind.LIST,
-                selector=_list_invoices,
-                output_serializer=InvoiceOutputSerializer,
-            ),
-            ordering_fields=["amount_cents"],
-        )
+def test_an_unrecognised_ordering_value_is_rejected_by_the_filter() -> None:
+    """A value outside the advertised choices is refused, not guessed at.
 
-    out = handle_tools_call(
-        {"name": "invoices.list", "arguments": {"ordering": "-amount_cents"}},
-        _ctx(server),
-    )
+    ``ordering`` is validated like every other filter field now, so a mistyped
+    value raises DRF's ``ValidationError`` out of queryset shaping — which the
+    ViewSet turns into DRF's own 400 rather than a JSON-RPC ``-32602``. That is
+    the shape *every* invalid filter value on a selector tool already had; the
+    retired knob was the one channel that quietly dropped a bad value and
+    answered with rows in an order nobody asked for.
 
-    assert [row["number"] for row in _rows(out)] == ["mid", "low"]
-
-
-@pytest.mark.django_db
-def test_a_doubled_sign_is_not_an_allowed_ordering() -> None:
-    """``--amount_cents`` is rejected by the allowlist, not passed to the ORM.
-
-    Stripping the sign with ``lstrip("-")`` strips *characters*, so a doubled
-    sign normalised to an allowed field name and reached ``order_by`` verbatim,
-    where Django's ordering pattern raises a ``ValueError`` that no handler on
-    the tool-call path catches — an unhandled 500 with no JSON-RPC envelope for
-    a client that only mistyped an argument.
+    Pinned rather than asserted-as-desirable: routing it through the
+    ``-32602`` envelope the service-tool path uses would be an improvement, and
+    a deliberate one, so it should have to edit this test.
     """
     Invoice.objects.create(number="mid", amount_cents=200)
     Invoice.objects.create(number="low", amount_cents=100)
     server = _server()
-    with pytest.warns(DeprecationWarning):
-        server.register_selector_tool(
-            name="invoices.list",
-            spec=SelectorSpec(
-                kind=SelectorKind.LIST,
-                selector=_list_invoices,
-                output_serializer=InvoiceOutputSerializer,
-            ),
-            ordering_fields=["amount_cents"],
+    _register_ordered(server)
+
+    with pytest.raises(drf_serializers.ValidationError, match="not one of the available choices"):
+        handle_tools_call(
+            {"name": "invoices.list", "arguments": {"ordering": "--amount"}},
+            _ctx(server),
         )
 
-    out = handle_tools_call(
-        {"name": "invoices.list", "arguments": {"ordering": "--amount_cents"}},
-        _ctx(server),
-    )
 
-    # Ignored like any other unrecognised ordering: the call still answers.
-    assert {row["number"] for row in _rows(out)} == {"mid", "low"}
+# ---------- the removed second vocabulary ----------
+
+
+def test_ordering_fields_is_no_longer_a_registration_kwarg() -> None:
+    """The knob is gone from the signature, not merely ignored.
+
+    A silently-accepted ``ordering_fields=`` would be worse than the removal:
+    the caller would keep declaring an ordering that nothing applies, and the
+    tool would advertise none. ``TypeError`` at registration is the intended
+    breaking change — deprecated in 0.30.0, removed here.
+    """
+    server = _server()
+
+    with pytest.raises(TypeError, match="ordering_fields"):
+        _register_ordered(server, ordering_fields=["amount_cents"])
+
+
+# ---------- the selector's own sort parameter ----------
+#
+# The other route to an orderable tool, for a project with no django-filter
+# dependency: the selector declares a sort parameter and drf-services reflects
+# it into the schema like any other. It works — with one name it cannot use.
+
+
+def _list_invoices_sorted(*, user: Any, sort: str = "-amount_cents") -> Any:  # noqa: ARG001
+    return Invoice.objects.all().order_by(sort)
 
 
 @pytest.mark.django_db
-def test_a_single_sign_still_orders_after_the_strip_is_narrowed() -> None:
-    """The narrowed strip must not cost the one prefix that is legitimate."""
+def test_a_selector_declared_sort_parameter_is_advertised_and_applied() -> None:
+    """No ``filter_set`` anywhere: the callable's own parameter is the channel.
+
+    Reflected into the ``inputSchema`` as a plain string and spread into the
+    selector's kwargs at dispatch, so a project without the ``[filter]`` extra
+    still ships an orderable tool. The FilterSet route is the better one where
+    there is a FilterSet — this value reaches ``.order_by()`` with only whatever
+    checking the selector itself does — but it is not the only one.
+    """
     Invoice.objects.create(number="mid", amount_cents=200)
     Invoice.objects.create(number="low", amount_cents=100)
+    Invoice.objects.create(number="high", amount_cents=300)
     server = _server()
-    with pytest.warns(DeprecationWarning):
-        server.register_selector_tool(
-            name="invoices.list",
-            spec=SelectorSpec(
-                kind=SelectorKind.LIST,
-                selector=_list_invoices,
-                output_serializer=InvoiceOutputSerializer,
-            ),
-            ordering_fields=["amount_cents"],
-        )
+    server.register_selector_tool(
+        name="invoices.list",
+        spec=SelectorSpec(
+            kind=SelectorKind.LIST,
+            selector=_list_invoices_sorted,
+            output_serializer=InvoiceOutputSerializer,
+        ),
+    )
+
+    listed = handle_tools_list(None, _ctx(server))
+    assert isinstance(listed, dict)
+    assert listed["tools"][0]["inputSchema"]["properties"]["sort"] == {"type": "string"}
 
     out = handle_tools_call(
-        {"name": "invoices.list", "arguments": {"ordering": "-amount_cents"}},
+        {"name": "invoices.list", "arguments": {"sort": "amount_cents"}},
         _ctx(server),
     )
 
-    assert [row["number"] for row in _rows(out)] == ["mid", "low"]
+    assert [row["number"] for row in _rows(out)] == ["low", "mid", "high"]
+
+
+def _list_invoices_ordering_param(*, user: Any, ordering: str = "-amount_cents") -> Any:  # noqa: ARG001
+    return Invoice.objects.all().order_by(ordering)
+
+
+@pytest.mark.django_db
+def test_a_selector_may_own_a_parameter_named_ordering() -> None:
+    """No name is reserved for sorting any more, including this one.
+
+    While ``ordering_fields`` existed, the pipeline sorted the queryset itself
+    and held ``ordering`` in ``RESERVED_POST_FETCH_KEYS`` so a ``**kwargs``
+    selector would not receive an argument it never declared. A parameter
+    *named* ``ordering`` was caught by that strip by name: reflection advertised
+    it and dispatch dropped it, so the selector ran on its default -- the same
+    promise-without-delivery shape 0.30.0 fixed for the FilterSet channel.
+
+    Removing the knob removed the consumer, so the reservation went with it.
+    Sorting now belongs to whatever declares it, under whatever name it likes:
+    a ``FilterSet``'s ``OrderingFilter``, or a parameter on the callable.
+    """
+    Invoice.objects.create(number="mid", amount_cents=200)
+    Invoice.objects.create(number="low", amount_cents=100)
+    Invoice.objects.create(number="high", amount_cents=300)
+    server = _server()
+    server.register_selector_tool(
+        name="invoices.list",
+        spec=SelectorSpec(
+            kind=SelectorKind.LIST,
+            selector=_list_invoices_ordering_param,
+            output_serializer=InvoiceOutputSerializer,
+        ),
+    )
+
+    listed = handle_tools_list(None, _ctx(server))
+    assert isinstance(listed, dict)
+    assert "ordering" in listed["tools"][0]["inputSchema"]["properties"]
+
+    out = handle_tools_call(
+        {"name": "invoices.list", "arguments": {"ordering": "amount_cents"}},
+        _ctx(server),
+    )
+
+    # Ascending was asked for, and ascending is what ran -- the argument now
+    # reaches the callable that declared it.
+    assert [row["number"] for row in _rows(out)] == ["low", "mid", "high"]

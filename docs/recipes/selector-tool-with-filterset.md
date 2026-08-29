@@ -141,26 +141,63 @@ rides along with it: nothing about ordering appears on the registration
 call, because the `OrderingFilter` already declared it. `paginate` is
 the one MCP-only pipeline mechanic left here.
 
-!!! warning "`ordering_fields` is deprecated"
+### Two ways to offer ordering
+
+Ordering is not a registration knob, and there are two channels that
+need none. Both are reflected into the tool's `inputSchema`, so one
+declaration serves the HTTP transport and every agent transport.
+
+1. **An `OrderingFilter` on the `FilterSet`** — the one above. **Prefer
+   this wherever there is a `FilterSet`**: the value is validated against
+   a published set of choices before anything reaches the ORM, and the
+   choices are consumer-facing names rather than column paths.
+2. **A sort parameter the selector declares itself** — for a project with
+   no `django-filter` dependency. drf-services reflects the callable's
+   own parameters, so this needs nothing at registration either:
+
+    ```python
+    def list_invoices(*, user, sort: str = "-created_at"):
+        """List the caller's invoices, newest first by default."""
+        return Invoice.objects.for_user(user).order_by(sort)
+    ```
+
+    The trade-off is the validation: whatever the model sends reaches
+    `.order_by()` with only the checking the selector itself does, so
+    constrain it there (an allowlist, or a `ChoiceField` on an
+    `input_serializer`) rather than passing it straight through.
+
+!!! warning "Do not name that parameter `page` or `limit`"
+
+    Those two names belong to the selector-tool read pipeline and are
+    stripped from the arguments the selector is called with, so that a
+    `**kwargs` selector never receives them. The strip goes by name, so a
+    selector declaring `page` as a parameter of its own gets it advertised
+    in the schema and then dropped at dispatch, with its default running
+    instead — silently.
+
+    **`ordering` is not reserved.** It was, while `ordering_fields`
+    existed and the pipeline sorted the queryset itself. Sorting now
+    belongs to whatever declares it, under whatever name it likes, so
+    name the parameter `ordering` if that reads best.
+
+!!! warning "`ordering_fields` was removed"
 
     The registration once took `ordering_fields=[...]`, a list of raw ORM
-    paths handed to `.order_by()`. That is a second vocabulary for the
-    same `ordering` argument, and the two collide on the key: declaring
-    it alongside a `FilterSet` that orders would overwrite the filter's
-    enum with the ORM names — so adding the declaration could break an
-    ordering the filter was already handling. Declaring both is now
-    refused at registration, and declaring it alone warns.
+    paths handed to `.order_by()`. That was a third vocabulary for the
+    same `ordering` argument, deprecated in 0.30.0 and removed since —
+    passing it now raises `TypeError` at registration.
 
     Migrate by moving the field list into an `OrderingFilter` on the
-    `FilterSet`, mapping each ORM path to the public name you want the
-    model to use. A spec with no `filter_set` can keep using
-    `ordering_fields` for now.
+    `FilterSet`, as above, mapping each ORM path to the public name you
+    want the model to use — or, with no `FilterSet`, onto a sort parameter
+    of the selector's own. A model's `Meta.ordering` covers the default
+    order without any argument at all.
 
 The decorator form is symmetric with `@server.service_tool`. It
 auto-builds the `SelectorSpec` from `kind` + the wrapped function, so it
-covers `paginate` (and the deprecated `ordering_fields`) but **not**
-`filter_set` (a
-`FilterSet` belongs on the spec). For a filtered tool, use the explicit
+covers `paginate` but **not** `filter_set` (a
+`FilterSet` belongs on the spec). A decorated selector orders through its
+own sort parameter; for the `FilterSet` route, use the explicit
 `register_selector_tool` form above, or hand the decorator a ready
 `spec=` that carries the `filter_set`:
 

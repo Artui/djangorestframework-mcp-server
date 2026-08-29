@@ -81,7 +81,11 @@ def test_json_rpc_error_code_standard_set() -> None:
 
 
 def test_reserved_post_fetch_keys_shape() -> None:
-    assert frozenset({"ordering", "page", "limit"}) == RESERVED_POST_FETCH_KEYS
+    # ``ordering`` left when ``ordering_fields`` did: the pipeline stopped
+    # consuming it, and every name in here is a name a selector cannot use for a
+    # parameter of its own -- so an entry the pipeline no longer reads is pure
+    # cost, and was silently dropping a value reflection had advertised.
+    assert frozenset({"page", "limit"}) == RESERVED_POST_FETCH_KEYS
 
 
 def test_reserved_pool_seeds_shape() -> None:

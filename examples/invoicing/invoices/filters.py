@@ -13,6 +13,13 @@ class InvoiceFilterSet(django_filters.FilterSet):
     max_amount = django_filters.NumberFilter(field_name="amount_cents", lookup_expr="lte")
     created_after = django_filters.DateTimeFilter(field_name="created_at", lookup_expr="gte")
     number = django_filters.CharFilter(lookup_expr="icontains")
+    # Ordering is a filter like any other. ``OrderingFilter`` subclasses
+    # ``ChoiceFilter``, so it reflects into the tool's ``inputSchema`` as a
+    # labelled choice over the public names on the right — never the ORM paths
+    # on the left — and one declaration serves the HTTP transport and MCP.
+    ordering = django_filters.OrderingFilter(
+        fields=(("created_at", "created"), ("amount_cents", "amount")),
+    )
 
     class Meta:
         model = Invoice

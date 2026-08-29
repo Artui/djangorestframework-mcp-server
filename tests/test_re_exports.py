@@ -1,31 +1,44 @@
-"""Confirm sister-repo Protocols + spec types are re-exported at top level."""
+"""The drf-services boundary: this package does not re-export its sister's API.
+
+Nine symbols -- ``ServiceSpec``, ``SelectorSpec``, ``SelectorKind``,
+``ServiceView`` and the five service / selector protocols -- used to be
+importable from here as a convenience. Each of those imports named a *module
+path* inside drf-services, so this package's public API was pinned to the other
+one's internal layout: a move over there would have broken an import from here.
+
+Pinned as a test rather than left to review, because a re-export is one line and
+reads like a kindness. The kindness is the sister package's own ``__init__`` to
+give, and it does.
+"""
 
 from __future__ import annotations
 
+import pytest
 
-def test_service_protocols_reexported() -> None:
-    from rest_framework_mcp import CreateService, DeleteService, UpdateService
+import rest_framework_mcp
 
-    for proto in (CreateService, UpdateService, DeleteService):
-        assert proto.__module__.startswith("rest_framework_services.")
-
-
-def test_selector_protocols_reexported() -> None:
-    from rest_framework_mcp import ListSelector, RetrieveSelector
-
-    for proto in (ListSelector, RetrieveSelector):
-        assert proto.__module__.startswith("rest_framework_services.")
-
-
-def test_selector_kind_reexported() -> None:
-    from rest_framework_mcp import SelectorKind
-
-    assert SelectorKind.__module__.startswith("rest_framework_services.")
+GONE = [
+    "CreateService",
+    "DeleteService",
+    "ListSelector",
+    "RetrieveSelector",
+    "SelectorKind",
+    "SelectorSpec",
+    "ServiceSpec",
+    "ServiceView",
+    "UpdateService",
+]
 
 
-def test_spec_and_view_reexported() -> None:
-    from rest_framework_mcp import SelectorSpec, ServiceSpec, ServiceView
+@pytest.mark.parametrize("name", GONE)
+def test_a_drf_services_symbol_is_not_re_exported(name: str) -> None:
+    assert not hasattr(rest_framework_mcp, name)
+    assert name not in rest_framework_mcp.__all__
 
-    assert ServiceSpec.__module__ == "rest_framework_services.types.service_spec"
-    assert SelectorSpec.__module__ == "rest_framework_services.types.selector_spec"
-    assert ServiceView.__module__ == "rest_framework_services.types.service_view"
+
+@pytest.mark.parametrize("name", GONE)
+def test_it_is_importable_from_the_package_that_declares_it(name: str) -> None:
+    """The migration, asserted rather than described: same symbol, one import away."""
+    import rest_framework_services
+
+    assert hasattr(rest_framework_services, name)

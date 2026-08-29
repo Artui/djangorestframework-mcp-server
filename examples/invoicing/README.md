@@ -93,7 +93,7 @@ done
 curl -s -X POST http://localhost:8000/mcp/ $H \
   -d '{"jsonrpc":"2.0","id":3,"method":"tools/call",
        "params":{"name":"invoices.list",
-                 "arguments":{"sent":false,"ordering":"-created_at","page":1,"limit":2}}}'
+                 "arguments":{"sent":false,"ordering":"-created","page":1,"limit":2}}}'
 
 # Mark one as sent
 curl -s -X POST http://localhost:8000/mcp/ $H \

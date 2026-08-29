@@ -114,12 +114,12 @@ class TestOverrides:
         server = _make()
         (binding,) = server.register_specs(
             _read_only(),
-            overrides={"list_orders": {"paginate": True, "ordering_fields": ["id"]}},
+            overrides={"list_orders": {"paginate": True, "max_page_size": 25}},
         )
 
         assert isinstance(binding, SelectorToolBinding)
         assert binding.paginate is True
-        assert binding.ordering_fields == ("id",)
+        assert binding.max_page_size == 25
 
     def test_meta_rides_the_overrides_map(self) -> None:
         """``_meta`` is per-transport, so it is a binding knob rather than

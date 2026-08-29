@@ -480,11 +480,10 @@ def test_selector_list_tool_paginated_provider_receives_page_slice() -> None:
             output_serializer=InvoiceOutputSerializer,
             output_serializer_context=_ctx_provider,
         ),
-        ordering_fields=["amount_cents"],
         paginate=True,
     )
     handle_tools_call(
-        {"name": "invoices.list", "arguments": {"ordering": "amount_cents", "page": 1, "limit": 2}},
+        {"name": "invoices.list", "arguments": {"page": 1, "limit": 2}},
         _ctx(server),
     )
     # Provider saw only the 2-row page, not all 5 rows.

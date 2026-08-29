@@ -13,7 +13,7 @@ def build_selector_tool_input_schema(
 ) -> dict[str, Any]:
     """Build the JSON Schema for a selector tool's ``inputSchema``.
 
-    Merges five sources, in order of precedence (later sources override earlier
+    Merges four sources, in order of precedence (later sources override earlier
     ones on key collision):
 
     1. **Reflected ``spec`` shape** — the selector callable's own parameters (an
@@ -29,15 +29,10 @@ def build_selector_tool_input_schema(
        selector params. A ``SelectorSpec`` carries no input serializer, so this
        is MCP-only; its curated fields win over a reflected param of the same
        name, and required-marked fields stay required.
-    3. **``ordering_fields``** — adds an ``ordering`` enum of ``"<field>"`` and
-       ``"-<field>"`` values. **Deprecated** in favour of source 1: these are
-       raw ORM paths, a second vocabulary for the same key. Declaring it
-       alongside a filter-provided ordering is refused at construction, so it
-       can never overwrite the reflected enum here.
-    4. **``paginate=True``** — adds optional ``page`` and ``limit`` positive
+    3. **``paginate=True``** — adds optional ``page`` and ``limit`` positive
        integers. ``limit`` carries a ``maximum`` when ``max_page_size`` is
        supplied, so the model sees the ceiling dispatch will clamp to.
-    5. **``url_kwargs``** — each registered
+    4. **``url_kwargs``** — each registered
        [`UrlKwarg`][rest_framework_services.types.url_kwarg.UrlKwarg]'s advertised
        schema, winning over a reflected key of the same name.
 
@@ -60,13 +55,6 @@ def build_selector_tool_input_schema(
     base: dict[str, Any] = build_input_schema(binding.input_serializer)
     properties.update(base.get("properties", {}))
     required.extend(name for name in base.get("required", []) if name not in required)
-
-    if binding.ordering_fields:
-        ordering_values: list[str] = []
-        for field in binding.ordering_fields:
-            ordering_values.append(field)
-            ordering_values.append(f"-{field}")
-        properties["ordering"] = {"enum": ordering_values}
 
     if binding.paginate:
         properties["page"] = {"type": "integer", "minimum": 1}

@@ -28,7 +28,8 @@ optional `inputs(ctx)` callable that builds that step's kwargs from the
 validated arguments (`ctx.args`) and any prior output (`ctx[alias]`):
 
 ```python
-from rest_framework_mcp import ChainStep, MCPServer, SelectorKind, SelectorSpec, ServiceSpec
+from rest_framework_mcp import ChainStep, MCPServer
+from rest_framework_services import SelectorKind, SelectorSpec, ServiceSpec
 
 server.register_chain_tool(
     name="onboard_account",

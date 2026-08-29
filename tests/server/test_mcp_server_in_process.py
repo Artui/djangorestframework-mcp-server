@@ -14,6 +14,7 @@ from __future__ import annotations
 
 from typing import Any
 
+import django_filters
 import pytest
 from django.http import HttpRequest
 from rest_framework.permissions import BasePermission
@@ -29,6 +30,17 @@ from rest_framework_mcp.conf import get_setting
 from rest_framework_mcp.transport.in_memory_session_store import InMemorySessionStore
 from tests.testapp.models import Invoice
 from tests.testapp.serializers import InvoiceInputSerializer, InvoiceOutputSerializer
+
+
+class OrderedInvoiceFilterSet(django_filters.FilterSet):
+    """Ordering's only declaration channel — an ``OrderingFilter`` on the spec's
+    ``filter_set``, publishing the consumer-facing name rather than the ORM path."""
+
+    ordering = django_filters.OrderingFilter(fields=(("amount_cents", "amount"),))
+
+    class Meta:
+        model = Invoice
+        fields: list[str] = []
 
 
 def _server() -> MCPServer:
@@ -65,16 +77,17 @@ def test_list_tools_returns_the_merged_input_schema() -> None:
             kind=SelectorKind.LIST,
             selector=_list_invoices,
             output_serializer=InvoiceOutputSerializer,
+            filter_set=OrderedInvoiceFilterSet,
         ),
-        ordering_fields=["amount_cents"],
         paginate=True,
     )
     payload = server.list_tools(user=None)
     assert isinstance(payload, dict)
     (tool,) = payload["tools"]
     assert tool["name"] == "invoices.list"
-    # The wire's merged schema, not the bare serializer: a paginated, orderable
-    # selector advertises ``ordering`` / ``page`` / ``limit`` arguments.
+    # The wire's merged schema, not the bare serializer: a paginated selector
+    # over an ordering FilterSet advertises ``ordering`` (from the reflected
+    # filter) plus ``page`` / ``limit`` (from the binding's own knob).
     props = tool["inputSchema"]["properties"]
     assert {"ordering", "page", "limit"} <= set(props)
 
@@ -160,12 +173,12 @@ async def test_acall_tool_applies_read_extras_the_spec_core_omits() -> None:
             kind=SelectorKind.LIST,
             selector=_list_invoices,
             output_serializer=InvoiceOutputSerializer,
+            filter_set=OrderedInvoiceFilterSet,
         ),
-        ordering_fields=["amount_cents"],
         paginate=True,
     )
     out = await server.acall_tool(
-        "invoices.list", {"ordering": "amount_cents", "page": 1, "limit": 2}, user=None
+        "invoices.list", {"ordering": "amount", "page": 1, "limit": 2}, user=None
     )
     assert isinstance(out, dict)
     payload = out["structuredContent"]
