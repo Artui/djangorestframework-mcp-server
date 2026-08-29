@@ -147,7 +147,8 @@ jobs:
 
           import rest_framework_mcp
           from rest_framework.permissions import AllowAny
-          from rest_framework_mcp import MCPServer, ServiceSpec, ToolRegistry
+          from rest_framework_mcp import MCPServer, ToolRegistry
+          from rest_framework_services import ServiceSpec
 
           # Touch the public surface rather than only the package root: an
           # upstream symbol that moved would be imported by a leaf module, and
