@@ -1,9 +1,15 @@
 """Ordering on a selector tool, and which channel owns it.
 
-A ``FilterSet``'s ``OrderingFilter`` is now the **only** declaration. It
-subclasses ``ChoiceFilter``, so drf-services' reflection maps it exactly like
-any other choice filter — which means a spec carrying one advertises
-``ordering`` in the tool's ``inputSchema`` with nothing declared at
+Two channels survive the removal of the ``ordering_fields`` knob, and neither
+is a registration kwarg: a ``FilterSet``'s ``OrderingFilter``, and a sort
+parameter the selector callable declares for itself. The first is preferred —
+it validates against published choices before anything reaches the ORM — and
+the second is what a project with no ``django-filter`` dependency uses. Both
+are exercised below.
+
+An ``OrderingFilter`` subclasses ``ChoiceFilter``, so drf-services' reflection
+maps it exactly like any other choice filter — which means a spec carrying one
+advertises ``ordering`` in the tool's ``inputSchema`` with nothing declared at
 registration.
 
 Since drf-services 0.47.0 that mapping is a labelled ``oneOf`` rather than a
@@ -282,3 +288,94 @@ def test_ordering_fields_is_no_longer_a_registration_kwarg() -> None:
 
     with pytest.raises(TypeError, match="ordering_fields"):
         _register_ordered(server, ordering_fields=["amount_cents"])
+
+
+# ---------- the selector's own sort parameter ----------
+#
+# The other route to an orderable tool, for a project with no django-filter
+# dependency: the selector declares a sort parameter and drf-services reflects
+# it into the schema like any other. It works — with one name it cannot use.
+
+
+def _list_invoices_sorted(*, user: Any, sort: str = "-amount_cents") -> Any:  # noqa: ARG001
+    return Invoice.objects.all().order_by(sort)
+
+
+@pytest.mark.django_db
+def test_a_selector_declared_sort_parameter_is_advertised_and_applied() -> None:
+    """No ``filter_set`` anywhere: the callable's own parameter is the channel.
+
+    Reflected into the ``inputSchema`` as a plain string and spread into the
+    selector's kwargs at dispatch, so a project without the ``[filter]`` extra
+    still ships an orderable tool. The FilterSet route is the better one where
+    there is a FilterSet — this value reaches ``.order_by()`` with only whatever
+    checking the selector itself does — but it is not the only one.
+    """
+    Invoice.objects.create(number="mid", amount_cents=200)
+    Invoice.objects.create(number="low", amount_cents=100)
+    Invoice.objects.create(number="high", amount_cents=300)
+    server = _server()
+    server.register_selector_tool(
+        name="invoices.list",
+        spec=SelectorSpec(
+            kind=SelectorKind.LIST,
+            selector=_list_invoices_sorted,
+            output_serializer=InvoiceOutputSerializer,
+        ),
+    )
+
+    listed = handle_tools_list(None, _ctx(server))
+    assert isinstance(listed, dict)
+    assert listed["tools"][0]["inputSchema"]["properties"]["sort"] == {"type": "string"}
+
+    out = handle_tools_call(
+        {"name": "invoices.list", "arguments": {"sort": "amount_cents"}},
+        _ctx(server),
+    )
+
+    assert [row["number"] for row in _rows(out)] == ["low", "mid", "high"]
+
+
+def _list_invoices_ordering_param(*, user: Any, ordering: str = "-amount_cents") -> Any:  # noqa: ARG001
+    return Invoice.objects.all().order_by(ordering)
+
+
+@pytest.mark.django_db
+def test_a_selector_parameter_named_ordering_is_advertised_but_not_delivered() -> None:
+    """The one name that route cannot use on this transport.
+
+    ``ordering`` is in ``RESERVED_POST_FETCH_KEYS``, stripped from the pool the
+    selector is called with so a ``**kwargs`` selector never receives the read
+    pipeline's own arguments. A parameter *named* ``ordering`` is caught by that
+    strip: reflection advertises it, dispatch drops it, and the selector runs on
+    its default — the same promise-without-delivery shape 0.30.0 fixed for the
+    FilterSet channel, still live on this one.
+
+    Pinned as the behaviour that exists, not the behaviour that is wanted. Any
+    fix — narrowing the strip to bindings that own the key, or refusing the
+    collision at registration — should have to edit this test.
+    """
+    Invoice.objects.create(number="mid", amount_cents=200)
+    Invoice.objects.create(number="low", amount_cents=100)
+    Invoice.objects.create(number="high", amount_cents=300)
+    server = _server()
+    server.register_selector_tool(
+        name="invoices.list",
+        spec=SelectorSpec(
+            kind=SelectorKind.LIST,
+            selector=_list_invoices_ordering_param,
+            output_serializer=InvoiceOutputSerializer,
+        ),
+    )
+
+    listed = handle_tools_list(None, _ctx(server))
+    assert isinstance(listed, dict)
+    assert "ordering" in listed["tools"][0]["inputSchema"]["properties"]
+
+    out = handle_tools_call(
+        {"name": "invoices.list", "arguments": {"ordering": "amount_cents"}},
+        _ctx(server),
+    )
+
+    # Ascending was asked for; the selector's descending default is what ran.
+    assert [row["number"] for row in _rows(out)] == ["high", "mid", "low"]

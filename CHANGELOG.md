@@ -16,8 +16,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   call still passing it raises `TypeError` at registration rather than being
   quietly ignored.
 
-  Migrate by moving the field list onto the spec's `FilterSet` as an
-  `OrderingFilter`:
+  **Migration, preferred route** — move the field list onto the spec's
+  `FilterSet` as an `OrderingFilter`:
 
   ```python
   class InvoiceFilterSet(django_filters.FilterSet):
@@ -26,16 +26,31 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
       )
   ```
 
-  ...and dropping `ordering_fields=[...]` from the registration call. The names
-  on the right become the choices the model sees — pick ones you are happy to
-  expose, because the ORM paths on the left stop being public. A model's own
-  `Meta.ordering` still supplies the default order with no argument at all.
+  ...and drop `ordering_fields=[...]` from the registration call. The names on
+  the right become the choices the model sees — pick ones you are happy to
+  expose, because the ORM paths on the left stop being public.
 
-  One vocabulary now serves HTTP and every agent transport: the `OrderingFilter`
-  is reflected into the tool's `inputSchema` as a labelled `oneOf` and applied
-  by the `FilterSet`, which is why the knob's own enum, its dispatch-side
-  `order_by(...)`, and the `ImproperlyConfigured` raised when both channels
-  declared `ordering` all go with it.
+  **Migration without `django-filter`** — the selector declares a sort
+  parameter of its own, which drf-services reflects into the `inputSchema` like
+  any other parameter, so this needs nothing at registration either:
+
+  ```python
+  def list_invoices(*, user, sort: str = "-created_at"):
+      return Invoice.objects.for_user(user).order_by(sort)
+  ```
+
+  Prefer the `FilterSet` where there is one: it validates the value against a
+  published set of choices before anything reaches the ORM, while a bare
+  parameter is only as safe as what the selector does with it. Do **not** name
+  that parameter `ordering`, `page` or `limit` — those belong to the read
+  pipeline and are stripped from the selector's kwargs, so one named `ordering`
+  is advertised and then silently dropped. And a model's own `Meta.ordering`
+  still supplies the default order with no argument at all.
+
+  One vocabulary now serves HTTP and every agent transport, whichever route you
+  take, which is why the knob's own enum, its dispatch-side `order_by(...)`, and
+  the `ImproperlyConfigured` raised when both channels declared `ordering` all
+  go with it.
 
   **Two behaviour notes for anyone on the retired knob.** The advertised values
   change from raw ORM paths (`amount_cents` / `-amount_cents`) to the

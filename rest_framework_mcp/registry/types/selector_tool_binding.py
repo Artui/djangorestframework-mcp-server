@@ -64,10 +64,15 @@ class SelectorToolBinding(Generic[ResultT, ExtraT]):
 
     ``paginate=True`` generates ``page`` / ``limit`` arguments, slices the
     queryset and wraps the response with ``items`` / ``page`` / ``totalPages``
-    / ``hasNext``. Ordering has no binding-level knob at all: it is declared as
-    an ``OrderingFilter`` on the spec's ``FilterSet``, reflected into the
-    ``inputSchema`` and applied by the filter, so one vocabulary serves the
-    HTTP transport and every agent transport alike.
+    / ``hasNext``. Ordering has no binding-level knob at all, and two channels
+    that need none: an ``OrderingFilter`` on the spec's ``FilterSet``, or a sort
+    parameter the selector declares for itself. Both are reflected into the
+    ``inputSchema``, so one declaration serves the HTTP transport and every
+    agent transport alike. Prefer the filter where there is one — it validates
+    the value against published choices before it reaches the ORM, while a bare
+    parameter is only as safe as what the selector does with it — and do not
+    name that parameter ``ordering`` / ``page`` / ``limit``, which
+    ``RESERVED_POST_FETCH_KEYS`` strips from the selector's pool.
 
     ``annotations`` and ``meta`` are emitted verbatim on this tool's
     ``tools/list`` entry, under ``annotations`` and ``_meta`` respectively.

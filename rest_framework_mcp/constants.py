@@ -146,6 +146,11 @@ receive kwargs it never declared. Scoped to that pool only: the ``FilterSet``
 is handed the arguments unstripped, because a spec whose ``filter_set`` carries
 an ``OrderingFilter`` advertises ``ordering`` through the reflected schema and
 must therefore receive it.
+
+The strip is by name, so it also catches a selector that *declares* one of these
+as a parameter of its own: reflection advertises it and dispatch then drops it.
+A selector doing its own sorting should name the parameter something else
+(``sort``, ``order_by``) until the strip learns to tell the two apart.
 """
 
 

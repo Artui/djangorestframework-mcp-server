@@ -4,9 +4,10 @@ Tool, resource, and prompt lookup, plus session storage and SSE infrastructure.
 
 `ToolBinding` wraps a `ServiceSpec` (mutation tools);
 `SelectorToolBinding` wraps a `SelectorSpec` and exposes the read-shaped
-pipeline knobs — `filter_set` is read from the spec (and owns ordering,
-via an `OrderingFilter`); `paginate` is the one binding-level MCP
-mechanic. The shared
+pipeline knobs — `filter_set` is read from the spec, and carries ordering
+with it via an `OrderingFilter` (a selector declaring its own sort
+parameter is the other ordering route, and likewise needs no knob);
+`paginate` is the one binding-level MCP mechanic. The shared
 `ToolRegistry` accepts either kind and is what `tools/list` and
 `tools/call` iterate.
 
