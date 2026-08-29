@@ -1,14 +1,17 @@
-# Re-exported from the sister package so MCP consumers need not know which
-# sub-package each symbol lives in. The dependency is mandatory anyway.
-from rest_framework_services.selectors.list_selector import ListSelector
-from rest_framework_services.selectors.retrieve_selector import RetrieveSelector
-from rest_framework_services.services.create_service import CreateService
-from rest_framework_services.services.delete_service import DeleteService
-from rest_framework_services.services.update_service import UpdateService
-from rest_framework_services.types.selector_kind import SelectorKind
-from rest_framework_services.types.selector_spec import SelectorSpec
-from rest_framework_services.types.service_spec import ServiceSpec
-from rest_framework_services.types.service_view import ServiceView
+"""Public API for ``rest_framework_mcp``.
+
+Nine drf-services symbols used to be re-exported here -- ``ServiceSpec``,
+``SelectorSpec``, ``SelectorKind``, ``ServiceView`` and the five service /
+selector protocols -- on the reasoning that a consumer should not have to know
+which sub-package each lives in, the dependency being mandatory anyway.
+
+They are gone, because the convenience pinned this package's **public** API to
+the sister package's **internal** layout: every one of those imports named a
+module path (``rest_framework_services.types.service_spec``) that drf-services
+is free to move, and moving one would have broken an import from *here*.
+Import them from ``rest_framework_services``, which is where they are declared
+and where that package's own ``__init__`` keeps them stable.
+"""
 
 from rest_framework_mcp.auth.permissions.django_perm_required import DjangoPermRequired
 from rest_framework_mcp.auth.permissions.drf_permission_adapter import DRFPermissionAdapter
@@ -79,9 +82,7 @@ __all__ = [
     "ArgumentBinding",
     "ChainContext",
     "ChainStep",
-    "CreateService",
     "DRFPermissionAdapter",
-    "DeleteService",
     "DjangoCacheSessionStore",
     "DjangoPermRequired",
     "InMemorySSEBroker",
@@ -91,7 +92,6 @@ __all__ = [
     "InMemorySessionStore",
     "JsonRpcError",
     "JsonRpcErrorCode",
-    "ListSelector",
     "MCPAuthBackend",
     "MCPPermission",
     "MCPServer",
@@ -102,16 +102,11 @@ __all__ = [
     "ResourceContents",
     "ResourceEncoding",
     "ResourceRegistry",
-    "RetrieveSelector",
     "SSEBroker",
     "SSEReplayBuffer",
     "ScopeRequired",
     "SelectorDefaults",
-    "SelectorKind",
-    "SelectorSpec",
     "ServiceDefaults",
-    "ServiceSpec",
-    "ServiceView",
     "SessionStore",
     "DjangoCacheTaskStore",
     "InMemoryTaskStore",
@@ -136,7 +131,6 @@ __all__ = [
     "UIToolMeta",
     "UIVisibility",
     "UnknownArguments",
-    "UpdateService",
     "QueryParam",
     "UrlKwarg",
     "register_tools",

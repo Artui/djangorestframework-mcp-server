@@ -12,7 +12,7 @@ instances directly. Same value object as the HTTP transport — same callable ca
 serve both at once.
 
 ```python
-from rest_framework_mcp import SelectorKind, SelectorSpec, ServiceSpec  # re-exported for ergonomics
+from rest_framework_services import SelectorKind, SelectorSpec, ServiceSpec
 
 spec = ServiceSpec(
     service=create_invoice,
@@ -287,7 +287,7 @@ is a spec on both surfaces.
 - `.kwargs` becomes the binding's per-request kwargs provider.
 
 ```python
-from rest_framework_mcp import SelectorKind, SelectorSpec
+from rest_framework_services import SelectorKind, SelectorSpec
 
 server.register_resource(
     name="invoice",

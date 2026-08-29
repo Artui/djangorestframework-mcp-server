@@ -7,6 +7,28 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Removed
+
+- **The nine drf-services symbols this package re-exported.** `ServiceSpec`,
+  `SelectorSpec`, `SelectorKind`, `ServiceView` and the five service / selector
+  protocols are no longer importable from `rest_framework_mcp`. Import them from
+  `rest_framework_services`, which is where they are declared:
+
+  ```python
+  from rest_framework_mcp import MCPServer
+  from rest_framework_services import SelectorKind, SelectorSpec, ServiceSpec
+  ```
+
+  The convenience was that a consumer need not know which sub-package each
+  symbol lives in, the dependency being mandatory anyway. The cost was that it
+  **pinned this package's public API to the sister package's internal layout**:
+  every one of those imports named a module path
+  (`rest_framework_services.types.service_spec`) that drf-services is free to
+  move, and a move over there would have broken an import from *here*.
+
+  No deprecation window: the symbols are unchanged and one import line away, and
+  a test now pins the boundary so the convenience cannot creep back.
+
 ### Fixed
 
 - **A selector may own a parameter named `ordering` again.** `ordering` sat in

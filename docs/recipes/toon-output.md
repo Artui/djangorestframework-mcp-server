@@ -12,7 +12,8 @@ pip install "djangorestframework-mcp-server[toon]"
 Pick the format per binding:
 
 ```python
-from rest_framework_mcp import OutputFormat, SelectorKind, SelectorSpec
+from rest_framework_mcp import OutputFormat
+from rest_framework_services import SelectorKind, SelectorSpec
 
 server.register_service_tool(
     name="invoices.list",
