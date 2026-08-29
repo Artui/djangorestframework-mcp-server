@@ -2630,7 +2630,7 @@ routers, or views. Consumers register
 <a href="https://github.com/Artui/djangorestframework-services/blob/main/rest_framework_services/types/service_spec.py"><code>ServiceSpec</code></a>
 instances directly. Same value object as the HTTP transport — same callable can
 serve both at once.</p>
-<div class="language-python highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="kn">from</span><span class="w"> </span><span class="nn">rest_framework_mcp</span><span class="w"> </span><span class="kn">import</span> <span class="n">SelectorKind</span><span class="p">,</span> <span class="n">SelectorSpec</span><span class="p">,</span> <span class="n">ServiceSpec</span>  <span class="c1"># re-exported for ergonomics</span>
+<div class="language-python highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="kn">from</span><span class="w"> </span><span class="nn">rest_framework_services</span><span class="w"> </span><span class="kn">import</span> <span class="n">SelectorKind</span><span class="p">,</span> <span class="n">SelectorSpec</span><span class="p">,</span> <span class="n">ServiceSpec</span>
 </span><span id="__span-0-2"><a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a>
 </span><span id="__span-0-3"><a id="__codelineno-0-3" name="__codelineno-0-3" href="#__codelineno-0-3"></a><span class="n">spec</span> <span class="o">=</span> <span class="n">ServiceSpec</span><span class="p">(</span>
 </span><span id="__span-0-4"><a id="__codelineno-0-4" name="__codelineno-0-4" href="#__codelineno-0-4"></a>    <span class="n">service</span><span class="o">=</span><span class="n">create_invoice</span><span class="p">,</span>
@@ -2678,7 +2678,7 @@ register a spec once and both surfaces get the same shape:</p>
   (<code>LIST</code> or <code>RETRIEVE</code>). It drives the <code>many=</code> flag on the output
   serializer and gates which post-fetch knobs the registration
   accepts (a <code>RETRIEVE</code> spec rejects the collection-only
-  <code>ordering_fields</code> (deprecated) / <code>paginate</code>, but <code>filter_set</code> is allowed — it is
+  <code>paginate</code>, but <code>filter_set</code> is allowed — it is
   shaped + applied before the single-instance <code>.first()</code>).
   <code>SelectorKind</code> is re-exported from <code>rest_framework_mcp</code> for
   convenience.</li>
@@ -2899,7 +2899,7 @@ is a spec on both surfaces.</p>
 <li><code>.output_serializer</code> fills in when the caller didn't pass one explicitly.</li>
 <li><code>.kwargs</code> becomes the binding's per-request kwargs provider.</li>
 </ul>
-<div class="language-python highlight"><pre><span></span><code><span id="__span-5-1"><a id="__codelineno-5-1" name="__codelineno-5-1" href="#__codelineno-5-1"></a><span class="kn">from</span><span class="w"> </span><span class="nn">rest_framework_mcp</span><span class="w"> </span><span class="kn">import</span> <span class="n">SelectorKind</span><span class="p">,</span> <span class="n">SelectorSpec</span>
+<div class="language-python highlight"><pre><span></span><code><span id="__span-5-1"><a id="__codelineno-5-1" name="__codelineno-5-1" href="#__codelineno-5-1"></a><span class="kn">from</span><span class="w"> </span><span class="nn">rest_framework_services</span><span class="w"> </span><span class="kn">import</span> <span class="n">SelectorKind</span><span class="p">,</span> <span class="n">SelectorSpec</span>
 </span><span id="__span-5-2"><a id="__codelineno-5-2" name="__codelineno-5-2" href="#__codelineno-5-2"></a>
 </span><span id="__span-5-3"><a id="__codelineno-5-3" name="__codelineno-5-3" href="#__codelineno-5-3"></a><span class="n">server</span><span class="o">.</span><span class="n">register_resource</span><span class="p">(</span>
 </span><span id="__span-5-4"><a id="__codelineno-5-4" name="__codelineno-5-4" href="#__codelineno-5-4"></a>    <span class="n">name</span><span class="o">=</span><span class="s2">&quot;invoice&quot;</span><span class="p">,</span>

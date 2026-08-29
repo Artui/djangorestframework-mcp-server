@@ -1774,17 +1774,6 @@
   
 </li>
         
-          <li class="md-nav__item">
-  <a href="#rest_framework_mcp.registry.types.selector_tool_binding.SelectorToolBinding.filter_advertises_ordering" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        filter_advertises_ordering
-      
-    </span>
-  </a>
-  
-</li>
-        
       </ul>
     </nav>
   
@@ -3466,17 +3455,6 @@
   
 </li>
         
-          <li class="md-nav__item">
-  <a href="#rest_framework_mcp.registry.types.selector_tool_binding.SelectorToolBinding.filter_advertises_ordering" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        filter_advertises_ordering
-      
-    </span>
-  </a>
-  
-</li>
-        
       </ul>
     </nav>
   
@@ -4581,9 +4559,10 @@
 <p>Tool, resource, and prompt lookup, plus session storage and SSE infrastructure.</p>
 <p><code>ToolBinding</code> wraps a <code>ServiceSpec</code> (mutation tools);
 <code>SelectorToolBinding</code> wraps a <code>SelectorSpec</code> and exposes the read-shaped
-pipeline knobs — <code>filter_set</code> is read from the spec (and owns ordering,
-via an <code>OrderingFilter</code>); the deprecated <code>ordering_fields</code> /
-<code>paginate</code> are binding-level MCP mechanics. The shared
+pipeline knobs — <code>filter_set</code> is read from the spec, and carries ordering
+with it via an <code>OrderingFilter</code> (a selector declaring its own sort
+parameter is the other ordering route, and likewise needs no knob);
+<code>paginate</code> is the one binding-level MCP mechanic. The shared
 <code>ToolRegistry</code> accepts either kind and is what <code>tools/list</code> and
 <code>tools/call</code> iterate.</p>
 
@@ -5230,27 +5209,31 @@ Selectors return raw, unscoped data and the tool layer owns every shape decision
 chosen by <code>kind</code>.</p>
 <p><code>kind=LIST</code> runs the full pipeline:</p>
 <div class="language-text highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a>arguments → validate(merged inputSchema) → run_selector
-</span><span id="__span-0-2"><a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a>          → FilterSet(data=...).qs    (if ``filter_set`` set)
-</span><span id="__span-0-3"><a id="__codelineno-0-3" name="__codelineno-0-3" href="#__codelineno-0-3"></a>          → order_by(...)             (if ``ordering_fields`` set)
-</span><span id="__span-0-4"><a id="__codelineno-0-4" name="__codelineno-0-4" href="#__codelineno-0-4"></a>          → paginate                  (if ``paginate=True``)
-</span><span id="__span-0-5"><a id="__codelineno-0-5" name="__codelineno-0-5" href="#__codelineno-0-5"></a>          → output_serializer(many=True)
-</span><span id="__span-0-6"><a id="__codelineno-0-6" name="__codelineno-0-6" href="#__codelineno-0-6"></a>          → ToolResult
+</span><span id="__span-0-2"><a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a>          → FilterSet(data=...).qs    (if ``filter_set`` set, and it
+</span><span id="__span-0-3"><a id="__codelineno-0-3" name="__codelineno-0-3" href="#__codelineno-0-3"></a>                                       orders too when it declares an
+</span><span id="__span-0-4"><a id="__codelineno-0-4" name="__codelineno-0-4" href="#__codelineno-0-4"></a>                                       ``OrderingFilter``)
+</span><span id="__span-0-5"><a id="__codelineno-0-5" name="__codelineno-0-5" href="#__codelineno-0-5"></a>          → paginate                  (if ``paginate=True``)
+</span><span id="__span-0-6"><a id="__codelineno-0-6" name="__codelineno-0-6" href="#__codelineno-0-6"></a>          → output_serializer(many=True)
+</span><span id="__span-0-7"><a id="__codelineno-0-7" name="__codelineno-0-7" href="#__codelineno-0-7"></a>          → ToolResult
 </span></code></pre></div>
-<p>With none of the three set it behaves as a plain RPC read, rendering the
-selector's return value verbatim.</p>
-<p><code>kind=RETRIEVE</code> skips ordering and pagination but still applies queryset
-shaping and <code>spec.filter_set</code> before materializing the instance via
-<code>.first()</code> — so a "stats from a filtered set" retrieve works — then
-renders <code>output_serializer(many=False)</code>. Pairing it with
-<code>ordering_fields</code> / <code>paginate</code> is rejected at construction: those knobs
-only mean something on a collection.</p>
+<p>With neither set it behaves as a plain RPC read, rendering the selector's
+return value verbatim.</p>
+<p><code>kind=RETRIEVE</code> skips pagination but still applies queryset shaping and
+<code>spec.filter_set</code> before materializing the instance via <code>.first()</code> — so
+a "stats from a filtered set" retrieve works — then renders
+<code>output_serializer(many=False)</code>. Pairing it with <code>paginate</code> is rejected
+at construction: that knob only means something on a collection.</p>
 <p><code>paginate=True</code> generates <code>page</code> / <code>limit</code> arguments, slices the
 queryset and wraps the response with <code>items</code> / <code>page</code> / <code>totalPages</code>
-/ <code>hasNext</code>. <code>ordering_fields</code> is <strong>deprecated</strong>: it exposes each name
-as <code>"&lt;name&gt;"</code> and <code>"-&lt;name&gt;"</code> and hands raw ORM paths to
-<code>.order_by()</code>, a second vocabulary for the same <code>ordering</code> argument a
-<code>FilterSet</code>'s <code>OrderingFilter</code> already advertises. Declaring both is
-refused; declaring it alone still works for a spec with no <code>filter_set</code>.</p>
+/ <code>hasNext</code>. Ordering has no binding-level knob at all, and two channels
+that need none: an <code>OrderingFilter</code> on the spec's <code>FilterSet</code>, or a sort
+parameter the selector declares for itself. Both are reflected into the
+<code>inputSchema</code>, so one declaration serves the HTTP transport and every
+agent transport alike. Prefer the filter where there is one — it validates
+the value against published choices before it reaches the ORM, while a bare
+parameter is only as safe as what the selector does with it — and do not
+name that parameter <code>ordering</code> / <code>page</code> / <code>limit</code>, which
+<code>RESERVED_POST_FETCH_KEYS</code> strips from the selector's pool.</p>
 <p><code>annotations</code> and <code>meta</code> are emitted verbatim on this tool's
 <code>tools/list</code> entry, under <code>annotations</code> and <code>_meta</code> respectively.</p>
 <p>The generic parameters mirror <code>SelectorSpec</code>'s and are purely
@@ -5890,38 +5873,6 @@ so a project declares its filterable shape once on the spec and both
 the HTTP and MCP transports honour it.</p>
 <p>Typed <code>Any</code> because <code>django-filter</code> is optional behind the
 <code>[filter]</code> extra, and narrowing would force a hard import here.</p>
-
-    </div>
-
-</div>
-
-<div class="doc doc-object doc-attribute">
-
-
-
-<h3 id="rest_framework_mcp.registry.types.selector_tool_binding.SelectorToolBinding.filter_advertises_ordering" class="doc doc-heading">
-            <span class="doc doc-object-name doc-attribute-name">filter_advertises_ordering</span>
-
-
-  <span class="doc doc-labels">
-      <small class="doc doc-label doc-label-property"><code>property</code></small>
-  </span>
-
-<a href="#rest_framework_mcp.registry.types.selector_tool_binding.SelectorToolBinding.filter_advertises_ordering" class="headerlink" title="Permanent link">&para;</a></h3>
-<div class="language-python doc-signature highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="n">filter_advertises_ordering</span><span class="p">:</span> <span class="nb">bool</span>
-</span></code></pre></div>
-
-    <div class="doc doc-contents ">
-
-        <p>Whether the spec's reflected shape already offers an <code>ordering</code> arg.</p>
-<p><code>django_filters.OrderingFilter</code> subclasses <code>ChoiceFilter</code>, so
-reflection maps it to an enum like any other choice filter: a spec
-carrying one advertises <code>ordering</code> with nothing declared here.</p>
-<p>Asked of the <strong>reflected schema</strong> rather than by isinstance-checking
-<code>django_filters</code> types, because that extra is optional and because
-the invariant worth encoding is that whatever the <code>inputSchema</code>
-advertises, the dispatch delivers. Reading the same reflection the
-schema builder reads makes promise and delivery agree by construction.</p>
 
     </div>
 
@@ -8046,17 +7997,16 @@ those names.</p>
 </span><span id="__span-0-12"><a id="__codelineno-0-12" name="__codelineno-0-12" href="#__codelineno-0-12"></a>    <span class="n">rate_limits</span><span class="p">:</span> <span class="n">Sequence</span><span class="p">[</span><span class="n">Any</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
 </span><span id="__span-0-13"><a id="__codelineno-0-13" name="__codelineno-0-13" href="#__codelineno-0-13"></a>    <span class="n">annotations</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
 </span><span id="__span-0-14"><a id="__codelineno-0-14" name="__codelineno-0-14" href="#__codelineno-0-14"></a>    <span class="n">meta</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
-</span><span id="__span-0-15"><a id="__codelineno-0-15" name="__codelineno-0-15" href="#__codelineno-0-15"></a>    <span class="n">ordering_fields</span><span class="p">:</span> <span class="n">Sequence</span><span class="p">[</span><span class="nb">str</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
-</span><span id="__span-0-16"><a id="__codelineno-0-16" name="__codelineno-0-16" href="#__codelineno-0-16"></a>    <span class="n">paginate</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
-</span><span id="__span-0-17"><a id="__codelineno-0-17" name="__codelineno-0-17" href="#__codelineno-0-17"></a>    <span class="n">include_structured_content</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
-</span><span id="__span-0-18"><a id="__codelineno-0-18" name="__codelineno-0-18" href="#__codelineno-0-18"></a>    <span class="n">include_output_schema</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
-</span><span id="__span-0-19"><a id="__codelineno-0-19" name="__codelineno-0-19" href="#__codelineno-0-19"></a>    <span class="n">argument_binding</span><span class="p">:</span> <span class="n">ArgumentBinding</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
-</span><span id="__span-0-20"><a id="__codelineno-0-20" name="__codelineno-0-20" href="#__codelineno-0-20"></a>    <span class="n">unknown_arguments</span><span class="p">:</span> <span class="n">UnknownArguments</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
-</span><span id="__span-0-21"><a id="__codelineno-0-21" name="__codelineno-0-21" href="#__codelineno-0-21"></a>    <span class="n">always_listed</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
-</span><span id="__span-0-22"><a id="__codelineno-0-22" name="__codelineno-0-22" href="#__codelineno-0-22"></a>    <span class="n">spec_kwargs_provides</span><span class="p">:</span> <span class="n">Sequence</span><span class="p">[</span><span class="nb">str</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
-</span><span id="__span-0-23"><a id="__codelineno-0-23" name="__codelineno-0-23" href="#__codelineno-0-23"></a>    <span class="n">url_kwargs</span><span class="p">:</span> <span class="n">Sequence</span><span class="p">[</span><span class="n">UrlKwarg</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
-</span><span id="__span-0-24"><a id="__codelineno-0-24" name="__codelineno-0-24" href="#__codelineno-0-24"></a>    <span class="n">query_params</span><span class="p">:</span> <span class="n">Sequence</span><span class="p">[</span><span class="n">QueryParam</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
-</span><span id="__span-0-25"><a id="__codelineno-0-25" name="__codelineno-0-25" href="#__codelineno-0-25"></a><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">ToolDefinition</span>
+</span><span id="__span-0-15"><a id="__codelineno-0-15" name="__codelineno-0-15" href="#__codelineno-0-15"></a>    <span class="n">paginate</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+</span><span id="__span-0-16"><a id="__codelineno-0-16" name="__codelineno-0-16" href="#__codelineno-0-16"></a>    <span class="n">include_structured_content</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+</span><span id="__span-0-17"><a id="__codelineno-0-17" name="__codelineno-0-17" href="#__codelineno-0-17"></a>    <span class="n">include_output_schema</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+</span><span id="__span-0-18"><a id="__codelineno-0-18" name="__codelineno-0-18" href="#__codelineno-0-18"></a>    <span class="n">argument_binding</span><span class="p">:</span> <span class="n">ArgumentBinding</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+</span><span id="__span-0-19"><a id="__codelineno-0-19" name="__codelineno-0-19" href="#__codelineno-0-19"></a>    <span class="n">unknown_arguments</span><span class="p">:</span> <span class="n">UnknownArguments</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+</span><span id="__span-0-20"><a id="__codelineno-0-20" name="__codelineno-0-20" href="#__codelineno-0-20"></a>    <span class="n">always_listed</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+</span><span id="__span-0-21"><a id="__codelineno-0-21" name="__codelineno-0-21" href="#__codelineno-0-21"></a>    <span class="n">spec_kwargs_provides</span><span class="p">:</span> <span class="n">Sequence</span><span class="p">[</span><span class="nb">str</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+</span><span id="__span-0-22"><a id="__codelineno-0-22" name="__codelineno-0-22" href="#__codelineno-0-22"></a>    <span class="n">url_kwargs</span><span class="p">:</span> <span class="n">Sequence</span><span class="p">[</span><span class="n">UrlKwarg</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+</span><span id="__span-0-23"><a id="__codelineno-0-23" name="__codelineno-0-23" href="#__codelineno-0-23"></a>    <span class="n">query_params</span><span class="p">:</span> <span class="n">Sequence</span><span class="p">[</span><span class="n">QueryParam</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+</span><span id="__span-0-24"><a id="__codelineno-0-24" name="__codelineno-0-24" href="#__codelineno-0-24"></a><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">ToolDefinition</span>
 </span></code></pre></div>
 
     <div class="doc doc-contents ">
@@ -8175,7 +8125,7 @@ own default, and a per-definition kwarg always wins on conflict.</p>
 <p>The selector-only knobs live here too, so a project wanting every selector
 tool to paginate by default says so once. Filtering is not among them —
 <code>filter_set</code> is declared on each <code>SelectorSpec</code>, never as a
-registration default.</p>
+registration default, and it carries ordering with it.</p>
 
 
 
@@ -9255,7 +9205,7 @@ top, so the shape is described the same way across transports.</p>
     <div class="doc doc-contents first">
 
         <p>Build the JSON Schema for a selector tool's <code>inputSchema</code>.</p>
-<p>Merges five sources, in order of precedence (later sources override earlier
+<p>Merges four sources, in order of precedence (later sources override earlier
 ones on key collision):</p>
 <ol>
 <li><strong>Reflected <code>spec</code> shape</strong> — the selector callable's own parameters (an
@@ -9271,11 +9221,6 @@ ones on key collision):</p>
    selector params. A <code>SelectorSpec</code> carries no input serializer, so this
    is MCP-only; its curated fields win over a reflected param of the same
    name, and required-marked fields stay required.</li>
-<li><strong><code>ordering_fields</code></strong> — adds an <code>ordering</code> enum of <code>"&lt;field&gt;"</code> and
-   <code>"-&lt;field&gt;"</code> values. <strong>Deprecated</strong> in favour of source 1: these are
-   raw ORM paths, a second vocabulary for the same key. Declaring it
-   alongside a filter-provided ordering is refused at construction, so it
-   can never overwrite the reflected enum here.</li>
 <li><strong><code>paginate=True</code></strong> — adds optional <code>page</code> and <code>limit</code> positive
    integers. <code>limit</code> carries a <code>maximum</code> when <code>max_page_size</code> is
    supplied, so the model sees the ceiling dispatch will clamp to.</li>
