@@ -629,6 +629,34 @@
 </li>
       
         <li class="md-nav__item">
+  <a href="#valueerror-when-registering-a-resource" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        ValueError when registering a resource
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="ValueError when registering a resource">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#sets-which-the-resource-read-path-does-not-apply" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        "sets ..., which the resource read path does not apply"
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
   <a href="#oauth-discovery-returns-404s" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -1324,6 +1352,8 @@
       
         
       
+        
+      
     
     
     
@@ -1548,6 +1578,34 @@
 
               
             
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../reference/testing/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Testing
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
           </ul>
         </nav>
       
@@ -1681,6 +1739,34 @@
     <span class="md-ellipsis">
       
         "outputSchema would be advertised but structuredContent is disabled"
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#valueerror-when-registering-a-resource" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        ValueError when registering a resource
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="ValueError when registering a resource">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#sets-which-the-resource-read-path-does-not-apply" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        "sets ..., which the resource read path does not apply"
       
     </span>
   </a>
@@ -1878,6 +1964,19 @@ rather than on the first call.</p>
 <p>Note that server-wide <code>INCLUDE_OUTPUT_SCHEMA=True</code> with
 <code>INCLUDE_STRUCTURED_CONTENT=False</code> is <strong>legal</strong> — it just requires every binding
 to override the content back on. The error names the binding that did not.</p>
+<h2 id="valueerror-when-registering-a-resource"><code>ValueError</code> when registering a resource<a class="headerlink" href="#valueerror-when-registering-a-resource" title="Permanent link">&para;</a></h2>
+<h3 id="sets-which-the-resource-read-path-does-not-apply">"sets ..., which the resource read path does not apply"<a class="headerlink" href="#sets-which-the-resource-read-path-does-not-apply" title="Permanent link">&para;</a></h3>
+<p><code>register_resource</code> refuses a <code>SelectorSpec</code> carrying any of ten behavioural
+fields — <code>preconditions</code>, <code>filter_set</code>, <code>select_related</code>, <code>prefetch_related</code>,
+<code>annotations</code>, <code>extend_queryset</code>, <code>allow_none</code>, <code>output_serializer_context</code>,
+<code>progress_reporter</code>, <code>metadata</code>. <code>resources/read</code> dispatches the bare selector
+callable, so those would be silently dropped, and a <code>filter_set</code> that scopes a
+tenant over HTTP would return every row here with nothing in the response
+saying so.</p>
+<p>Register the same spec as a selector <em>tool</em> — which honours all ten — or move
+the behaviour into the callable, where it travels with every dispatch.
+<a href="../concepts/#what-a-resource-cannot-carry-and-why-registration-refuses-it">What a resource cannot carry, and why registration refuses it</a>
+has the field-by-field consequences.</p>
 <h2 id="oauth-discovery-returns-404s">OAuth discovery returns 404s<a class="headerlink" href="#oauth-discovery-returns-404s" title="Permanent link">&para;</a></h2>
 <h3 id="the-authorization-server-must-be-a-site-root">The authorization server must be a site root<a class="headerlink" href="#the-authorization-server-must-be-a-site-root" title="Permanent link">&para;</a></h3>
 <p>Endpoint paths are appended to it, so passing the value django-oauth-toolkit

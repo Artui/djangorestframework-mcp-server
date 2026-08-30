@@ -466,6 +466,17 @@
   
 </li>
         
+          <li class="md-nav__item">
+  <a href="#what-a-resource-cannot-carry-and-why-registration-refuses-it" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        What a resource cannot carry, and why registration refuses it
+      
+    </span>
+  </a>
+  
+</li>
+        
       </ul>
     </nav>
   
@@ -1751,6 +1762,8 @@
       
         
       
+        
+      
     
     
     
@@ -1975,6 +1988,34 @@
 
               
             
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../reference/testing/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Testing
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
           </ul>
         </nav>
       
@@ -2086,6 +2127,17 @@
     <span class="md-ellipsis">
       
         SelectorSpec for resources
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#what-a-resource-cannot-carry-and-why-registration-refuses-it" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        What a resource cannot carry, and why registration refuses it
       
     </span>
   </a>
@@ -2917,6 +2969,84 @@ the imperative surface symmetric with <code>register_service_tool</code> makes t
 single point where output serializers and kwargs providers attach. Use the
 <code>@server.resource(uri_template=...)</code> decorator if you'd rather skip the
 boilerplate; it wraps the function in a <code>SelectorSpec</code> for you.</p>
+<h3 id="what-a-resource-cannot-carry-and-why-registration-refuses-it">What a resource cannot carry, and why registration refuses it<a class="headerlink" href="#what-a-resource-cannot-carry-and-why-registration-refuses-it" title="Permanent link">&para;</a></h3>
+<p>Only those five fields are carried. <code>resources/read</code> dispatches the <strong>bare
+selector callable</strong> through <code>run_selector</code>: a <code>ResourceBinding</code> holds the
+callable that was lifted out of the spec, not the spec itself, so there is no
+spec left to dispatch and nothing to apply the rest against.</p>
+<p>A <code>SelectorSpec</code> that sets any of the following ten is <strong>refused at
+registration</strong>, with a <code>ValueError</code> naming the ones it set:</p>
+<table>
+<thead>
+<tr>
+<th>Field</th>
+<th>What would not happen on a read</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>preconditions</code></td>
+<td>The state and database rules never run. The read proceeds.</td>
+</tr>
+<tr>
+<td><code>filter_set</code></td>
+<td>The queryset is not filtered. Every row is returned.</td>
+</tr>
+<tr>
+<td><code>select_related</code></td>
+<td>No join is planned; the read runs the extra queries.</td>
+</tr>
+<tr>
+<td><code>prefetch_related</code></td>
+<td>Same, for the multi-valued relations.</td>
+</tr>
+<tr>
+<td><code>annotations</code></td>
+<td>The <code>.annotate(**...)</code> call is skipped, so annotated names are missing from every row.</td>
+</tr>
+<tr>
+<td><code>extend_queryset</code></td>
+<td>The dynamic shaping hook is never invoked.</td>
+</tr>
+<tr>
+<td><code>allow_none</code></td>
+<td>The <code>RETRIEVE</code> nullability contract is not applied to a <code>None</code> result.</td>
+</tr>
+<tr>
+<td><code>output_serializer_context</code></td>
+<td>The provider is not resolved, so a serializer reading that context sees only the baseline.</td>
+</tr>
+<tr>
+<td><code>progress_reporter</code></td>
+<td>Nothing is reported; a read is a single response with nowhere to stream to.</td>
+</tr>
+<tr>
+<td><code>metadata</code></td>
+<td>The consumer-owned mapping is not attached, so a permission or downstream reader looking for it finds nothing.</td>
+</tr>
+</tbody>
+</table>
+<p>Refusing is the deliberate choice over the two alternatives. Carrying them is
+not available — the read path has no spec to carry them on. That leaves
+dropping them silently, and <strong>a gate that does not run on one transport while
+holding on every other is worse than either</strong>: the same <code>filter_set</code> that
+scopes a tenant over HTTP would return every row over <code>resources/read</code>, and
+nothing in the response says so. A <code>ValueError</code> at registration is loud, early,
+and lands on the person who can act on it.</p>
+<p>Two ways forward, both of which keep the behaviour:</p>
+<ul>
+<li><strong>Register the spec as a selector tool instead.</strong> Selector tools dispatch
+  through <code>dispatch_spec</code>, which honours all ten. This is the default answer,
+  and it costs the URI addressing rather than the behaviour.</li>
+<li><strong>Fold the behaviour into the callable.</strong> A selector that does its own
+  filtering and its own precondition checks carries them wherever it is
+  dispatched, resource reads included.</li>
+</ul>
+<p>Worth knowing while you are choosing a shape rather than after: in a codebase
+whose specs routinely declare shaping or gates, this means most specs can only
+ever be tools. The resource surface fits the plain, addressable read — a single
+object by URI, no filtering, no gate beyond <code>permission_classes</code> — and the
+richer the spec, the more likely a tool is the honest home for it.</p>
 <h2 id="per-tool-registration-kwargs">Per-tool registration kwargs<a class="headerlink" href="#per-tool-registration-kwargs" title="Permanent link">&para;</a></h2>
 <p>Beyond <code>permissions=</code>, <code>output_format=</code>, and <code>include_structured_content=</code>,
 <code>register_service_tool</code> / <code>register_selector_tool</code> (and their decorator
@@ -3214,12 +3344,20 @@ whose name doesn't match the entity it identifies belongs in <code>help_text</co
 <td><code>inputSchema</code> + optional <code>outputSchema</code></td>
 <td><code>mimeType</code></td>
 </tr>
+<tr>
+<td>Spec fields honoured</td>
+<td>all of them</td>
+<td>five; the other ten are refused at registration</td>
+</tr>
 </tbody>
 </table>
 <p>Tools are imperative (the client decides when to call them and supplies
 arguments). Resources are read-only and addressable by URI; they have a stable
 identifier and the client can rely on the same URI returning a consistent shape
 over time.</p>
+<p>That last row is the one that decides a shape, so it is worth reading before
+committing to a resource surface:
+<a href="#what-a-resource-cannot-carry-and-why-registration-refuses-it">What a resource cannot carry, and why registration refuses it</a>.</p>
 <h2 id="uri-templates">URI templates<a class="headerlink" href="#uri-templates" title="Permanent link">&para;</a></h2>
 <p>Resource URIs follow a small subset of <a href="https://www.rfc-editor.org/rfc/rfc6570">RFC 6570</a>.
 Each <code>{var}</code> placeholder becomes a kwarg in the selector's signature:</p>

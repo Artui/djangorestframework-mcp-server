@@ -16,6 +16,8 @@
         <link rel="prev" href="../auth/">
       
       
+        <link rel="next" href="../testing/">
+      
       
         
       
@@ -1116,6 +1118,8 @@
       
         
       
+        
+      
     
     
     
@@ -1446,6 +1450,34 @@
 
               
             
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../testing/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Testing
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
           </ul>
         </nav>
       
@@ -1578,6 +1610,10 @@ the reverse is allowed — so they are not a single switch.</p>
 <code>include_output_schema=</code> at registration. The asymmetric rule is enforced:
 <code>include_output_schema=True</code> with <code>include_structured_content=False</code> raises at
 registration rather than advertising a schema nothing will satisfy.</p>
+<p>That is a check on the <em>settings</em>, not on a response. To assert that a real
+result satisfies the schema its tool advertised — types and formats, not only
+the property names — see
+<a href="../testing/#does-a-result-match-the-schema-the-server-advertised"><code>assert_tool_result_conforms</code></a>.</p>
 <p>See <a href="../../concepts/#omitting-structuredcontent-and-outputschema">Omitting <code>structuredContent</code> and <code>outputSchema</code></a>
 for when to turn either off, and
 <a href="../../concepts/#what-an-agent-sees">the schema an agent sees</a> for what shapes
