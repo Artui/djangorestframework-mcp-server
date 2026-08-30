@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.37.0] — 2026-08-30
+
 ### Added
 
 - **Floored at `djangorestframework-services>=0.49`.** 0.49 is where a
@@ -4303,7 +4305,8 @@ Pinned to `djangorestframework-services==0.6.0`.
 - 100% line + branch coverage enforced by pytest (**451 tests** at
   release).
 
-[Unreleased]: https://github.com/Artui/djangorestframework-mcp-server/compare/v0.36.0...HEAD
+[Unreleased]: https://github.com/Artui/djangorestframework-mcp-server/compare/v0.37.0...HEAD
+[0.37.0]: https://github.com/Artui/djangorestframework-mcp-server/compare/v0.36.0...v0.37.0
 [0.36.0]: https://github.com/Artui/djangorestframework-mcp-server/compare/v0.35.0...v0.36.0
 [0.35.0]: https://github.com/Artui/djangorestframework-mcp-server/compare/v0.34.0...v0.35.0
 [0.34.0]: https://github.com/Artui/djangorestframework-mcp-server/compare/v0.33.0...v0.34.0
