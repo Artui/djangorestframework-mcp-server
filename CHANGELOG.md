@@ -7,6 +7,85 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- **`rest_framework_mcp.testing.assert_tool_result_conforms(tool, result)`** — a
+  packaged test helper that validates a real `tools/call` result against the
+  `outputSchema` its `tools/list` entry advertised, checking types and formats
+  rather than the presence of property names.
+
+  The package already refuses a binding whose *settings* disagree
+  (`include_output_schema=True` with `include_structured_content=False` raises
+  at registration). That is coherence, decided from the configuration alone.
+  Nothing checked whether a response conforms, and the assertion a suite writes
+  for itself compares key sets:
+
+  ```python
+  advertised = tool["outputSchema"]["items"]["properties"]
+  assert set(advertised) == set(result["structuredContent"][0])
+  ```
+
+  That catches a field that vanished. It passes unchanged when a property
+  advertised as `integer` arrives as a string, or a `date-time` arrives as
+  `"soon"` — which is what a typed client breaks on, and what an output
+  serializer's `to_representation` override introduces without touching a
+  single key.
+
+  ```python
+  from rest_framework_mcp.testing import assert_tool_result_conforms
+
+  page = server.list_tools(user=user)
+  tool = next(entry for entry in page["tools"] if entry["name"] == "invoices.list")
+  result = await server.acall_tool("invoices.list", {}, user=user)
+
+  assert_tool_result_conforms(tool, result)
+  ```
+
+  Every disagreement is reported, each naming the property, what was advertised
+  and what arrived:
+
+  ```text
+  AssertionError: Tool 'invoices.list' returned 'structuredContent' that does not
+  conform to the 'outputSchema' it advertises (2 problems):
+    - $[0].amount_cents: advertised type 'integer', got string '1240.00'
+    - $[1]: 'number' is a required property
+  ```
+
+  A tool advertising no schema is a failure rather than a pass, since there
+  would be nothing to conform to.
+
+  **No setting compels a tool to advertise a schema, deliberately.** For a
+  service whose response shape is context-dependent, compelling advertisement
+  is the wrong default; the existing on/off knob plus per-binding overrides is
+  the right shape. Verification was the missing piece, not compulsion.
+
+- **A `test` extra**, `pip install "djangorestframework-mcp-server[test]"`,
+  carrying `jsonschema[format-nongpl]`. It is the helper's dependency and
+  nothing else's: `jsonschema` is imported inside the function body and is not
+  a runtime dependency, so the package works exactly as before without it. The
+  `format-nongpl` variant is what makes the format half of the check real —
+  `jsonschema` registers a format checker only when the library performing it
+  is importable, so on a bare install `"format": "date-time"` is not checked at
+  all.
+
+### Documentation
+
+- **The resource boundary is written down.** `register_resource` has always
+  refused a `SelectorSpec` that sets any of ten behavioural fields
+  (`preconditions`, `filter_set`, `select_related`, `prefetch_related`,
+  `annotations`, `extend_queryset`, `allow_none`,
+  `output_serializer_context`, `progress_reporter`, `metadata`), because
+  `resources/read` dispatches the bare selector callable and would drop them —
+  and a gate that does not run on one transport while holding on every other is
+  worse than either carrying it or refusing it.
+
+  That was stated only inside the `ValueError`, which meant a project found out
+  at registration that its richer specs can only ever be tools. The behaviour
+  is unchanged; it is now in
+  [Concepts](https://artui.github.io/djangorestframework-mcp-server/concepts/#what-a-resource-cannot-carry-and-why-registration-refuses-it)
+  field by field, with what to do instead, plus a row in the tools-vs-resources
+  table and an entry in Troubleshooting.
+
 ## [0.36.0] — 2026-08-29
 
 ### Removed
