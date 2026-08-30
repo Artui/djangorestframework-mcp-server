@@ -45,7 +45,13 @@ dependencies = [
     # every dispatch path import them at module level. ``paginate_output`` /
     # ``DEFAULT_PAGE_SIZE``, which own the selector pagination this transport used
     # to shape itself, arrived in 0.47 and are imported the same way.
-    "djangorestframework-services>=0.48",
+    # 0.49 is where a self-referential serializer stopped crashing schema
+    # generation. That is not a fix this package can route around: ``tools/list``
+    # builds every advertised schema on every request, so a spec whose serializer
+    # nests itself takes the server down at discovery rather than at the one call
+    # that used it. The floor is here to keep that crash out of reach, not because
+    # anything below imports a 0.49 symbol.
+    "djangorestframework-services>=0.49",
     "djangorestframework-dataclasses>=1.3.1",
     # ``typing_extensions.Unpack`` is used at runtime by the strict service /
     # selector Protocols (PEP 692) we re-export from the sister package.
