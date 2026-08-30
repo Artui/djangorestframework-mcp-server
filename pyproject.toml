@@ -69,6 +69,23 @@ filter = ["django-filter>=23"]
 # 5.3.1, not 5.3: 5.3.0 imports ``pkg_resources`` at module level, so it does
 # not import at all on an environment without setuptools.
 jwt = ["djangorestframework-simplejwt>=5.3.1"]
+# Powers ``rest_framework_mcp.testing.assert_tool_result_conforms``, which
+# validates a real tool result against the ``outputSchema`` the server
+# advertised for it. Test-time code, so ``jsonschema`` stays out of the runtime
+# dependencies entirely: the helper imports it inside the function body and
+# names this extra if it is absent, and nothing else in the package touches it.
+#
+# 4.0.1, not 4.0.0: ``Draft202012Validator`` — the draft the helper validates
+# against when a schema names none — first exists in 4.0, whose only release is
+# yanked.
+#
+# ``format-nongpl``, not a bare ``jsonschema``, is what makes the *format* half
+# of the check real. jsonschema registers a format checker only when its
+# checking library is importable, so on a bare install ``"format": "date-time"``
+# is silently not checked and a green assertion says nothing about formats. The
+# nongpl variant swaps the one GPL-licensed checker for a permissive
+# equivalent, so an MIT package can name it.
+test = ["jsonschema[format-nongpl]>=4.0.1"]
 
 [project.urls]
 Homepage = "https://github.com/Artui/djangorestframework-mcp-server"
@@ -118,6 +135,10 @@ dev = [
     "drf-spectacular>=0.27",
     "django-filter>=23",
     "djangorestframework-simplejwt>=5.3.1",
+    # The ``test`` extra's dependency, declared here too because ``uv sync
+    # --all-groups`` installs groups but not extras — the suite that covers the
+    # conformance helper would otherwise run without it in the test matrix.
+    "jsonschema[format-nongpl]>=4.0.1",
 ]
 docs = [
     "mkdocs>=1.6",
