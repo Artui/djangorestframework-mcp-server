@@ -7,7 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.37.0] — 2026-08-30
+
 ### Added
+
+- **Floored at `djangorestframework-services>=0.49`.** 0.49 is where a
+  self-referential serializer stopped crashing schema generation, and that is not
+  a fix this package can route around: `tools/list` builds every advertised
+  schema on every request, so a spec whose serializer nests itself takes the
+  server down at discovery rather than at the one call that used it. Nothing
+  below the floor imports a 0.49 symbol — the floor is there to keep the crash
+  out of reach.
 
 - **`rest_framework_mcp.testing.assert_tool_result_conforms(tool, result)`** — a
   packaged test helper that validates a real `tools/call` result against the
@@ -4295,7 +4305,8 @@ Pinned to `djangorestframework-services==0.6.0`.
 - 100% line + branch coverage enforced by pytest (**451 tests** at
   release).
 
-[Unreleased]: https://github.com/Artui/djangorestframework-mcp-server/compare/v0.36.0...HEAD
+[Unreleased]: https://github.com/Artui/djangorestframework-mcp-server/compare/v0.37.0...HEAD
+[0.37.0]: https://github.com/Artui/djangorestframework-mcp-server/compare/v0.36.0...v0.37.0
 [0.36.0]: https://github.com/Artui/djangorestframework-mcp-server/compare/v0.35.0...v0.36.0
 [0.35.0]: https://github.com/Artui/djangorestframework-mcp-server/compare/v0.34.0...v0.35.0
 [0.34.0]: https://github.com/Artui/djangorestframework-mcp-server/compare/v0.33.0...v0.34.0
