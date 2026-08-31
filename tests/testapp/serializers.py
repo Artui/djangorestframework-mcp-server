@@ -33,3 +33,23 @@ class AgentInvoiceSerializer(serializers.ModelSerializer):
             "number": {"style": {MARKING: FieldMarking.label()}},
             "sent": {"style": {MARKING: FieldMarking.hidden()}},
         }
+
+
+class LedgerSerializer(serializers.ModelSerializer):
+    """An output serializer that formats one value for display on the way out.
+
+    A stand-in for a real consumer defect rather than a contrivance: someone
+    reaches for ``to_representation`` to render an amount the way a person
+    reads it, and the advertised schema, derived from the *declared* field,
+    goes on saying ``integer``. No key changes name and none disappears, so
+    every key-set assertion in a suite stays green over it.
+    """
+
+    class Meta:
+        model = Invoice
+        fields = ["id", "number", "amount_cents"]
+
+    def to_representation(self, instance: Invoice) -> dict[str, object]:
+        row = super().to_representation(instance)
+        row["amount_cents"] = f"{row['amount_cents'] / 100:.2f}"
+        return row

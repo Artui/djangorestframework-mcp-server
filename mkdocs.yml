@@ -116,3 +116,4 @@ nav:
       - Settings: reference/settings.md
       - Auth: reference/auth.md
       - Output: reference/output.md
+      - Testing: reference/testing.md

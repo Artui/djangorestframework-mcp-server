@@ -15,6 +15,11 @@ Both are on by default, server-wide via
 `include_output_schema=True` with `include_structured_content=False` raises at
 registration rather than advertising a schema nothing will satisfy.
 
+That is a check on the *settings*, not on a response. To assert that a real
+result satisfies the schema its tool advertised — types and formats, not only
+the property names — see
+[`assert_tool_result_conforms`](testing.md#does-a-result-match-the-schema-the-server-advertised).
+
 See [Omitting `structuredContent` and `outputSchema`](../concepts.md#omitting-structuredcontent-and-outputschema)
 for when to turn either off, and
 [the schema an agent sees](../concepts.md#what-an-agent-sees) for what shapes

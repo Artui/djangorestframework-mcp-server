@@ -307,6 +307,52 @@ single point where output serializers and kwargs providers attach. Use the
 `@server.resource(uri_template=...)` decorator if you'd rather skip the
 boilerplate; it wraps the function in a `SelectorSpec` for you.
 
+### What a resource cannot carry, and why registration refuses it
+
+Only those five fields are carried. `resources/read` dispatches the **bare
+selector callable** through `run_selector`: a `ResourceBinding` holds the
+callable that was lifted out of the spec, not the spec itself, so there is no
+spec left to dispatch and nothing to apply the rest against.
+
+A `SelectorSpec` that sets any of the following ten is **refused at
+registration**, with a `ValueError` naming the ones it set:
+
+| Field | What would not happen on a read |
+| --- | --- |
+| `preconditions` | The state and database rules never run. The read proceeds. |
+| `filter_set` | The queryset is not filtered. Every row is returned. |
+| `select_related` | No join is planned; the read runs the extra queries. |
+| `prefetch_related` | Same, for the multi-valued relations. |
+| `annotations` | The `.annotate(**...)` call is skipped, so annotated names are missing from every row. |
+| `extend_queryset` | The dynamic shaping hook is never invoked. |
+| `allow_none` | The `RETRIEVE` nullability contract is not applied to a `None` result. |
+| `output_serializer_context` | The provider is not resolved, so a serializer reading that context sees only the baseline. |
+| `progress_reporter` | Nothing is reported; a read is a single response with nowhere to stream to. |
+| `metadata` | The consumer-owned mapping is not attached, so a permission or downstream reader looking for it finds nothing. |
+
+Refusing is the deliberate choice over the two alternatives. Carrying them is
+not available — the read path has no spec to carry them on. That leaves
+dropping them silently, and **a gate that does not run on one transport while
+holding on every other is worse than either**: the same `filter_set` that
+scopes a tenant over HTTP would return every row over `resources/read`, and
+nothing in the response says so. A `ValueError` at registration is loud, early,
+and lands on the person who can act on it.
+
+Two ways forward, both of which keep the behaviour:
+
+- **Register the spec as a selector tool instead.** Selector tools dispatch
+  through `dispatch_spec`, which honours all ten. This is the default answer,
+  and it costs the URI addressing rather than the behaviour.
+- **Fold the behaviour into the callable.** A selector that does its own
+  filtering and its own precondition checks carries them wherever it is
+  dispatched, resource reads included.
+
+Worth knowing while you are choosing a shape rather than after: in a codebase
+whose specs routinely declare shaping or gates, this means most specs can only
+ever be tools. The resource surface fits the plain, addressable read — a single
+object by URI, no filtering, no gate beyond `permission_classes` — and the
+richer the spec, the more likely a tool is the honest home for it.
+
 ## Per-tool registration kwargs
 
 Beyond `permissions=`, `output_format=`, and `include_structured_content=`,
@@ -613,11 +659,16 @@ whose name doesn't match the entity it identifies belongs in `help_text` or
 | Dispatched via | `tools/call` | `resources/read` |
 | Backed by | `ServiceSpec` | `SelectorSpec` |
 | Schema advertised | `inputSchema` + optional `outputSchema` | `mimeType` |
+| Spec fields honoured | all of them | five; the other ten are refused at registration |
 
 Tools are imperative (the client decides when to call them and supplies
 arguments). Resources are read-only and addressable by URI; they have a stable
 identifier and the client can rely on the same URI returning a consistent shape
 over time.
+
+That last row is the one that decides a shape, so it is worth reading before
+committing to a resource surface:
+[What a resource cannot carry, and why registration refuses it](#what-a-resource-cannot-carry-and-why-registration-refuses-it).
 
 ## URI templates
 
