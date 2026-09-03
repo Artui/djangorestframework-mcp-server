@@ -1404,7 +1404,11 @@ listed in `resources/list`, and guardable with `permissions=` — with three
 things fixed for you: the `text/html;profile=mcp-app` mime type, `TEXT` body
 encoding, and a `_meta` bundle under the extension's key. Give it exactly one
 content source: `template_name=` (a Django template, the idiomatic choice),
-`html=` (a literal document), or `selector=` (a zero-argument callable).
+`html=` (a literal document), or `selector=` (a callable returning one, which
+**must take no arguments** — one that declares a parameter is refused at
+registration, because the read path would fill it from a pool carrying
+`request` and `user`, and a view that varies by caller is exactly what the
+exemption below assumes cannot exist).
 
 Views are **unguarded by default**. The MCP session is already authenticated,
 a view is a static asset rather than tenant data, and hosts may prefetch one

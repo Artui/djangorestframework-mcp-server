@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import inspect
 from collections.abc import Callable
 from typing import Any
 
@@ -57,8 +58,12 @@ def ui_view_to_resource(
       *shell*, hydrated at runtime from tool results. Rendering tenant data
       into it would leak it across the cache.
     - ``html`` — a literal document, for a view small enough to inline.
-    - ``selector`` — a zero-argument callable returning the document, for a
-      project that assembles it some other way.
+    - ``selector`` — a callable returning the document, for a project that
+      assembles it some other way. It **must take no arguments**, and one that
+      declares a parameter is refused here rather than guarded later: the read
+      path resolves a selector against a pool carrying ``request`` and ``user``,
+      so a parameter would be handed the authenticated caller — which is exactly
+      what the permissions exemption on views assumes cannot happen.
     """
     sources = [s for s in (template_name, html, selector) if s is not None]
     if len(sources) != 1:
@@ -67,6 +72,9 @@ def ui_view_to_resource(
             "template_name=, html= or selector=. "
             f"Got {len(sources)}."
         )
+
+    if selector is not None:
+        _refuse_caller_aware_selector(name, selector)
 
     if ui is not None and meta is not None and UI_META_KEY in meta:
         raise ValueError(
@@ -114,3 +122,54 @@ def ui_view_to_resource(
 
 
 __all__ = ["ui_view_to_resource"]
+
+
+def _refuse_caller_aware_selector(name: str, selector: Callable[..., str]) -> None:
+    """Refuse a view selector that would be handed the caller.
+
+    A view is the one registration on this server that skips
+    ``check_tool_permissions_declared``, and the exemption rests entirely on a
+    view's content being caller-blind: hosts may prefetch a view and reuse the
+    document for whoever they serve next, which is why the template renders with
+    no context and why an unguarded view exposes nothing.
+
+    ``selector=`` was the hole in that argument. It is documented and typed as a
+    zero-argument callable, but nothing enforced it, and ``handle_resources_read``
+    resolves every binding's selector by name against a pool that deliberately
+    carries ``request`` and ``user``. So ``selector=lambda user: ...`` was handed
+    the authenticated caller, registered without permissions because of the
+    exemption, and served into a document a host may cache across callers --
+    three assumptions that are each fine alone.
+
+    Refused here rather than guarded later, for the reason every other
+    registration-time refusal on this server exists: the failure is invisible at
+    runtime. A caller-aware view does not misbehave, it just quietly varies, and
+    whoever reads the exemption's comment stops looking.
+
+    ``*args`` is left alone: ``resolve_callable_kwargs`` only ever builds
+    keyword arguments, so a variadic-positional selector is still called with
+    nothing.
+    """
+    parameters = inspect.signature(selector).parameters
+    fillable: list[str] = [
+        parameter_name
+        for parameter_name, parameter in parameters.items()
+        if parameter.kind
+        in (
+            inspect.Parameter.POSITIONAL_OR_KEYWORD,
+            inspect.Parameter.KEYWORD_ONLY,
+            inspect.Parameter.VAR_KEYWORD,
+        )
+    ]
+    if not fillable:
+        return
+    raise ValueError(
+        f"register_ui_resource({name!r}) got a selector taking {fillable!r}. A view's "
+        "selector must take no arguments: it is read through the same keyword pool as "
+        "any other resource, which carries `request` and `user`, so a parameter here "
+        "is handed the authenticated caller. Views skip the permissions-declared check "
+        "precisely because they cannot read the caller, and hosts may cache one "
+        "document across callers. Build the document from nothing and let the view "
+        "hydrate itself from tool results, or register it with `register_resource` as "
+        "a data resource, where the declaration check applies."
+    )

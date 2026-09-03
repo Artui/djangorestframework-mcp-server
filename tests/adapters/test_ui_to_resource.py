@@ -180,3 +180,98 @@ class TestUIMetadata:
         """The escape hatch stays open for a key the typed shape can't express."""
         binding = _register(_make(), meta={UI_META_KEY: {"future": True}})
         assert binding.meta == {UI_META_KEY: {"future": True}}
+
+
+class TestAViewSelectorCannotReadTheCaller:
+    """The premise the permissions exemption rests on, made true by construction.
+
+    ``register_ui_resource`` is the one registration on this server that skips
+    ``check_tool_permissions_declared``, and the reason given is that a view's
+    content cannot depend on who is asking. Two of the three content sources
+    make that true on their own. The third did not: ``selector=`` was documented
+    and typed as zero-argument, nothing enforced it, and
+    ``handle_resources_read`` resolves every binding's selector by name against a
+    pool that deliberately carries ``request`` and ``user``.
+
+    So ``selector=lambda user: ...`` was handed the authenticated caller, was
+    registered unguarded because of the exemption, and produced a document a host
+    may cache across callers. Each of those is defensible alone.
+    """
+
+    def test_a_selector_naming_the_user_is_refused(self) -> None:
+        with pytest.raises(ValueError, match="must take no arguments"):
+            _register(
+                _make(),
+                html=None,
+                selector=lambda user: f"<h1>{user}</h1>",  # ty: ignore[invalid-argument-type]
+            )
+
+    def test_a_selector_naming_the_request_is_refused(self) -> None:
+        with pytest.raises(ValueError, match="must take no arguments"):
+            _register(
+                _make(),
+                html=None,
+                selector=lambda request: "<h1>hi</h1>",  # ty: ignore[invalid-argument-type]
+            )
+
+    def test_a_selector_taking_anything_at_all_is_refused(self) -> None:
+        # The pool is not a fixed set -- URI-template variables land in it too --
+        # so the refusal is about declaring a fillable parameter, not about the
+        # two names that happen to be the dangerous ones today.
+        with pytest.raises(ValueError, match="must take no arguments"):
+            _register(
+                _make(),
+                html=None,
+                selector=lambda anything: "<h1>hi</h1>",  # ty: ignore[invalid-argument-type]
+            )
+
+    def test_a_selector_with_a_default_is_still_refused(self) -> None:
+        # A default does not stop resolve_callable_kwargs filling the parameter
+        # when the name is in the pool; it only hides the failure if it is not.
+        with pytest.raises(ValueError, match="must take no arguments"):
+            _register(
+                _make(),
+                html=None,
+                selector=lambda user=None: "<h1>hi</h1>",  # ty: ignore[invalid-argument-type]
+            )
+
+    def test_a_var_keyword_selector_is_refused(self) -> None:
+        # The worst case rather than an edge one: resolve_callable_kwargs hands
+        # the *entire* pool to a callable declaring **kwargs.
+        def selector(**kwargs: object) -> str:
+            return "<h1>hi</h1>"
+
+        with pytest.raises(ValueError, match="must take no arguments"):
+            _register(_make(), html=None, selector=selector)
+
+    def test_the_message_names_the_remedy(self) -> None:
+        with pytest.raises(ValueError) as caught:
+            _register(
+                _make(),
+                html=None,
+                selector=lambda user: "<h1>hi</h1>",  # ty: ignore[invalid-argument-type]
+            )
+        message = str(caught.value)
+        # A registration-time refusal is only useful if it says what to do next.
+        assert "register_resource" in message
+        assert "'user'" in message
+
+    def test_a_zero_argument_selector_is_accepted(self) -> None:
+        binding = _register(_make(), html=None, selector=lambda: "<h1>hi</h1>")
+
+        assert binding.selector() == "<h1>hi</h1>"
+
+    def test_a_variadic_positional_selector_is_accepted(self) -> None:
+        # resolve_callable_kwargs only ever builds keyword arguments, so this
+        # one is still called with nothing.
+        def selector(*args: object) -> str:
+            return "<h1>hi</h1>"
+
+        binding = _register(_make(), html=None, selector=selector)
+
+        assert binding.selector() == "<h1>hi</h1>"
+
+    def test_the_other_two_sources_are_untouched(self) -> None:
+        # The exemption was always sound for these; the fix must not narrow them.
+        assert _register(_make(), html="<p>a</p>").selector() == "<p>a</p>"
+        assert _register(_make(), template_name=None, html="<p>b</p>").selector() == "<p>b</p>"

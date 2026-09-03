@@ -1135,7 +1135,9 @@ class MCPServer:
 
         Give exactly one content source — ``template_name`` (a Django template,
         the idiomatic choice), ``html`` (a literal document), or ``selector``
-        (a zero-argument callable returning one).
+        (a callable returning one, which **must take no arguments** — a selector
+        that declares a parameter is refused at registration, because the read
+        path would fill it from a pool carrying ``request`` and ``user``).
 
         **Keep tenant data out of the view.** Hosts may prefetch and cache a
         view before any tool call, so it is a shell that hydrates itself at
@@ -1179,6 +1181,15 @@ class MCPServer:
         # callable — none of which can read the caller's data, so an unguarded
         # view exposes nothing an authenticated session may not already see.
         # Requiring permissions on it would be noise on every MCP Apps install.
+        #
+        # That third source is only caller-blind because ``ui_view_to_resource``
+        # refuses a selector that declares any fillable parameter. It did not
+        # always: ``handle_resources_read`` resolves every binding's selector
+        # against a pool carrying ``request`` and ``user``, so
+        # ``selector=lambda user: ...`` was handed the caller while this comment
+        # said it could not be — and skipped the declaration check on the
+        # strength of the claim. The exemption is sound *because* of that
+        # refusal, not on its own, and the two have to move together.
         self._resources.register(binding)
         return binding
 
