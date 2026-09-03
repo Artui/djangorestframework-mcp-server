@@ -2034,6 +2034,14 @@ it. Interactive <strong>views</strong> (<code>register_ui_resource</code>) are t
 and a deliberate one — a view is a template rendered with no context, a
 literal document, or a zero-argument callable, none of which can read the
 caller's data.</p>
+<p>That third source is caller-blind <strong>because registration enforces it</strong>: a
+<code>selector=</code> declaring any fillable parameter is refused, since the read path
+resolves every binding's selector against a pool carrying <code>request</code> and
+<code>user</code>. Without that refusal the exemption was unsound for one of its three
+cases — a caller-aware view registered unguarded, served into a document
+hosts may cache across callers. If you want a view whose content depends on
+who is asking, you want <code>register_resource</code>, where the declaration check
+applies.</p>
 </div>
 <p>Per-binding permissions are AND-combined. Two ship in v1:</p>
 <ul>

@@ -2834,7 +2834,9 @@ inside a sandboxed iframe it constructs itself. This server only
 bridge belong to the host and are deliberately not implemented here.</p>
 <p>Give exactly one content source — <code>template_name</code> (a Django template,
 the idiomatic choice), <code>html</code> (a literal document), or <code>selector</code>
-(a zero-argument callable returning one).</p>
+(a callable returning one, which <strong>must take no arguments</strong> — a selector
+that declares a parameter is refused at registration, because the read
+path would fill it from a pool carrying <code>request</code> and <code>user</code>).</p>
 <p><strong>Keep tenant data out of the view.</strong> Hosts may prefetch and cache a
 view before any tool call, so it is a shell that hydrates itself at
 runtime from tool results — which is also why the template renders with
