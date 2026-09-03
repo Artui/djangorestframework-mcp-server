@@ -7,6 +7,46 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.38.0] — 2026-09-03
+
+### Fixed
+
+- **A view's `selector=` could read the caller, and the permissions exemption
+  said it could not.** `register_ui_resource` is the one registration on this
+  server that skips `check_tool_permissions_declared`, and the reason given in
+  the code is that a view's three content sources — a template rendered with no
+  context, a literal document, a zero-argument callable — cannot read the
+  caller's data.
+
+  Two of the three made that true on their own. The third did not.
+  `selector=` was documented and typed as zero-argument and nothing enforced
+  it, while `handle_resources_read` resolves **every** binding's selector by
+  name against a pool that deliberately carries `request` and `user`. So
+  `register_ui_resource(selector=lambda user: ...)` was handed the
+  authenticated caller, registered unguarded because of the exemption, and
+  produced a document hosts may cache across callers — the caching model being
+  the stated reason a template renders with no context in the first place.
+
+  A `selector=` declaring any fillable parameter is now **refused at
+  registration**, which makes the exemption's premise true by construction
+  rather than by assertion. Refused rather than guarded, for the reason the
+  other registration-time refusals here exist: a caller-aware view does not
+  misbehave at runtime, it quietly varies. `*args` is still accepted, since
+  `resolve_callable_kwargs` only ever builds keyword arguments. A view whose
+  content depends on who is asking wants `register_resource`, where the
+  declaration check applies.
+
+  The comment that stated the premise now says *why* it holds and that the two
+  have to move together, and `docs/auth.md` and `docs/concepts.md` say the same.
+  A confident comment is load-bearing: a reviewer who reads it stops checking,
+  which is what it did.
+
+  Reported by the TrustPoint team, who hit it by accident — a selector they were
+  breaking a test with received a real `User`. No live leak is claimed and none
+  is needed: the gap between "documented as impossible" and "works and is
+  unguarded" is the finding.
+
+
 ## [0.37.0] — 2026-08-30
 
 ### Added
@@ -4305,7 +4345,8 @@ Pinned to `djangorestframework-services==0.6.0`.
 - 100% line + branch coverage enforced by pytest (**451 tests** at
   release).
 
-[Unreleased]: https://github.com/Artui/djangorestframework-mcp-server/compare/v0.37.0...HEAD
+[Unreleased]: https://github.com/Artui/djangorestframework-mcp-server/compare/v0.38.0...HEAD
+[0.38.0]: https://github.com/Artui/djangorestframework-mcp-server/compare/v0.37.0...v0.38.0
 [0.37.0]: https://github.com/Artui/djangorestframework-mcp-server/compare/v0.36.0...v0.37.0
 [0.36.0]: https://github.com/Artui/djangorestframework-mcp-server/compare/v0.35.0...v0.36.0
 [0.35.0]: https://github.com/Artui/djangorestframework-mcp-server/compare/v0.34.0...v0.35.0

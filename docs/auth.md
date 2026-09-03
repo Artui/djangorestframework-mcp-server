@@ -109,6 +109,15 @@ The `SERVER_INFO` keys flow into both:
     literal document, or a zero-argument callable, none of which can read the
     caller's data.
 
+    That third source is caller-blind **because registration enforces it**: a
+    `selector=` declaring any fillable parameter is refused, since the read path
+    resolves every binding's selector against a pool carrying `request` and
+    `user`. Without that refusal the exemption was unsound for one of its three
+    cases — a caller-aware view registered unguarded, served into a document
+    hosts may cache across callers. If you want a view whose content depends on
+    who is asking, you want `register_resource`, where the declaration check
+    applies.
+
 Per-binding permissions are AND-combined. Two ship in v1:
 
 - `ScopeRequired(["a", "b"])` — token must carry every listed OAuth scope. A
