@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.39.0] — 2026-09-04
+
 ### Added
 
 - **A view's `ui/*` bridge now ships with the package.**
@@ -4460,7 +4462,8 @@ Pinned to `djangorestframework-services==0.6.0`.
 - 100% line + branch coverage enforced by pytest (**451 tests** at
   release).
 
-[Unreleased]: https://github.com/Artui/djangorestframework-mcp-server/compare/v0.38.0...HEAD
+[Unreleased]: https://github.com/Artui/djangorestframework-mcp-server/compare/v0.39.0...HEAD
+[0.39.0]: https://github.com/Artui/djangorestframework-mcp-server/compare/v0.38.0...v0.39.0
 [0.38.0]: https://github.com/Artui/djangorestframework-mcp-server/compare/v0.37.0...v0.38.0
 [0.37.0]: https://github.com/Artui/djangorestframework-mcp-server/compare/v0.36.0...v0.37.0
 [0.36.0]: https://github.com/Artui/djangorestframework-mcp-server/compare/v0.35.0...v0.36.0
