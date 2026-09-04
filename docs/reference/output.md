@@ -22,8 +22,9 @@ the property names — see
 
 See [Omitting `structuredContent` and `outputSchema`](../concepts.md#omitting-structuredcontent-and-outputschema)
 for when to turn either off, and
-[the schema an agent sees](../concepts.md#what-an-agent-sees) for what shapes
-the advertised schema.
+[Hide plumbing from the model](../recipes/agent-audience.md) for what shapes the
+schema an agent sees — field markings project the payload and the advertised
+`outputSchema` from the same declaration.
 
 ::: rest_framework_mcp.constants.OutputFormat
 ::: rest_framework_mcp.output.encode_json.encode_json
