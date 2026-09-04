@@ -1094,10 +1094,21 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#trying-it" class="md-nav__link">
+  <a href="#caching-and-why-a-negative-result-can-lie-to-you" class="md-nav__link">
     <span class="md-ellipsis">
       
-        Trying it
+        Caching, and why a negative result can lie to you
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#end-the-uri-in-html" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        End the URI in .html
       
     </span>
   </a>
@@ -1572,10 +1583,21 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#trying-it" class="md-nav__link">
+  <a href="#caching-and-why-a-negative-result-can-lie-to-you" class="md-nav__link">
     <span class="md-ellipsis">
       
-        Trying it
+        Caching, and why a negative result can lie to you
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#end-the-uri-in-html" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        End the URI in .html
       
     </span>
   </a>
@@ -1613,62 +1635,59 @@ pagination. This turns it into a table an MCP host draws inline in the chat,
 instead of the model reading raw JSON aloud.</p>
 <p>Two registrations: the view, then the tool that points at it.</p>
 <h2 id="1-the-view">1. The view<a class="headerlink" href="#1-the-view" title="Permanent link">&para;</a></h2>
-<p>A single self-contained template. No context is passed, and that is
-deliberate — see <a href="#keep-tenant-data-out">the warning below</a>.</p>
+<p>Write the markup only. <code>body_template_name=</code> wraps it in a document that
+already carries the <code>ui/*</code> postMessage bridge — the handshake, the tool-result
+and host-context notifications, size reporting, and view-initiated <code>tools/call</code>.
+That bridge is not optional and it is not the host's; see
+<a href="../../concepts/#writing-the-bridge-yourself">Writing the bridge yourself</a> for
+what you take on by skipping it.</p>
 <div class="language-html highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="cm">&lt;!-- templates/mcp/invoices_table.html --&gt;</span>
-</span><span id="__span-0-2"><a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a><span class="cp">&lt;!doctype html&gt;</span>
-</span><span id="__span-0-3"><a id="__codelineno-0-3" name="__codelineno-0-3" href="#__codelineno-0-3"></a><span class="p">&lt;</span><span class="nt">meta</span> <span class="na">charset</span><span class="o">=</span><span class="s">&quot;utf-8&quot;</span> <span class="p">/&gt;</span>
-</span><span id="__span-0-4"><a id="__codelineno-0-4" name="__codelineno-0-4" href="#__codelineno-0-4"></a><span class="p">&lt;</span><span class="nt">style</span><span class="p">&gt;</span>
-</span><span id="__span-0-5"><a id="__codelineno-0-5" name="__codelineno-0-5" href="#__codelineno-0-5"></a><span class="w">  </span><span class="c">/* Inherit the host&#39;s theme. Never hardcode colours — the same view is</span>
-</span><span id="__span-0-6"><a id="__codelineno-0-6" name="__codelineno-0-6" href="#__codelineno-0-6"></a><span class="c">     drawn in light and dark hosts. */</span>
-</span><span id="__span-0-7"><a id="__codelineno-0-7" name="__codelineno-0-7" href="#__codelineno-0-7"></a><span class="w">  </span><span class="nt">body</span><span class="w"> </span><span class="p">{</span><span class="w"> </span><span class="k">font</span><span class="p">:</span><span class="w"> </span><span class="mi">13</span><span class="kt">px</span><span class="o">/</span><span class="mf">1.5</span><span class="w"> </span><span class="nf">var</span><span class="p">(</span><span class="nv">--font-family</span><span class="p">,</span><span class="w"> </span><span class="n">system</span><span class="nv">-ui</span><span class="p">);</span><span class="w"> </span><span class="k">color</span><span class="p">:</span><span class="w"> </span><span class="nf">var</span><span class="p">(</span><span class="nv">--text-primary</span><span class="p">,</span><span class="w"> </span><span class="mh">#111</span><span class="p">);</span><span class="w"> </span><span class="k">margin</span><span class="p">:</span><span class="w"> </span><span class="mi">0</span><span class="p">;</span><span class="w"> </span><span class="p">}</span>
-</span><span id="__span-0-8"><a id="__codelineno-0-8" name="__codelineno-0-8" href="#__codelineno-0-8"></a><span class="w">  </span><span class="nt">table</span><span class="w"> </span><span class="p">{</span><span class="w"> </span><span class="k">border-collapse</span><span class="p">:</span><span class="w"> </span><span class="kc">collapse</span><span class="p">;</span><span class="w"> </span><span class="k">width</span><span class="p">:</span><span class="w"> </span><span class="mi">100</span><span class="kt">%</span><span class="p">;</span><span class="w"> </span><span class="p">}</span>
-</span><span id="__span-0-9"><a id="__codelineno-0-9" name="__codelineno-0-9" href="#__codelineno-0-9"></a><span class="w">  </span><span class="nt">th</span><span class="o">,</span><span class="w"> </span><span class="nt">td</span><span class="w"> </span><span class="p">{</span><span class="w"> </span><span class="k">text-align</span><span class="p">:</span><span class="w"> </span><span class="kc">left</span><span class="p">;</span><span class="w"> </span><span class="k">padding</span><span class="p">:</span><span class="w"> </span><span class="mi">6</span><span class="kt">px</span><span class="w"> </span><span class="mi">10</span><span class="kt">px</span><span class="p">;</span><span class="w"> </span><span class="k">border-bottom</span><span class="p">:</span><span class="w"> </span><span class="mi">1</span><span class="kt">px</span><span class="w"> </span><span class="kc">solid</span><span class="w"> </span><span class="nf">var</span><span class="p">(</span><span class="nv">--border</span><span class="p">,</span><span class="w"> </span><span class="mh">#e5e5e5</span><span class="p">);</span><span class="w"> </span><span class="p">}</span>
-</span><span id="__span-0-10"><a id="__codelineno-0-10" name="__codelineno-0-10" href="#__codelineno-0-10"></a><span class="w">  </span><span class="p">.</span><span class="nc">empty</span><span class="w"> </span><span class="p">{</span><span class="w"> </span><span class="k">padding</span><span class="p">:</span><span class="w"> </span><span class="mi">16</span><span class="kt">px</span><span class="p">;</span><span class="w"> </span><span class="k">opacity</span><span class="p">:</span><span class="w"> </span><span class="mf">.7</span><span class="p">;</span><span class="w"> </span><span class="p">}</span>
-</span><span id="__span-0-11"><a id="__codelineno-0-11" name="__codelineno-0-11" href="#__codelineno-0-11"></a><span class="p">&lt;/</span><span class="nt">style</span><span class="p">&gt;</span>
-</span><span id="__span-0-12"><a id="__codelineno-0-12" name="__codelineno-0-12" href="#__codelineno-0-12"></a><span class="p">&lt;</span><span class="nt">div</span> <span class="na">id</span><span class="o">=</span><span class="s">&quot;root&quot;</span><span class="p">&gt;&lt;</span><span class="nt">p</span> <span class="na">class</span><span class="o">=</span><span class="s">&quot;empty&quot;</span><span class="p">&gt;</span>Waiting for results…<span class="p">&lt;/</span><span class="nt">p</span><span class="p">&gt;&lt;/</span><span class="nt">div</span><span class="p">&gt;</span>
-</span><span id="__span-0-13"><a id="__codelineno-0-13" name="__codelineno-0-13" href="#__codelineno-0-13"></a><span class="p">&lt;</span><span class="nt">script</span> <span class="na">type</span><span class="o">=</span><span class="s">&quot;module&quot;</span><span class="p">&gt;</span>
-</span><span id="__span-0-14"><a id="__codelineno-0-14" name="__codelineno-0-14" href="#__codelineno-0-14"></a><span class="w">  </span><span class="k">import</span><span class="w"> </span><span class="p">{</span><span class="w"> </span><span class="nx">App</span><span class="w"> </span><span class="p">}</span><span class="w"> </span><span class="kr">from</span><span class="w"> </span><span class="s2">&quot;https://esm.sh/@modelcontextprotocol/ext-apps&quot;</span><span class="p">;</span>
-</span><span id="__span-0-15"><a id="__codelineno-0-15" name="__codelineno-0-15" href="#__codelineno-0-15"></a>
-</span><span id="__span-0-16"><a id="__codelineno-0-16" name="__codelineno-0-16" href="#__codelineno-0-16"></a><span class="w">  </span><span class="kd">const</span><span class="w"> </span><span class="nx">app</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="ow">new</span><span class="w"> </span><span class="nx">App</span><span class="p">({</span><span class="w"> </span><span class="nx">name</span><span class="o">:</span><span class="w"> </span><span class="s2">&quot;Invoices table&quot;</span><span class="p">,</span><span class="w"> </span><span class="nx">version</span><span class="o">:</span><span class="w"> </span><span class="s2">&quot;1.0.0&quot;</span><span class="w"> </span><span class="p">});</span>
-</span><span id="__span-0-17"><a id="__codelineno-0-17" name="__codelineno-0-17" href="#__codelineno-0-17"></a>
-</span><span id="__span-0-18"><a id="__codelineno-0-18" name="__codelineno-0-18" href="#__codelineno-0-18"></a><span class="w">  </span><span class="nx">app</span><span class="p">.</span><span class="nx">ontoolresult</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="p">(</span><span class="nx">result</span><span class="p">)</span><span class="w"> </span><span class="p">=&gt;</span><span class="w"> </span><span class="p">{</span>
-</span><span id="__span-0-19"><a id="__codelineno-0-19" name="__codelineno-0-19" href="#__codelineno-0-19"></a><span class="w">    </span><span class="c1">// `structuredContent` is what `list_invoices` already emits — the</span>
-</span><span id="__span-0-20"><a id="__codelineno-0-20" name="__codelineno-0-20" href="#__codelineno-0-20"></a><span class="w">    </span><span class="c1">// selector tool&#39;s pagination envelope, unchanged.</span>
-</span><span id="__span-0-21"><a id="__codelineno-0-21" name="__codelineno-0-21" href="#__codelineno-0-21"></a><span class="w">    </span><span class="kd">const</span><span class="w"> </span><span class="nx">rows</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="nx">result</span><span class="p">.</span><span class="nx">structuredContent</span><span class="o">?</span><span class="p">.</span><span class="nx">results</span><span class="w"> </span><span class="o">??</span><span class="w"> </span><span class="p">[];</span>
-</span><span id="__span-0-22"><a id="__codelineno-0-22" name="__codelineno-0-22" href="#__codelineno-0-22"></a><span class="w">    </span><span class="nb">document</span><span class="p">.</span><span class="nx">getElementById</span><span class="p">(</span><span class="s2">&quot;root&quot;</span><span class="p">).</span><span class="nx">innerHTML</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="nx">rows</span><span class="p">.</span><span class="nx">length</span>
-</span><span id="__span-0-23"><a id="__codelineno-0-23" name="__codelineno-0-23" href="#__codelineno-0-23"></a><span class="w">      </span><span class="o">?</span><span class="w"> </span><span class="sb">`&lt;table&gt;&lt;thead&gt;&lt;tr&gt;&lt;th&gt;Number&lt;/th&gt;&lt;th&gt;Customer&lt;/th&gt;&lt;th&gt;Total&lt;/th&gt;&lt;/tr&gt;&lt;/thead&gt;&lt;tbody&gt;</span><span class="si">${</span>
-</span><span id="__span-0-24"><a id="__codelineno-0-24" name="__codelineno-0-24" href="#__codelineno-0-24"></a><span class="w">          </span><span class="nx">rows</span><span class="p">.</span><span class="nx">map</span><span class="p">(</span><span class="nx">r</span><span class="w"> </span><span class="p">=&gt;</span><span class="w"> </span><span class="sb">`&lt;tr&gt;&lt;td&gt;</span><span class="si">${</span><span class="nx">r</span><span class="p">.</span><span class="nx">number</span><span class="si">}</span><span class="sb">&lt;/td&gt;&lt;td&gt;</span><span class="si">${</span><span class="nx">r</span><span class="p">.</span><span class="nx">customer</span><span class="si">}</span><span class="sb">&lt;/td&gt;&lt;td&gt;</span><span class="si">${</span><span class="nx">r</span><span class="p">.</span><span class="nx">total</span><span class="si">}</span><span class="sb">&lt;/td&gt;&lt;/tr&gt;`</span><span class="p">).</span><span class="nx">join</span><span class="p">(</span><span class="s2">&quot;&quot;</span><span class="p">)</span>
-</span><span id="__span-0-25"><a id="__codelineno-0-25" name="__codelineno-0-25" href="#__codelineno-0-25"></a><span class="w">        </span><span class="si">}</span><span class="sb">&lt;/tbody&gt;&lt;/table&gt;`</span>
-</span><span id="__span-0-26"><a id="__codelineno-0-26" name="__codelineno-0-26" href="#__codelineno-0-26"></a><span class="w">      </span><span class="o">:</span><span class="w"> </span><span class="sb">`&lt;p class=&quot;empty&quot;&gt;No invoices matched.&lt;/p&gt;`</span><span class="p">;</span>
-</span><span id="__span-0-27"><a id="__codelineno-0-27" name="__codelineno-0-27" href="#__codelineno-0-27"></a><span class="w">    </span><span class="c1">// Claude sizes the frame from documentElement height; tell the host when</span>
-</span><span id="__span-0-28"><a id="__codelineno-0-28" name="__codelineno-0-28" href="#__codelineno-0-28"></a><span class="w">    </span><span class="c1">// the content changes so it doesn&#39;t clip or leave a gap.</span>
-</span><span id="__span-0-29"><a id="__codelineno-0-29" name="__codelineno-0-29" href="#__codelineno-0-29"></a><span class="w">    </span><span class="nx">app</span><span class="p">.</span><span class="nx">sendSizeChanged</span><span class="p">();</span>
-</span><span id="__span-0-30"><a id="__codelineno-0-30" name="__codelineno-0-30" href="#__codelineno-0-30"></a><span class="w">  </span><span class="p">};</span>
-</span><span id="__span-0-31"><a id="__codelineno-0-31" name="__codelineno-0-31" href="#__codelineno-0-31"></a>
-</span><span id="__span-0-32"><a id="__codelineno-0-32" name="__codelineno-0-32" href="#__codelineno-0-32"></a><span class="w">  </span><span class="nx">app</span><span class="p">.</span><span class="nx">connect</span><span class="p">();</span>
-</span><span id="__span-0-33"><a id="__codelineno-0-33" name="__codelineno-0-33" href="#__codelineno-0-33"></a><span class="p">&lt;/</span><span class="nt">script</span><span class="p">&gt;</span>
+</span><span id="__span-0-2"><a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a><span class="p">&lt;</span><span class="nt">style</span><span class="p">&gt;</span>
+</span><span id="__span-0-3"><a id="__codelineno-0-3" name="__codelineno-0-3" href="#__codelineno-0-3"></a><span class="w">  </span><span class="c">/* Inherit the host&#39;s theme. Never hardcode colours — the same view is</span>
+</span><span id="__span-0-4"><a id="__codelineno-0-4" name="__codelineno-0-4" href="#__codelineno-0-4"></a><span class="c">     drawn in light and dark hosts, and the host sends its palette as CSS</span>
+</span><span id="__span-0-5"><a id="__codelineno-0-5" name="__codelineno-0-5" href="#__codelineno-0-5"></a><span class="c">     custom properties during the handshake. */</span>
+</span><span id="__span-0-6"><a id="__codelineno-0-6" name="__codelineno-0-6" href="#__codelineno-0-6"></a><span class="w">  </span><span class="nt">table</span><span class="w"> </span><span class="p">{</span><span class="w"> </span><span class="k">border-collapse</span><span class="p">:</span><span class="w"> </span><span class="kc">collapse</span><span class="p">;</span><span class="w"> </span><span class="k">width</span><span class="p">:</span><span class="w"> </span><span class="mi">100</span><span class="kt">%</span><span class="p">;</span><span class="w"> </span><span class="p">}</span>
+</span><span id="__span-0-7"><a id="__codelineno-0-7" name="__codelineno-0-7" href="#__codelineno-0-7"></a><span class="w">  </span><span class="nt">th</span><span class="o">,</span><span class="w"> </span><span class="nt">td</span><span class="w"> </span><span class="p">{</span><span class="w"> </span><span class="k">text-align</span><span class="p">:</span><span class="w"> </span><span class="kc">left</span><span class="p">;</span><span class="w"> </span><span class="k">padding</span><span class="p">:</span><span class="w"> </span><span class="mi">6</span><span class="kt">px</span><span class="w"> </span><span class="mi">10</span><span class="kt">px</span><span class="p">;</span><span class="w"> </span><span class="k">border-bottom</span><span class="p">:</span><span class="w"> </span><span class="mi">1</span><span class="kt">px</span><span class="w"> </span><span class="kc">solid</span><span class="w"> </span><span class="nf">var</span><span class="p">(</span><span class="nv">--border</span><span class="p">,</span><span class="w"> </span><span class="kc">currentColor</span><span class="p">);</span><span class="w"> </span><span class="p">}</span>
+</span><span id="__span-0-8"><a id="__codelineno-0-8" name="__codelineno-0-8" href="#__codelineno-0-8"></a><span class="w">  </span><span class="p">.</span><span class="nc">empty</span><span class="w"> </span><span class="p">{</span><span class="w"> </span><span class="k">padding</span><span class="p">:</span><span class="w"> </span><span class="mi">16</span><span class="kt">px</span><span class="p">;</span><span class="w"> </span><span class="k">opacity</span><span class="p">:</span><span class="w"> </span><span class="mf">.7</span><span class="p">;</span><span class="w"> </span><span class="p">}</span>
+</span><span id="__span-0-9"><a id="__codelineno-0-9" name="__codelineno-0-9" href="#__codelineno-0-9"></a><span class="p">&lt;/</span><span class="nt">style</span><span class="p">&gt;</span>
+</span><span id="__span-0-10"><a id="__codelineno-0-10" name="__codelineno-0-10" href="#__codelineno-0-10"></a>
+</span><span id="__span-0-11"><a id="__codelineno-0-11" name="__codelineno-0-11" href="#__codelineno-0-11"></a><span class="p">&lt;</span><span class="nt">div</span> <span class="na">id</span><span class="o">=</span><span class="s">&quot;root&quot;</span><span class="p">&gt;&lt;</span><span class="nt">p</span> <span class="na">class</span><span class="o">=</span><span class="s">&quot;empty&quot;</span><span class="p">&gt;</span>Waiting for results…<span class="p">&lt;/</span><span class="nt">p</span><span class="p">&gt;&lt;/</span><span class="nt">div</span><span class="p">&gt;</span>
+</span><span id="__span-0-12"><a id="__codelineno-0-12" name="__codelineno-0-12" href="#__codelineno-0-12"></a>
+</span><span id="__span-0-13"><a id="__codelineno-0-13" name="__codelineno-0-13" href="#__codelineno-0-13"></a><span class="p">&lt;</span><span class="nt">script</span><span class="p">&gt;</span>
+</span><span id="__span-0-14"><a id="__codelineno-0-14" name="__codelineno-0-14" href="#__codelineno-0-14"></a><span class="w">  </span><span class="c1">// `mcpApp` is defined before this fragment is parsed, so assigning here is</span>
+</span><span id="__span-0-15"><a id="__codelineno-0-15" name="__codelineno-0-15" href="#__codelineno-0-15"></a><span class="w">  </span><span class="c1">// always early enough.</span>
+</span><span id="__span-0-16"><a id="__codelineno-0-16" name="__codelineno-0-16" href="#__codelineno-0-16"></a><span class="w">  </span><span class="nx">mcpApp</span><span class="p">.</span><span class="nx">onToolResult</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="kd">function</span><span class="w"> </span><span class="p">(</span><span class="nx">structuredContent</span><span class="p">)</span><span class="w"> </span><span class="p">{</span>
+</span><span id="__span-0-17"><a id="__codelineno-0-17" name="__codelineno-0-17" href="#__codelineno-0-17"></a><span class="w">    </span><span class="c1">// What `list_invoices` already emits — the selector tool&#39;s pagination</span>
+</span><span id="__span-0-18"><a id="__codelineno-0-18" name="__codelineno-0-18" href="#__codelineno-0-18"></a><span class="w">    </span><span class="c1">// envelope, unchanged.</span>
+</span><span id="__span-0-19"><a id="__codelineno-0-19" name="__codelineno-0-19" href="#__codelineno-0-19"></a><span class="w">    </span><span class="kd">var</span><span class="w"> </span><span class="nx">rows</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="p">(</span><span class="nx">structuredContent</span><span class="w"> </span><span class="o">&amp;&amp;</span><span class="w"> </span><span class="nx">structuredContent</span><span class="p">.</span><span class="nx">results</span><span class="p">)</span><span class="w"> </span><span class="o">||</span><span class="w"> </span><span class="p">[];</span>
+</span><span id="__span-0-20"><a id="__codelineno-0-20" name="__codelineno-0-20" href="#__codelineno-0-20"></a><span class="w">    </span><span class="nb">document</span><span class="p">.</span><span class="nx">getElementById</span><span class="p">(</span><span class="s2">&quot;root&quot;</span><span class="p">).</span><span class="nx">innerHTML</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="nx">rows</span><span class="p">.</span><span class="nx">length</span>
+</span><span id="__span-0-21"><a id="__codelineno-0-21" name="__codelineno-0-21" href="#__codelineno-0-21"></a><span class="w">      </span><span class="o">?</span><span class="w"> </span><span class="s2">&quot;&lt;table&gt;&lt;thead&gt;&lt;tr&gt;&lt;th&gt;Number&lt;/th&gt;&lt;th&gt;Customer&lt;/th&gt;&lt;th&gt;Total&lt;/th&gt;&lt;/tr&gt;&lt;/thead&gt;&lt;tbody&gt;&quot;</span><span class="w"> </span><span class="o">+</span>
+</span><span id="__span-0-22"><a id="__codelineno-0-22" name="__codelineno-0-22" href="#__codelineno-0-22"></a><span class="w">        </span><span class="nx">rows</span><span class="p">.</span><span class="nx">map</span><span class="p">(</span><span class="kd">function</span><span class="w"> </span><span class="p">(</span><span class="nx">r</span><span class="p">)</span><span class="w"> </span><span class="p">{</span>
+</span><span id="__span-0-23"><a id="__codelineno-0-23" name="__codelineno-0-23" href="#__codelineno-0-23"></a><span class="w">          </span><span class="k">return</span><span class="w"> </span><span class="s2">&quot;&lt;tr&gt;&lt;td&gt;&quot;</span><span class="w"> </span><span class="o">+</span><span class="w"> </span><span class="nx">r</span><span class="p">.</span><span class="nx">number</span><span class="w"> </span><span class="o">+</span><span class="w"> </span><span class="s2">&quot;&lt;/td&gt;&lt;td&gt;&quot;</span><span class="w"> </span><span class="o">+</span><span class="w"> </span><span class="nx">r</span><span class="p">.</span><span class="nx">customer</span><span class="w"> </span><span class="o">+</span><span class="w"> </span><span class="s2">&quot;&lt;/td&gt;&lt;td&gt;&quot;</span><span class="w"> </span><span class="o">+</span><span class="w"> </span><span class="nx">r</span><span class="p">.</span><span class="nx">total</span><span class="w"> </span><span class="o">+</span><span class="w"> </span><span class="s2">&quot;&lt;/td&gt;&lt;/tr&gt;&quot;</span><span class="p">;</span>
+</span><span id="__span-0-24"><a id="__codelineno-0-24" name="__codelineno-0-24" href="#__codelineno-0-24"></a><span class="w">        </span><span class="p">}).</span><span class="nx">join</span><span class="p">(</span><span class="s2">&quot;&quot;</span><span class="p">)</span><span class="w"> </span><span class="o">+</span>
+</span><span id="__span-0-25"><a id="__codelineno-0-25" name="__codelineno-0-25" href="#__codelineno-0-25"></a><span class="w">        </span><span class="s2">&quot;&lt;/tbody&gt;&lt;/table&gt;&quot;</span>
+</span><span id="__span-0-26"><a id="__codelineno-0-26" name="__codelineno-0-26" href="#__codelineno-0-26"></a><span class="w">      </span><span class="o">:</span><span class="w"> </span><span class="s2">&quot;&lt;p class=&#39;empty&#39;&gt;No invoices matched.&lt;/p&gt;&quot;</span><span class="p">;</span>
+</span><span id="__span-0-27"><a id="__codelineno-0-27" name="__codelineno-0-27" href="#__codelineno-0-27"></a><span class="w">  </span><span class="p">};</span>
+</span><span id="__span-0-28"><a id="__codelineno-0-28" name="__codelineno-0-28" href="#__codelineno-0-28"></a><span class="p">&lt;/</span><span class="nt">script</span><span class="p">&gt;</span>
 </span></code></pre></div>
-<p>The view can also fetch fresh data itself — <code>app.callServerTool({ name:
-"list_invoices", arguments: { ordering: "-total" } })</code> goes back through the
-ordinary <code>tools/call</code> endpoint, permissions and all. The View API surface
-(<code>ontoolresult</code>, <code>connect</code>, <code>callServerTool</code>, <code>sendSizeChanged</code>,
-<code>requestDisplayMode</code>, …) belongs to
-<a href="https://apps.extensions.modelcontextprotocol.io/"><code>@modelcontextprotocol/ext-apps</code></a>,
-not to this package — check its docs for the current shape.</p>
 <div class="language-python highlight"><pre><span></span><code><span id="__span-1-1"><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a><span class="n">server</span><span class="o">.</span><span class="n">register_ui_resource</span><span class="p">(</span>
 </span><span id="__span-1-2"><a id="__codelineno-1-2" name="__codelineno-1-2" href="#__codelineno-1-2"></a>    <span class="n">name</span><span class="o">=</span><span class="s2">&quot;invoices_table&quot;</span><span class="p">,</span>
 </span><span id="__span-1-3"><a id="__codelineno-1-3" name="__codelineno-1-3" href="#__codelineno-1-3"></a>    <span class="n">uri</span><span class="o">=</span><span class="s2">&quot;ui://invoices/table.html&quot;</span><span class="p">,</span>
-</span><span id="__span-1-4"><a id="__codelineno-1-4" name="__codelineno-1-4" href="#__codelineno-1-4"></a>    <span class="n">template_name</span><span class="o">=</span><span class="s2">&quot;mcp/invoices_table.html&quot;</span><span class="p">,</span>
-</span><span id="__span-1-5"><a id="__codelineno-1-5" name="__codelineno-1-5" href="#__codelineno-1-5"></a>    <span class="n">description</span><span class="o">=</span><span class="s2">&quot;Invoices, as a sortable table.&quot;</span><span class="p">,</span>
-</span><span id="__span-1-6"><a id="__codelineno-1-6" name="__codelineno-1-6" href="#__codelineno-1-6"></a>    <span class="n">ui</span><span class="o">=</span><span class="n">UIResourceMeta</span><span class="p">(</span>
-</span><span id="__span-1-7"><a id="__codelineno-1-7" name="__codelineno-1-7" href="#__codelineno-1-7"></a>        <span class="c1"># The view imports its module from esm.sh, so that origin has to be</span>
-</span><span id="__span-1-8"><a id="__codelineno-1-8" name="__codelineno-1-8" href="#__codelineno-1-8"></a>        <span class="c1"># declared or the host&#39;s CSP blocks it.</span>
-</span><span id="__span-1-9"><a id="__codelineno-1-9" name="__codelineno-1-9" href="#__codelineno-1-9"></a>        <span class="n">csp</span><span class="o">=</span><span class="n">UICsp</span><span class="p">(</span><span class="n">resource_domains</span><span class="o">=</span><span class="p">[</span><span class="s2">&quot;https://esm.sh&quot;</span><span class="p">]),</span>
-</span><span id="__span-1-10"><a id="__codelineno-1-10" name="__codelineno-1-10" href="#__codelineno-1-10"></a>        <span class="n">prefers_border</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
-</span><span id="__span-1-11"><a id="__codelineno-1-11" name="__codelineno-1-11" href="#__codelineno-1-11"></a>    <span class="p">),</span>
-</span><span id="__span-1-12"><a id="__codelineno-1-12" name="__codelineno-1-12" href="#__codelineno-1-12"></a><span class="p">)</span>
+</span><span id="__span-1-4"><a id="__codelineno-1-4" name="__codelineno-1-4" href="#__codelineno-1-4"></a>    <span class="n">body_template_name</span><span class="o">=</span><span class="s2">&quot;mcp/invoices_table.html&quot;</span><span class="p">,</span>
+</span><span id="__span-1-5"><a id="__codelineno-1-5" name="__codelineno-1-5" href="#__codelineno-1-5"></a>    <span class="n">title</span><span class="o">=</span><span class="s2">&quot;Invoices&quot;</span><span class="p">,</span>
+</span><span id="__span-1-6"><a id="__codelineno-1-6" name="__codelineno-1-6" href="#__codelineno-1-6"></a>    <span class="n">description</span><span class="o">=</span><span class="s2">&quot;Invoices, as a sortable table.&quot;</span><span class="p">,</span>
+</span><span id="__span-1-7"><a id="__codelineno-1-7" name="__codelineno-1-7" href="#__codelineno-1-7"></a><span class="p">)</span>
 </span></code></pre></div>
+<p>No <code>csp=</code> is needed for this view, because the document fetches nothing. That
+is the point of the shipped bridge being inlined rather than imported: a view
+that pulls its runtime from a CDN needs that origin in <code>resource_domains</code>
+before it will boot at all, on every host.</p>
+<p>The view can also fetch fresh data itself. <code>mcpApp.callTool("list_invoices",
+{ordering: "-total"})</code> returns a promise and goes back through the ordinary
+<code>tools/call</code> endpoint, permissions and all. The rest of the surface —
+<code>onToolInput</code>, <code>onToolCancelled</code>, <code>onHostContext</code>, <code>onTeardown</code>,
+<code>requestDisplayMode</code>, <code>sendMessage</code>, <code>openLink</code>, <code>hostContext</code> — is documented
+on <a class="autorefs autorefs-internal" title="build_app_document" href="../../reference/registries/#rest_framework_mcp.ui.build_app_document.build_app_document"><code>build_app_document</code></a>.</p>
 <h2 id="2-the-tool">2. The tool<a class="headerlink" href="#2-the-tool" title="Permanent link">&para;</a></h2>
 <div class="language-python highlight"><pre><span></span><code><span id="__span-2-1"><a id="__codelineno-2-1" name="__codelineno-2-1" href="#__codelineno-2-1"></a><span class="n">server</span><span class="o">.</span><span class="n">register_selector_tool</span><span class="p">(</span>
 </span><span id="__span-2-2"><a id="__codelineno-2-2" name="__codelineno-2-2" href="#__codelineno-2-2"></a>    <span class="n">name</span><span class="o">=</span><span class="s2">&quot;list_invoices&quot;</span><span class="p">,</span>
@@ -1696,8 +1715,9 @@ rather than reaching the host as a dangling reference.</p>
 <li><strong>Auth for the view's own calls.</strong> A <code>tools/call</code> the view makes arrives at
   the ordinary endpoint, so <code>permission_classes</code>, per-binding <code>MCPPermission</code>s
   and rate limits all apply unchanged.</li>
-<li><strong>Anything in the sandbox.</strong> The iframe, CSP <em>enforcement</em> and the <code>ui/*</code>
-  postMessage bridge are the host's.</li>
+<li><strong>The view half of the <code>ui/*</code> bridge</strong>, as long as you use
+  <code>body_template_name=</code>. The <em>host</em> half — the iframe, CSP enforcement, and the
+  host's end of the protocol — is the host's and is not implemented here.</li>
 </ul>
 <h2 id="keep-tenant-data-out">Keep tenant data out<a class="headerlink" href="#keep-tenant-data-out" title="Permanent link">&para;</a></h2>
 <div class="admonition warning">
@@ -1716,25 +1736,71 @@ a view once, and the spec defines no expansion mechanism for a tool's
 "A different view per report type" is just N concrete registrations. RFC 6570
 templating for ordinary <em>data</em> resources is unaffected.</p>
 <h2 id="host-gotchas-worth-knowing">Host gotchas worth knowing<a class="headerlink" href="#host-gotchas-worth-knowing" title="Permanent link">&para;</a></h2>
+<p>The bridge handles the first three. They are here because they explain what you
+are seeing when a view misbehaves, and because they are yours again the moment
+you write the document yourself.</p>
 <ul>
-<li><strong>Use the host's CSS custom properties</strong>, never hardcoded colours — the same
-  view is drawn in light and dark hosts.</li>
-<li><strong>Size to content.</strong> Claude reads <code>documentElement</code> height; call
-  <code>sendSizeChanged()</code> after you mutate the DOM, and set an explicit height as a
-  fallback. For long tables, <code>requestDisplayMode()</code> a scroll viewport rather
-  than growing without bound.</li>
+<li><strong>Size to content, and push it.</strong> The host never asks; a silent view is left
+  at whatever the host guessed, which is usually two rows tall. Note that
+  <code>document.documentElement.scrollWidth</code> is the wrong measure when the content
+  sits in an <code>overflow-x: auto</code> container — an overflowing child does not widen
+  its scrolling ancestor, so the document measures exactly as wide as the frame
+  it already has and the view asks for the width it was just given. The bridge
+  measures <code>#mcp-app-root</code> for this reason — but that only helps when the wide
+  content overflows the root itself. If your view scrolls a table inside its own
+  container, the root measures the frame width again: call
+  <code>mcpApp.measureWidthFrom(el)</code> once with the content <em>inside</em> the scroller.</li>
+<li><strong>Width may be fixed.</strong> Hosts can flex only the height
+  (<code>containerDimensions: {width}</code>), and a request for more width is refused
+  silently. Lay out for the width you are given.</li>
+<li><strong>Use the host's CSS custom properties</strong>, never hardcoded colours. The
+  handshake result carries them and the bridge applies them to <code>:root</code>, along
+  with <code>data-theme</code> and the host's locale.</li>
 <li><strong>A view can be recreated at any time.</strong> Hold no state you cannot rebuild
   from the next tool result.</li>
-<li><strong>Declare every origin you touch</strong> in <code>csp</code>. Django <code>{% static %}</code> assets
-  need the static origin in <code>resource_domains</code>; a single-file template needs
-  nothing. The spec's own advice is to inline everything.</li>
+<li><strong>Declare every origin you touch</strong> in <code>csp</code>. Django <code>{% static %}</code> assets need
+  the static origin in <code>resource_domains</code>; a view built with
+  <code>body_template_name=</code> and no assets of its own needs nothing.</li>
+<li><strong>A failed handshake is logged, not displayed.</strong> The bridge always reveals
+  the frame — that is the half that cannot be recovered from — but it writes the
+  reason into the document only under <code>settings.DEBUG</code>, or when you pass
+  <code>diagnostics=True</code>. A host can error on <code>ui/initialize</code> and still deliver the
+  tool result, so an unconditional banner would put raw protocol text above
+  working content for every user. <code>console.error</code> gets it either way.</li>
+<li><strong><code>prefers_border=True</code> is for edge-to-edge views.</strong> The host already draws
+  its own chrome, and the packaged shell paints no background of its own for the
+  same reason — a view that also paints a card ends up inside three frames.</li>
 </ul>
-<h2 id="trying-it">Trying it<a class="headerlink" href="#trying-it" title="Permanent link">&para;</a></h2>
-<p>Any MCP Apps host: the extension's own <code>basic-host</code> example, MCPJam, or Goose.
-Claude needs a publicly reachable URL, so tunnel your dev server and add it as
-a custom connector.</p>
-<p><strong>The MCP Inspector does not render apps</strong> — it speaks base MCP only, so a view
-shows up there as a resource with an HTML body, which is all it is.</p>
+<h2 id="caching-and-why-a-negative-result-can-lie-to-you">Caching, and why a negative result can lie to you<a class="headerlink" href="#caching-and-why-a-negative-result-can-lie-to-you" title="Permanent link">&para;</a></h2>
+<p>A host may prefetch a <code>ui://</code> document and is <strong>not obliged to honour</strong>
+<code>ttlMs: 0</code>, which is what <code>RESOURCE_CACHE_TTL_MS</code> defaults to. A view served
+stale across a template change will happily disprove a fix you actually made.</p>
+<p>Until this package can version a view for you, the reliable workaround is the
+hashed-asset-filename trick: put a few hex characters of the document's own
+digest in the URI, so a changed view is a different resource.</p>
+<p><strong>Hash the composed document, not the template.</strong> Under <code>body_template_name=</code>
+the template is a <em>fragment</em>; what the host caches is that fragment plus the
+packaged shell and the whole of <code>bridge.js</code>, both of which ship in the wheel. A
+digest taken over the template file alone does not move when you upgrade the
+package, so the host keeps serving what it cached against the old bridge — the
+same false negative this section exists to warn about, reintroduced at the
+upgrade boundary.</p>
+<div class="language-python highlight"><pre><span></span><code><span id="__span-3-1"><a id="__codelineno-3-1" name="__codelineno-3-1" href="#__codelineno-3-1"></a><span class="n">document</span> <span class="o">=</span> <span class="n">build_app_document</span><span class="p">(</span><span class="n">render_to_string</span><span class="p">(</span><span class="s2">&quot;mcp/invoices_table.html&quot;</span><span class="p">),</span> <span class="n">title</span><span class="o">=</span><span class="s2">&quot;Invoices&quot;</span><span class="p">)</span>
+</span><span id="__span-3-2"><a id="__codelineno-3-2" name="__codelineno-3-2" href="#__codelineno-3-2"></a><span class="n">digest</span> <span class="o">=</span> <span class="n">hashlib</span><span class="o">.</span><span class="n">sha256</span><span class="p">(</span><span class="n">document</span><span class="o">.</span><span class="n">encode</span><span class="p">())</span><span class="o">.</span><span class="n">hexdigest</span><span class="p">()[:</span><span class="mi">8</span><span class="p">]</span>
+</span><span id="__span-3-3"><a id="__codelineno-3-3" name="__codelineno-3-3" href="#__codelineno-3-3"></a><span class="n">uri</span> <span class="o">=</span> <span class="sa">f</span><span class="s2">&quot;ui://invoices/table.</span><span class="si">{</span><span class="n">digest</span><span class="si">}</span><span class="s2">.html&quot;</span>
+</span><span id="__span-3-4"><a id="__codelineno-3-4" name="__codelineno-3-4" href="#__codelineno-3-4"></a>
+</span><span id="__span-3-5"><a id="__codelineno-3-5" name="__codelineno-3-5" href="#__codelineno-3-5"></a><span class="n">server</span><span class="o">.</span><span class="n">register_ui_resource</span><span class="p">(</span><span class="n">name</span><span class="o">=</span><span class="s2">&quot;invoices_table&quot;</span><span class="p">,</span> <span class="n">uri</span><span class="o">=</span><span class="n">uri</span><span class="p">,</span> <span class="n">body_template_name</span><span class="o">=...</span><span class="p">)</span>
+</span><span id="__span-3-6"><a id="__codelineno-3-6" name="__codelineno-3-6" href="#__codelineno-3-6"></a><span class="n">server</span><span class="o">.</span><span class="n">register_selector_tool</span><span class="p">(</span><span class="n">name</span><span class="o">=</span><span class="s2">&quot;list_invoices&quot;</span><span class="p">,</span> <span class="n">spec</span><span class="o">=...</span><span class="p">,</span> <span class="n">ui</span><span class="o">=</span><span class="n">UIToolMeta</span><span class="p">(</span><span class="n">resource_uri</span><span class="o">=</span><span class="n">uri</span><span class="p">))</span>
+</span></code></pre></div>
+<p>Both registrations have to name the same URI, which is the reason this is a
+recipe rather than a parameter: the tool link is checked against the resource
+registry at registration, so a hash the package computed on its own would have
+to be threaded back into <code>UIToolMeta</code> for you. Computing it here means you are
+holding it already.</p>
+<h2 id="end-the-uri-in-html">End the URI in <code>.html</code><a class="headerlink" href="#end-the-uri-in-html" title="Permanent link">&para;</a></h2>
+<p>Not required by the spec. Every reference implementation does it, and the one
+public report of a host resolving a view and rendering nothing also used an
+extensionless URI. It costs nothing to match the convention.</p>
 
 
 

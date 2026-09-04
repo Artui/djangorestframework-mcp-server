@@ -918,6 +918,23 @@
     </span>
   </a>
   
+    <nav class="md-nav" aria-label="Interactive views (MCP Apps)">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#writing-the-bridge-yourself" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Writing the bridge yourself
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
 </li>
       
         <li class="md-nav__item">
@@ -2585,6 +2602,23 @@
     </span>
   </a>
   
+    <nav class="md-nav" aria-label="Interactive views (MCP Apps)">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#writing-the-bridge-yourself" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Writing the bridge yourself
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
 </li>
       
         <li class="md-nav__item">
@@ -4100,9 +4134,27 @@ there is no protocol bump and no transport change.</p>
 </span><span id="__span-37-8"><a id="__codelineno-37-8" name="__codelineno-37-8" href="#__codelineno-37-8"></a>    <span class="p">),</span>
 </span><span id="__span-37-9"><a id="__codelineno-37-9" name="__codelineno-37-9" href="#__codelineno-37-9"></a><span class="p">)</span>
 </span></code></pre></div>
-<p>The <strong>host</strong> renders: it builds the sandboxed iframe, constructs and enforces
-the CSP from what you declared, and runs the <code>ui/*</code> postMessage bridge. None of
-that is implemented here, and none of it should be.</p>
+<p>The <strong>host</strong> renders: it builds the sandboxed iframe and constructs and
+enforces the CSP from what you declared. Neither is implemented here, and
+neither should be.</p>
+<p>The <code>ui/*</code> postMessage bridge is <strong>not</strong> on that list, and reading it as though
+it were is the single most expensive misunderstanding this extension produces.
+The bridge has two ends. The host runs its end; the <em>document</em> runs the other,
+and the document is yours. That second end is a mandatory startup handshake
+whose failure modes are all silent — see
+<a href="#writing-the-bridge-yourself">Writing the bridge yourself</a>.</p>
+<p>So the package ships the view end, inlined into a document it composes for you:</p>
+<div class="language-python highlight"><pre><span></span><code><span id="__span-38-1"><a id="__codelineno-38-1" name="__codelineno-38-1" href="#__codelineno-38-1"></a><span class="n">server</span><span class="o">.</span><span class="n">register_ui_resource</span><span class="p">(</span>
+</span><span id="__span-38-2"><a id="__codelineno-38-2" name="__codelineno-38-2" href="#__codelineno-38-2"></a>    <span class="n">name</span><span class="o">=</span><span class="s2">&quot;invoices_table&quot;</span><span class="p">,</span>
+</span><span id="__span-38-3"><a id="__codelineno-38-3" name="__codelineno-38-3" href="#__codelineno-38-3"></a>    <span class="n">uri</span><span class="o">=</span><span class="s2">&quot;ui://invoices/table.html&quot;</span><span class="p">,</span>
+</span><span id="__span-38-4"><a id="__codelineno-38-4" name="__codelineno-38-4" href="#__codelineno-38-4"></a>    <span class="n">body_template_name</span><span class="o">=</span><span class="s2">&quot;mcp/invoices_table.html&quot;</span><span class="p">,</span>  <span class="c1"># markup only</span>
+</span><span id="__span-38-5"><a id="__codelineno-38-5" name="__codelineno-38-5" href="#__codelineno-38-5"></a><span class="p">)</span>
+</span></code></pre></div>
+<p><code>body_template_name=</code> takes a template holding the view's markup, styles and
+scripts, and wraps it in a document carrying
+<a class="autorefs autorefs-internal" title="build_app_document" href="../reference/registries/#rest_framework_mcp.ui.build_app_document.build_app_document"><code>build_app_document</code></a>'s
+shell and bridge. The other three sources — <code>template_name=</code>, <code>html=</code>,
+<code>selector=</code> — hand you a whole document to fill, bridge included.</p>
 <p>A view is an ordinary resource — one URI namespace with your data resources,
 listed in <code>resources/list</code>, and guardable with <code>permissions=</code> — with three
 things fixed for you: the <code>text/html;profile=mcp-app</code> mime type, <code>TEXT</code> body
@@ -4127,11 +4179,11 @@ across the host's cache.</p>
 </div>
 <p>A tool then points at the view, and the host renders that tool's result inside
 it instead of showing raw JSON:</p>
-<div class="language-python highlight"><pre><span></span><code><span id="__span-38-1"><a id="__codelineno-38-1" name="__codelineno-38-1" href="#__codelineno-38-1"></a><span class="n">server</span><span class="o">.</span><span class="n">register_selector_tool</span><span class="p">(</span>
-</span><span id="__span-38-2"><a id="__codelineno-38-2" name="__codelineno-38-2" href="#__codelineno-38-2"></a>    <span class="n">name</span><span class="o">=</span><span class="s2">&quot;list_invoices&quot;</span><span class="p">,</span>
-</span><span id="__span-38-3"><a id="__codelineno-38-3" name="__codelineno-38-3" href="#__codelineno-38-3"></a>    <span class="n">spec</span><span class="o">=</span><span class="n">list_invoices_spec</span><span class="p">,</span>
-</span><span id="__span-38-4"><a id="__codelineno-38-4" name="__codelineno-38-4" href="#__codelineno-38-4"></a>    <span class="n">ui</span><span class="o">=</span><span class="n">UIToolMeta</span><span class="p">(</span><span class="n">resource_uri</span><span class="o">=</span><span class="s2">&quot;ui://invoices/table.html&quot;</span><span class="p">),</span>
-</span><span id="__span-38-5"><a id="__codelineno-38-5" name="__codelineno-38-5" href="#__codelineno-38-5"></a><span class="p">)</span>
+<div class="language-python highlight"><pre><span></span><code><span id="__span-39-1"><a id="__codelineno-39-1" name="__codelineno-39-1" href="#__codelineno-39-1"></a><span class="n">server</span><span class="o">.</span><span class="n">register_selector_tool</span><span class="p">(</span>
+</span><span id="__span-39-2"><a id="__codelineno-39-2" name="__codelineno-39-2" href="#__codelineno-39-2"></a>    <span class="n">name</span><span class="o">=</span><span class="s2">&quot;list_invoices&quot;</span><span class="p">,</span>
+</span><span id="__span-39-3"><a id="__codelineno-39-3" name="__codelineno-39-3" href="#__codelineno-39-3"></a>    <span class="n">spec</span><span class="o">=</span><span class="n">list_invoices_spec</span><span class="p">,</span>
+</span><span id="__span-39-4"><a id="__codelineno-39-4" name="__codelineno-39-4" href="#__codelineno-39-4"></a>    <span class="n">ui</span><span class="o">=</span><span class="n">UIToolMeta</span><span class="p">(</span><span class="n">resource_uri</span><span class="o">=</span><span class="s2">&quot;ui://invoices/table.html&quot;</span><span class="p">),</span>
+</span><span id="__span-39-5"><a id="__codelineno-39-5" name="__codelineno-39-5" href="#__codelineno-39-5"></a><span class="p">)</span>
 </span></code></pre></div>
 <p>The render payload is the <code>structuredContent</code> the tool <strong>already emits</strong> — no
 second serialisation path — and a <code>tools/call</code> the view makes comes back
@@ -4174,6 +4226,71 @@ one-directional, client → server</strong> — the spec defines no matching ser
 capability, so nothing is sent back, and <code>_meta.ui</code> is emitted unconditionally.
 Unknown <code>_meta</code> keys are ignorable by design, so a client that doesn't
 implement Apps is unaffected.</p>
+<h3 id="writing-the-bridge-yourself">Writing the bridge yourself<a class="headerlink" href="#writing-the-bridge-yourself" title="Permanent link">&para;</a></h3>
+<p><code>body_template_name=</code> exists so you do not have to read this. Everything below
+is what <code>template_name=</code>, <code>html=</code> and <code>selector=</code> hand back to you along with
+the whole document, and it is written as a checklist because every item on it
+has cost somebody at least one debugging round.</p>
+<p>The thing that makes this expensive is not difficulty, it is <strong>silence</strong>. A
+broken bridge raises nothing, logs nothing, and leaves a clean <code>resources/read</code>
+in the server log. The host keeps the frame hidden until the view says it is
+ready — so an error message the view writes into the document is itself
+invisible. There is no diagnostic surface until the handshake completes, which
+makes the first rule the one that matters.</p>
+<ol>
+<li>
+<p><strong>The view MUST send <code>ui/notifications/initialized</code> — on <em>any</em> reply to
+   <code>ui/initialize</code>, including an error, and even if the host never replies at
+   all.</strong> The spec requires that "the Host MUST NOT send any request or
+   notification to the View before it receives an initialized notification",
+   and says nothing about what a view should do when <code>ui/initialize</code> fails. The
+   natural shape — treat the error as fatal, explain in the document, return —
+   produces a frame that stays hidden forever with the explanation sealed
+   inside it. Send the notification first, then read the result. A timeout that
+   sends it anyway costs four lines and covers the silent host.</p>
+<div class="admonition warning">
+<p class="admonition-title">The extension's own SDK does not do this</p>
+<p><code>App.connect()</code> awaits <code>ui/initialize</code> inside a <code>try</code> and sends
+<code>initialized</code> only after a successful result, so an error reply jumps
+past it to the <code>catch</code>. A view built on the SDK inherits this.</p>
+</div>
+</li>
+<li>
+<p><strong>The view MUST push <code>ui/notifications/size-changed</code>.</strong> The host never asks.
+   A silent view is left at whatever the host guessed. Measure an element that
+   is an <strong>ancestor of the overflow</strong>, not <code>documentElement</code>: content inside an
+   <code>overflow-x: auto</code> container does not widen its scrolling ancestor, so
+   anything above that container measures as wide as the frame it already has
+   and the view asks for the width it was just given. A wrapper element is not
+   enough on its own — a view that scrolls a wide table internally has to
+   measure the content inside the scroller. Note that a host may fix the width
+   and flex only the height, and refuse the width silently.</p>
+</li>
+<li><strong><code>ui/initialize</code> params are <code>appInfo</code>, <code>appCapabilities</code> and
+   <code>protocolVersion</code>.</strong> The spec's prose and its worked example disagree here —
+   the pinned <code>2026-01-26</code> revision's example sends <code>capabilities</code> against
+   normative text requiring <code>appCapabilities</code>. Follow the generated schema,
+   which is what hosts are built from.</li>
+<li><strong>The view MUST answer host requests it does not implement</strong>, with a
+   JSON-RPC <code>-32601</code> rather than silence. An unanswered request leaves the host
+   waiting on a promise that never settles.</li>
+<li><strong>Write <code>&lt;html&gt;</code>, <code>&lt;head&gt;</code> and <code>&lt;body&gt;</code> out.</strong> HTML5 infers all three and
+   browsers do not care, but the sandbox loads this document as raw HTML and
+   applies a CSP to it, and a sandbox injecting anything into <code>&lt;head&gt;</code> has
+   nowhere to put it when the element is implied. Every reference view does it.</li>
+<li><strong>Inline everything.</strong> A view that imports its runtime from a CDN needs that
+   origin in <code>csp.resource_domains</code> before it will boot, on every host — and
+   the extension's own advice is to inline.</li>
+<li><strong>End the URI in <code>.html</code>.</strong> Not a spec requirement; every reference
+   implementation does it, and the one public report of a host resolving a view
+   and rendering nothing also used an extensionless URI.</li>
+</ol>
+<p>A last one that is not about the bridge: <strong>a host may prefetch and cache a
+<code>ui://</code> document, and is not obliged to honour <code>ttlMs: 0</code></strong> — which is what
+<code>RESOURCE_CACHE_TTL_MS</code> defaults to. A stale view will disprove a fix you
+actually made. The
+<a href="../recipes/interactive-view/#caching-and-why-a-negative-result-can-lie-to-you">recipe</a>
+carries the hashed-URI workaround.</p>
 <h2 id="dispatch-flow">Dispatch flow<a class="headerlink" href="#dispatch-flow" title="Permanent link">&para;</a></h2>
 <p>The MCP package owns its own dispatch flow. It does <strong>not</strong> import
 <code>_execute_mutation</code> or anything under <code>rest_framework_services.viewsets</code>.</p>
@@ -4277,19 +4394,19 @@ optional <code>structuredContent</code>:</p>
 <li><code>structuredContent</code> is always JSON-shaped — clients parse it directly.</li>
 <li><code>content[0]</code> is a text block whose payload is encoded per <code>OutputFormat</code>.</li>
 </ul>
-<div class="language-python highlight"><pre><span></span><code><span id="__span-39-1"><a id="__codelineno-39-1" name="__codelineno-39-1" href="#__codelineno-39-1"></a><span class="kn">from</span><span class="w"> </span><span class="nn">rest_framework_mcp</span><span class="w"> </span><span class="kn">import</span> <span class="n">OutputFormat</span>
-</span><span id="__span-39-2"><a id="__codelineno-39-2" name="__codelineno-39-2" href="#__codelineno-39-2"></a>
-</span><span id="__span-39-3"><a id="__codelineno-39-3" name="__codelineno-39-3" href="#__codelineno-39-3"></a><span class="n">server</span><span class="o">.</span><span class="n">register_service_tool</span><span class="p">(</span>
-</span><span id="__span-39-4"><a id="__codelineno-39-4" name="__codelineno-39-4" href="#__codelineno-39-4"></a>    <span class="n">name</span><span class="o">=</span><span class="s2">&quot;invoices.list&quot;</span><span class="p">,</span>
-</span><span id="__span-39-5"><a id="__codelineno-39-5" name="__codelineno-39-5" href="#__codelineno-39-5"></a>    <span class="n">spec</span><span class="o">=</span><span class="n">ServiceSpec</span><span class="p">(</span>
-</span><span id="__span-39-6"><a id="__codelineno-39-6" name="__codelineno-39-6" href="#__codelineno-39-6"></a>        <span class="n">service</span><span class="o">=</span><span class="n">list_invoices</span><span class="p">,</span>
-</span><span id="__span-39-7"><a id="__codelineno-39-7" name="__codelineno-39-7" href="#__codelineno-39-7"></a>        <span class="n">output_selector_spec</span><span class="o">=</span><span class="n">SelectorSpec</span><span class="p">(</span>
-</span><span id="__span-39-8"><a id="__codelineno-39-8" name="__codelineno-39-8" href="#__codelineno-39-8"></a>            <span class="n">kind</span><span class="o">=</span><span class="n">SelectorKind</span><span class="o">.</span><span class="n">LIST</span><span class="p">,</span>
-</span><span id="__span-39-9"><a id="__codelineno-39-9" name="__codelineno-39-9" href="#__codelineno-39-9"></a>            <span class="n">output_serializer</span><span class="o">=</span><span class="n">InvoiceOutputSerializer</span><span class="p">,</span>
-</span><span id="__span-39-10"><a id="__codelineno-39-10" name="__codelineno-39-10" href="#__codelineno-39-10"></a>        <span class="p">),</span>
-</span><span id="__span-39-11"><a id="__codelineno-39-11" name="__codelineno-39-11" href="#__codelineno-39-11"></a>    <span class="p">),</span>
-</span><span id="__span-39-12"><a id="__codelineno-39-12" name="__codelineno-39-12" href="#__codelineno-39-12"></a>    <span class="n">output_format</span><span class="o">=</span><span class="n">OutputFormat</span><span class="o">.</span><span class="n">AUTO</span><span class="p">,</span>  <span class="c1"># JSON, TOON, or AUTO</span>
-</span><span id="__span-39-13"><a id="__codelineno-39-13" name="__codelineno-39-13" href="#__codelineno-39-13"></a><span class="p">)</span>
+<div class="language-python highlight"><pre><span></span><code><span id="__span-40-1"><a id="__codelineno-40-1" name="__codelineno-40-1" href="#__codelineno-40-1"></a><span class="kn">from</span><span class="w"> </span><span class="nn">rest_framework_mcp</span><span class="w"> </span><span class="kn">import</span> <span class="n">OutputFormat</span>
+</span><span id="__span-40-2"><a id="__codelineno-40-2" name="__codelineno-40-2" href="#__codelineno-40-2"></a>
+</span><span id="__span-40-3"><a id="__codelineno-40-3" name="__codelineno-40-3" href="#__codelineno-40-3"></a><span class="n">server</span><span class="o">.</span><span class="n">register_service_tool</span><span class="p">(</span>
+</span><span id="__span-40-4"><a id="__codelineno-40-4" name="__codelineno-40-4" href="#__codelineno-40-4"></a>    <span class="n">name</span><span class="o">=</span><span class="s2">&quot;invoices.list&quot;</span><span class="p">,</span>
+</span><span id="__span-40-5"><a id="__codelineno-40-5" name="__codelineno-40-5" href="#__codelineno-40-5"></a>    <span class="n">spec</span><span class="o">=</span><span class="n">ServiceSpec</span><span class="p">(</span>
+</span><span id="__span-40-6"><a id="__codelineno-40-6" name="__codelineno-40-6" href="#__codelineno-40-6"></a>        <span class="n">service</span><span class="o">=</span><span class="n">list_invoices</span><span class="p">,</span>
+</span><span id="__span-40-7"><a id="__codelineno-40-7" name="__codelineno-40-7" href="#__codelineno-40-7"></a>        <span class="n">output_selector_spec</span><span class="o">=</span><span class="n">SelectorSpec</span><span class="p">(</span>
+</span><span id="__span-40-8"><a id="__codelineno-40-8" name="__codelineno-40-8" href="#__codelineno-40-8"></a>            <span class="n">kind</span><span class="o">=</span><span class="n">SelectorKind</span><span class="o">.</span><span class="n">LIST</span><span class="p">,</span>
+</span><span id="__span-40-9"><a id="__codelineno-40-9" name="__codelineno-40-9" href="#__codelineno-40-9"></a>            <span class="n">output_serializer</span><span class="o">=</span><span class="n">InvoiceOutputSerializer</span><span class="p">,</span>
+</span><span id="__span-40-10"><a id="__codelineno-40-10" name="__codelineno-40-10" href="#__codelineno-40-10"></a>        <span class="p">),</span>
+</span><span id="__span-40-11"><a id="__codelineno-40-11" name="__codelineno-40-11" href="#__codelineno-40-11"></a>    <span class="p">),</span>
+</span><span id="__span-40-12"><a id="__codelineno-40-12" name="__codelineno-40-12" href="#__codelineno-40-12"></a>    <span class="n">output_format</span><span class="o">=</span><span class="n">OutputFormat</span><span class="o">.</span><span class="n">AUTO</span><span class="p">,</span>  <span class="c1"># JSON, TOON, or AUTO</span>
+</span><span id="__span-40-13"><a id="__codelineno-40-13" name="__codelineno-40-13" href="#__codelineno-40-13"></a><span class="p">)</span>
 </span></code></pre></div>
 <p><code>AUTO</code> picks per-payload — TOON for uniform list-of-objects, JSON otherwise.
 TOON is wrapped in a fenced <code>```toon</code> block with a leading <code># format: toon</code>
@@ -4331,6 +4448,20 @@ global, <code>True</code>/<code>False</code> force the behaviour regardless of t
 <code>ImproperlyConfigured</code> at construction time (for explicit per-binding
 conflicts) or at request time (for setting-level conflicts), so the misconfig
 surfaces immediately rather than producing a non-compliant response.</p>
+<div class="admonition tip">
+<p class="admonition-title">If you turned <code>outputSchema</code> off because your serializer returns a subset</p>
+<p>That is the right instinct against the wrong cause, and it costs the model
+the schema for every other tool too. A serializer that drops fields at
+runtime does advertise a shape its results do not match — but only when the
+pruning happens somewhere this server cannot see.</p>
+<p>Prune with <a href="../recipes/agent-audience/">field markings</a> instead. The
+advertised schema is generated from the <strong>same declaration</strong> the payload is
+projected through, so the two cannot disagree: a field marked hidden leaves
+both. Then verify it rather than trusting it —
+<a href="../reference/testing/#does-a-result-match-the-schema-the-server-advertised"><code>assert_tool_result_conforms</code></a>
+checks a real result against the schema its own <code>tools/list</code> entry
+advertised, types and formats included.</p>
+</div>
 <h2 id="auth-model">Auth model<a class="headerlink" href="#auth-model" title="Permanent link">&para;</a></h2>
 <p>Two pluggable surfaces:</p>
 <ul>
