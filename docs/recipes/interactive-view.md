@@ -135,7 +135,10 @@ you write the document yourself.
   sits in an `overflow-x: auto` container — an overflowing child does not widen
   its scrolling ancestor, so the document measures exactly as wide as the frame
   it already has and the view asks for the width it was just given. The bridge
-  measures `#mcp-app-root` for this reason.
+  measures `#mcp-app-root` for this reason — but that only helps when the wide
+  content overflows the root itself. If your view scrolls a table inside its own
+  container, the root measures the frame width again: call
+  `mcpApp.measureWidthFrom(el)` once with the content *inside* the scroller.
 - **Width may be fixed.** Hosts can flex only the height
   (`containerDimensions: {width}`), and a request for more width is refused
   silently. Lay out for the width you are given.
@@ -147,6 +150,12 @@ you write the document yourself.
 - **Declare every origin you touch** in `csp`. Django `{% static %}` assets need
   the static origin in `resource_domains`; a view built with
   `body_template_name=` and no assets of its own needs nothing.
+- **A failed handshake is logged, not displayed.** The bridge always reveals
+  the frame — that is the half that cannot be recovered from — but it writes the
+  reason into the document only under `settings.DEBUG`, or when you pass
+  `diagnostics=True`. A host can error on `ui/initialize` and still deliver the
+  tool result, so an unconditional banner would put raw protocol text above
+  working content for every user. `console.error` gets it either way.
 - **`prefers_border=True` is for edge-to-edge views.** The host already draws
   its own chrome, and the packaged shell paints no background of its own for the
   same reason — a view that also paints a card ends up inside three frames.
@@ -158,13 +167,20 @@ A host may prefetch a `ui://` document and is **not obliged to honour**
 stale across a template change will happily disprove a fix you actually made.
 
 Until this package can version a view for you, the reliable workaround is the
-hashed-asset-filename trick: hash the template's contents and put a few hex
-characters in the URI, so a changed view is a different resource.
+hashed-asset-filename trick: put a few hex characters of the document's own
+digest in the URI, so a changed view is a different resource.
+
+**Hash the composed document, not the template.** Under `body_template_name=`
+the template is a *fragment*; what the host caches is that fragment plus the
+packaged shell and the whole of `bridge.js`, both of which ship in the wheel. A
+digest taken over the template file alone does not move when you upgrade the
+package, so the host keeps serving what it cached against the old bridge — the
+same false negative this section exists to warn about, reintroduced at the
+upgrade boundary.
 
 ```python
-digest = hashlib.sha256(
-    (Path(settings.BASE_DIR) / "templates/mcp/invoices_table.html").read_bytes()
-).hexdigest()[:8]
+document = build_app_document(render_to_string("mcp/invoices_table.html"), title="Invoices")
+digest = hashlib.sha256(document.encode()).hexdigest()[:8]
 uri = f"ui://invoices/table.{digest}.html"
 
 server.register_ui_resource(name="invoices_table", uri=uri, body_template_name=...)
@@ -174,7 +190,8 @@ server.register_selector_tool(name="list_invoices", spec=..., ui=UIToolMeta(reso
 Both registrations have to name the same URI, which is the reason this is a
 recipe rather than a parameter: the tool link is checked against the resource
 registry at registration, so a hash the package computed on its own would have
-to be threaded back into `UIToolMeta` for you.
+to be threaded back into `UIToolMeta` for you. Computing it here means you are
+holding it already.
 
 ## End the URI in `.html`
 

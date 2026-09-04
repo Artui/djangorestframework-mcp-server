@@ -21,14 +21,21 @@ function makeElement(id) {
     id: id || "",
     textContent: "",
     children: [],
+    parentNode: null,
     scrollWidth: 320,
     scrollHeight: 240,
     style: { setProperty() {} },
     get firstChild() {
       return this.children[0] || null;
     },
-    insertBefore(node, before) {
+    insertBefore(node) {
       this.children.unshift(node);
+      node.parentNode = this;
+      return node;
+    },
+    removeChild(node) {
+      this.children = this.children.filter((c) => c !== node);
+      node.parentNode = null;
       return node;
     },
   };
@@ -37,6 +44,7 @@ function makeElement(id) {
 /* A run of the bridge: a fresh DOM, a fresh fake host, a controllable clock. */
 function run(options) {
   const posted = [];
+  const logged = [];
   const timers = [];
   const listeners = { window: {}, document: {} };
   const root = makeElement("mcp-app-root");
@@ -44,9 +52,10 @@ function run(options) {
 
   const documentElement = {
     lang: "en",
-    attributes: {},
+    attributes: options.diagnostics ? { "data-mcp-diagnostics": "1" } : {},
     style: { properties: {}, setProperty(k, v) { this.properties[k] = v; } },
     setAttribute(k, v) { this.attributes[k] = v; },
+    getAttribute(k) { return Object.prototype.hasOwnProperty.call(this.attributes, k) ? this.attributes[k] : null; },
   };
 
   const document = {
@@ -57,7 +66,21 @@ function run(options) {
       (listeners.document[type] = listeners.document[type] || []).push(fn);
     },
     getElementById(id) {
-      return elements[id] || null;
+      if (elements[id]) {
+        return elements[id];
+      }
+      // Elements the bridge creates and inserts are findable by id too, or
+      // `showError` would build a second banner every time and `clearError`
+      // would never find the first.
+      const search = (node) => {
+        for (const child of node.children || []) {
+          if (child.id === id) return child;
+          const found = search(child);
+          if (found) return found;
+        }
+        return null;
+      };
+      return search(root);
     },
     createElement() {
       return makeElement();
@@ -92,16 +115,20 @@ function run(options) {
     Math,
     String,
     setTimeout(fn, ms) {
-      timers.push({ fn, ms });
+      timers.push({ fn, ms, id: timers.length + 1 });
       return timers.length;
     },
-    clearTimeout() {},
-    console,
+    clearTimeout(id) {
+      const at = timers.findIndex((t) => t.id === id);
+      if (at !== -1) timers.splice(at, 1);
+    },
+    console: { error: (m) => logged.push(m) },
   });
   vm.runInContext(source, context);
 
   const api = {
     posted,
+    logged,
     root,
     documentElement,
     mcpApp: window.mcpApp,
@@ -179,17 +206,70 @@ scenarios.success = async () => {
  * is invisible AND unable to say why.
  */
 scenarios.error_reply = async () => {
+  const app = run({ diagnostics: true });
+  await handshake(app, { error: { code: -32603, message: "host said no" } });
+  return {
+    methods: app.methods(),
+    banner: app.root.children.map((c) => c.textContent),
+    logged: app.logged,
+  };
+};
+
+/*
+ * The same failure with diagnostics off, which is the default. The frame is
+ * still revealed -- that is the unrecoverable half -- but the reason goes to
+ * the console rather than in front of whoever is using the product.
+ */
+scenarios.error_reply_quiet = async () => {
   const app = run({});
   await handshake(app, { error: { code: -32603, message: "host said no" } });
   return {
     methods: app.methods(),
     banner: app.root.children.map((c) => c.textContent),
+    logged: app.logged,
   };
+};
+
+/*
+ * A host slower than HANDSHAKE_TIMEOUT_MS. The timeout completes the handshake
+ * and says so; the reply then arrives and is still the answer. Discarding it
+ * left the view on the UA default theme under a banner claiming the host never
+ * replied -- true when written, false by the time anyone read it.
+ */
+scenarios.late_reply = async () => {
+  const app = run({ diagnostics: true });
+  app.domReady();
+  app.fireTimers();
+  await flush();
+  const bannerAfterTimeout = app.root.children.map((c) => c.textContent);
+  app.deliver({ jsonrpc: "2.0", id: 1, result: INITIALIZE_RESULT });
+  await flush();
+  return {
+    banner_after_timeout: bannerAfterTimeout,
+    banner_after_reply: app.root.children.map((c) => c.textContent),
+    initialized_count: app.methods().filter((m) => m === "ui/notifications/initialized").length,
+    theme: app.documentElement.attributes["data-theme"],
+    protocol_version: app.mcpApp.protocolVersion,
+  };
+};
+
+/*
+ * Measuring `#mcp-app-root` moves the overflow problem one level up rather than
+ * solving it: a view whose wide table sits inside its own scroller has the
+ * table clipped by the scroller and the scroller sized by the root.
+ */
+scenarios.measure_width_from = async () => {
+  const app = run({});
+  await handshake(app, { result: INITIALIZE_RESULT });
+  const beforeWidth = app.posted.filter((m) => m.method === "ui/notifications/size-changed").pop().params.width;
+  app.mcpApp.measureWidthFrom({ scrollWidth: 1400, scrollHeight: 200 });
+  const afterWidth = app.posted.filter((m) => m.method === "ui/notifications/size-changed").pop().params;
+  return { before_width: beforeWidth, after: afterWidth };
 };
 
 /* The host never answers at all. Same requirement, different cause. */
 scenarios.no_reply = async () => {
-  const app = run({});
+  const app = run({ diagnostics: true });
   app.domReady();
   app.fireTimers();
   await flush();
@@ -229,7 +309,7 @@ scenarios.tool_result = async () => {
 
 /* A throwing handler must not take the bridge down with it. */
 scenarios.handler_throws = async () => {
-  const app = run({});
+  const app = run({ diagnostics: true });
   app.mcpApp.onToolResult = () => {
     throw new Error("render blew up");
   };
@@ -268,6 +348,19 @@ scenarios.call_tool = async () => {
   await flush();
   const last = app.posted[app.posted.length - 1];
   return { method: last.method, params: last.params, has_id: last.id !== undefined };
+};
+
+/*
+ * A host that answers with an error and a timer still pending. The timer has to
+ * be cancelled, or the view goes on to report that the host never answered --
+ * which is false, and is the second thing it says about the same exchange.
+ */
+scenarios.error_reply_cancels_the_timer = async () => {
+  const app = run({ diagnostics: true });
+  await handshake(app, { error: { code: -32603, message: "host said no" } });
+  app.fireTimers();
+  await flush();
+  return { logged: app.logged, banner: app.root.children.map((c) => c.textContent) };
 };
 
 const out = {};

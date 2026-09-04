@@ -26,6 +26,7 @@ def ui_view_to_resource(
     uri: str,
     template_name: str | None = None,
     body_template_name: str | None = None,
+    diagnostics: bool | None = None,
     html: str | None = None,
     selector: Callable[[], str] | None = None,
     description: str | None = None,
@@ -59,6 +60,9 @@ def ui_view_to_resource(
       recommended source, and the only one that does not ask a project to
       implement the extension's postMessage protocol itself — see
       [`build_app_document`][rest_framework_mcp.ui.build_app_document.build_app_document].
+      ``diagnostics=`` rides with it: whether a protocol failure is written
+      into the document as well as logged, ``None`` following
+      ``settings.DEBUG``.
     - ``template_name`` — a Django template holding a **whole document**.
       Everything the view needs, the bridge included, is then the template's own
       responsibility.
@@ -106,7 +110,11 @@ def ui_view_to_resource(
         # around it are the package's, composed from a source string cached for
         # the life of the process because it ships in the wheel.
         def resolved() -> str:
-            return build_app_document(render_to_string(body_template_name), title=title or name)
+            return build_app_document(
+                render_to_string(body_template_name),
+                title=title or name,
+                diagnostics=diagnostics,
+            )
 
     elif html is not None:
 

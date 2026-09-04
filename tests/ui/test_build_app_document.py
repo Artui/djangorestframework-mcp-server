@@ -9,12 +9,25 @@ driven for real in ``test_bridge.py``.
 from __future__ import annotations
 
 import re
+from typing import Any
 
 import pytest
 
 from rest_framework_mcp.ui.build_app_document import build_app_document
 
 BODY = '<div id="rows">Waiting.</div>'
+
+
+def _html_tag(document: str) -> str:
+    """The root element's open tag.
+
+    Asserted on rather than the whole document: the bridge reads the flag back
+    with `getAttribute("data-mcp-diagnostics")`, so the name is present in the
+    inlined script whether the flag is set or not.
+    """
+    match = re.search(r"<html[^>]*>", document)
+    assert match is not None
+    return match.group(0)
 
 
 @pytest.fixture
@@ -82,3 +95,38 @@ class TestTheShellStaysOutOfTheWay:
         document choosing a palette."""
         assert "color-scheme: light dark;" in document
         assert not re.search(r"#[0-9a-fA-F]{3,6}\b", document.split("</style>")[0])
+
+
+class TestDiagnosticsFollowDebug:
+    """Whether a protocol failure is written into the document, or only logged.
+
+    The bridge always reveals the frame -- that is the unrecoverable half and it
+    is unconditional. The banner is a debugging convenience written for whoever
+    wrote the view, and a rendered view's audience is whoever is using the
+    product, so the default resolves away from showing them raw protocol text.
+
+    Reported by the consumer this work came from: their host errors on
+    `ui/initialize` and still delivers the tool result, so an unconditional
+    banner would have put a monospace protocol message above working content on
+    every call, for every user, in a shipped product.
+    """
+
+    def test_off_by_default_outside_debug(self, settings: Any) -> None:
+        settings.DEBUG = False
+        assert _html_tag(build_app_document(BODY, title="t")) == '<html lang="en">'
+
+    def test_on_by_default_under_debug(self, settings: Any) -> None:
+        settings.DEBUG = True
+        assert _html_tag(build_app_document(BODY, title="t")) == (
+            '<html lang="en" data-mcp-diagnostics="1">'
+        )
+
+    def test_an_explicit_true_wins_outside_debug(self, settings: Any) -> None:
+        settings.DEBUG = False
+        document = build_app_document(BODY, title="t", diagnostics=True)
+        assert 'data-mcp-diagnostics="1"' in _html_tag(document)
+
+    def test_an_explicit_false_wins_under_debug(self, settings: Any) -> None:
+        settings.DEBUG = True
+        document = build_app_document(BODY, title="t", diagnostics=False)
+        assert _html_tag(document) == '<html lang="en">'

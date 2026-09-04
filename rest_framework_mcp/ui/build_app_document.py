@@ -3,6 +3,7 @@ from __future__ import annotations
 from functools import lru_cache
 from importlib.resources import files
 
+from django.conf import settings
 from django.utils.html import escape
 
 # Deliberately close to nothing. The view is drawn inside the host's own chrome,
@@ -38,7 +39,7 @@ body {
 """
 
 
-def build_app_document(body: str, *, title: str) -> str:
+def build_app_document(body: str, *, title: str, diagnostics: bool | None = None) -> str:
     """Wrap a view's markup in a complete MCP Apps document.
 
     ``body`` is a *fragment* -- the view's own markup, styles and scripts, with
@@ -64,19 +65,37 @@ def build_app_document(body: str, *, title: str) -> str:
       which is the extension's own advice, and means a view needs no
       ``resource_domains`` in its CSP just to boot.
     - **The bridge always completes its handshake**, so the frame is always
-      revealed and a broken view can say what is wrong. See ``bridge.js``.
+      revealed and a broken view can say what is wrong -- to the console
+      always, and into the document when ``diagnostics`` is on. See
+      ``bridge.js``.
 
     Args:
         body: The view's markup. Inserted verbatim -- it is HTML by definition,
             and it is the project's own template output, not caller input.
         title: The document title. Escaped.
+        diagnostics: Whether a protocol failure is written into the document as
+            well as logged to the console. ``None`` follows ``settings.DEBUG``.
+
+            The text is written for whoever wrote the view, and the audience of
+            a rendered view is whoever is using the product -- so it is off
+            where that audience is real. A failed handshake is not necessarily
+            a failed view either: a host that errors on ``ui/initialize`` may
+            still deliver the tool result, which would leave a working view
+            under a banner of raw protocol text. The bridge cannot tell those
+            apart, so the default resolves toward saying nothing to end users
+            and logging in both cases.
 
     Returns:
         A complete ``text/html`` document.
     """
+    show = settings.DEBUG if diagnostics is None else diagnostics
+    # Stamped on the root element rather than handed over as a global, so it is
+    # visible to anyone reading the served document. Nested quotes are kept out
+    # of the f-string below because that spelling needs Python 3.12.
+    flag = ' data-mcp-diagnostics="1"' if show else ""
     return (
         "<!doctype html>\n"
-        '<html lang="en">\n'
+        f'<html lang="en"{flag}>\n'
         "<head>\n"
         '<meta charset="utf-8">\n'
         '<meta name="viewport" content="width=device-width, initial-scale=1">\n'

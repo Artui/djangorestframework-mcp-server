@@ -89,6 +89,68 @@ class TestTheHandshakeAlwaysCompletes:
         frame is revealed, so there is somewhere for this text to appear."""
         assert "host said no" in " ".join(scenarios["error_reply"]["banner"])
 
+    def test_a_reply_that_loses_the_race_with_the_timeout_is_still_applied(
+        self, scenarios: dict[str, Any]
+    ) -> None:
+        """Only the notification must not repeat. Three seconds is not long for
+        a cold host, and returning early on the once-only guard threw away the
+        host context that arrived a moment later -- leaving the view on the UA's
+        default theme, underneath a banner saying the host never replied, which
+        by then was false. Self-concealing in the same way the hidden frame is.
+        Reported by the consumer this work came from, against the first draft."""
+        result = scenarios["late_reply"]
+
+        assert result["banner_after_timeout"] != []
+        assert result["banner_after_reply"] == []
+        assert result["theme"] == "dark"
+        assert result["protocol_version"] == "2026-01-26"
+        assert result["initialized_count"] == 1
+
+
+class TestDiagnosticsAreOptIn:
+    """What the failure says, and to whom.
+
+    Revealing the frame is the fix and is unconditional. *Showing the reason*
+    is a debugging convenience, and the reason is written for whoever wrote the
+    view -- while the audience of a rendered view is whoever is using the
+    product. A host that errors on `ui/initialize` may still deliver the tool
+    result, which would leave a working view under a banner of raw protocol
+    text on every call, and the bridge cannot tell that case from a fatal one.
+
+    So it follows `settings.DEBUG` unless the registration says otherwise, and
+    the console gets it either way.
+    """
+
+    def test_the_frame_is_revealed_either_way(self, scenarios: dict[str, Any]) -> None:
+        assert INITIALIZED in scenarios["error_reply_quiet"]["methods"]
+
+    def test_nothing_is_written_into_the_document_by_default(
+        self, scenarios: dict[str, Any]
+    ) -> None:
+        assert scenarios["error_reply_quiet"]["banner"] == []
+
+    def test_the_reason_still_reaches_the_console(self, scenarios: dict[str, Any]) -> None:
+        assert "host said no" in " ".join(scenarios["error_reply_quiet"]["logged"])
+
+    def test_an_answered_host_is_not_then_accused_of_not_answering(
+        self, scenarios: dict[str, Any]
+    ) -> None:
+        """The pending timeout has to be cancelled on the first completion.
+        Left running, it fired three seconds after an error reply and reported
+        that the host had never answered -- a second, contradictory statement
+        about one exchange, and the wrong one."""
+        result = scenarios["error_reply_cancels_the_timer"]
+
+        assert len(result["logged"]) == 1
+        assert result["banner"] == [
+            "This view could not complete the MCP Apps handshake with its host: host said no"
+        ]
+
+    def test_a_document_outside_a_host_always_says_so(self, scenarios: dict[str, Any]) -> None:
+        """The one unconditional case: there is no host, so there is no end
+        user to show developer text to. Whoever is looking opened the file."""
+        assert "rendering outside a host" in " ".join(scenarios["unframed"]["banner"])
+
 
 class TestTheInitializeRequest:
     def test_it_sends_the_field_names_the_schema_requires(self, scenarios: dict[str, Any]) -> None:
@@ -134,6 +196,24 @@ class TestDataDelivery:
         result = scenarios["handler_throws"]
         assert "render blew up" in " ".join(result["banner"])
         assert "ui/notifications/size-changed" in result["methods"]
+
+
+class TestSizing:
+    def test_a_view_can_name_the_element_to_measure_width_from(
+        self, scenarios: dict[str, Any]
+    ) -> None:
+        """Measuring `#mcp-app-root` moves the overflow trap one level up
+        rather than removing it: content clipped by the view's own
+        `overflow-x: auto` scroller does not widen that scroller, and the
+        scroller is sized by the root -- so the root measures the frame width
+        again. The measured element has to be an ancestor of the overflow."""
+        result = scenarios["measure_width_from"]
+
+        assert result["before_width"] == 320
+        assert result["after"]["width"] == 1400
+        # Height is unaffected: a horizontal scroller does not clip its height,
+        # so it still comes from the root.
+        assert result["after"]["height"] == 240
 
 
 class TestRequestsFromTheHost:

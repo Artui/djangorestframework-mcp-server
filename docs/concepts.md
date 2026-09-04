@@ -1517,12 +1517,14 @@ makes the first rule the one that matters.
         past it to the `catch`. A view built on the SDK inherits this.
 
 2. **The view MUST push `ui/notifications/size-changed`.** The host never asks.
-   A silent view is left at whatever the host guessed. Measure the *content
-   element*, not `documentElement`: content inside an `overflow-x: auto`
-   container does not widen its scrolling ancestor, so the document measures as
-   wide as the frame it already has and the view asks for the width it was just
-   given. Note that a host may fix the width and flex only the height, and
-   refuse the width silently.
+   A silent view is left at whatever the host guessed. Measure an element that
+   is an **ancestor of the overflow**, not `documentElement`: content inside an
+   `overflow-x: auto` container does not widen its scrolling ancestor, so
+   anything above that container measures as wide as the frame it already has
+   and the view asks for the width it was just given. A wrapper element is not
+   enough on its own — a view that scrolls a wide table internally has to
+   measure the content inside the scroller. Note that a host may fix the width
+   and flex only the height, and refuse the width silently.
 3. **`ui/initialize` params are `appInfo`, `appCapabilities` and
    `protocolVersion`.** The spec's prose and its worked example disagree here —
    the pinned `2026-01-26` revision's example sends `capabilities` against
@@ -1720,6 +1722,21 @@ The fourth combination — advertising `outputSchema` while suppressing
 `ImproperlyConfigured` at construction time (for explicit per-binding
 conflicts) or at request time (for setting-level conflicts), so the misconfig
 surfaces immediately rather than producing a non-compliant response.
+
+!!! tip "If you turned `outputSchema` off because your serializer returns a subset"
+
+    That is the right instinct against the wrong cause, and it costs the model
+    the schema for every other tool too. A serializer that drops fields at
+    runtime does advertise a shape its results do not match — but only when the
+    pruning happens somewhere this server cannot see.
+
+    Prune with [field markings](recipes/agent-audience.md) instead. The
+    advertised schema is generated from the **same declaration** the payload is
+    projected through, so the two cannot disagree: a field marked hidden leaves
+    both. Then verify it rather than trusting it —
+    [`assert_tool_result_conforms`](reference/testing.md#does-a-result-match-the-schema-the-server-advertised)
+    checks a real result against the schema its own `tools/list` entry
+    advertised, types and formats included.
 
 ## Auth model
 

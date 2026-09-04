@@ -42,11 +42,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   view is at least a *visible* broken view. It then says what went wrong in the
   document.
 
+  **What the failure says, and to whom, is separate from whether the frame is
+  revealed.** Revealing it is unconditional. The reason is written for whoever
+  wrote the view, while a rendered view's audience is whoever is using the
+  product — and a host can error on `ui/initialize` and still deliver the tool
+  result, which would leave a working view under a banner of raw protocol text
+  on every call. The bridge cannot tell that case from a fatal one, so the
+  reason always goes to `console.error` and reaches the document only under
+  `settings.DEBUG`, or when a registration passes `diagnostics=True`. A document
+  rendering outside a host says so unconditionally: there is no end user there.
+
   The bridge is exercised under Node against a fake host and a fake DOM
   (`tests/ui/bridge_harness.mjs`), not asserted against as source text: a string
   match would agree with a broken bridge as readily as a working one, which is
-  the failure being fixed. Nine scenarios, including the error reply, the
-  silent host, and a late reply that must not send the notification twice.
+  the failure being fixed. Thirteen scenarios, including the error reply, the
+  silent host, a late reply that must not send the notification twice, and the
+  diagnostics gate.
 
   The composed document also settles three things that were previously advice:
   `<html>`, `<head>` and `<body>` are written out rather than implied, because
@@ -56,6 +67,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   view that already draws its own.
 
 ### Fixed
+
+- **A reply to `ui/initialize` that lost the race with the handshake timeout
+  was discarded.** `completeHandshake` returned early once `initialized` had
+  gone out, so a host slower than three seconds — a cold start on a slow
+  machine — lost its `protocolVersion`, `hostInfo`, `hostCapabilities` and,
+  visibly, its `hostContext.theme`. The view stayed on the user agent's default
+  theme underneath a banner saying the host had not replied, which by then was
+  untrue: self-concealing in the same way the hidden frame is. Only the
+  notification must not repeat, so the result is now applied whenever it
+  arrives and retracts the timeout's message.
+
+- **`#mcp-app-root` was described as fixing the overflow-width trap, and only
+  moves it.** Content clipped by a view's own `overflow-x: auto` scroller does
+  not widen that scroller, and the scroller is sized by the root — so a view
+  laid out as `#mcp-app-root > .scroller > table` measures the frame width
+  again, the same wrong number one level up. The measured element has to be an
+  ancestor of the overflow: `mcpApp.measureWidthFrom(element)` names it, and the
+  comment and the docs now say what the default does and does not cover. Height
+  is unaffected, since a horizontal scroller does not clip its own height.
 
 - **The docs said the `ui/*` bridge was the host's problem. Half of it is
   yours.** `docs/concepts.md` said the host "runs the `ui/*` postMessage
@@ -84,6 +114,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   time and is checked against the resource registry at registration, so a hash
   the package computed on its own would have to be threaded back into
   `UIToolMeta`.
+
+  It hashes the **composed document**, not the template. Under
+  `body_template_name=` the template is a fragment, and what a host caches is
+  that fragment plus the packaged shell and the whole of `bridge.js` — both of
+  which ship in the wheel. A digest over the template file alone does not move
+  when the package is upgraded, which would reintroduce the exact false negative
+  the section warns about, at the upgrade boundary.
 
 ## [0.38.0] — 2026-09-03
 

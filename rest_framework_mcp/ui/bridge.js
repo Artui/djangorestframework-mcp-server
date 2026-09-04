@@ -33,9 +33,21 @@
   // impossible -- see `completeHandshake`.
   var HANDSHAKE_TIMEOUT_MS = 3000;
 
+  // Whether protocol failures are written into the document as well as logged.
+  // Stamped on the root element by `build_app_document`, which follows
+  // `settings.DEBUG` unless the registration overrides it.
+  var DIAGNOSTICS = document.documentElement.getAttribute("data-mcp-diagnostics") === "1";
+
   var nextId = 1;
   var pending = {};
   var handshakeDone = false;
+  // Whether the host ever answered `ui/initialize` with a result. Distinct from
+  // `handshakeDone`, which only records that `initialized` has gone out.
+  var handshakeAnswered = false;
+  // Set by `mcpApp.measureWidthFrom` when the view scrolls wide content inside
+  // a container of its own -- see `contentElement`.
+  var widthElement = null;
+  var handshakeTimer = null;
   var host = window.parent;
   // False when this document was opened directly rather than framed by a host.
   // Every send checks it: `showError` and the size notifications run in that
@@ -66,7 +78,9 @@
     sendMessage: sendMessage,
     openLink: openLink,
     notifySize: notifySize,
+    measureWidthFrom: measureWidthFrom,
     showError: showError,
+    clearError: clearError,
   };
   window.mcpApp = mcpApp;
 
@@ -153,6 +167,9 @@
       return;
     }
     if (method === "ui/notifications/host-context-changed") {
+      // `params` IS a partial HostContext, not an envelope around one, so it
+      // merges straight in. Confirmed against a real host by the consumer this
+      // bridge came from -- it was an open question in their report.
       applyHostContext(params);
     }
   }
@@ -191,26 +208,40 @@
    * a view which failed to initialise, and this file handles those regardless.
    */
   function completeHandshake(result, error) {
-    if (handshakeDone) {
-      return;
+    if (!handshakeDone) {
+      handshakeDone = true;
+      // Cancelled on the first completion whatever it was, so a host that
+      // answers with an error is not then also accused of never answering.
+      if (handshakeTimer !== null) {
+        clearTimeout(handshakeTimer);
+        handshakeTimer = null;
+      }
+      notify("ui/notifications/initialized", {});
+      observeSize();
+      notifySize();
     }
-    handshakeDone = true;
-    notify("ui/notifications/initialized", {});
 
+    // Applied outside the once-only guard, because the timeout and the reply
+    // are two paths to the same funnel and the reply can lose the race. Only
+    // the notification must not repeat; a host that answers late is still
+    // answering, and discarding its `hostContext` here left the view on the
+    // UA's default theme underneath a banner claiming the host never replied
+    // -- self-concealing in the same way the hidden frame is.
     if (result) {
+      handshakeAnswered = true;
       mcpApp.protocolVersion = result.protocolVersion;
       mcpApp.hostInfo = result.hostInfo;
       mcpApp.hostCapabilities = result.hostCapabilities;
+      clearError();
       applyHostContext(result.hostContext || {});
+      return;
     }
-    if (error) {
-      showError(
+    if (error && !handshakeAnswered) {
+      report(
         "This view could not complete the MCP Apps handshake with its host: " +
           (error.message || String(error))
       );
     }
-    observeSize();
-    notifySize();
   }
 
   function connect() {
@@ -218,13 +249,17 @@
       // Opened directly rather than framed by a host -- during development,
       // usually. Say so in the document instead of posting into the void.
       handshakeDone = true;
+      // Shown unconditionally, unlike every other diagnostic: there is no host
+      // here, so there is no end user to show developer text to. Whoever is
+      // looking at this opened the file themselves.
       showError(
         "This document is an MCP Apps view. It is rendering outside a host, " +
           "so there is no tool result to display."
       );
       return;
     }
-    setTimeout(function () {
+    handshakeTimer = setTimeout(function () {
+      handshakeTimer = null;
       completeHandshake(null, { message: "the host did not answer ui/initialize" });
     }, HANDSHAKE_TIMEOUT_MS);
 
@@ -286,17 +321,31 @@
   /* ---------- Sizing ---------- */
 
   /*
-   * Measured from the content element, never from `documentElement`. When the
-   * view puts a wide table inside an `overflow-x: auto` container, the
-   * overflowing child does not widen its scrolling ancestor -- so the document
-   * measures exactly as wide as the frame it already has, and the view asks
-   * the host for the width it was just given.
+   * Measured from the content element, never from `documentElement`: content
+   * that overflows an `overflow-x: auto` container does not widen its scrolling
+   * ancestor, so the document measures exactly as wide as the frame it already
+   * has and the view asks the host for the width it was just given.
    *
-   * Height is what hosts actually act on. Width is reported too, and a host
-   * that fixes the width simply ignores it.
+   * That reasoning applies to the measured element too, and measuring
+   * `#mcp-app-root` only moves the problem one level up. A view laid out as
+   * `#mcp-app-root > .scroller[overflow-x: auto] > table` has its table clipped
+   * by `.scroller` and `.scroller` sized by the root, so the root's
+   * `scrollWidth` is the frame width again. **The measured element has to be
+   * an ancestor of the overflow, not of the scroller.** A view that scrolls
+   * wide content internally says so with `mcpApp.measureWidthFrom(element)`,
+   * passing the content inside the scroller.
+   *
+   * Height is what hosts actually act on, and it is unaffected: a horizontal
+   * scroller does not clip its own height. Width is reported anyway, and a host
+   * that fixes the width ignores it -- silently, with no error and no log.
    */
   function contentElement() {
     return document.getElementById("mcp-app-root") || document.body;
+  }
+
+  function measureWidthFrom(element) {
+    widthElement = element;
+    notifySize();
   }
 
   function notifySize() {
@@ -305,7 +354,7 @@
       return;
     }
     notify("ui/notifications/size-changed", {
-      width: Math.ceil(element.scrollWidth),
+      width: Math.ceil((widthElement || element).scrollWidth),
       height: Math.ceil(element.scrollHeight),
     });
   }
@@ -346,6 +395,30 @@
   /* ---------- Diagnostics ---------- */
 
   /*
+   * Report a protocol or handler failure.
+   *
+   * Always to the console, where a developer with devtools open will find it.
+   * Into the document only when the composed page asked for it, because this
+   * text is written for whoever wrote the view and the audience of a rendered
+   * view is whoever is using the product. A handshake that fails while the
+   * host still delivers a tool result produces a view that works and a banner
+   * of raw protocol text above it -- and the bridge cannot tell that case from
+   * a fatal one.
+   *
+   * The unrecoverable failure is the hidden frame, and completing the handshake
+   * is what fixes that. Showing the reason is a debugging convenience, so it
+   * follows `settings.DEBUG` unless a project says otherwise.
+   */
+  function report(text) {
+    if (typeof console !== "undefined" && console.error) {
+      console.error("[mcp-app] " + text);
+    }
+    if (DIAGNOSTICS) {
+      showError(text);
+    }
+  }
+
+  /*
    * The diagnostic surface a view otherwise does not have. By the time this is
    * called the `initialized` notification has already gone out, so the host
    * has revealed the frame and there is somewhere for the text to appear.
@@ -365,6 +438,15 @@
     notifySize();
   }
 
+  /* Retract a message that has since been proved wrong -- see `completeHandshake`. */
+  function clearError() {
+    var banner = document.getElementById("mcp-app-error");
+    if (banner && banner.parentNode) {
+      banner.parentNode.removeChild(banner);
+      notifySize();
+    }
+  }
+
   function call(handler, first, second) {
     if (typeof handler !== "function") {
       return;
@@ -374,7 +456,7 @@
     try {
       handler(first, second);
     } catch (error) {
-      showError("The view's handler raised: " + (error && error.message ? error.message : error));
+      report("The view's handler raised: " + (error && error.message ? error.message : error));
     }
   }
 

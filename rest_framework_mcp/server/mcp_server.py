@@ -1112,6 +1112,7 @@ class MCPServer:
         uri: str,
         template_name: str | None = None,
         body_template_name: str | None = None,
+        diagnostics: bool | None = None,
         html: str | None = None,
         selector: Callable[[], str] | None = None,
         description: str | None = None,
@@ -1143,7 +1144,11 @@ class MCPServer:
 
         - ``body_template_name`` — a Django template holding the view's markup
           only. The package wraps it in a document whose bridge is already
-          written and already correct.
+          written and already correct. ``diagnostics=`` decides whether that
+          bridge writes a protocol failure into the document as well as logging
+          it; ``None`` follows ``settings.DEBUG``, because the text is written
+          for whoever wrote the view and a rendered view's audience is whoever
+          is using the product.
         - ``template_name`` — a Django template holding a whole document, whose
           bridge is then yours to write.
         - ``html`` — a literal document, same.
@@ -1175,6 +1180,7 @@ class MCPServer:
             uri=uri,
             template_name=template_name,
             body_template_name=body_template_name,
+            diagnostics=diagnostics,
             html=html,
             selector=selector,
             description=description,
