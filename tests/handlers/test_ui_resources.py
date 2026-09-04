@@ -142,3 +142,22 @@ async def test_a_template_backed_view_renders(reader: str) -> None:
     )
 
     assert "<h1>A view</h1>" in _contents(out)["text"]
+
+
+@pytest.mark.parametrize("reader", ["sync", "async"])
+async def test_a_body_template_backed_view_serves_a_whole_document(reader: str) -> None:
+    """The package-composed shell has to survive the read path intact — TEXT
+    encoding and all — or the host receives a quoted string rather than a
+    document, and renders nothing."""
+    server = _server(html=None, body_template_name="mcp_ui/body.html")
+    ctx = _ctx(server)
+    out = (
+        handle_resources_read({"uri": URI}, ctx)
+        if reader == "sync"
+        else await handle_resources_read_async({"uri": URI}, ctx)
+    )
+    text = _contents(out)["text"]
+
+    assert text.startswith("<!doctype html>")
+    assert '<div id="rows">Waiting for results.</div>' in text
+    assert "ui/notifications/initialized" in text

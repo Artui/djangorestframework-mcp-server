@@ -1,0 +1,9 @@
+<style>
+  table { border-collapse: collapse; width: 100%; }
+</style>
+<div id="rows">Waiting for results.</div>
+<script>
+  mcpApp.onToolResult = function (structuredContent) {
+    document.getElementById("rows").textContent = (structuredContent.results || []).length + " rows";
+  };
+</script>

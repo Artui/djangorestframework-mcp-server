@@ -103,6 +103,36 @@ class TestContentSources:
         with pytest.raises(TemplateDoesNotExist):
             binding.selector()
 
+    def test_a_body_template_is_wrapped_in_the_package_document(self) -> None:
+        """The recommended source. What the project writes is markup; the shell
+        and the ``ui/*`` bridge around it are the package's."""
+        binding = _register(_make(), html=None, body_template_name="mcp_ui/body.html")
+        document = binding.selector()
+
+        assert document.startswith("<!doctype html>")
+        assert '<div id="rows">Waiting for results.</div>' in document
+        assert "ui/notifications/initialized" in document
+
+    def test_a_body_template_titles_the_document(self) -> None:
+        binding = _register(
+            _make(), html=None, body_template_name="mcp_ui/body.html", title="Invoices"
+        )
+        assert "<title>Invoices</title>" in binding.selector()
+
+    def test_a_body_template_falls_back_to_the_binding_name_for_the_title(self) -> None:
+        """A view with no ``title=`` still needs one: the bridge sends it as
+        ``appInfo.name``, and a host may show it as the frame's label."""
+        binding = _register(_make(), html=None, body_template_name="mcp_ui/body.html")
+        assert "<title>invoices_table</title>" in binding.selector()
+
+    def test_a_body_template_is_also_rendered_per_read(self) -> None:
+        """Same reason a whole-document template is — an edit shows up without
+        a restart. Registration therefore does not touch the loader."""
+        binding = _register(_make(), html=None, body_template_name="mcp_ui/nope.html")
+
+        with pytest.raises(TemplateDoesNotExist):
+            binding.selector()
+
     def test_no_content_source_raises(self) -> None:
         with pytest.raises(ValueError, match="exactly one content source"):
             _register(_make(), html=None)
@@ -110,6 +140,18 @@ class TestContentSources:
     def test_two_content_sources_raise(self) -> None:
         with pytest.raises(ValueError, match="exactly one content source"):
             _register(_make(), html="<p>x</p>", selector=lambda: "<p>y</p>")
+
+    def test_the_two_template_sources_are_mutually_exclusive(self) -> None:
+        """They differ in what the template is expected to contain — a whole
+        document against a fragment — so accepting both would have to pick one
+        silently."""
+        with pytest.raises(ValueError, match="exactly one content source"):
+            _register(
+                _make(),
+                html=None,
+                template_name="mcp_ui/view.html",
+                body_template_name="mcp_ui/body.html",
+            )
 
 
 class TestUIMetadata:

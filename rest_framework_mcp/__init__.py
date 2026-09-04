@@ -74,6 +74,7 @@ from rest_framework_mcp.transport.in_memory_sse_replay_buffer import InMemorySSE
 from rest_framework_mcp.transport.types.session_store import SessionStore
 from rest_framework_mcp.transport.types.sse_broker import SSEBroker
 from rest_framework_mcp.transport.types.sse_replay_buffer import SSEReplayBuffer
+from rest_framework_mcp.ui.build_app_document import build_app_document
 from rest_framework_mcp.version import __version__
 
 __all__ = [
@@ -133,6 +134,7 @@ __all__ = [
     "UnknownArguments",
     "QueryParam",
     "UrlKwarg",
+    "build_app_document",
     "register_tools",
     "__version__",
 ]

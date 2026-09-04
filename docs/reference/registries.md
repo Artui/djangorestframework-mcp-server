@@ -39,6 +39,17 @@ rule.
 ::: rest_framework_mcp.registry.types.ui_tool_meta.UIToolMeta
 ::: rest_framework_mcp.constants.UIVisibility
 
+### The view document
+
+`register_ui_resource(body_template_name=...)` composes the document through
+this, so most projects never call it directly. It is exported for the case that
+assembles the markup some other way and still wants the packaged shell and the
+`ui/*` bridge — a bridge whose failure modes are all silent, and which
+[Writing the bridge yourself](../concepts.md#writing-the-bridge-yourself)
+describes for anyone declining it.
+
+::: rest_framework_mcp.ui.build_app_document.build_app_document
+
 ## Bulk registration
 
 `register_tools(server, definitions, *, selector_defaults=None, service_defaults=None)`
