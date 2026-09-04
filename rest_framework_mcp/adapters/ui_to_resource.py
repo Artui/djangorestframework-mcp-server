@@ -17,6 +17,7 @@ from rest_framework_mcp.constants import (
 from rest_framework_mcp.protocol.types.icon import Icon
 from rest_framework_mcp.registry.types.resource_binding import ResourceBinding
 from rest_framework_mcp.registry.types.ui_resource_meta import UIResourceMeta
+from rest_framework_mcp.ui.build_app_document import build_app_document
 
 
 def ui_view_to_resource(
@@ -24,6 +25,7 @@ def ui_view_to_resource(
     name: str,
     uri: str,
     template_name: str | None = None,
+    body_template_name: str | None = None,
     html: str | None = None,
     selector: Callable[[], str] | None = None,
     description: str | None = None,
@@ -52,11 +54,14 @@ def ui_view_to_resource(
 
     Exactly one content source:
 
-    - ``template_name`` — a Django template, rendered per read with **no
-      context**. This is the idiomatic choice and the deliberate one: hosts
-      may prefetch and cache a view before any tool call, so a view is a
-      *shell*, hydrated at runtime from tool results. Rendering tenant data
-      into it would leak it across the cache.
+    - ``body_template_name`` — a Django template holding the view's *markup
+      only*, wrapped here in a document that carries the ``ui/*`` bridge. The
+      recommended source, and the only one that does not ask a project to
+      implement the extension's postMessage protocol itself — see
+      [`build_app_document`][rest_framework_mcp.ui.build_app_document.build_app_document].
+    - ``template_name`` — a Django template holding a **whole document**.
+      Everything the view needs, the bridge included, is then the template's own
+      responsibility.
     - ``html`` — a literal document, for a view small enough to inline.
     - ``selector`` — a callable returning the document, for a project that
       assembles it some other way. It **must take no arguments**, and one that
@@ -64,12 +69,17 @@ def ui_view_to_resource(
       path resolves a selector against a pool carrying ``request`` and ``user``,
       so a parameter would be handed the authenticated caller — which is exactly
       what the permissions exemption on views assumes cannot happen.
+
+    Both template sources render with **no context**, and that is deliberate:
+    hosts may prefetch and cache a view before any tool call, so a view is a
+    *shell*, hydrated at runtime from tool results. Rendering tenant data into
+    one would leak it across the cache.
     """
-    sources = [s for s in (template_name, html, selector) if s is not None]
+    sources = [s for s in (template_name, body_template_name, html, selector) if s is not None]
     if len(sources) != 1:
         raise ValueError(
             f"register_ui_resource({name!r}) needs exactly one content source — "
-            "template_name=, html= or selector=. "
+            "body_template_name=, template_name=, html= or selector=. "
             f"Got {len(sources)}."
         )
 
@@ -89,6 +99,14 @@ def ui_view_to_resource(
         # shows up without a restart, matching every other Django template.
         def resolved() -> str:
             return render_to_string(template_name)
+
+    elif body_template_name is not None:
+        # Rendered per read for the same reason a whole-document template is —
+        # an edit shows up without a restart — while the shell and the bridge
+        # around it are the package's, composed from a source string cached for
+        # the life of the process because it ships in the wheel.
+        def resolved() -> str:
+            return build_app_document(render_to_string(body_template_name), title=title or name)
 
     elif html is not None:
 

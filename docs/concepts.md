@@ -1395,9 +1395,32 @@ server.register_ui_resource(
 )
 ```
 
-The **host** renders: it builds the sandboxed iframe, constructs and enforces
-the CSP from what you declared, and runs the `ui/*` postMessage bridge. None of
-that is implemented here, and none of it should be.
+The **host** renders: it builds the sandboxed iframe and constructs and
+enforces the CSP from what you declared. Neither is implemented here, and
+neither should be.
+
+The `ui/*` postMessage bridge is **not** on that list, and reading it as though
+it were is the single most expensive misunderstanding this extension produces.
+The bridge has two ends. The host runs its end; the *document* runs the other,
+and the document is yours. That second end is a mandatory startup handshake
+whose failure modes are all silent — see
+[Writing the bridge yourself](#writing-the-bridge-yourself).
+
+So the package ships the view end, inlined into a document it composes for you:
+
+```python
+server.register_ui_resource(
+    name="invoices_table",
+    uri="ui://invoices/table.html",
+    body_template_name="mcp/invoices_table.html",  # markup only
+)
+```
+
+`body_template_name=` takes a template holding the view's markup, styles and
+scripts, and wraps it in a document carrying
+[`build_app_document`][rest_framework_mcp.ui.build_app_document.build_app_document]'s
+shell and bridge. The other three sources — `template_name=`, `html=`,
+`selector=` — hand you a whole document to fill, bridge included.
 
 A view is an ordinary resource — one URI namespace with your data resources,
 listed in `resources/list`, and guardable with `permissions=` — with three
@@ -1462,6 +1485,69 @@ one-directional, client → server** — the spec defines no matching server
 capability, so nothing is sent back, and `_meta.ui` is emitted unconditionally.
 Unknown `_meta` keys are ignorable by design, so a client that doesn't
 implement Apps is unaffected.
+
+### Writing the bridge yourself
+
+`body_template_name=` exists so you do not have to read this. Everything below
+is what `template_name=`, `html=` and `selector=` hand back to you along with
+the whole document, and it is written as a checklist because every item on it
+has cost somebody at least one debugging round.
+
+The thing that makes this expensive is not difficulty, it is **silence**. A
+broken bridge raises nothing, logs nothing, and leaves a clean `resources/read`
+in the server log. The host keeps the frame hidden until the view says it is
+ready — so an error message the view writes into the document is itself
+invisible. There is no diagnostic surface until the handshake completes, which
+makes the first rule the one that matters.
+
+1. **The view MUST send `ui/notifications/initialized` — on *any* reply to
+   `ui/initialize`, including an error, and even if the host never replies at
+   all.** The spec requires that "the Host MUST NOT send any request or
+   notification to the View before it receives an initialized notification",
+   and says nothing about what a view should do when `ui/initialize` fails. The
+   natural shape — treat the error as fatal, explain in the document, return —
+   produces a frame that stays hidden forever with the explanation sealed
+   inside it. Send the notification first, then read the result. A timeout that
+   sends it anyway costs four lines and covers the silent host.
+
+    !!! warning "The extension's own SDK does not do this"
+
+        `App.connect()` awaits `ui/initialize` inside a `try` and sends
+        `initialized` only after a successful result, so an error reply jumps
+        past it to the `catch`. A view built on the SDK inherits this.
+
+2. **The view MUST push `ui/notifications/size-changed`.** The host never asks.
+   A silent view is left at whatever the host guessed. Measure the *content
+   element*, not `documentElement`: content inside an `overflow-x: auto`
+   container does not widen its scrolling ancestor, so the document measures as
+   wide as the frame it already has and the view asks for the width it was just
+   given. Note that a host may fix the width and flex only the height, and
+   refuse the width silently.
+3. **`ui/initialize` params are `appInfo`, `appCapabilities` and
+   `protocolVersion`.** The spec's prose and its worked example disagree here —
+   the pinned `2026-01-26` revision's example sends `capabilities` against
+   normative text requiring `appCapabilities`. Follow the generated schema,
+   which is what hosts are built from.
+4. **The view MUST answer host requests it does not implement**, with a
+   JSON-RPC `-32601` rather than silence. An unanswered request leaves the host
+   waiting on a promise that never settles.
+5. **Write `<html>`, `<head>` and `<body>` out.** HTML5 infers all three and
+   browsers do not care, but the sandbox loads this document as raw HTML and
+   applies a CSP to it, and a sandbox injecting anything into `<head>` has
+   nowhere to put it when the element is implied. Every reference view does it.
+6. **Inline everything.** A view that imports its runtime from a CDN needs that
+   origin in `csp.resource_domains` before it will boot, on every host — and
+   the extension's own advice is to inline.
+7. **End the URI in `.html`.** Not a spec requirement; every reference
+   implementation does it, and the one public report of a host resolving a view
+   and rendering nothing also used an extensionless URI.
+
+A last one that is not about the bridge: **a host may prefetch and cache a
+`ui://` document, and is not obliged to honour `ttlMs: 0`** — which is what
+`RESOURCE_CACHE_TTL_MS` defaults to. A stale view will disprove a fix you
+actually made. The
+[recipe](recipes/interactive-view.md#caching-and-why-a-negative-result-can-lie-to-you)
+carries the hashed-URI workaround.
 
 ## Dispatch flow
 

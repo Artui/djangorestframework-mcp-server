@@ -1111,6 +1111,7 @@ class MCPServer:
         name: str,
         uri: str,
         template_name: str | None = None,
+        body_template_name: str | None = None,
         html: str | None = None,
         selector: Callable[[], str] | None = None,
         description: str | None = None,
@@ -1128,16 +1129,28 @@ class MCPServer:
         """Register an interactive HTML view (an MCP App) as a resource.
 
         A tool links to the view and a **host** renders it inline in the chat,
-        inside a sandboxed iframe it constructs itself. This server only
-        *declares*: it serves the document and describes what it needs in
-        ``_meta``. The iframe, the CSP enforcement and the ``ui/*`` postMessage
-        bridge belong to the host and are deliberately not implemented here.
+        inside a sandboxed iframe it constructs itself. The iframe and the CSP
+        *enforcement* are the host's and are deliberately not implemented here.
 
-        Give exactly one content source — ``template_name`` (a Django template,
-        the idiomatic choice), ``html`` (a literal document), or ``selector``
-        (a callable returning one, which **must take no arguments** — a selector
-        that declares a parameter is refused at registration, because the read
-        path would fill it from a pool carrying ``request`` and ``user``).
+        The ``ui/*`` postMessage bridge is **not** in that list, and reading it
+        as though it were is what this parameter set exists to prevent. The
+        bridge has two ends: the host runs its end, and the *document* runs the
+        other. That second end is a view's mandatory startup handshake, every
+        one of its failure modes is silent, and one of them leaves the frame
+        hidden with the view unable to say why.
+
+        So give exactly one content source, and prefer the first:
+
+        - ``body_template_name`` — a Django template holding the view's markup
+          only. The package wraps it in a document whose bridge is already
+          written and already correct.
+        - ``template_name`` — a Django template holding a whole document, whose
+          bridge is then yours to write.
+        - ``html`` — a literal document, same.
+        - ``selector`` — a callable returning one, which **must take no
+          arguments**: a selector that declares a parameter is refused at
+          registration, because the read path would fill it from a pool carrying
+          ``request`` and ``user``.
 
         **Keep tenant data out of the view.** Hosts may prefetch and cache a
         view before any tool call, so it is a shell that hydrates itself at
@@ -1161,6 +1174,7 @@ class MCPServer:
             name=name,
             uri=uri,
             template_name=template_name,
+            body_template_name=body_template_name,
             html=html,
             selector=selector,
             description=description,
@@ -1177,9 +1191,11 @@ class MCPServer:
         )
         # No ``check_tool_permissions_declared`` here, unlike every other
         # registration on this server. A view's content sources are a template
-        # rendered with no context, a literal document, or a zero-argument
-        # callable — none of which can read the caller's data, so an unguarded
-        # view exposes nothing an authenticated session may not already see.
+        # rendered with no context (whole document or body fragment — the shell
+        # around a fragment is the package's own and reads nothing), a literal
+        # document, or a zero-argument callable — none of which can read the
+        # caller's data, so an unguarded view exposes nothing an authenticated
+        # session may not already see.
         # Requiring permissions on it would be noise on every MCP Apps install.
         #
         # That third source is only caller-blind because ``ui_view_to_resource``

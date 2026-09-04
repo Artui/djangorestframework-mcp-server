@@ -7,6 +7,84 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- **A view's `ui/*` bridge now ships with the package.**
+  `register_ui_resource(body_template_name=...)` takes a Django template
+  holding the view's markup, styles and scripts, and wraps it in a document
+  that already speaks the MCP Apps postMessage protocol: the startup handshake,
+  the `tool-input` / `tool-result` / `tool-cancelled` / `host-context-changed`
+  notifications, size reporting, and view-initiated `tools/call`. A project
+  writes columns and assigns `mcpApp.onToolResult`; it writes no JSON-RPC.
+
+  The three existing content sources are unchanged, and
+  `build_app_document` is exported so a document assembled some other way can
+  have the same shell.
+
+  This is a departure — the package declares and serves, and implements no
+  client — and the reason for it is that this particular client cannot be
+  written safely from the outside. **Every failure mode in that bridge is
+  silent.** Nothing throws, the console stays empty, the server sees a clean
+  `resources/read`, and the host keeps the frame hidden until the view says it
+  is ready, so an error message the view writes into the document is itself
+  invisible. One of those failure modes is unrecoverable, and it is the easiest
+  one to write:
+
+  A host reveals the frame only after `ui/notifications/initialized`. A view
+  that sends it from the success branch of `ui/initialize` and treats an error
+  reply as fatal never sends it at all — so the frame stays hidden forever,
+  with the explanation sealed inside. The reporting consumer lost a day to
+  exactly this, and **the extension's own SDK has the same shape**:
+  `App.connect()` awaits the request inside a `try` and reaches the
+  notification only on success. The packaged bridge funnels every exit from
+  `ui/initialize` — result, error, and no reply at all — through one function
+  that sends the notification first and reads the result second, so a broken
+  view is at least a *visible* broken view. It then says what went wrong in the
+  document.
+
+  The bridge is exercised under Node against a fake host and a fake DOM
+  (`tests/ui/bridge_harness.mjs`), not asserted against as source text: a string
+  match would agree with a broken bridge as readily as a working one, which is
+  the failure being fixed. Nine scenarios, including the error reply, the
+  silent host, and a late reply that must not send the notification twice.
+
+  The composed document also settles three things that were previously advice:
+  `<html>`, `<head>` and `<body>` are written out rather than implied, because
+  a sandbox that injects into `<head>` has nowhere to put it otherwise; nothing
+  is fetched, so a view boots with an empty CSP; and the shell paints no
+  background, so `prefers_border=True` does not become a third frame around a
+  view that already draws its own.
+
+### Fixed
+
+- **The docs said the `ui/*` bridge was the host's problem. Half of it is
+  yours.** `docs/concepts.md` said the host "runs the `ui/*` postMessage
+  bridge", and the interactive-view recipe listed it under **What you did not
+  have to write**. The bridge has two ends: the host runs its end, and the
+  document — a Django template the project writes — runs the other, which is
+  the end with the silent failures. A reader who has just been told they did
+  not have to write it does not go looking there. Both now say which end is
+  whose, and `docs/concepts.md` carries the view contract as a numbered list of
+  requirements for anyone writing the document themselves.
+
+- **The recipe's example contradicted its own advice.** It imported the
+  extension's SDK from `esm.sh` — which meant declaring that origin in
+  `csp.resource_domains` before the view would boot on any host — and then, a
+  hundred lines further down, told the reader that the spec's own advice is to
+  inline everything. It also omitted `<html>`, `<head>` and `<body>`, which is
+  the exact shape its own host-gotchas section now warns against. The recipe is
+  rebuilt on `body_template_name=` and fetches nothing.
+
+- **The recipe now records what a stale view costs you.** A host may prefetch
+  and cache a `ui://` document and is not obliged to honour `ttlMs: 0`, which
+  is what `RESOURCE_CACHE_TTL_MS` defaults to — so a view can be served stale
+  across a template change and disprove a fix that actually worked. The hashed
+  URI workaround is written down, along with why it is a recipe rather than a
+  `version=` parameter: the tool's `resource_uri` names the same URI a second
+  time and is checked against the resource registry at registration, so a hash
+  the package computed on its own would have to be threaded back into
+  `UIToolMeta`.
+
 ## [0.38.0] — 2026-09-03
 
 ### Fixed
