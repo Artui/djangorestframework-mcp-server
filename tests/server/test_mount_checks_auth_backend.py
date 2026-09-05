@@ -65,3 +65,33 @@ def test_a_backend_needing_nothing_mounts_with_dot_absent(
     _hide_dot(monkeypatch)
 
     assert server.urls is not None
+
+
+def test_mounting_without_the_app_installed_refuses_by_name(
+    settings: pytest.FixtureRequest,
+) -> None:
+    """The extra installed, the app not, which is the same gap one layer down.
+
+    `authenticate` imports a validator *and* resolves DOT's access-token model,
+    and the second needs the app registry rather than the module. Checking only
+    the import let a project that had installed the extra get past the mount and
+    then fail on the first request with a `RuntimeError` about `app_label` --
+    which names neither this package nor the setting that would fix it.
+    """
+    from django.test import override_settings
+
+    installed = [app for app in settings.INSTALLED_APPS if app != "oauth2_provider"]
+    server = MCPServer(name="mounted-without-the-app")
+
+    with (
+        override_settings(INSTALLED_APPS=installed),
+        pytest.raises(ImproperlyConfigured, match="INSTALLED_APPS"),
+    ):
+        _ = server.urls
+
+
+def test_mounting_with_the_app_installed_is_fine() -> None:
+    """The ordinary case: the extra is present and the app is declared."""
+    server = MCPServer(name="mounted-properly")
+
+    assert server.urls is not None
