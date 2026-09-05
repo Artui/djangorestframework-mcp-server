@@ -27,6 +27,7 @@ from rest_framework_mcp.auth.backends.django_oauth_toolkit_backend import (
 )
 from rest_framework_mcp.auth.protected_resource_metadata import ProtectedResourceMetadataViewSet
 from rest_framework_mcp.auth.types.auth_backend import MCPAuthBackend
+from rest_framework_mcp.auth.types.self_checking import SelfChecking
 from rest_framework_mcp.auth.types.token_info import TokenInfo
 from rest_framework_mcp.check_removed_settings import check_removed_settings
 from rest_framework_mcp.config.build_mcp_config import build_mcp_config
@@ -1691,6 +1692,12 @@ class MCPServer:
         return self._urls_with_view(view)
 
     def _urls_with_view(self, view: Any) -> tuple[list[URLPattern], str, str]:
+        # Mounting is where the auth backend stops being optional: from here on
+        # every request reaches ``authenticate``. Both ``urls`` and
+        # ``async_urls`` land here, so one call covers them. A backend that does
+        # not implement the opt-in protocol needs no setup and is left alone.
+        if isinstance(self._auth_backend, SelfChecking):
+            self._auth_backend.check_configuration()
         patterns = [
             path("", view, name="endpoint"),
             path(

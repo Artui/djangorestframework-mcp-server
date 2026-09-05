@@ -110,9 +110,9 @@ uv add "djangorestframework-mcp-server[toon,oauth,redis,otel,filter,spectacular]
 Optional extras degrade gracefully:
 
 - TOON falls back to JSON with a runtime warning if `python-toon` is not installed.
-- The OAuth backend module imports cleanly without `oauth2_provider`; the
-  `ImportError` only fires if you actually configure the backend and a request
-  reaches `authenticate()`.
+- The OAuth backend module imports cleanly without `oauth2_provider`, so a
+  server used in process needs no DOT. Mounting one over HTTP refuses without
+  it, while the URLConf is imported, rather than 500-ing on the first request.
 - `RedisSSEBroker` / `RedisSSEReplayBuffer` raise a clear `ImportError` from
   `__init__` if `redis` isn't installed.
 - The OTel tracing helper yields a no-op span when `opentelemetry-api` isn't

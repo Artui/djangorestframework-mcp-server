@@ -154,6 +154,33 @@ class DjangoOAuthToolkitBackend:
             or _derive_metadata_url(self._resource_url)
         )
 
+    def check_configuration(self) -> None:
+        """Refuse at mount time if DOT is absent, rather than at the first request.
+
+        Implements the opt-in
+        :class:`~rest_framework_mcp.auth.types.self_checking.SelfChecking`
+        protocol. It imports exactly what ``authenticate`` imports, so a pass
+        here is evidence about the call that matters rather than about the
+        distribution being on disk under some name.
+
+        The import stays lazy everywhere else on purpose -- see the class
+        docstring -- and this method does not change that: an in-process server
+        is never mounted, so it is never called.
+        """
+        try:
+            from oauth2_provider.oauth2_validators import (  # noqa: F401
+                OAuth2Validator,
+            )
+        except ImportError as exc:
+            raise ImproperlyConfigured(
+                "DjangoOAuthToolkitBackend is mounted but `django-oauth-toolkit` is "
+                "not installed, so every request to this endpoint would fail. "
+                'Install it via `pip install "djangorestframework-mcp-server[oauth]"`, '
+                "or pass a different auth_backend= to MCPServer(...). "
+                "This is the default backend, so a server built without an explicit "
+                "auth_backend= reaches it."
+            ) from exc
+
     def authenticate(self, request: HttpRequest) -> TokenInfo | None:
         try:
             # Lazy: oauth2_provider is an optional extra, so a top-level import

@@ -18,6 +18,7 @@ from rest_framework_mcp.auth.permissions.drf_permission_adapter import DRFPermis
 from rest_framework_mcp.auth.permissions.scope_required import ScopeRequired
 from rest_framework_mcp.auth.permissions.types.mcp_permission import MCPPermission
 from rest_framework_mcp.auth.types.auth_backend import MCPAuthBackend
+from rest_framework_mcp.auth.types.self_checking import SelfChecking
 from rest_framework_mcp.auth.types.token_info import TokenInfo
 from rest_framework_mcp.constants import (
     UI_EXTENSION_ID,
@@ -120,6 +121,7 @@ __all__ = [
     "NotificationKind",
     "SubscriptionBroker",
     "SubscriptionFilter",
+    "SelfChecking",
     "TokenInfo",
     "ToolContentBlock",
     "ToolContentKind",

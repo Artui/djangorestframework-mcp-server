@@ -7,6 +7,71 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- **Mounting a server now checks that its auth backend can actually run.**
+  `DjangoOAuthToolkitBackend` is the default, and its `oauth2_provider` import
+  is lazy on purpose, so a project without the `[oauth]` extra could build a
+  server, register every tool, answer `list_tools(user=...)` in process and
+  pass `manage.py check` — then return a 500 `ImportError` on the first HTTP
+  request. That is how a consumer's entire MCP test suite went green against a
+  server that could not serve one request.
+
+  `server.urls` and `server.async_urls` now ask the backend to check itself
+  first, so a missing extra raises `ImproperlyConfigured` while the URLConf is
+  imported, which `manage.py check` reaches.
+
+  **Mounting is the seam, deliberately, and not construction.** An in-process
+  server never authenticates anything — `call_tool`, `list_tools`, and the
+  route `django-ag-ui` uses — so requiring an optional dependency to build one
+  would refuse a supported deployment. The smoke job pins that a bare server
+  constructs without DOT, and that stays true.
+
+  Backends opt in by implementing `check_configuration()`, described by the new
+  `SelfChecking` protocol. It is a second protocol beside `MCPAuthBackend`
+  rather than a fifth method on it, because adding a required method would
+  break every backend already written against the four-method one. A backend
+  that implements nothing is treated as ready, which is the right default:
+  needing no setup is the ordinary case, and a backend that needs some is the
+  one able to say so.
+
+### Changed
+
+- **`docs/auth.md` now documents one recommended deployment**: django-oauth-toolkit
+  with `CIMD_ENABLED = True` and `ENFORCE_AUDIENCE = True`, rather than a menu
+  of equally weighted options. The package had avoided recommending an
+  authorization server; DOT 3.4 implements every resource-server MUST the
+  `2026-07-28` specification names, plus the client-registration mechanism that
+  replaces the deprecated one, so there is now an answer worth naming.
+
+### Fixed
+
+- **Two false claims about django-oauth-toolkit in the published docs**, both
+  verified against the DOT 3.4.1 in this repo's own environment.
+
+  The larger one had a security consequence. `docs/auth.md` said "DOT does not
+  implement CIMD natively today" and gave a recipe for fronting it with a view
+  that accepts a URL-shaped `client_id` and fetches it. DOT has shipped Client
+  ID Metadata Documents since 3.4.0, with a fetcher that validates the URL,
+  rejects private and loopback addresses after resolution, and caps document
+  size, timeout, concurrency and retry rate. The page was recommending that
+  readers hand-roll a server-side request forgery surface whose defended
+  version was already installed.
+
+  The smaller one is the third instance of a claim corrected twice before: "DOT
+  does not carry the `resource` parameter through to the token — it implements
+  no resource indicators". The two known copies were fixed when DOT 3.4 landed;
+  this one survived because it is worded differently, and a sweep matching the
+  earlier phrasing could not see it. Sweeping by dependency name plus a
+  negation, and reading every hit, found it and confirmed the remaining
+  negative claims — no per-application scope column, no `response_types`,
+  `application_type`, `logo_uri` or `jwks` counterparts — are still true.
+
+- **The backend table said the default was conditional.** It read
+  "`DjangoOAuthToolkitBackend` if `oauth2_provider` is installed, else
+  configurable". The default is unconditional, which is why the missing extra
+  was a surprise rather than an expected configuration error.
+
 ## [0.39.0] — 2026-09-04
 
 ### Added
