@@ -17,7 +17,7 @@ RFC 9728 metadata endpoint clients use to discover them.
 
 | Surface | Protocol | Default |
 | --- | --- | --- |
-| `MCPAuthBackend` | Authenticate request → `TokenInfo`, build `WWW-Authenticate`, supply PRM payload | `DjangoOAuthToolkitBackend` if `oauth2_provider` is installed, else configurable |
+| `MCPAuthBackend` | Authenticate request → `TokenInfo`, build `WWW-Authenticate`, supply PRM payload | **always** `DjangoOAuthToolkitBackend` unless you pass `auth_backend=`; mounting refuses if its extra is missing |
 | `MCPPermission` | Per-tool / per-resource gate (AND-combined) | `[]` (no extra constraints) |
 | `/.well-known/oauth-protected-resource` | RFC 9728 metadata | served from backend's `protected_resource_metadata()` |
 
@@ -49,8 +49,15 @@ server = MCPServer(name="dev", auth_backend=AllowAnyBackend())
 Wraps [django-oauth-toolkit](https://django-oauth-toolkit.readthedocs.io/) as a
 resource server. Bearer tokens are validated against DOT's `AccessToken` model;
 scopes are projected into the `TokenInfo`. The package import is **lazy** — the
-backend module imports cleanly even without `oauth2_provider` installed; the
-`ImportError` only fires when `authenticate()` actually runs.
+backend module imports cleanly even without `oauth2_provider` installed, so a
+server used purely in process (`call_tool`, `list_tools`) needs no DOT at all.
+
+Mounting is different, because from there on every request reaches
+`authenticate()`. `server.urls` and `server.async_urls` ask the backend to check
+itself first, so a missing extra is an `ImproperlyConfigured` while the URLConf
+is imported — which `manage.py check` reaches — rather than a 500 on the first
+request. Backends opt into that by implementing `check_configuration()`; one
+that needs no setup implements nothing and is left alone.
 
 ```bash
 pip install "djangorestframework-mcp-server[oauth]"
@@ -548,12 +555,28 @@ metadata endpoints rather than serving a fake payload. Use
 `DjangoOAuthToolkitBackend` (or another backend that implements
 `authorization_server_metadata()`) in production.
 
-## Recipe: bring-your-own AS via django-oauth-toolkit
+## The documented deployment: django-oauth-toolkit with CIMD
 
-DOT can act as the Authorization Server too. The MCP package only consumes the
-tokens it issues — DCR, the authorization endpoint, token endpoint, and refresh
-flow are all handled by DOT itself. Modern MCP clients (Claude Desktop,
-Inspector) discover them through PRM → AS metadata.
+This is the configuration this project recommends and tests against. Everything
+above is a seam you can replace; this section is the answer if you do not want
+to make those choices yourself.
+
+DOT acts as the Authorization Server as well as backing the resource server. The
+MCP package only consumes the tokens it issues — the authorization endpoint,
+token endpoint, refresh flow and client registration are all DOT's. Modern MCP
+clients (Claude Desktop, Inspector) discover them through PRM → AS metadata.
+
+Two settings carry most of the weight, and they are the reason this deployment
+is the recommended one rather than one option among several:
+
+- `ENFORCE_AUDIENCE` makes the RFC 8707 audience check mandatory, which the MCP
+  specification requires of a resource server. DOT 3.4.0 and later record the
+  `resource` on the token, so this works with the stock model.
+- `CIMD_ENABLED` turns on Client ID Metadata Documents, which is how recent MCP
+  clients register. It replaces Dynamic Client Registration, which the
+  specification deprecates. See [Client ID Metadata
+  Documents](#client-id-metadata-documents) below for what it does and what to
+  decide about it.
 
 ```python title="settings.py"
 INSTALLED_APPS = [
@@ -573,11 +596,27 @@ OAUTH2_PROVIDER = {
     # refresh on demand.
     "ACCESS_TOKEN_EXPIRE_SECONDS": 600,
     "REFRESH_TOKEN_EXPIRE_SECONDS": 60 * 60 * 24,
+    # Client ID Metadata Documents: how recent MCP clients register, and the
+    # replacement for the deprecated Dynamic Client Registration. DOT publishes
+    # `client_id_metadata_document_supported` in its AS metadata from this
+    # setting, and this package reads the same setting when it builds its own
+    # AS metadata, so the two cannot disagree.
+    "CIMD_ENABLED": True,
+    # Registration over CIMD happens before anyone has authenticated, so DOT's
+    # default permission is open: any URL that serves a valid document becomes
+    # a client. That is the CIMD model working as intended and it is the right
+    # default for a public server. Narrow it if this server's tools are not
+    # meant for arbitrary clients — see "Deciding how open CIMD should be".
+    "CIMD_REGISTRATION_PERMISSION_CLASSES": ("oauth2_provider.cimd.AllowAllCIMDPermission",),
 }
 
 REST_FRAMEWORK_MCP = {
     "RESOURCE_URL": "https://example.com/mcp/",
     "ALLOWED_ORIGINS": ["https://app.example.com"],
+    # The specification requires a resource server to validate that a token was
+    # issued for it. Off by default only because the floor is DOT >=2.3, where
+    # no token records a resource; on 3.4.0+ this is the correct setting.
+    "ENFORCE_AUDIENCE": True,
     "SERVER_INFO": {
         "authorization_servers": ["https://example.com/oauth/"],
         "scopes_supported": ["invoices:read", "invoices:write"],
@@ -585,6 +624,12 @@ REST_FRAMEWORK_MCP = {
     },
 }
 ```
+
+!!! warning "Install the extra"
+    `DjangoOAuthToolkitBackend` is the default backend, and mounting refuses
+    without DOT: `pip install "djangorestframework-mcp-server[oauth]"`. The
+    refusal happens while the URLConf is imported, so `manage.py check` catches
+    it before a request ever arrives.
 
 ```python title="urls.py"
 from django.urls import include, path
@@ -606,9 +651,10 @@ curl https://example.com/oauth/.well-known/oauth-authorization-server | jq .
 ```
 
 You should see at minimum `issuer`, `authorization_endpoint`, `token_endpoint`,
-and (for DCR-aware clients) `registration_endpoint`. The PRM endpoint you serve
-points clients at this AS, so a missing or wrong URL here is the most common
-cause of "Inspector can't authenticate" reports.
+and `client_id_metadata_document_supported: true`. A `registration_endpoint` also
+appears for clients that still use Dynamic Client Registration. The PRM endpoint
+you serve points clients at this AS, so a missing or wrong URL here is the most
+common cause of "Inspector can't authenticate" reports.
 
 ### What the round-trip looks like
 
@@ -617,46 +663,88 @@ cause of "Inspector can't authenticate" reports.
    `WWW-Authenticate: Bearer resource_metadata="https://example.com/mcp/.well-known/oauth-protected-resource", error="invalid_token"`.
 3. Client fetches that URL → reads `authorization_servers`.
 4. Client fetches `<as>/.well-known/oauth-authorization-server` → reads
-   `registration_endpoint` (DCR) or `client_id_metadata_document_supported`
-   (CIMD).
-5. Client either pre-registers or publishes a Metadata Document, then walks
-   the authorization-code flow with `resource=https://example.com/mcp/` so the
-   issued access token is audience-bound to this server.
+   `client_id_metadata_document_supported` (CIMD), falling back to
+   `registration_endpoint` (the deprecated DCR) if it does not speak CIMD.
+5. Client publishes a Metadata Document at its own `client_id` URL — or
+   pre-registers — then walks the authorization-code flow with
+   `resource=https://example.com/mcp/`, so the issued access token is
+   audience-bound to this server.
 6. Client retries `tools/call` with the bearer token; server validates the
    token, checks audience, dispatches.
 
-## Recipe: Client ID Metadata Documents
+## Client ID Metadata Documents
 
-Many recent MCP clients prefer
-[Client ID Metadata Documents](https://datatracker.ietf.org/doc/draft-ietf-oauth-client-id-metadata-document/)
-(CIMD) over DCR — they avoid an extra registration round-trip and let clients
-rotate without server-side state. If your AS supports CIMD, advertise it in
-the AS metadata response:
+Recent MCP clients prefer **Client ID Metadata Documents**
+([draft-ietf-oauth-client-id-metadata-document](https://datatracker.ietf.org/doc/draft-ietf-oauth-client-id-metadata-document/))
+over Dynamic Client Registration, which the MCP specification deprecates. A
+client uses an **HTTPS URL as its `client_id`** and publishes a JSON metadata
+document there; the authorization server fetches it. There is no registration
+round-trip and no registration state to keep, and a client can rotate without
+re-registering.
+
+**DOT implements this natively from 3.4.0.** Set `CIMD_ENABLED = True` and DOT
+advertises it in AS metadata, resolves URL-shaped client IDs, fetches and
+validates the document, and provisions the `Application` row:
 
 ```json
 {
   "issuer": "https://example.com/oauth/",
   "authorization_endpoint": "https://example.com/oauth/authorize/",
   "token_endpoint": "https://example.com/oauth/token/",
-  "registration_endpoint": "https://example.com/oauth/register/",
   "client_id_metadata_document_supported": true
 }
 ```
 
-DOT does not implement CIMD natively today; the typical setup is to front it
-with a small wrapper view that:
+This package reads the same `CIMD_ENABLED` setting when it builds its own AS
+metadata, rather than carrying a flag of its own, so the two can never disagree
+about what the deployment supports.
 
-1. Accepts a `client_id` shaped like a URL.
-2. Fetches that URL, validates the document against the
-   [draft schema](https://datatracker.ietf.org/doc/draft-ietf-oauth-client-id-metadata-document/),
-   and either resolves to an existing DOT `Application` row or provisions one
-   on the fly with the document's `redirect_uris`.
+!!! danger "Do not hand-roll the fetch"
+    Earlier versions of this page suggested fronting DOT with a small view that
+    accepted a URL-shaped `client_id` and fetched it. That advice was wrong once
+    DOT 3.4.0 shipped, and it was the dangerous kind of wrong: *fetch a URL the
+    client just supplied* is a server-side request forgery unless it is
+    carefully defended, and the defence is the hard part. DOT's fetcher
+    validates the URL, resolves the hostname and rejects private and loopback
+    addresses (so a DNS rebind does not slip through), caps the document size,
+    the timeout, the number of concurrent fetches and the retry rate after a
+    failure, and honours cache lifetimes. Use it.
 
-From the resource server's perspective nothing changes — the access tokens
-issued at the end of the flow look identical. Note that DOT does **not** carry
-the `resource` parameter through to the token — it implements no resource
-indicators — so audience enforcement needs an `audience_getter`; see
-[Audience binding](#audience-binding-rfc-8707).
+### Deciding how open CIMD should be
+
+CIMD registration happens on the pre-authorization path, where nobody has
+authenticated yet, so DOT's default permission class is open: any URL serving a
+valid document can become a client. That is the CIMD model working as designed —
+the URL *is* the identity, and it is fetched rather than asserted — and it is
+the right default for a server whose tools are meant for any client the user
+authorizes.
+
+It is the wrong default for a server whose tools are not. Narrow it with the
+host allowlist:
+
+```python title="settings.py"
+OAUTH2_PROVIDER = {
+    "CIMD_ENABLED": True,
+    "CIMD_REGISTRATION_PERMISSION_CLASSES": ("oauth2_provider.cimd.HostAllowlistCIMDPermission",),
+    # Django ALLOWED_HOSTS syntax: an exact host, or ".example.com" for a
+    # domain and its subdomains. An empty list denies everything.
+    "CIMD_ALLOWED_HOSTS": [".anthropic.com", "inspector.example.com"],
+}
+```
+
+The remaining knobs — `CIMD_FETCH_TIMEOUT_SECONDS`, `CIMD_MAX_DOCUMENT_SIZE`,
+`CIMD_METADATA_MIN_AGE_SECONDS` / `_MAX_AGE_SECONDS`,
+`CIMD_FAILURE_BACKOFF_SECONDS`, `CIMD_MAX_CONCURRENT_FETCHES` — have sensible
+defaults and are documented by DOT. `manage.py clearcimdapplications` prunes
+rows for documents that have stopped resolving.
+
+### What the resource server sees
+
+Nothing. A CIMD-registered client's access token is byte-identical to a
+pre-registered client's, so `authenticate()`, the audience check and the
+permission classes all behave the same way. CIMD is an authorization-server
+mechanism; it is worth turning on because it is what clients expect, not
+because this package does anything with it beyond advertising it.
 
 ## Try it with mcp-inspector
 
