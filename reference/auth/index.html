@@ -1448,6 +1448,17 @@
       <ul class="md-nav__list">
         
           <li class="md-nav__item">
+  <a href="#rest_framework_mcp.auth.backends.django_oauth_toolkit_backend.DjangoOAuthToolkitBackend.check_configuration" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        check_configuration
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
   <a href="#rest_framework_mcp.auth.backends.django_oauth_toolkit_backend.DjangoOAuthToolkitBackend.authorization_server_metadata" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -2008,6 +2019,17 @@
   
     <nav class="md-nav" aria-label="DjangoOAuthToolkitBackend">
       <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#rest_framework_mcp.auth.backends.django_oauth_toolkit_backend.DjangoOAuthToolkitBackend.check_configuration" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        check_configuration
+      
+    </span>
+  </a>
+  
+</li>
         
           <li class="md-nav__item">
   <a href="#rest_framework_mcp.auth.backends.django_oauth_toolkit_backend.DjangoOAuthToolkitBackend.authorization_server_metadata" class="md-nav__link">
@@ -2799,6 +2821,34 @@ genuinely differ.</p>
 
 
 
+
+<div class="doc doc-object doc-function">
+
+
+<h3 id="rest_framework_mcp.auth.backends.django_oauth_toolkit_backend.DjangoOAuthToolkitBackend.check_configuration" class="doc doc-heading">
+            <span class="doc doc-object-name doc-function-name">check_configuration</span>
+
+
+<a href="#rest_framework_mcp.auth.backends.django_oauth_toolkit_backend.DjangoOAuthToolkitBackend.check_configuration" class="headerlink" title="Permanent link">&para;</a></h3>
+<div class="language-python doc-signature highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="nf">check_configuration</span><span class="p">()</span> <span class="o">-&gt;</span> <span class="kc">None</span>
+</span></code></pre></div>
+
+    <div class="doc doc-contents ">
+
+        <p>Refuse at mount time if DOT is absent, rather than at the first request.</p>
+<p>Implements the opt-in
+:class:<code>~rest_framework_mcp.auth.types.self_checking.SelfChecking</code>
+protocol. It imports exactly what <code>authenticate</code> imports, so a pass
+here is evidence about the call that matters rather than about the
+distribution being on disk under some name.</p>
+<p>The import stays lazy everywhere else on purpose -- see the class
+docstring -- and this method does not change that: an in-process server
+is never mounted, so it is never called.</p>
+
+
+    </div>
+
+</div>
 
 <div class="doc doc-object doc-function">
 

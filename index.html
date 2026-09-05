@@ -1681,9 +1681,9 @@ not a view.</p>
 <p>Optional extras degrade gracefully:</p>
 <ul>
 <li>TOON falls back to JSON with a runtime warning if <code>python-toon</code> is not installed.</li>
-<li>The OAuth backend module imports cleanly without <code>oauth2_provider</code>; the
-  <code>ImportError</code> only fires if you actually configure the backend and a request
-  reaches <code>authenticate()</code>.</li>
+<li>The OAuth backend module imports cleanly without <code>oauth2_provider</code>, so a
+  server used in process needs no DOT. Mounting one over HTTP refuses without
+  it, while the URLConf is imported, rather than 500-ing on the first request.</li>
 <li><code>RedisSSEBroker</code> / <code>RedisSSEReplayBuffer</code> raise a clear <code>ImportError</code> from
   <code>__init__</code> if <code>redis</code> isn't installed.</li>
 <li>The OTel tracing helper yields a no-op span when <code>opentelemetry-api</code> isn't
