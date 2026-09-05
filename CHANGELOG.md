@@ -7,6 +7,32 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.40.1] — 2026-09-05
+
+### Fixed
+
+- **The mount check verified the import and not the app**, which let through the
+  same failure it was added in 0.40.0 to prevent, one layer down.
+
+  `DjangoOAuthToolkitBackend.authenticate` needs two things: the
+  `django-oauth-toolkit` distribution, and `'oauth2_provider'` in
+  `INSTALLED_APPS`, because it resolves DOT's `AccessToken` model and a model
+  needs the app registry rather than the module. The check asked only the first.
+  A project that installed the `[oauth]` extra and forgot the setting therefore
+  passed `manage.py check`, mounted cleanly, and failed on the first request
+  with a `RuntimeError` about `app_label` -- naming neither this package nor the
+  setting that fixes it.
+
+  Both are now checked, in the order they fail in. The import comes first
+  because `apps.is_installed` is False both when the app is missing from the
+  setting and when the distribution is absent entirely, so asking it first would
+  tell someone without the extra to go and edit a setting.
+
+  The reason it was missed is worth more than the line that fixes it: the check
+  was written to answer the question that had already been asked rather than the
+  one the backend actually needs answered, which is *can `authenticate` run?*
+  When a check stands in for a call, derive it from what the call needs.
+
 ## [0.40.0] — 2026-09-05
 
 ### Added
@@ -4529,7 +4555,8 @@ Pinned to `djangorestframework-services==0.6.0`.
 - 100% line + branch coverage enforced by pytest (**451 tests** at
   release).
 
-[Unreleased]: https://github.com/Artui/djangorestframework-mcp-server/compare/v0.40.0...HEAD
+[Unreleased]: https://github.com/Artui/djangorestframework-mcp-server/compare/v0.40.1...HEAD
+[0.40.1]: https://github.com/Artui/djangorestframework-mcp-server/compare/v0.40.0...v0.40.1
 [0.40.0]: https://github.com/Artui/djangorestframework-mcp-server/compare/v0.39.0...v0.40.0
 [0.39.0]: https://github.com/Artui/djangorestframework-mcp-server/compare/v0.38.0...v0.39.0
 [0.38.0]: https://github.com/Artui/djangorestframework-mcp-server/compare/v0.37.0...v0.38.0

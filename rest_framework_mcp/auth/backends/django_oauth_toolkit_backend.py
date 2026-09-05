@@ -5,6 +5,7 @@ from collections.abc import Callable
 from typing import Any
 from urllib.parse import urlparse
 
+from django.apps import apps
 from django.core.exceptions import ImproperlyConfigured
 from django.http import HttpRequest
 
@@ -155,22 +156,31 @@ class DjangoOAuthToolkitBackend:
         )
 
     def check_configuration(self) -> None:
-        """Refuse at mount time if DOT is absent, rather than at the first request.
+        """Refuse at mount time if DOT cannot serve a request, rather than at the first one.
 
         Implements the opt-in
         :class:`~rest_framework_mcp.auth.types.self_checking.SelfChecking`
-        protocol. It imports exactly what ``authenticate`` imports, so a pass
-        here is evidence about the call that matters rather than about the
-        distribution being on disk under some name.
-
-        The import stays lazy everywhere else on purpose -- see the class
-        docstring -- and this method does not change that: an in-process server
+        protocol. The import stays lazy everywhere else on purpose -- see the
+        class docstring -- and this does not change that: an in-process server
         is never mounted, so it is never called.
+
+        **Two things have to be true, and they fail differently.** The
+        distribution has to be installed, and the app has to be in
+        ``INSTALLED_APPS``, because ``authenticate`` resolves DOT's access-token
+        model and a model needs the app registry rather than the module. The
+        first version of this checked only the import and let the second case
+        through -- a project that had installed the extra got past the mount and
+        then failed on the first request with a ``RuntimeError`` about
+        ``app_label``, naming neither this package nor the setting that fixes
+        it.
+
+        The order is the order the two fail in. ``apps.is_installed`` is False
+        both when the app is missing from the setting and when the distribution
+        is absent entirely, so asking it first would tell someone without the
+        extra to edit a setting.
         """
         try:
-            from oauth2_provider.oauth2_validators import (  # noqa: F401
-                OAuth2Validator,
-            )
+            import oauth2_provider  # noqa: F401
         except ImportError as exc:
             raise ImproperlyConfigured(
                 "DjangoOAuthToolkitBackend is mounted but `django-oauth-toolkit` is "
@@ -180,6 +190,23 @@ class DjangoOAuthToolkitBackend:
                 "This is the default backend, so a server built without an explicit "
                 "auth_backend= reaches it."
             ) from exc
+
+        if not apps.is_installed("oauth2_provider"):
+            raise ImproperlyConfigured(
+                "DjangoOAuthToolkitBackend is mounted and `django-oauth-toolkit` is "
+                "installed, but 'oauth2_provider' is not in INSTALLED_APPS. This "
+                "backend validates bearer tokens against DOT's AccessToken model, "
+                "and a model needs the app registry rather than the module -- so "
+                "every request to this endpoint would fail with a RuntimeError "
+                "about app_label. Add 'oauth2_provider' to INSTALLED_APPS and run "
+                "migrate, or pass a different auth_backend= to MCPServer(...)."
+            )
+
+        # Imported last and deliberately: this is exactly what ``authenticate``
+        # imports, so reaching it is evidence about the call that matters rather
+        # than about the distribution being on disk under some name. It resolves
+        # DOT's models at module level, which is why it cannot come first.
+        from oauth2_provider.oauth2_validators import OAuth2Validator  # noqa: F401
 
     def authenticate(self, request: HttpRequest) -> TokenInfo | None:
         try:
