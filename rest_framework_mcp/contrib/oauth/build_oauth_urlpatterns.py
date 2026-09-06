@@ -87,7 +87,12 @@ def build_oauth_urlpatterns(
         whose ``auth_backend`` drives every discovery payload. A parameter rather than a settings lookup so
         multi-server deployments work.
       include_dcr: Mount ``/oauth/register/``. Off by default, so a consumer
-        who does not want DCR never exposes the URL at all.
+        who does not want DCR never exposes the URL at all. RFC 7591 Dynamic
+        Client Registration is **deprecated** by MCP revision ``2026-07-28`` in
+        favour of Client ID Metadata Documents, with an earliest removal of the
+        first revision released on or after 2027-07-28; see
+        [`DynamicClientRegistrationViewSet`][rest_framework_mcp.contrib.oauth.dynamic_client_registration_viewset.DynamicClientRegistrationViewSet]
+        for the timetable and for why this endpoint is kept meanwhile.
       include_aliases: Mount the alias URLs alongside the canonical ones.
       include_openid_discovery: Mount the OIDC discovery alias.
       include_authorize: Mount ``/oauth/authorize/`` as a thin DOT

@@ -20,6 +20,34 @@ from rest_framework_mcp.contrib.oauth.utils import OPENID_SCOPE, resolve_id_toke
 class DynamicClientRegistrationViewSet(ViewSet):
     """RFC 7591 Dynamic Client Registration endpoint.
 
+    **Deprecated by the MCP specification, and kept until the specification
+    removes it.** Revision ``2026-07-28`` deprecated Dynamic Client Registration
+    in favour of Client ID Metadata Documents, and the spec's deprecated-features
+    registry gives it an earliest removal of *the first revision released on or
+    after 2027-07-28*. Deprecated is not removed: DCR remains a ``MAY`` in the
+    current revision, and this endpoint is supported for as long as that holds.
+    The replacement is CIMD, which is an authorization-server capability rather
+    than one of ours — on django-oauth-toolkit 3.4 and later,
+    ``OAUTH2_PROVIDER["CIMD_ENABLED"] = True`` is the whole configuration, and
+    ``AuthorizationServerMetadata.client_id_metadata_document_supported`` then
+    advertises it. New deployments should reach for that first; a client that
+    reads it never reaches this endpoint, because the spec's registration
+    priority order puts pre-registration and CIMD above DCR.
+
+    **Why the surface stays, and why nothing warns at runtime.** Most MCP
+    clients in the field have no CIMD implementation at all, and several have no
+    alternative to DCR whatsoever, so a server that withdraws this endpoint
+    ahead of the timetable is a server those clients simply cannot connect to.
+    A deployment reaching this code has already opted in twice — ``include_dcr``
+    at the mount and ``dcr_enabled`` on top of it, both defaulting off — so a
+    ``DeprecationWarning`` here would fire on a *correct* configuration whose
+    operator has nothing to act on, and it would fire once per registration
+    request, since this package forbids the warn-once module state that would
+    quieten it. An announcement that cannot be acted on trains people to filter
+    the module, which is worse than no announcement. It belongs where the
+    decision is made — this docstring, the settings reference, and the
+    authentication guide — not on every request after it.
+
     Locked down by default: ``dcr_enabled=False`` answers 403 to every
     request. Turn it on with ``REST_FRAMEWORK_MCP['DCR_ENABLED']`` and,
     recommended, a ``DCR_INITIAL_ACCESS_TOKEN`` clients must present. Wired as

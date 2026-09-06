@@ -7,6 +7,115 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- **The `[oauth]` extra floors `django-oauth-toolkit` at `>=3.4`,** from
+  `>=2.3`. The package was recommending a deployment its own extra could not
+  install: `docs/auth.md` names DOT with `CIMD_ENABLED = True` and
+  `ENFORCE_AUDIENCE = True` as *the* answer, and both of those first exist in
+  3.4.0 — Client ID Metadata Documents, and the `resource` field on stock
+  `AccessToken` that the RFC 8707 audience check reads.
+
+  Neither gap announced itself, which is what made the floor worth moving rather
+  than documenting around. `CIMD_ENABLED` on an older DOT is an unknown key it
+  ignores, so the server advertised no CIMD support and every client fell back
+  to the deprecated registration path; `ENFORCE_AUDIENCE` had no field to read,
+  so turning it on refused every request. 3.4.0 requires Python `>=3.10` and
+  Django `>=4.2`, both already this package's own floors, so nothing else moved
+  with it. The dev group is pinned to the same value, or the `lowest declared
+  versions` job would exercise a DOT the extra no longer promises.
+
+- **`ENFORCE_AUDIENCE` still defaults to `False`, for a different reason.**
+  Every statement of that default said it was off "only because the `[oauth]`
+  extra floors DOT at `>=2.3`", which the raise above retires. The reason that
+  survives is stronger and is now what the docstrings, `docs/auth.md` and the
+  settings reference say: a token recording *no* resource is rejected, and a
+  token only records one when the client sent RFC 8707's `resource` parameter.
+  MCP clients are obliged to send it; the other clients of a general OAuth
+  server are not, so flipping the default would 401 them on the upgrade that
+  flipped it. That is a decision about a deployment's client population, which
+  is why `UnenforcedAudienceWarning` names it at construction instead.
+
+  `tests/auth/backends/test_dot_backend_audience_reality.py` gained a test that
+  asserts stock DOT at the resolved version can enforce, replacing one that
+  branched on whether the installed DOT had the field and expected
+  `ImproperlyConfigured` on the other side. That branch is unreachable through
+  any declared resolution now, and its name said "refuses to start" while the
+  reachable half asserted that it starts.
+
+- **Dynamic Client Registration is marked deprecated in the package's own
+  voice.** MCP revision `2026-07-28` deprecated RFC 7591 registration in favour
+  of Client ID Metadata Documents, and the specification's deprecated-features
+  registry gives it an earliest removal of *the first revision released on or
+  after 2027-07-28*. The notice is on `DynamicClientRegistrationViewSet`, in the
+  contrib-mount section of `docs/auth.md`, on the `DCR_ENABLED` settings row and
+  in the API reference — the places the decision to enable it is made.
+
+  **The surface is kept, and there is no runtime `DeprecationWarning`.**
+  Deprecated is not removed: DCR remains a `MAY` in the current revision, most
+  MCP clients in the field have no CIMD implementation at all, and several have
+  no other way in — so a server that withdraws the endpoint ahead of the
+  timetable is one those clients cannot connect to. A deployment reaching this
+  code has opted in twice, `include_dcr` and `dcr_enabled`, both defaulting off;
+  a warning would therefore fire on a *correct* configuration, once per
+  registration request, since this package forbids the warn-once module state
+  that would quieten it. An announcement its reader cannot act on trains people
+  to filter the module.
+
+### Fixed
+
+- **A false claim about Claude's custom connectors, load-bearing where it
+  sat.** `docs/auth.md` said `token_endpoint_auth_method: none` is "the only
+  mode Claude's custom connectors can use — that flow has no way to be handed a
+  pre-provisioned `client_id`, so DCR is its only path in". Anthropic's current
+  connector documentation lists three mechanisms — `oauth_cimd`, `oauth_dcr`
+  and Anthropic-held client credentials — and the "Advanced settings" panel on a
+  custom connector takes an OAuth Client ID and an optional Client Secret, which
+  is pre-registration. The page now says what actually decides the mechanism:
+  Claude picks CIMD only when the authorization-server metadata advertises both
+  `client_id_metadata_document_supported: true` *and* `none` in
+  `token_endpoint_auth_methods_supported`, and falls back to DCR if either is
+  missing.
+
+  That sentence was the recorded justification for advertising
+  `registration_endpoint` unconditionally, so the decision was re-examined
+  rather than left standing on a dead premise. **It holds, on two other
+  grounds**, now recorded on
+  `DjangoOAuthToolkitBackend.authorization_server_metadata` where the
+  advertisement is actually built. Structurally it is the only answer available
+  there: whether the endpoint accepts registrations is a *per-mount* decision
+  (`build_oauth_urlpatterns(dcr_enabled=...)` resolved into `as_view`, with the
+  setting only its default), and this backend never sees the argument — so
+  gating on the global would withdraw a working endpoint from every deployment
+  that enables DCR at the mount. By protocol it also costs a modern client
+  nothing: the registration priority order is pre-registration, then CIMD, then
+  DCR, so a client that can read `client_id_metadata_document_supported` never
+  reaches `registration_endpoint`. It is read only by clients with no other way
+  in.
+
+- **`check_oauth_url_shadowing` watched three of the nine paths it should**, and
+  the six it missed include the costlier collision. It listed `/oauth/register/`
+  and the two spellings of the authorization-server document; DOT 3.4.0 also
+  serves RFC 9728 protected-resource metadata, OIDC discovery, and
+  `<path:issuer_path>` / `<path:resource_path>` component forms that swallow
+  this package's alias paths — and DOT's own documentation tells deployers to
+  mount those **at the server root**, which is exactly the arrangement that
+  takes ours.
+
+  Reading the wrong authorization-server document sends a client to the wrong
+  issuer and fails visibly. Reading the wrong *protected-resource* document
+  hands it the wrong `resource`, so it completes the flow and arrives holding a
+  token minted for something else — and with `ENFORCE_AUDIENCE` on, that is a
+  401 per request with a correctly configured server on both ends. Found while
+  raising the `[oauth]` floor, which is what makes DOT's competing routes
+  present in every install rather than only in an early adopter's.
+
+  `/oauth/authorize/` is contested too and is left out on purpose:
+  `include_authorize` defaults off precisely so the consumer's own
+  `include('oauth2_provider.urls')` can own that path, so a report there would
+  fire on a working configuration. A test pins the omission, against a URLconf
+  that does serve the path, so it cannot pass by resolving nowhere.
+
 ## [0.40.1] — 2026-09-05
 
 ### Fixed

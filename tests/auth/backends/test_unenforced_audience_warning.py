@@ -2,15 +2,18 @@
 
 The MCP ``2026-07-28`` spec requires a resource server to validate that a token
 was issued for it, and the failure mode of not doing so is cross-resource token
-replay. The default stays off because the ``[oauth]`` extra floors DOT at
-``>=2.3``, where no token records a resource -- but that reason expires **per
-deployment**, when a project upgrades DOT, and it expires silently.
+replay. The default stays off because a token recording no resource is
+rejected, and whether tokens record one is a fact about a deployment's clients
+rather than about its DOT version -- so the package cannot decide it, and says
+so instead.
 
 Every case here pins the token model rather than reading whichever DOT the
-environment installed. The floor job resolves DOT at ``2.3``, where stock
-``AccessToken`` has no ``resource`` field, so a test that assumed 3.4.0 passed
-locally and failed there -- and a test whose result depends on the resolver is
-not testing the thing it names.
+environment installed. That mattered when the floor was ``2.3`` and the floor
+job resolved a stock ``AccessToken`` with no ``resource`` field: a test that
+assumed 3.4.0 passed locally and failed there. The floor is now ``>=3.4`` and
+both resolutions carry the field, which makes the pinning *less* visibly
+load-bearing and no less necessary -- a test whose result depends on the
+resolver is not testing the thing it names, and the resolver can move again.
 """
 
 from __future__ import annotations

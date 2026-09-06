@@ -11,10 +11,16 @@ Before 3.4.0 the audience path was unsatisfiable in every stock deployment —
 enforcement could only work against a swapped `ACCESS_TOKEN_MODEL` or a custom
 `audience_getter`. From 3.4.0 the default getter is meaningful out of the box.
 
-The package supports `django-oauth-toolkit>=2.3`, so both realities are live
-and these tests are version-gated rather than rewritten. Whether
-`ENFORCE_AUDIENCE` should now *default on* is a separate decision — it would be
-breaking for anyone on older DOT.
+The `[oauth]` extra now floors DOT at `>=3.4`, so the pre-3.4 reality is no
+longer one this package ships anybody into. What survives of it lives on the
+swapped-model tests below, which reach the same code path through
+`OAUTH2_PROVIDER['ACCESS_TOKEN_MODEL']` rather than through a version — the
+route that is still live, and the one the guard's error message names.
+
+Whether `ENFORCE_AUDIENCE` should *default on* is still a separate decision, and
+the floor raise did not settle it: a token recording no resource is rejected, so
+the default turns on whether every client of this authorization server sends
+RFC 8707's `resource` parameter, which no version number answers.
 """
 
 from __future__ import annotations
@@ -119,22 +125,30 @@ def test_metadata_still_advertises_the_resource_it_authenticates_for(settings) -
     assert backend.authenticate(_request(token)) is not None
 
 
-def test_enforcement_without_a_usable_audience_source_refuses_to_start(settings) -> None:
-    """Loud at startup rather than a 401 per request.
+def test_stock_dot_at_the_declared_floor_can_enforce(settings) -> None:
+    """The `[oauth]` floor is what makes the recommended deployment installable.
 
-    An operator who turns enforcement on against stock DOT has built a
-    server that rejects everything. That is a configuration error, and the
-    only useful place to say so is where the configuration is read.
+    `docs/auth.md` recommends `ENFORCE_AUDIENCE = True` on stock DOT with no
+    swapped model and no custom getter. That is only true from 3.4, which is
+    where the extra floors it — so this asserts the recommendation against
+    whatever DOT actually resolved, rather than against the prose.
+
+    It replaced a test that branched on `_dot_has_resource_indicators()` and
+    expected `ImproperlyConfigured` on the other side. With the floor at 3.4
+    that branch is unreachable through any declared resolution, and a test whose
+    name says "refuses to start" while asserting that it starts is worse than no
+    test. The refusal is covered where it is still reachable:
+    `test_enforcement_refuses_a_swapped_model_without_a_resource`.
     """
     settings.REST_FRAMEWORK_MCP = {"RESOURCE_URL": RESOURCE_URL, "ENFORCE_AUDIENCE": True}
-    if _dot_has_resource_indicators():
-        # DOT >= 3.4: the default getter reads a real field, so enforcement is
-        # satisfiable and starting up is the correct behaviour. The guard has
-        # not weakened — it still refuses when there is genuinely no source.
-        DjangoOAuthToolkitBackend()
-        return
-    with pytest.raises(ImproperlyConfigured, match="no 'resource' field"):
-        DjangoOAuthToolkitBackend()
+
+    assert _dot_has_resource_indicators(), (
+        "stock AccessToken has no 'resource' field, so the installed DOT is "
+        "below the [oauth] extra's declared floor of >=3.4"
+    )
+    backend = DjangoOAuthToolkitBackend()
+
+    assert backend.protected_resource_metadata().to_dict()["resource"] == RESOURCE_URL
 
 
 def test_enforcement_with_no_resource_url_refuses_to_start(settings) -> None:
@@ -213,11 +227,13 @@ def test_unconfigured_metadata_says_why_resource_is_empty(settings) -> None:
 def test_enforcement_refuses_a_swapped_model_without_a_resource(monkeypatch, settings) -> None:
     """The guard still fires — it just needs a model that lacks the field.
 
-    Stock DOT >= 3.4 ships ``resource``, so this path is no longer reachable
-    through the default model. It remains reachable, and worth keeping, for an
-    older DOT or a project that swapped ``OAUTH2_PROVIDER['ACCESS_TOKEN_MODEL']``
-    for one without it — which is exactly when an operator most needs to be told
-    at startup rather than by a 401 on every request.
+    Stock DOT >= 3.4 ships ``resource`` and the ``[oauth]`` extra floors it
+    there, so this path is no longer reachable through the default model. It
+    stays reachable — and is the only route to the guard now — through a project
+    that swapped ``OAUTH2_PROVIDER['ACCESS_TOKEN_MODEL']`` for a model without
+    the field, or a DOT installed outside this extra and pinned older. That is
+    exactly when an operator most needs to be told at startup rather than by a
+    401 on every request.
     """
 
     class _Field:
