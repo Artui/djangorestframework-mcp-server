@@ -2767,15 +2767,23 @@ actually reaches authentication.</p>
 publishes in its protected-resource metadata; enforcement is whether a
 token that doesn't carry that identity is rejected. <code>resource_url</code> is
 effectively required by RFC 9728; enforcement is a separate decision.</p>
-<p><strong>On django-oauth-toolkit 3.4.0 and later this works out of the box.</strong> That
-release added RFC 8707 resource indicators: stock <code>AccessToken</code> carries a
-<code>resource</code> field and an <code>allows_audience</code> check, so turning enforcement
-on needs nothing else. The default stays off because the floor of the
-<code>[oauth]</code> extra is <code>&gt;=2.3</code>, and on an older DOT no token records a
-resource — so a default of <code>True</code> would reject every request for anyone
-who has not upgraded.</p>
-<p>Below 3.4.0, or with a swapped model that drops the field, enforcement still
-works if the resource is somewhere else:</p>
+<p><strong>The <code>[oauth]</code> extra floors django-oauth-toolkit at <code>&gt;=3.4</code>, so this
+works out of the box.</strong> That release added RFC 8707 resource indicators:
+stock <code>AccessToken</code> carries a <code>resource</code> field and an
+<code>allows_audience</code> check, so turning enforcement on needs nothing else.</p>
+<p>The default nonetheless stays off, and the reason is no longer the floor.
+<code>audience_matches</code> rejects a token carrying <em>no</em> resource, and a token
+only carries one if the client sent the RFC 8707 <code>resource</code> parameter at
+the authorize and token endpoints. The MCP specification requires clients
+to send it, but the authorization server this backend reads is a general
+OAuth server whose other clients have no such obligation — so defaulting
+<code>True</code> would 401 every token minted for a browser app, a script, or an
+MCP client that has not caught up, on the release that changed the default.
+<code>UnenforcedAudienceWarning</code> is how a deployment that could conform is
+told so, at construction, instead.</p>
+<p>With a swapped model that drops the field, or a DOT installed outside this
+extra and pinned below 3.4, enforcement still works if the resource is
+somewhere else:</p>
 <ul>
 <li>a swapped <code>OAUTH2_PROVIDER["ACCESS_TOKEN_MODEL"]</code> carrying a
   <code>resource</code> field (DOT supports substituting the model), or</li>
@@ -2888,6 +2896,25 @@ warns at construction; see <code>MountedAuthorizationServerWarning</code>.</p>
 is always valid JSON; configure <code>authorization_servers</code> for
 production. <code>client_id_metadata_document_supported</code> is read from DOT
 rather than asserted here — see <code>_cimd_enabled</code>.</p>
+<p><strong><code>registration_endpoint</code> is advertised whenever an issuer is
+configured, including where DCR is switched off</strong>, and that is
+deliberate on two counts.</p>
+<p>Structurally it is the only answer available here. Whether the endpoint
+accepts registrations is decided per <em>mount</em>:
+<code>build_oauth_urlpatterns(dcr_enabled=...)</code> resolves it into
+<code>as_view(...)</code>, and <code>REST_FRAMEWORK_MCP['DCR_ENABLED']</code> is only that
+argument's default. This backend never sees the argument, so gating the
+advertisement on the global would withdraw a working endpoint from any
+deployment that enables DCR at the mount — the flow that exists so two
+mounts in one project can differ. A client that registers against a
+disabled endpoint gets an immediate, well-formed <code>403
+invalid_request</code>, not a hang.</p>
+<p>By protocol the advertisement also costs a modern client nothing. The
+<code>2026-07-28</code> registration priority order is pre-registration, then
+Client ID Metadata Documents, then DCR, so a client that can read
+<code>client_id_metadata_document_supported</code> never reaches
+<code>registration_endpoint</code>. It is read only by clients with no other way
+in, which is still most of them.</p>
 
 
     </div>
@@ -3567,7 +3594,12 @@ multi-server deployments work.</p>
             <td>
               <div class="doc-md-description">
                 <p>Mount <code>/oauth/register/</code>. Off by default, so a consumer
-who does not want DCR never exposes the URL at all.</p>
+who does not want DCR never exposes the URL at all. RFC 7591 Dynamic
+Client Registration is <strong>deprecated</strong> by MCP revision <code>2026-07-28</code> in
+favour of Client ID Metadata Documents, with an earliest removal of the
+first revision released on or after 2027-07-28; see
+<a class="autorefs autorefs-internal" title="DynamicClientRegistrationViewSet" href="#rest_framework_mcp.contrib.oauth.dynamic_client_registration_viewset.DynamicClientRegistrationViewSet"><code>DynamicClientRegistrationViewSet</code></a>
+for the timetable and for why this endpoint is kept meanwhile.</p>
               </div>
             </td>
             <td>
@@ -3832,6 +3864,32 @@ surfaced as <code>501</code> for parity with
 
 
         <p>RFC 7591 Dynamic Client Registration endpoint.</p>
+<p><strong>Deprecated by the MCP specification, and kept until the specification
+removes it.</strong> Revision <code>2026-07-28</code> deprecated Dynamic Client Registration
+in favour of Client ID Metadata Documents, and the spec's deprecated-features
+registry gives it an earliest removal of <em>the first revision released on or
+after 2027-07-28</em>. Deprecated is not removed: DCR remains a <code>MAY</code> in the
+current revision, and this endpoint is supported for as long as that holds.
+The replacement is CIMD, which is an authorization-server capability rather
+than one of ours — on django-oauth-toolkit 3.4 and later,
+<code>OAUTH2_PROVIDER["CIMD_ENABLED"] = True</code> is the whole configuration, and
+<code>AuthorizationServerMetadata.client_id_metadata_document_supported</code> then
+advertises it. New deployments should reach for that first; a client that
+reads it never reaches this endpoint, because the spec's registration
+priority order puts pre-registration and CIMD above DCR.</p>
+<p><strong>Why the surface stays, and why nothing warns at runtime.</strong> Most MCP
+clients in the field have no CIMD implementation at all, and several have no
+alternative to DCR whatsoever, so a server that withdraws this endpoint
+ahead of the timetable is a server those clients simply cannot connect to.
+A deployment reaching this code has already opted in twice — <code>include_dcr</code>
+at the mount and <code>dcr_enabled</code> on top of it, both defaulting off — so a
+<code>DeprecationWarning</code> here would fire on a <em>correct</em> configuration whose
+operator has nothing to act on, and it would fire once per registration
+request, since this package forbids the warn-once module state that would
+quieten it. An announcement that cannot be acted on trains people to filter
+the module, which is worse than no announcement. It belongs where the
+decision is made — this docstring, the settings reference, and the
+authentication guide — not on every request after it.</p>
 <p>Locked down by default: <code>dcr_enabled=False</code> answers 403 to every
 request. Turn it on with <code>REST_FRAMEWORK_MCP['DCR_ENABLED']</code> and,
 recommended, a <code>DCR_INITIAL_ACCESS_TOKEN</code> clients must present. Wired as
@@ -3897,6 +3955,10 @@ by its own knobs, not by DRF's authenticators. CSRF is sidestepped because
 
 
         <p>RFC 7591 dynamic client registration request shape.</p>
+<p>Dynamic Client Registration is deprecated by MCP revision <code>2026-07-28</code> in
+favour of Client ID Metadata Documents; the timetable, the replacement and
+the reason this surface is nonetheless kept are recorded once, on
+<a class="autorefs autorefs-internal" title="DynamicClientRegistrationViewSet" href="#rest_framework_mcp.contrib.oauth.dynamic_client_registration_viewset.DynamicClientRegistrationViewSet"><code>DynamicClientRegistrationViewSet</code></a>.</p>
 <p>Wraps
 <a class="autorefs autorefs-internal" title="DynamicClientRegistrationRequest
 
@@ -4308,7 +4370,12 @@ making it REQUIRED in that case, with <code>0</code> meaning "does not expire".
 
     </div>
 
-</div><p>DCR is gated by two <code>build_oauth_urlpatterns</code> arguments, each defaulting to the
+</div><p><strong>DCR is deprecated by MCP revision <code>2026-07-28</code></strong>, in favour of Client ID
+Metadata Documents, with an earliest removal of the first specification revision
+released on or after 2027-07-28. It is kept, and stays off by default; the
+timetable and the reasoning are on <code>DynamicClientRegistrationViewSet</code> above and
+in <a href="../../auth/#oauth-contrib-mount">Authentication</a>.</p>
+<p>DCR is gated by two <code>build_oauth_urlpatterns</code> arguments, each defaulting to the
 matching setting when omitted:</p>
 <ul>
 <li><code>dcr_enabled</code> (default: <code>REST_FRAMEWORK_MCP["DCR_ENABLED"]</code>, itself <code>False</code>) —

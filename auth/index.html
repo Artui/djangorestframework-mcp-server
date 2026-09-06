@@ -2205,11 +2205,16 @@ indicators</strong>: stock <code>AccessToken</code> carries a <code>resource</co
 <code>allows_audience()</code> check, and <code>resource</code> is accepted at both the authorize
 and token endpoints. On 3.4.0 or later, <code>ENFORCE_AUDIENCE = True</code> needs
 nothing else.</p>
-<p>It is <strong>off by default</strong> only because the <code>[oauth]</code> extra floors DOT at
-<code>&gt;=2.3</code>, and on an older DOT no token records a resource — a default of
-<code>True</code> would reject every request for anyone who has not upgraded. The check
-is capability-based rather than version-based, so it asks your configured
-token model rather than DOT's version number.</p>
+<p>It is nonetheless <strong>off by default</strong>, and since the <code>[oauth]</code> extra floors
+DOT at <code>&gt;=3.4</code> that is no longer about the floor. A token that records <em>no</em>
+resource is rejected, and one only records a resource if the client sent
+RFC 8707's <code>resource</code> parameter. The MCP spec obliges MCP clients to send
+it; the other clients of your authorization server — a browser app, a
+script, a mobile client — are under no such obligation, so a default of
+<code>True</code> would 401 them the day you upgrade this package. Choosing
+enforcement is a statement about your client population, which is yours to
+make. The check itself is capability-based rather than version-based, so it
+asks your configured token model rather than DOT's version number.</p>
 <p>Enforcement used to be implied by <code>resource_url</code> alone. That made the
 bundled backend unusable: configuring the resource URL a resource server is
 supposed to publish rejected <em>every</em> token, and clearing it published
@@ -2223,7 +2228,12 @@ issued specifically for it. Leaving <code>ENFORCE_AUDIENCE</code> off on DOT 3.4
 conformance gap, and the failure mode is cross-resource token replay: a token
 minted for a different resource on the same authorization server is accepted
 here.</p>
-<p>Turn it on unless you are pinned below DOT 3.4.0.</p>
+<p>Turn it on. The <code>[oauth]</code> extra floors DOT at <code>&gt;=3.4</code>, so the only
+deployments that cannot are those running a swapped <code>ACCESS_TOKEN_MODEL</code>
+without the field, or a DOT installed outside this extra and pinned older —
+and both of those have an <code>audience_getter=</code> available. Before flipping it,
+check that the clients you serve send <code>resource</code> on the authorize and token
+requests, because a token that carries none is rejected.</p>
 </div>
 <p>To enforce, tell the backend where the audience actually lives — either a
 swapped <code>OAUTH2_PROVIDER["ACCESS_TOKEN_MODEL"]</code> carrying a <code>resource</code> field, or
@@ -2336,7 +2346,7 @@ flow without you running a separate AS-facing service:</p>
 </tr>
 <tr>
 <td><code>/oauth/register/</code> (and aliases)</td>
-<td>RFC 7591 Dynamic Client Registration</td>
+<td>RFC 7591 Dynamic Client Registration (<strong>deprecated</strong>, see below)</td>
 </tr>
 <tr>
 <td><code>/oauth/authorize/</code></td>
@@ -2345,6 +2355,26 @@ flow without you running a separate AS-facing service:</p>
 </tbody>
 </table>
 <p>Aliases render the canonical payload — they are not HTTP redirects.</p>
+<div class="admonition warning">
+<p class="admonition-title">Dynamic Client Registration is deprecated — on a published timetable</p>
+<p>MCP revision <code>2026-07-28</code> deprecated DCR in favour of <a href="#client-id-metadata-documents">Client ID Metadata
+Documents</a>, and the specification's
+deprecated-features registry gives it an earliest removal of <em>the first
+revision released on or after 2027-07-28</em>. Deprecated is not removed: DCR is
+still a <code>MAY</code> in the current revision, clients that speak it keep working,
+and this endpoint is supported for as long as that holds. It is off twice
+over by default — <code>include_dcr</code> and <code>dcr_enabled</code> — so nothing is exposed
+until you ask for it.</p>
+<p><strong>Turn on CIMD first, and then decide whether you still need this.</strong> With
+<code>CIMD_ENABLED = True</code> on DOT 3.4+, a client that can read
+<code>client_id_metadata_document_supported</code> never reaches <code>/oauth/register/</code>:
+the specification's registration priority order is pre-registration, then
+CIMD, then DCR. What is left is the clients that cannot — a large share of
+the MCP hosts in the field today have no CIMD implementation at all, and
+several have no path in but DCR. Serving both is a supported answer until
+the spec withdraws one of them. Nothing warns at runtime, deliberately: a
+deployment that opted in twice is correctly configured, not mistaken.</p>
+</div>
 <div class="language-python highlight"><span class="filename">urls.py</span><pre><span></span><code><span id="__span-10-1"><a id="__codelineno-10-1" name="__codelineno-10-1" href="#__codelineno-10-1"></a><span class="kn">from</span><span class="w"> </span><span class="nn">django.urls</span><span class="w"> </span><span class="kn">import</span> <span class="n">path</span>
 </span><span id="__span-10-2"><a id="__codelineno-10-2" name="__codelineno-10-2" href="#__codelineno-10-2"></a>
 </span><span id="__span-10-3"><a id="__codelineno-10-3" name="__codelineno-10-3" href="#__codelineno-10-3"></a><span class="kn">from</span><span class="w"> </span><span class="nn">invoices.mcp</span><span class="w"> </span><span class="kn">import</span> <span class="n">server</span>
@@ -2385,11 +2415,30 @@ grant — the two fields an interoperable client actually sends:</p>
 </span><span id="__span-12-7"><a id="__codelineno-12-7" name="__codelineno-12-7" href="#__codelineno-12-7"></a><span class="p">}</span>
 </span></code></pre></div>
 <p><code>token_endpoint_auth_method: none</code> registers a <strong>public</strong> client: no secret is
-issued, and it authenticates at the token endpoint with PKCE alone. This is the
-only mode Claude's custom connectors can use — that flow has no way to be handed
-a pre-provisioned <code>client_id</code>, so DCR is its only path in. <code>client_secret_basic</code>
+issued, and it authenticates at the token endpoint with PKCE alone. That is the
+mode a host registering itself dynamically will ask for, and it is why <code>none</code>
+has to stay in <code>token_endpoint_auth_methods_supported</code>. <code>client_secret_basic</code>
 (the RFC's default when the field is omitted) and <code>client_secret_post</code> register
 a <strong>confidential</strong> client and return a <code>client_secret</code>.</p>
+<div class="admonition note">
+<p class="admonition-title">Claude's custom connectors are no longer DCR-only</p>
+<p>An earlier version of this page said this flow "has no way to be handed a
+pre-provisioned <code>client_id</code>, so DCR is its only path in". That is false as
+of Anthropic's current connector documentation, which lists three
+mechanisms: <code>oauth_cimd</code> (Client ID Metadata Documents), <code>oauth_dcr</code>
+(RFC 7591), and Anthropic-held client credentials; the "Advanced settings"
+panel on a custom connector also takes an OAuth Client ID and an optional
+OAuth Client Secret, which is pre-registration.</p>
+<p>What decides which one runs is your metadata, not the client: Claude selects
+CIMD <strong>only</strong> when your AS metadata advertises both
+<code>client_id_metadata_document_supported: true</code> <em>and</em> <code>none</code> in
+<code>token_endpoint_auth_methods_supported</code>, and falls back to DCR if either is
+missing. Anthropic's own guidance prefers CIMD over DCR for servers
+expecting traffic, because DCR registers a fresh client on every new
+connection. So advertise CIMD — see <a href="#the-documented-deployment-django-oauth-toolkit-with-cimd">the recommended
+deployment</a> — and
+the fallback stops being reached.</p>
+</div>
 <p>The registration above — a public client — comes back with no secret at all:</p>
 <div class="language-json highlight"><span class="filename">201 Created</span><pre><span></span><code><span id="__span-13-1"><a id="__codelineno-13-1" name="__codelineno-13-1" href="#__codelineno-13-1"></a><span class="p">{</span>
 </span><span id="__span-13-2"><a id="__codelineno-13-2" name="__codelineno-13-2" href="#__codelineno-13-2"></a><span class="w">  </span><span class="nt">&quot;client_id&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;…&quot;</span><span class="p">,</span>
@@ -2504,6 +2553,12 @@ is the recommended one rather than one option among several:</p>
   Documents</a> below for what it does and what to
   decide about it.</li>
 </ul>
+<p>Both arrived in django-oauth-toolkit <strong>3.4.0</strong>, and that is where the <code>[oauth]</code>
+extra floors it — a recommendation the package's own extra could not install
+would not be one. Below 3.4 there is no <code>CIMD_ENABLED</code> key for DOT to read and
+no <code>resource</code> on the token for the audience check to compare, and neither
+failure announces itself: the server advertises no CIMD support and every
+client quietly falls back to the deprecated path.</p>
 <div class="language-python highlight"><span class="filename">settings.py</span><pre><span></span><code><span id="__span-14-1"><a id="__codelineno-14-1" name="__codelineno-14-1" href="#__codelineno-14-1"></a><span class="n">INSTALLED_APPS</span> <span class="o">=</span> <span class="p">[</span>
 </span><span id="__span-14-2"><a id="__codelineno-14-2" name="__codelineno-14-2" href="#__codelineno-14-2"></a>    <span class="c1"># ...</span>
 </span><span id="__span-14-3"><a id="__codelineno-14-3" name="__codelineno-14-3" href="#__codelineno-14-3"></a>    <span class="s2">&quot;oauth2_provider&quot;</span><span class="p">,</span>
@@ -2539,22 +2594,26 @@ is the recommended one rather than one option among several:</p>
 </span><span id="__span-14-33"><a id="__codelineno-14-33" name="__codelineno-14-33" href="#__codelineno-14-33"></a>    <span class="s2">&quot;RESOURCE_URL&quot;</span><span class="p">:</span> <span class="s2">&quot;https://example.com/mcp/&quot;</span><span class="p">,</span>
 </span><span id="__span-14-34"><a id="__codelineno-14-34" name="__codelineno-14-34" href="#__codelineno-14-34"></a>    <span class="s2">&quot;ALLOWED_ORIGINS&quot;</span><span class="p">:</span> <span class="p">[</span><span class="s2">&quot;https://app.example.com&quot;</span><span class="p">],</span>
 </span><span id="__span-14-35"><a id="__codelineno-14-35" name="__codelineno-14-35" href="#__codelineno-14-35"></a>    <span class="c1"># The specification requires a resource server to validate that a token was</span>
-</span><span id="__span-14-36"><a id="__codelineno-14-36" name="__codelineno-14-36" href="#__codelineno-14-36"></a>    <span class="c1"># issued for it. Off by default only because the floor is DOT &gt;=2.3, where</span>
-</span><span id="__span-14-37"><a id="__codelineno-14-37" name="__codelineno-14-37" href="#__codelineno-14-37"></a>    <span class="c1"># no token records a resource; on 3.4.0+ this is the correct setting.</span>
-</span><span id="__span-14-38"><a id="__codelineno-14-38" name="__codelineno-14-38" href="#__codelineno-14-38"></a>    <span class="s2">&quot;ENFORCE_AUDIENCE&quot;</span><span class="p">:</span> <span class="kc">True</span><span class="p">,</span>
-</span><span id="__span-14-39"><a id="__codelineno-14-39" name="__codelineno-14-39" href="#__codelineno-14-39"></a>    <span class="s2">&quot;SERVER_INFO&quot;</span><span class="p">:</span> <span class="p">{</span>
-</span><span id="__span-14-40"><a id="__codelineno-14-40" name="__codelineno-14-40" href="#__codelineno-14-40"></a>        <span class="s2">&quot;authorization_servers&quot;</span><span class="p">:</span> <span class="p">[</span><span class="s2">&quot;https://example.com/oauth/&quot;</span><span class="p">],</span>
-</span><span id="__span-14-41"><a id="__codelineno-14-41" name="__codelineno-14-41" href="#__codelineno-14-41"></a>        <span class="s2">&quot;scopes_supported&quot;</span><span class="p">:</span> <span class="p">[</span><span class="s2">&quot;invoices:read&quot;</span><span class="p">,</span> <span class="s2">&quot;invoices:write&quot;</span><span class="p">],</span>
-</span><span id="__span-14-42"><a id="__codelineno-14-42" name="__codelineno-14-42" href="#__codelineno-14-42"></a>        <span class="s2">&quot;resource_metadata_url&quot;</span><span class="p">:</span> <span class="s2">&quot;https://example.com/mcp/.well-known/oauth-protected-resource&quot;</span><span class="p">,</span>
-</span><span id="__span-14-43"><a id="__codelineno-14-43" name="__codelineno-14-43" href="#__codelineno-14-43"></a>    <span class="p">},</span>
-</span><span id="__span-14-44"><a id="__codelineno-14-44" name="__codelineno-14-44" href="#__codelineno-14-44"></a><span class="p">}</span>
+</span><span id="__span-14-36"><a id="__codelineno-14-36" name="__codelineno-14-36" href="#__codelineno-14-36"></a>    <span class="c1"># issued for it. Off by default because a token recording no resource is</span>
+</span><span id="__span-14-37"><a id="__codelineno-14-37" name="__codelineno-14-37" href="#__codelineno-14-37"></a>    <span class="c1"># rejected, and only a client that sends RFC 8707&#39;s `resource` parameter</span>
+</span><span id="__span-14-38"><a id="__codelineno-14-38" name="__codelineno-14-38" href="#__codelineno-14-38"></a>    <span class="c1"># records one -- which MCP clients must and other OAuth clients need not.</span>
+</span><span id="__span-14-39"><a id="__codelineno-14-39" name="__codelineno-14-39" href="#__codelineno-14-39"></a>    <span class="c1"># For a server whose clients are MCP clients, this is the correct setting.</span>
+</span><span id="__span-14-40"><a id="__codelineno-14-40" name="__codelineno-14-40" href="#__codelineno-14-40"></a>    <span class="s2">&quot;ENFORCE_AUDIENCE&quot;</span><span class="p">:</span> <span class="kc">True</span><span class="p">,</span>
+</span><span id="__span-14-41"><a id="__codelineno-14-41" name="__codelineno-14-41" href="#__codelineno-14-41"></a>    <span class="s2">&quot;SERVER_INFO&quot;</span><span class="p">:</span> <span class="p">{</span>
+</span><span id="__span-14-42"><a id="__codelineno-14-42" name="__codelineno-14-42" href="#__codelineno-14-42"></a>        <span class="s2">&quot;authorization_servers&quot;</span><span class="p">:</span> <span class="p">[</span><span class="s2">&quot;https://example.com/oauth/&quot;</span><span class="p">],</span>
+</span><span id="__span-14-43"><a id="__codelineno-14-43" name="__codelineno-14-43" href="#__codelineno-14-43"></a>        <span class="s2">&quot;scopes_supported&quot;</span><span class="p">:</span> <span class="p">[</span><span class="s2">&quot;invoices:read&quot;</span><span class="p">,</span> <span class="s2">&quot;invoices:write&quot;</span><span class="p">],</span>
+</span><span id="__span-14-44"><a id="__codelineno-14-44" name="__codelineno-14-44" href="#__codelineno-14-44"></a>        <span class="s2">&quot;resource_metadata_url&quot;</span><span class="p">:</span> <span class="s2">&quot;https://example.com/mcp/.well-known/oauth-protected-resource&quot;</span><span class="p">,</span>
+</span><span id="__span-14-45"><a id="__codelineno-14-45" name="__codelineno-14-45" href="#__codelineno-14-45"></a>    <span class="p">},</span>
+</span><span id="__span-14-46"><a id="__codelineno-14-46" name="__codelineno-14-46" href="#__codelineno-14-46"></a><span class="p">}</span>
 </span></code></pre></div>
 <div class="admonition warning">
 <p class="admonition-title">Install the extra</p>
 <p><code>DjangoOAuthToolkitBackend</code> is the default backend, and mounting refuses
 without DOT: <code>pip install "djangorestframework-mcp-server[oauth]"</code>. The
 refusal happens while the URLConf is imported, so <code>manage.py check</code> catches
-it before a request ever arrives.</p>
+it before a request ever arrives. The extra pulls
+<code>django-oauth-toolkit&gt;=3.4</code>, so the two settings above are always available;
+if you declare DOT yourself instead, declare it at 3.4 or later too.</p>
 </div>
 <div class="language-python highlight"><span class="filename">urls.py</span><pre><span></span><code><span id="__span-15-1"><a id="__codelineno-15-1" name="__codelineno-15-1" href="#__codelineno-15-1"></a><span class="kn">from</span><span class="w"> </span><span class="nn">django.urls</span><span class="w"> </span><span class="kn">import</span> <span class="n">include</span><span class="p">,</span> <span class="n">path</span>
 </span><span id="__span-15-2"><a id="__codelineno-15-2" name="__codelineno-15-2" href="#__codelineno-15-2"></a>
@@ -2571,10 +2630,18 @@ is configurable. From a shell:</p>
 <div class="language-bash highlight"><pre><span></span><code><span id="__span-16-1"><a id="__codelineno-16-1" name="__codelineno-16-1" href="#__codelineno-16-1"></a>curl<span class="w"> </span>https://example.com/oauth/.well-known/oauth-authorization-server<span class="w"> </span><span class="p">|</span><span class="w"> </span>jq<span class="w"> </span>.
 </span></code></pre></div>
 <p>You should see at minimum <code>issuer</code>, <code>authorization_endpoint</code>, <code>token_endpoint</code>,
-and <code>client_id_metadata_document_supported: true</code>. A <code>registration_endpoint</code> also
-appears for clients that still use Dynamic Client Registration. The PRM endpoint
-you serve points clients at this AS, so a missing or wrong URL here is the most
-common cause of "Inspector can't authenticate" reports.</p>
+and <code>client_id_metadata_document_supported: true</code>. Check <code>none</code> is in
+<code>token_endpoint_auth_methods_supported</code> while you are there: some hosts, Claude
+among them, require <em>both</em> before they will pick CIMD, and drop to DCR if
+either is missing.</p>
+<p>A <code>registration_endpoint</code> appears too, and appears whenever an issuer is
+configured — including where DCR is switched off. That is not a leak: the
+mechanism a client picks is its own choice under the specification's priority
+order, and a client that reads <code>client_id_metadata_document_supported</code> never
+looks at <code>registration_endpoint</code>. Withdrawing it would only ever be read by
+clients that have no other way in.</p>
+<p>The PRM endpoint you serve points clients at this AS, so a missing or wrong URL
+here is the most common cause of "Inspector can't authenticate" reports.</p>
 <h3 id="what-the-round-trip-looks-like">What the round-trip looks like<a class="headerlink" href="#what-the-round-trip-looks-like" title="Permanent link">&para;</a></h3>
 <ol>
 <li>Client hits <code>tools/call</code> without a token.</li>
@@ -2599,6 +2666,11 @@ client uses an <strong>HTTPS URL as its <code>client_id</code></strong> and publ
 document there; the authorization server fetches it. There is no registration
 round-trip and no registration state to keep, and a client can rotate without
 re-registering.</p>
+<p>The deprecation has a date attached: the specification's deprecated-features
+registry gives DCR an earliest removal of <em>the first revision released on or
+after 2027-07-28</em>. Until then both mechanisms are legal to serve, and <a href="#oauth-contrib-mount">the
+contrib mount</a> explains why serving both is usually the
+right call rather than a hedge.</p>
 <p><strong>DOT implements this natively from 3.4.0.</strong> Set <code>CIMD_ENABLED = True</code> and DOT
 advertises it in AS metadata, resolves URL-shaped client IDs, fetches and
 validates the document, and provisions the <code>Application</code> row:</p>
