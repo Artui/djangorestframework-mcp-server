@@ -142,6 +142,41 @@ class TestOAuthUrlShadowing:
         assert "/oauth/register/" in shadowed
         assert "/.well-known/oauth-authorization-server" in shadowed
 
+    @override_settings(ROOT_URLCONF="tests.testapp.shadowed_oauth_urls")
+    def test_the_protected_resource_document_is_contested_too(self) -> None:
+        """The half the check used to miss, and the costlier half.
+
+        DOT 3.4.0 serves RFC 9728 protected-resource metadata and its own OIDC
+        discovery, and its documentation tells deployers to mount those at the
+        server root. Reading the wrong authorization-server document sends a
+        client to the wrong issuer, which fails visibly; reading the wrong
+        *protected-resource* document hands it the wrong ``resource``, so it
+        completes a flow and arrives with a token minted for something else.
+
+        The ``<path:...>`` component forms are asserted separately because they
+        swallow this package's alias paths, and a check listing only the
+        canonical URLs would report a clean bill of health while two of the
+        three mounted spellings answered from somewhere else.
+        """
+        shadowed = check_oauth_url_shadowing(warn=False)
+
+        assert "/.well-known/oauth-protected-resource" in shadowed
+        assert "/.well-known/oauth-protected-resource/mcp" in shadowed
+        assert "/.well-known/oauth-authorization-server/oauth" in shadowed
+        assert "/.well-known/openid-configuration" in shadowed
+
+    @override_settings(ROOT_URLCONF="tests.testapp.shadowed_oauth_urls")
+    def test_the_authorize_path_is_not_reported(self) -> None:
+        """Both packages serve it, and DOT owning it is the documented default.
+
+        ``include_authorize`` defaults off precisely so the consumer's own
+        ``include('oauth2_provider.urls')`` can own ``/oauth/authorize/``. A
+        report there would fire on a configuration working as designed, which
+        is why the contested set leaves it out on purpose rather than by
+        omission.
+        """
+        assert "/oauth/authorize/" not in check_oauth_url_shadowing(warn=False)
+
     @override_settings(ROOT_URLCONF="tests.conformance.urls")
     def test_our_own_views_on_those_paths_are_not_reported(self) -> None:
         """The correctly-ordered mount is the case that must stay quiet."""

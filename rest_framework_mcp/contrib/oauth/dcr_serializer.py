@@ -118,6 +118,11 @@ _CLIENT_TYPE_AUTH_METHODS = {
 class DynamicClientRegistrationSerializer(DataclassSerializer):
     """RFC 7591 dynamic client registration request shape.
 
+    Dynamic Client Registration is deprecated by MCP revision ``2026-07-28`` in
+    favour of Client ID Metadata Documents; the timetable, the replacement and
+    the reason this surface is nonetheless kept are recorded once, on
+    [`DynamicClientRegistrationViewSet`][rest_framework_mcp.contrib.oauth.dynamic_client_registration_viewset.DynamicClientRegistrationViewSet].
+
     Wraps
     [`DynamicClientRegistrationRequest`][rest_framework_mcp.contrib.oauth.types.dynamic_client_registration_request.DynamicClientRegistrationRequest]
     so ``.save()`` hands

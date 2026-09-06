@@ -62,7 +62,22 @@ dependencies = [
 
 [project.optional-dependencies]
 toon = ["python-toon>=0.1.3"]
-oauth = ["django-oauth-toolkit>=2.3"]
+# 3.4, not 2.3, because the floor has to be able to deliver the deployment the
+# docs recommend. ``docs/auth.md`` names django-oauth-toolkit with
+# ``CIMD_ENABLED = True`` and ``ENFORCE_AUDIENCE = True`` as *the* answer, and
+# both of those first exist in 3.4.0: Client ID Metadata Documents (the
+# registration mechanism the ``2026-07-28`` MCP specification puts above the
+# deprecated Dynamic Client Registration), and the ``resource`` field on stock
+# ``AccessToken`` that the RFC 8707 audience check reads. Under 2.3 the
+# recommendation was unreachable in a way nothing reported: ``CIMD_ENABLED``
+# was an unknown key DOT ignored, so the server advertised no CIMD support and
+# every client fell back to DCR; and enforcement had no field to read, so
+# turning it on refused every request. Also the release that makes DOT serve
+# its own ``register/`` and ``.well-known/oauth-authorization-server``, which
+# is what ``check_oauth_url_shadowing`` exists to catch.
+# 3.4.0 requires Python >=3.10 and Django >=4.2, which are already this
+# package's own floors, so nothing else has to move with it.
+oauth = ["django-oauth-toolkit>=3.4"]
 # 5.0.1, not 5.0: ``Redis.aclose()`` — which the async SSE broker and
 # replay buffer call — first exists in 5.0.1.
 redis = ["redis>=5.0.1"]
@@ -121,7 +136,12 @@ dev = [
     "pytest-cov>=7.0",
     "pytest-asyncio>=0.24",
     "flake8-tidy-imports>=4.12.0",
-    "django-oauth-toolkit>=2.3",
+    # Kept in lockstep with the ``[oauth]`` extra's floor. The `floor` job
+    # resolves every declared dependency at the bottom of its window, so a dev
+    # pin left at the old value would have the suite exercise a DOT the extra
+    # no longer promises -- the version-gated audience and CIMD tests would
+    # then measure a configuration no consumer can install.
+    "django-oauth-toolkit>=3.4",
     "django-stubs>=5.0",
     "djangorestframework-stubs>=3.15",
     "redis>=5.0.1",

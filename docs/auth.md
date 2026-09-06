@@ -245,11 +245,16 @@ points clients at. Setting it does **not**, on its own, reject anything.
     and token endpoints. On 3.4.0 or later, `ENFORCE_AUDIENCE = True` needs
     nothing else.
 
-    It is **off by default** only because the `[oauth]` extra floors DOT at
-    `>=2.3`, and on an older DOT no token records a resource — a default of
-    `True` would reject every request for anyone who has not upgraded. The check
-    is capability-based rather than version-based, so it asks your configured
-    token model rather than DOT's version number.
+    It is nonetheless **off by default**, and since the `[oauth]` extra floors
+    DOT at `>=3.4` that is no longer about the floor. A token that records *no*
+    resource is rejected, and one only records a resource if the client sent
+    RFC 8707's `resource` parameter. The MCP spec obliges MCP clients to send
+    it; the other clients of your authorization server — a browser app, a
+    script, a mobile client — are under no such obligation, so a default of
+    `True` would 401 them the day you upgrade this package. Choosing
+    enforcement is a statement about your client population, which is yours to
+    make. The check itself is capability-based rather than version-based, so it
+    asks your configured token model rather than DOT's version number.
 
     Enforcement used to be implied by `resource_url` alone. That made the
     bundled backend unusable: configuring the resource URL a resource server is
@@ -264,7 +269,12 @@ points clients at. Setting it does **not**, on its own, reject anything.
     minted for a different resource on the same authorization server is accepted
     here.
 
-    Turn it on unless you are pinned below DOT 3.4.0.
+    Turn it on. The `[oauth]` extra floors DOT at `>=3.4`, so the only
+    deployments that cannot are those running a swapped `ACCESS_TOKEN_MODEL`
+    without the field, or a DOT installed outside this extra and pinned older —
+    and both of those have an `audience_getter=` available. Before flipping it,
+    check that the clients you serve send `resource` on the authorize and token
+    requests, because a token that carries none is rejected.
 
 To enforce, tell the backend where the audience actually lives — either a
 swapped `OAUTH2_PROVIDER["ACCESS_TOKEN_MODEL"]` carrying a `resource` field, or
@@ -380,10 +390,30 @@ flow without you running a separate AS-facing service:
 | --- | --- |
 | `/.well-known/oauth-authorization-server` | RFC 8414 AS metadata |
 | `/.well-known/openid-configuration` | OIDC discovery (alias / minimal payload) |
-| `/oauth/register/` (and aliases) | RFC 7591 Dynamic Client Registration |
+| `/oauth/register/` (and aliases) | RFC 7591 Dynamic Client Registration (**deprecated**, see below) |
 | `/oauth/authorize/` | DOT's `AuthorizationView` (proxied so the user-adapter hook runs) |
 
 Aliases render the canonical payload — they are not HTTP redirects.
+
+!!! warning "Dynamic Client Registration is deprecated — on a published timetable"
+    MCP revision `2026-07-28` deprecated DCR in favour of [Client ID Metadata
+    Documents](#client-id-metadata-documents), and the specification's
+    deprecated-features registry gives it an earliest removal of *the first
+    revision released on or after 2027-07-28*. Deprecated is not removed: DCR is
+    still a `MAY` in the current revision, clients that speak it keep working,
+    and this endpoint is supported for as long as that holds. It is off twice
+    over by default — `include_dcr` and `dcr_enabled` — so nothing is exposed
+    until you ask for it.
+
+    **Turn on CIMD first, and then decide whether you still need this.** With
+    `CIMD_ENABLED = True` on DOT 3.4+, a client that can read
+    `client_id_metadata_document_supported` never reaches `/oauth/register/`:
+    the specification's registration priority order is pre-registration, then
+    CIMD, then DCR. What is left is the clients that cannot — a large share of
+    the MCP hosts in the field today have no CIMD implementation at all, and
+    several have no path in but DCR. Serving both is a supported answer until
+    the spec withdraws one of them. Nothing warns at runtime, deliberately: a
+    deployment that opted in twice is correctly configured, not mistaken.
 
 ```python title="urls.py"
 from django.urls import path
@@ -436,11 +466,30 @@ grant — the two fields an interoperable client actually sends:
 ```
 
 `token_endpoint_auth_method: none` registers a **public** client: no secret is
-issued, and it authenticates at the token endpoint with PKCE alone. This is the
-only mode Claude's custom connectors can use — that flow has no way to be handed
-a pre-provisioned `client_id`, so DCR is its only path in. `client_secret_basic`
+issued, and it authenticates at the token endpoint with PKCE alone. That is the
+mode a host registering itself dynamically will ask for, and it is why `none`
+has to stay in `token_endpoint_auth_methods_supported`. `client_secret_basic`
 (the RFC's default when the field is omitted) and `client_secret_post` register
 a **confidential** client and return a `client_secret`.
+
+!!! note "Claude's custom connectors are no longer DCR-only"
+    An earlier version of this page said this flow "has no way to be handed a
+    pre-provisioned `client_id`, so DCR is its only path in". That is false as
+    of Anthropic's current connector documentation, which lists three
+    mechanisms: `oauth_cimd` (Client ID Metadata Documents), `oauth_dcr`
+    (RFC 7591), and Anthropic-held client credentials; the "Advanced settings"
+    panel on a custom connector also takes an OAuth Client ID and an optional
+    OAuth Client Secret, which is pre-registration.
+
+    What decides which one runs is your metadata, not the client: Claude selects
+    CIMD **only** when your AS metadata advertises both
+    `client_id_metadata_document_supported: true` *and* `none` in
+    `token_endpoint_auth_methods_supported`, and falls back to DCR if either is
+    missing. Anthropic's own guidance prefers CIMD over DCR for servers
+    expecting traffic, because DCR registers a fresh client on every new
+    connection. So advertise CIMD — see [the recommended
+    deployment](#the-documented-deployment-django-oauth-toolkit-with-cimd) — and
+    the fallback stops being reached.
 
 The registration above — a public client — comes back with no secret at all:
 
@@ -578,6 +627,13 @@ is the recommended one rather than one option among several:
   Documents](#client-id-metadata-documents) below for what it does and what to
   decide about it.
 
+Both arrived in django-oauth-toolkit **3.4.0**, and that is where the `[oauth]`
+extra floors it — a recommendation the package's own extra could not install
+would not be one. Below 3.4 there is no `CIMD_ENABLED` key for DOT to read and
+no `resource` on the token for the audience check to compare, and neither
+failure announces itself: the server advertises no CIMD support and every
+client quietly falls back to the deprecated path.
+
 ```python title="settings.py"
 INSTALLED_APPS = [
     # ...
@@ -614,8 +670,10 @@ REST_FRAMEWORK_MCP = {
     "RESOURCE_URL": "https://example.com/mcp/",
     "ALLOWED_ORIGINS": ["https://app.example.com"],
     # The specification requires a resource server to validate that a token was
-    # issued for it. Off by default only because the floor is DOT >=2.3, where
-    # no token records a resource; on 3.4.0+ this is the correct setting.
+    # issued for it. Off by default because a token recording no resource is
+    # rejected, and only a client that sends RFC 8707's `resource` parameter
+    # records one -- which MCP clients must and other OAuth clients need not.
+    # For a server whose clients are MCP clients, this is the correct setting.
     "ENFORCE_AUDIENCE": True,
     "SERVER_INFO": {
         "authorization_servers": ["https://example.com/oauth/"],
@@ -629,7 +687,9 @@ REST_FRAMEWORK_MCP = {
     `DjangoOAuthToolkitBackend` is the default backend, and mounting refuses
     without DOT: `pip install "djangorestframework-mcp-server[oauth]"`. The
     refusal happens while the URLConf is imported, so `manage.py check` catches
-    it before a request ever arrives.
+    it before a request ever arrives. The extra pulls
+    `django-oauth-toolkit>=3.4`, so the two settings above are always available;
+    if you declare DOT yourself instead, declare it at 3.4 or later too.
 
 ```python title="urls.py"
 from django.urls import include, path
@@ -651,10 +711,20 @@ curl https://example.com/oauth/.well-known/oauth-authorization-server | jq .
 ```
 
 You should see at minimum `issuer`, `authorization_endpoint`, `token_endpoint`,
-and `client_id_metadata_document_supported: true`. A `registration_endpoint` also
-appears for clients that still use Dynamic Client Registration. The PRM endpoint
-you serve points clients at this AS, so a missing or wrong URL here is the most
-common cause of "Inspector can't authenticate" reports.
+and `client_id_metadata_document_supported: true`. Check `none` is in
+`token_endpoint_auth_methods_supported` while you are there: some hosts, Claude
+among them, require *both* before they will pick CIMD, and drop to DCR if
+either is missing.
+
+A `registration_endpoint` appears too, and appears whenever an issuer is
+configured — including where DCR is switched off. That is not a leak: the
+mechanism a client picks is its own choice under the specification's priority
+order, and a client that reads `client_id_metadata_document_supported` never
+looks at `registration_endpoint`. Withdrawing it would only ever be read by
+clients that have no other way in.
+
+The PRM endpoint you serve points clients at this AS, so a missing or wrong URL
+here is the most common cause of "Inspector can't authenticate" reports.
 
 ### What the round-trip looks like
 
@@ -681,6 +751,12 @@ client uses an **HTTPS URL as its `client_id`** and publishes a JSON metadata
 document there; the authorization server fetches it. There is no registration
 round-trip and no registration state to keep, and a client can rotate without
 re-registering.
+
+The deprecation has a date attached: the specification's deprecated-features
+registry gives DCR an earliest removal of *the first revision released on or
+after 2027-07-28*. Until then both mechanisms are legal to serve, and [the
+contrib mount](#oauth-contrib-mount) explains why serving both is usually the
+right call rather than a hedge.
 
 **DOT implements this natively from 3.4.0.** Set `CIMD_ENABLED = True` and DOT
 advertises it in AS metadata, resolves URL-shaped client IDs, fetches and

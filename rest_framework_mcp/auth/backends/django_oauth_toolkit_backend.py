@@ -47,16 +47,25 @@ class DjangoOAuthToolkitBackend:
     token that doesn't carry that identity is rejected. ``resource_url`` is
     effectively required by RFC 9728; enforcement is a separate decision.
 
-    **On django-oauth-toolkit 3.4.0 and later this works out of the box.** That
-    release added RFC 8707 resource indicators: stock ``AccessToken`` carries a
-    ``resource`` field and an ``allows_audience`` check, so turning enforcement
-    on needs nothing else. The default stays off because the floor of the
-    ``[oauth]`` extra is ``>=2.3``, and on an older DOT no token records a
-    resource — so a default of ``True`` would reject every request for anyone
-    who has not upgraded.
+    **The ``[oauth]`` extra floors django-oauth-toolkit at ``>=3.4``, so this
+    works out of the box.** That release added RFC 8707 resource indicators:
+    stock ``AccessToken`` carries a ``resource`` field and an
+    ``allows_audience`` check, so turning enforcement on needs nothing else.
 
-    Below 3.4.0, or with a swapped model that drops the field, enforcement still
-    works if the resource is somewhere else:
+    The default nonetheless stays off, and the reason is no longer the floor.
+    ``audience_matches`` rejects a token carrying *no* resource, and a token
+    only carries one if the client sent the RFC 8707 ``resource`` parameter at
+    the authorize and token endpoints. The MCP specification requires clients
+    to send it, but the authorization server this backend reads is a general
+    OAuth server whose other clients have no such obligation — so defaulting
+    ``True`` would 401 every token minted for a browser app, a script, or an
+    MCP client that has not caught up, on the release that changed the default.
+    ``UnenforcedAudienceWarning`` is how a deployment that could conform is
+    told so, at construction, instead.
+
+    With a swapped model that drops the field, or a DOT installed outside this
+    extra and pinned below 3.4, enforcement still works if the resource is
+    somewhere else:
 
     - a swapped ``OAUTH2_PROVIDER["ACCESS_TOKEN_MODEL"]`` carrying a
       ``resource`` field (DOT supports substituting the model), or
@@ -282,9 +291,10 @@ class DjangoOAuthToolkitBackend:
             "DjangoOAuthToolkitBackend: audience enforcement is on, but "
             f"{token_model.__name__} has no {_RESOURCE_FIELD!r} field, so no token it issues "
             "records the resource it was issued for and every request would be rejected. "
-            "django-oauth-toolkit added RFC 8707 resource indicators in 3.4.0, so this now "
-            "means either an older DOT or a swapped ACCESS_TOKEN_MODEL without the field. "
-            "Upgrade DOT, or supply "
+            "django-oauth-toolkit added RFC 8707 resource indicators in 3.4.0 and the "
+            "[oauth] extra floors it there, so this means either a swapped "
+            "ACCESS_TOKEN_MODEL without the field or a DOT installed outside that extra "
+            "and pinned below 3.4. Upgrade DOT, or supply "
             "audience_getter= to read the audience from wherever it actually lives (a JWT "
             "claim, a gateway header), swap OAUTH2_PROVIDER['ACCESS_TOKEN_MODEL'] for one "
             f"carrying a {_RESOURCE_FIELD!r} field, or turn off "
@@ -299,17 +309,19 @@ class DjangoOAuthToolkitBackend:
         cross-resource token replay: a token minted for another resource on the
         same authorization server is accepted here.
 
-        The default is off, and stays off, because the ``[oauth]`` extra floors
-        django-oauth-toolkit at ``>=2.3`` -- below 3.4.0 no token records a
-        resource, so a default of ``True`` would reject every request for anyone
-        who has not upgraded. But that reason expires per deployment rather than
-        per release, and it expires silently: a project that upgrades DOT
-        becomes able to conform and is never told.
+        The default is off, and stays off, because a token recording no
+        resource is rejected: enforcement is only satisfiable once the clients
+        of this authorization server actually send the RFC 8707 ``resource``
+        parameter, which is a fact about a deployment's client population
+        rather than about its DOT version. Flipping the default would 401 every
+        token already in flight, on upgrade, for a conformance gap the
+        deployment may have no way to close that day.
 
-        So this fires only where enforcement would actually work -- the token
-        model carries the field and a resource URL is configured -- which makes
-        it a fact about *this* deployment rather than advice about the package.
-        It cannot fire on the older DOT the default exists to protect.
+        So this fires only where enforcement would at least be *installable* --
+        the token model carries the field and a resource URL is configured --
+        which makes it a fact about *this* deployment rather than advice about
+        the package. It stays silent where the field is absent, because there
+        the advice would be to change something else first.
 
         Warns rather than raises, and rather than flipping the default: a
         project may have decided against enforcement for a single-resource
@@ -378,6 +390,28 @@ class DjangoOAuthToolkitBackend:
         is always valid JSON; configure ``authorization_servers`` for
         production. ``client_id_metadata_document_supported`` is read from DOT
         rather than asserted here — see ``_cimd_enabled``.
+
+        **``registration_endpoint`` is advertised whenever an issuer is
+        configured, including where DCR is switched off**, and that is
+        deliberate on two counts.
+
+        Structurally it is the only answer available here. Whether the endpoint
+        accepts registrations is decided per *mount*:
+        ``build_oauth_urlpatterns(dcr_enabled=...)`` resolves it into
+        ``as_view(...)``, and ``REST_FRAMEWORK_MCP['DCR_ENABLED']`` is only that
+        argument's default. This backend never sees the argument, so gating the
+        advertisement on the global would withdraw a working endpoint from any
+        deployment that enables DCR at the mount — the flow that exists so two
+        mounts in one project can differ. A client that registers against a
+        disabled endpoint gets an immediate, well-formed ``403
+        invalid_request``, not a hang.
+
+        By protocol the advertisement also costs a modern client nothing. The
+        ``2026-07-28`` registration priority order is pre-registration, then
+        Client ID Metadata Documents, then DCR, so a client that can read
+        ``client_id_metadata_document_supported`` never reaches
+        ``registration_endpoint``. It is read only by clients with no other way
+        in, which is still most of them.
         """
         as_list: list[str] = self._authorization_servers
         issuer: str = as_list[0] if as_list else ""
@@ -409,8 +443,11 @@ def _cimd_enabled() -> bool:
 
     **Feature-detected, not version-gated.** Client ID Metadata Document
     support landed in ``django-oauth-toolkit`` 3.4.0 as the opt-in
-    ``CIMD_ENABLED`` setting and older releases have no such key, so reading it
-    with a default keeps the ``[oauth]`` extra's floor where it is. Sourced
+    ``CIMD_ENABLED`` setting, which the ``[oauth]`` extra now floors at. The
+    ``getattr`` default survives the raise because this module is importable
+    without that extra at all -- a project may install DOT itself, at any
+    version -- and because the setting is opt-in even on 3.4, so a missing key
+    and a key set to ``False`` mean the same thing here. Sourced
     from DOT rather than from a setting of our own so the two can never
     disagree: DOT's own RFC 8414 endpoint advertises the same value, and a
     project running both would otherwise get contradictory metadata from one

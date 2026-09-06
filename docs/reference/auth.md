@@ -55,6 +55,12 @@ probe (aliases render the canonical payload — they are not HTTP redirects).
 ::: rest_framework_mcp.contrib.oauth.types.dynamic_client_registration_request.DynamicClientRegistrationRequest
 ::: rest_framework_mcp.contrib.oauth.types.dynamic_client_registration_response.DynamicClientRegistrationResponse
 
+**DCR is deprecated by MCP revision `2026-07-28`**, in favour of Client ID
+Metadata Documents, with an earliest removal of the first specification revision
+released on or after 2027-07-28. It is kept, and stays off by default; the
+timetable and the reasoning are on `DynamicClientRegistrationViewSet` above and
+in [Authentication](../auth.md#oauth-contrib-mount).
+
 DCR is gated by two `build_oauth_urlpatterns` arguments, each defaulting to the
 matching setting when omitted:
 
