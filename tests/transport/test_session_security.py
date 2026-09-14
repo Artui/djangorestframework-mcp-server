@@ -3,7 +3,11 @@
 Covers the 0.7.0 security hardening:
 
 - POST authenticates *before* the session lookup (no 404-vs-401 oracle).
-- GET (SSE) and DELETE require authentication on both viewsets.
+- GET (SSE) and DELETE require authentication wherever a credential can
+  change the answer — which on GET means the async viewset with a broker
+  wired and sessions on. Where the answer is 405 whatever the caller
+  presents, that is settled first; see
+  ``test_unauthenticated_method_support.py``.
 - Sessions are bound to the principal that initialized them; another
   principal presenting the id sees the same 404 as an unknown session.
 """
@@ -139,13 +143,16 @@ def test_session_is_bound_to_initializing_principal() -> None:
     assert other.status_code == 404
 
 
-# ---------- GET: authentication required ----------
+# ---------- GET: authentication required where it decides anything ----------
 
 
-def test_sync_get_requires_authentication() -> None:
+def test_sync_get_does_not_authenticate_at_all() -> None:
+    """WSGI serves no GET stream on any configuration, so 405 is the whole
+    answer and a 401 could only send the caller after a useless token."""
     view = _sync_view(InMemorySessionStore())
     response = view(factory.get("/mcp/"))
-    assert response.status_code == 401
+    assert response.status_code == 405
+    assert "WWW-Authenticate" not in response
 
 
 def test_sync_get_authenticated_is_405() -> None:
