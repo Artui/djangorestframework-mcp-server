@@ -60,8 +60,13 @@ bottom layer, not by anything you configure:
 
 | Install | FastMCP | MCP SDK | Protocol era |
 |---|---|---|---|
-| `pip install "pydantic-ai-slim[mcp]"` | 3.x | 1.x | legacy (`2025-11-25`) |
-| the same, allowing prereleases | 4.0.0b3 | 2.0.0 | modern (`2026-07-28`) |
+| `pip install "pydantic-ai-slim[mcp]"` | 4.x | 2.x | modern (`2026-07-28`) |
+| the same, plus `"fastmcp<4"` | 3.x | 1.x | legacy (`2025-11-25`) |
+
+FastMCP 4 is released, so the plain install now resolves the **modern** era.
+Until it was, the same install gave the legacy one and the modern era needed
+`--prerelease=allow` -- the reverse of the table above. If you are pinned to the
+older stack, nothing is wrong: this server answers both.
 
 Both connect, list tools and call them against this server — it serves both
 eras on one endpoint (see
@@ -69,10 +74,23 @@ eras on one endpoint (see
 place only, and it is the interesting one: elicitation.
 
 ```bash
-# The modern-era stack, as of the versions above. Drop --prerelease=allow
-# once FastMCP 4 is released; add the httpx constraint only while the
-# prerelease resolver would otherwise pick up an httpx 1.0 dev build.
-uv pip install --prerelease=allow "pydantic-ai-slim[mcp]" "httpx<1"
+# The modern-era stack: the plain install, since FastMCP 4 is released.
+uv pip install "pydantic-ai-slim[mcp]" httpx
+```
+
+!!! warning "`httpx` is a workaround for an upstream mismatch, not a real dependency"
+
+    pydantic-ai declares `httpx2>=2.7`, but `pydantic_ai/mcp.py` still does
+    `import httpx`. So `pydantic-ai-slim[mcp]` alone installs `httpx2` and then
+    raises `ModuleNotFoundError: No module named 'httpx'` the moment you import
+    `MCPToolset` -- the documented entry point. Installing both side by side
+    works and is what the interop job does. Present in pydantic-ai 2.41 through
+    2.43; drop the extra install once upstream finishes the migration.
+
+To pin the legacy era instead:
+
+```bash
+uv pip install "pydantic-ai-slim[mcp]" "fastmcp<4" httpx
 ```
 
 ## Elicitation works, on the modern stack

@@ -186,26 +186,35 @@ jobs:
       # the installed client speaks and asserts the behaviour documented for
       # that era, so it measures the pairing rather than a version number.
       #
-      # Two installs because they resolve to different eras, and the docs make
-      # a claim about each. Released first: it is what a consumer following the
-      # recipe gets today.
-      - name: Released client stack
+      # Two installs because this server answers two eras and the docs make a
+      # claim about each. Each one now **pins** the era it is for, which it did
+      # not before: the two used to be "released" and "prerelease", and that
+      # worked only while FastMCP 4 was unreleased. Once 4.0.3 shipped, a plain
+      # install resolved modern and both probes measured the same era -- the
+      # legacy half of a dual-era server going unchecked with nothing failing to
+      # say so. A probe named for how a version was published stops tracking the
+      # thing it measures the moment publishing catches up.
+      #
+      # `httpx` is added to both, and it is not ours to need. pydantic-ai
+      # declares `httpx2>=2.7` but `pydantic_ai/mcp.py` still does `import
+      # httpx`, so `pydantic-ai-slim[mcp]` raises ModuleNotFoundError on the
+      # documented import path. Present in 2.41 through 2.43. Drop this when
+      # upstream finishes the migration.
+      - name: Modern-era client stack
         run: |
-          uv venv --python 3.14 .venv-released
-          uv pip install --python .venv-released/bin/python -e . "pydantic-ai-slim[mcp]"
-          uv pip list --python .venv-released/bin/python | grep -Ei "fastmcp|^mcp|pydantic-ai"
-          .venv-released/bin/python scripts/interop_pydantic_ai.py
+          uv venv --python 3.14 .venv-modern
+          uv pip install --python .venv-modern/bin/python -e . "pydantic-ai-slim[mcp]" httpx
+          uv pip list --python .venv-modern/bin/python | grep -Ei "fastmcp|^mcp|pydantic-ai|^httpx"
+          .venv-modern/bin/python scripts/interop_pydantic_ai.py
 
-      # `httpx<1` is not the client's constraint, it is the resolver's: with
-      # prereleases allowed it otherwise picks an httpx 1.0 dev build that
-      # pydantic-ai cannot import. Drop both flags once FastMCP 4 is released.
-      - name: Prerelease client stack
+      # The era before the 2026-07-28 GA spec, which this server still answers.
+      # Reachable only by pinning now that FastMCP 4 is the default resolve.
+      - name: Legacy-era client stack
         run: |
-          uv venv --python 3.14 .venv-prerelease
-          uv pip install --python .venv-prerelease/bin/python --prerelease=allow \
-            -e . "pydantic-ai-slim[mcp]" "httpx<1"
-          uv pip list --python .venv-prerelease/bin/python | grep -Ei "fastmcp|^mcp|pydantic-ai"
-          .venv-prerelease/bin/python scripts/interop_pydantic_ai.py
+          uv venv --python 3.14 .venv-legacy
+          uv pip install --python .venv-legacy/bin/python -e . "pydantic-ai-slim[mcp]" "fastmcp<4" httpx
+          uv pip list --python .venv-legacy/bin/python | grep -Ei "fastmcp|^mcp|pydantic-ai|^httpx"
+          .venv-legacy/bin/python scripts/interop_pydantic_ai.py
 
       - name: Open or update an issue on failure
         if: failure()
