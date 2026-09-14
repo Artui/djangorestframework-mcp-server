@@ -7,6 +7,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Documentation
+
+- **The Pydantic-AI client recipe had the two protocol eras the wrong way
+  round.** It said a plain `pip install "pydantic-ai-slim[mcp]"` gives FastMCP
+  3.x and the legacy era, and that the modern era needs `--prerelease=allow`.
+  That was true while FastMCP 4 was unreleased. 4.0.3 has shipped, so the plain
+  install now resolves the modern era and the legacy one needs an explicit
+  `"fastmcp<4"`. Both recipes are documented; this server still answers both.
+
+  The recipe also now warns that `pydantic-ai-slim[mcp]` alone raises
+  `ModuleNotFoundError: No module named 'httpx'` on `from pydantic_ai.mcp import
+  MCPToolset`. pydantic-ai declares `httpx2>=2.7` while `pydantic_ai/mcp.py`
+  still imports `httpx`; installing both side by side works. Present in 2.41
+  through 2.43, and not something a floor or ceiling here can fix.
+
 ## [0.42.0] — 2026-09-14
 
 ### Fixed
