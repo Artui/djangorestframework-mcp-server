@@ -7,6 +7,47 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- **`GET /mcp/` sent unauthenticated callers after a token that could not
+  change its answer.** On every configuration that serves no server-pushed
+  stream — the WSGI transport always, the ASGI one when no broker is wired or
+  `SESSIONS_ENABLED` is off — the endpoint is `405`. Authentication ran first
+  anyway, so a caller with no credential got `401` and an RFC 9728
+  `WWW-Authenticate` challenge naming the protected-resource metadata
+  document. That challenge is the signal an MCP client uses to begin an OAuth
+  authorization flow, which in desktop clients opens a browser window; the
+  flow could only ever end at the same `405`. Method support is now settled
+  before the credential is looked at, on both transports.
+
+  **The ordering had a recorded rationale and it did not survive examination.**
+  `handle_get`'s docstring said authenticating first meant the endpoint
+  "reveals nothing (not even its 405) to unauthenticated callers" — but
+  `terminate_session` answers `405` to an anonymous `DELETE` whenever sessions
+  are off, which is exactly the condition that makes the legacy `GET` a `405`,
+  and `POST` answers `401` with a challenge naming a publicly fetchable
+  metadata document. The endpoint identified itself to anonymous callers by two
+  other routes already, so the challenge bought no confidentiality and cost a
+  browser window.
+
+  The package had already written down the rule that settles this, in
+  `_handle_modern` on the same class: header validation runs ahead of
+  authentication because era detection "reveals nothing about who is asking"
+  and gating it on credentials "would break era detection for anonymous
+  probes". Whether a resource supports a method is the same kind of fact. The
+  async `GET` still authenticates first where sessions *are* on and a broker
+  *is* wired, because there a credential genuinely decides whether a stream
+  opens.
+
+  **The WSGI transport had it on every configuration, not just sessionless
+  ones**: its `handle_get` carried no sessions check at all, having taken the
+  async sibling's gate without the stream that justifies it. It no longer
+  authenticates on this path.
+
+  Reachable only with an auth backend that can decline. `AllowAnyBackend`
+  authenticates every request as anonymous and so can never return `401`,
+  which is why no development configuration could reach any of this.
+
 ## [0.41.0] — 2026-09-06
 
 ### Changed

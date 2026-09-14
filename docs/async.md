@@ -145,7 +145,15 @@ The endpoint enforces the same headers as POST: `Mcp-Protocol-Version`
 required, `Mcp-Session-Id` required and validated against the session
 store. Origin allowlist applies. With no broker configured (e.g. a
 `MCPServer(sse_broker=None)`), GET returns 405 — spec-compliant when the
-server has nothing to push.
+server has nothing to push. So does `SESSIONS_ENABLED = False`, since a
+session id is what addresses a client's channel.
+
+Either 405 is decided **before** authentication, so it is what an
+unauthenticated caller sees too. This is deliberate: no credential opens a
+stream that isn't on offer, and answering `401` there would hand the client a
+`WWW-Authenticate` challenge — the signal it uses to start an OAuth flow, and
+a browser window in desktop clients — for a token that changes nothing. Where
+a broker *is* wired and sessions are on, GET authenticates first as before.
 
 ### Scaling across workers
 

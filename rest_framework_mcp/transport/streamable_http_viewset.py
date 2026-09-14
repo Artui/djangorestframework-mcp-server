@@ -411,16 +411,23 @@ class StreamableHttpViewSet(ViewSet):
     def handle_get(self, request: Request) -> HttpResponse:
         """GET action: SSE-from-server isn't implemented in v1; 405 per spec.
 
-        Authentication still runs first, so the endpoint reveals nothing (not
-        even its 405) to unauthenticated callers — parity with the async
-        sibling's SSE stream.
+        Unconditional, and so decided without authenticating. This once
+        challenged unauthenticated callers first, to keep the endpoint from
+        revealing even its 405 — but that confidentiality never existed:
+        ``terminate_session`` answers 405 to an anonymous DELETE whenever
+        sessions are off, and POST answers 401 with a challenge naming the
+        publicly fetchable protected-resource metadata. What the challenge did
+        buy was an OAuth flow, browser window and all, ending at the 405 the
+        caller would have got for free.
+
+        The async sibling still authenticates on this path, because there it
+        guards a stream a credential can actually open. WSGI serves no stream
+        on any configuration, so it inherited the gate without the reason.
         """
         http_request = request._request  # noqa: SLF001
         guard: HttpResponse | None = self._check_origin(http_request)
         if guard is not None:
             return guard
-        if self._authenticate(http_request) is None:
-            return self._unauthenticated_response()
         return HttpResponse(status=405)
 
     def terminate_session(self, request: Request) -> HttpResponse:

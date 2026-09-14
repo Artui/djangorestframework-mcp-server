@@ -432,9 +432,12 @@ class AsyncStreamableHttpViewSet(ViewSet):
     async def handle_get(self, request: Request) -> HttpResponseBase:
         """GET action: open a server-pushed SSE stream for the current session.
 
+        - 405 if no broker is configured, or sessions are off (nothing to
+          push, and no channel to push it down). Decided **before**
+          authentication: no credential changes this answer, so challenging
+          for one would send the client after a token it cannot use.
         - 401 if the caller cannot authenticate — the stream carries a
           session's payloads, so it is gated exactly like POST.
-        - 405 if no broker is configured (nothing to push).
         - 400 if the protocol-version header is missing or unsupported. The
           spec is silent on GET here; this is parity with POST.
         - 404 if the session id is unknown **or owned by a different
@@ -459,15 +462,22 @@ class AsyncStreamableHttpViewSet(ViewSet):
         if self._modern_era_requested(http_request):
             return HttpResponse(status=405)
 
-        token = await self._authenticate(http_request)
-        if token is None:
-            return self._unauthenticated_response()
-
-        if self.sse_broker is None or not self._sessions_enabled():
+        broker = self.sse_broker
+        if broker is None or not self._sessions_enabled():
             # The session id *is* the channel address, so sessionless leaves
             # nothing to open a per-client stream against. 405 is the spec's
             # status for "this endpoint offers no SSE stream".
+            #
+            # Ahead of authentication, because no credential moves this
+            # configuration off 405 and a 401 here carries a challenge that
+            # asks the client to go get one. Method support is a fact about
+            # the resource, not about the caller — the same reasoning
+            # ``_handle_modern`` applies to era detection.
             return HttpResponse(status=405)
+
+        token = await self._authenticate(http_request)
+        if token is None:
+            return self._unauthenticated_response()
 
         version_header: str | None = http_request.headers.get(_VERSION_HEADER)
         if (
@@ -492,7 +502,7 @@ class AsyncStreamableHttpViewSet(ViewSet):
 
         config: MCPConfig = self._require_config()
         cap: int | None = config.max_concurrent_sse_streams
-        if cap is not None and self.sse_broker.active_streams >= cap:
+        if cap is not None and broker.active_streams >= cap:
             # Refused rather than queued, as a subscription past its own cap
             # is: accepting trades a clear error for a worker that stops
             # answering anything at all.
@@ -514,7 +524,7 @@ class AsyncStreamableHttpViewSet(ViewSet):
             else None
         )
         return build_sse_response(
-            self.sse_broker,
+            broker,
             session_id,
             replay_buffer=self.sse_replay_buffer,
             last_event_id=last_event_id,
