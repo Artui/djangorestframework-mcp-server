@@ -51,12 +51,18 @@ dependencies = [
     # nests itself takes the server down at discovery rather than at the one call
     # that used it. The floor is here to keep that crash out of reach, not because
     # anything below imports a 0.49 symbol.
-    # 0.50 is deliberately not the floor. It refuses to derive a schema for an
-    # input serializer that is neither a ``Serializer`` subclass nor a dataclass,
-    # where 0.49 advertised the tool as taking no arguments. Nothing here depends
-    # on either answer: registration refuses that shape itself, on every release
-    # in the window, before a schema is ever derived for it.
-    "djangorestframework-services>=0.49",
+    # 0.51 is the floor, and it is a hard one: ``renderable_serializer_class``
+    # first exists there, and ``build_resource_contents`` imports it at module
+    # level, so below 0.51 this package does not import. It is what renders a
+    # resource whose output is declared as a raw dataclass -- instantiated as
+    # declared, the dataclass's own ``__init__`` received ``many=`` and every read
+    # raised. The same release makes ``render_spec_output`` resolve it the same
+    # way, which is what fixes the tool half, so registration admitting a dataclass
+    # output is only true on both paths from here.
+    # 0.50 in passing refuses to derive a schema for an input serializer that is
+    # neither a ``Serializer`` subclass nor a dataclass. Nothing here depends on
+    # that: registration refuses the shape itself before a schema is derived.
+    "djangorestframework-services>=0.51",
     "djangorestframework-dataclasses>=1.3.1",
     # ``typing_extensions.Unpack`` is used at runtime by the strict service /
     # selector Protocols (PEP 692) we re-export from the sister package.

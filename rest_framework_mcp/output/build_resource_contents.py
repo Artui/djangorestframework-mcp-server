@@ -3,7 +3,7 @@ from __future__ import annotations
 import base64
 from typing import Any
 
-from rest_framework_services import base_serializer_context
+from rest_framework_services import base_serializer_context, renderable_serializer_class
 from rest_framework_services.types.selector_kind import SelectorKind
 
 from rest_framework_mcp.constants import JsonRpcErrorCode, ResourceEncoding
@@ -35,6 +35,15 @@ def build_resource_contents(
        ``view`` / ``request``, so a field reading ``self.context["request"]``
        resolves it as it would behind a view. A resource binding has no context
        provider of its own: its selector is a bare callable, not a spec.
+
+       The declaration is resolved through drf-services'
+       ``renderable_serializer_class`` before it is instantiated, as
+       ``render_spec_output`` resolves it on the tool path. This site cannot
+       delegate to that function — it takes a spec, and the binding holds none —
+       so it makes the same resolution itself, rather than wrapping a dataclass
+       here. A raw dataclass declared as the output therefore renders through a
+       ``DataclassSerializer``; instantiated as declared, its own ``__init__``
+       received ``many=`` and every read raised.
     2. **Encode** per the binding's
        [`ResourceEncoding`][rest_framework_mcp.constants.ResourceEncoding].
        ``JSON`` pretty-prints; ``TEXT`` passes the value through verbatim, which is what
@@ -47,8 +56,9 @@ def build_resource_contents(
     [`JsonRpcError`][rest_framework_mcp.protocol.types.json_rpc_error.JsonRpcError]
     rather than an exception — a well-formed error response instead of a 500."""
     payload: Any = raw
-    if binding.output_serializer is not None:
-        payload = binding.output_serializer(
+    serializer_class = renderable_serializer_class(binding.output_serializer)
+    if serializer_class is not None:
+        payload = serializer_class(
             raw,
             many=binding.kind is SelectorKind.LIST,
             context=base_serializer_context(view=view, request=request),

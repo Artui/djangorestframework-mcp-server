@@ -158,7 +158,9 @@ The three direct paths are direct for structural reasons, not by neglect:
   `enforce_permissions` against the resolved target, and the spec's `preconditions`.
 - **`resources/read`.** A `ResourceBinding` holds a bare selector callable, not the
   spec it was lifted from, so there is no spec to dispatch. It composes
-  `base_serializer_context` for rendering, applies the reserved seeds over the
+  `base_serializer_context` for rendering and resolves the output declaration
+  through `renderable_serializer_class` before instantiating it (the two things
+  `render_spec_output` would have done), applies the reserved seeds over the
   URI-template variables, honours the `kwargs` provider's `UNSET` decline, and runs
   object-level permissions through `guard_resource_object`, which lifts the binding's
   wrapped permission classes back into a spec for `enforce_permissions`. Queryset

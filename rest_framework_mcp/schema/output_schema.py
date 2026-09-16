@@ -26,6 +26,12 @@ def build_output_schema(
     - ``kind=LIST, paginate=False`` — ``{type: array, items: <item>}``.
     - ``kind=LIST, paginate=True`` — ``{items, page, totalPages, hasNext}``.
 
+    A read-only ``BaseSerializer`` subclass has no fields to describe and also
+    answers ``None``. Anything that is neither a ``BaseSerializer`` subclass nor a
+    dataclass type raises ``TypeError``, as it would fail to render; registration
+    refuses those shapes first (``adapters.utils.validate_serializer_shapes``), so
+    one never reaches the per-request ``tools/list`` build.
+
     ``projection`` applies the output serializer's agent markings, so the
     advertised schema describes what a caller actually receives rather than what
     the serializer renders in full. It is generated from the same declaration the

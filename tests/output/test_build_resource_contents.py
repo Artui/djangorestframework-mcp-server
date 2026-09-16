@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import json
+from dataclasses import dataclass
 from typing import Any
 
 from rest_framework import serializers
@@ -15,6 +17,12 @@ from rest_framework_mcp.registry.types.resource_binding import ResourceBinding
 
 class _Out(serializers.Serializer):
     label = serializers.CharField()
+
+
+@dataclass
+class _DCOut:
+    label: str
+    qty: int = 0
 
 
 def _binding(**overrides: Any) -> ResourceBinding:
@@ -78,6 +86,27 @@ class TestRendering:
 
         assert not isinstance(contents, JsonRpcError)
         assert contents.text == '[\n  {\n    "label": "one"\n  }\n]'
+
+    def test_a_raw_dataclass_output_renders_a_retrieve(self) -> None:
+        """A dataclass declared as the output renders through the class drf-services
+        resolves for it. Instantiated as declared, the dataclass's own ``__init__``
+        received ``many=`` and raised on every read."""
+        binding = _binding(output_serializer=_DCOut, kind=SelectorKind.RETRIEVE)
+        contents = build_resource_contents(
+            binding=binding, uri="things://x", raw=_DCOut(label="one", qty=2)
+        )
+
+        assert not isinstance(contents, JsonRpcError)
+        assert contents.text == '{\n  "label": "one",\n  "qty": 2\n}'
+
+    def test_a_raw_dataclass_output_renders_a_list_as_many(self) -> None:
+        binding = _binding(output_serializer=_DCOut, kind=SelectorKind.LIST)
+        contents = build_resource_contents(
+            binding=binding, uri="things://x", raw=[_DCOut(label="one"), _DCOut(label="two")]
+        )
+
+        assert not isinstance(contents, JsonRpcError)
+        assert [row["label"] for row in json.loads(contents.text)] == ["one", "two"]
 
     def test_the_serializer_runs_before_the_encoding_check(self) -> None:
         """Order matters: the encoding check must see the *rendered* value, so

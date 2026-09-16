@@ -6,7 +6,7 @@ from typing import Any
 from rest_framework_services import UNSET, UnsetType
 from rest_framework_services.types.selector_spec import SelectorSpec
 
-from rest_framework_mcp.adapters.utils import merge_meta
+from rest_framework_mcp.adapters.utils import merge_meta, validate_serializer_shapes
 from rest_framework_mcp.auth.permissions.wrap_spec_permissions import wrap_spec_permissions
 from rest_framework_mcp.constants import ResourceEncoding
 from rest_framework_mcp.protocol.types.icon import Icon
@@ -110,6 +110,10 @@ def selector_to_resource(
     resolved_callable: Callable[..., Any] = selector.selector
     if output_serializer is None:
         output_serializer = selector.output_serializer
+    # Checked once resolved, so it holds whichever declaration will render. A
+    # resource derives no schema, so an unusable one cannot fail discovery the
+    # way a tool's can; it fails every read instead, and only when one happens.
+    validate_serializer_shapes(label=f"resource {name!r}", output_serializer=output_serializer)
     kwargs_provider = selector.kwargs
 
     spec_perms: tuple[Any, ...] = wrap_spec_permissions(selector.permission_classes, label=name)

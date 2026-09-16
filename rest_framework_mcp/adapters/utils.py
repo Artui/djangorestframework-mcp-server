@@ -32,21 +32,26 @@ def validate_serializer_shapes(
 ) -> None:
     """Fail-fast at registration time on a serializer no MCP path can use.
 
+    Run by the three tool adapters and, for its output alone, by the resource
+    adapter.
+
     **Input** must be ``None``, a DRF ``Serializer`` subclass or a dataclass type.
     That is the one rule every consumer of it shares: drf-services'
     ``build_input_serializer_from_data`` refuses anything else at dispatch, its
-    ``serializer_to_json_schema`` refuses it at schema derivation from 0.50, and
+    ``serializer_to_json_schema`` refuses it at schema derivation, and
     this package's own ``build_validated_input_serializer`` (the chain path)
     reads ``.fields`` off whatever it builds.
 
     **Output** must be ``None``, a DRF ``BaseSerializer`` subclass or a dataclass
-    type. It is deliberately wider than input, because output is only rendered —
-    ``render_spec_output`` calls ``serializer(value, many=..., context=...).data``
-    — and a read-only ``BaseSerializer`` subclass, which DRF documents for exactly
-    that job, answers it. ``output_to_json_schema`` derives no schema for one,
-    which is honest rather than a failure. A dataclass is admitted because that
-    same schema derivation accepts it, even though drf-services' renderer does
-    not wrap one yet: refusing it here would outlive the upstream fix.
+    type. It is deliberately wider than input, because output is only rendered.
+    Every render site — ``render_spec_output`` for tools, ``build_resource_contents``
+    for resources — resolves the declaration through drf-services'
+    ``renderable_serializer_class`` and calls what comes back as
+    ``serializer(value, many=..., context=...).data``. A read-only
+    ``BaseSerializer`` subclass, which DRF documents for exactly that job, answers
+    it, and ``output_to_json_schema`` honestly derives no schema for one. A
+    dataclass is wrapped in a ``DataclassSerializer`` by that resolution, so it
+    renders and advertises its fields.
 
     **Why at registration.** ``tools/list`` derives every tool's schema on each
     request, so a shape upstream refuses fails discovery for the whole server,
@@ -63,8 +68,8 @@ def validate_serializer_shapes(
         raise ImproperlyConfigured(
             f"{label}: input_serializer must be a DRF Serializer subclass or a dataclass "
             f"type, got {input_serializer!r}. Anything else is refused when the tool is "
-            "called, and from djangorestframework-services 0.50 also when its schema is "
-            "derived, which fails tools/list for every tool on the server."
+            "called and when its schema is derived, which fails tools/list for every "
+            "tool on the server."
             f"{_instance_hint(input_serializer)}"
         )
     if output_serializer is not None and not (
@@ -74,8 +79,8 @@ def validate_serializer_shapes(
         raise ImproperlyConfigured(
             f"{label}: output serializer must be a DRF BaseSerializer subclass or a "
             f"dataclass type, got {output_serializer!r}. Rendering calls it as "
-            "serializer(value, many=..., context=...).data, so every call to the tool "
-            f"would fail.{_instance_hint(output_serializer)}"
+            "serializer(value, many=..., context=...).data, so every call or read that "
+            f"renders it would fail.{_instance_hint(output_serializer)}"
         )
 
 
