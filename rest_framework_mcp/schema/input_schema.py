@@ -13,10 +13,10 @@ def build_input_schema(input_serializer: type | None, *, partial: bool = False) 
     (the tool takes no input), and drops ``required`` when ``partial``. The
     conversion is shared with every other transport rather than reproduced here.
 
-    Anything else raises ``TypeError`` from drf-services 0.50 — the error its
-    dispatch path already raised for such a tool at call time. Earlier releases
-    answered ``{"type": "object"}`` instead, so the tool advertised no arguments
-    and no call to it could succeed. Nothing here catches the error, and nothing
+    Anything else raises ``TypeError`` — the error drf-services' dispatch path
+    raises for such a tool at call time too. Before 0.50 it answered
+    ``{"type": "object"}`` instead, so the tool advertised no arguments and no
+    call to it could succeed. Nothing here catches the error, and nothing
     needs to: registration refuses those shapes first
     (``adapters.utils.validate_serializer_shapes``). Left to this function, one
     such tool would fail the whole ``tools/list`` rather than drop out of it,

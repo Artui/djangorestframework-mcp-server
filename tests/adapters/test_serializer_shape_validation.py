@@ -1,7 +1,9 @@
 """Registration-time checks that a declared serializer is a shape MCP can use.
 
 ``rest_framework_mcp.adapters.utils.validate_serializer_shapes`` runs from all
-three tool adapters, before anything else reads the serializer. Without it a
+three tool adapters, before anything else reads the serializer, and from the
+resource adapter for its output alone (tested with the read path, in
+``tests/handlers/test_resources_read_dataclass_output.py``). Without it a
 misdeclared ``input_serializer`` registered cleanly and then failed on every
 call -- and, from djangorestframework-services 0.50, failed ``tools/list`` for
 *every* tool on the server, because this transport derives each schema per
@@ -276,3 +278,23 @@ async def test_a_read_only_output_serializer_still_registers_and_renders() -> No
     )
     result: Any = await server.acall_tool("shout", user=None)
     assert result["structuredContent"] == {"shout": "HI"}
+
+
+async def test_a_dataclass_output_registers_and_renders() -> None:
+    """The other shape output admits that input's rule would not reach.
+
+    drf-services' renderer resolves a dataclass to a ``DataclassSerializer``;
+    before it did, this registered, advertised a schema, and raised on every call
+    because the dataclass's own ``__init__`` was handed ``many=``.
+    """
+    server = _server()
+    server.register_service_tool(
+        name="echo",
+        spec=ServiceSpec(
+            service=lambda **_: _DC(word="hi"),
+            atomic=False,
+            output_selector_spec=SelectorSpec(kind=SelectorKind.RETRIEVE, output_serializer=_DC),
+        ),
+    )
+    result: Any = await server.acall_tool("echo", user=None)
+    assert result["structuredContent"] == {"word": "hi"}

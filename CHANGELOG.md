@@ -9,11 +9,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
-- **Registration refuses a tool whose serializer no MCP path can use**, with
-  `ImproperlyConfigured` naming the tool, and the step for a chain. An input
-  serializer must be a DRF `Serializer` subclass or a dataclass type. An output
-  serializer must be a `BaseSerializer` subclass or a dataclass type. The
-  likeliest mistake is an instance where the class belongs, such as
+- **Floored at `djangorestframework-services>=0.51`, and it is a hard floor.**
+  `renderable_serializer_class` first exists there, and the resource render path
+  imports it at module level, so below 0.51 this package does not import. It is
+  what renders a raw dataclass declared as an output on every path (see Fixed).
+
+- **Registration refuses a tool or resource whose serializer no MCP path can
+  use**, with `ImproperlyConfigured` naming the tool or resource, and the step for
+  a chain. An input serializer must be a DRF `Serializer` subclass or a dataclass
+  type. An output serializer must be a `BaseSerializer` subclass or a dataclass
+  type. The likeliest mistake is an instance where the class belongs, such as
   `InvoiceSerializer(many=True)`, and the message says so when that is the case.
 
   **This can stop a server that used to start.** Such a tool registered cleanly
@@ -24,19 +29,27 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   tool's schema on each `tools/list` request. So the whole listing failed with an
   HTTP 500, and every other tool on the server dropped out of discovery with it.
   The dependency has no upper bound, so any environment resolving 0.50 was
-  already there. Refusing at registration reports the mistake once, against the
-  tool that made it.
+  already there. A resource derives no schema, so it could not break discovery,
+  but every read of it failed. Refusing at registration reports the mistake once,
+  against the declaration that made it.
 
   **The two sides accept different shapes on purpose.** Output is only
   rendered, as `serializer(value, many=..., context=...).data`. A read-only
   `BaseSerializer` subclass, which DRF documents for exactly that, therefore
   stays accepted: it renders and advertises no `outputSchema`. A dataclass output
-  is accepted too, because upstream's schema derivation accepts one, although
-  `djangorestframework-services` does not render one yet. Every call to such a
-  tool still fails with a `TypeError` about `many`, and that fix belongs upstream.
+  is accepted too, and renders (see Fixed).
 
-  The dependency floor stays at `>=0.49`, because the check holds on every
-  release in that window.
+### Fixed
+
+- **A raw dataclass declared as an output now renders, on tools and resources
+  alike.** Each render site instantiated the declaration as it was, so the
+  dataclass's own `__init__` received `many=` and every call or read raised
+  `TypeError`. A tool had advertised an `outputSchema` for that payload all the
+  while. Tools render through `djangorestframework-services`, which resolves the
+  declaration to a `DataclassSerializer` from 0.51. Resources render in this
+  package, because a resource binding holds a bare selector rather than a spec
+  to hand upstream, so `resources/read` now makes the same resolution through
+  `renderable_serializer_class`, on the sync and async paths both.
 
 ### Documentation
 

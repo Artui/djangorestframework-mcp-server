@@ -123,10 +123,10 @@ Note that server-wide `INCLUDE_OUTPUT_SCHEMA=True` with
 `INCLUDE_STRUCTURED_CONTENT=False` is **legal** — it just requires every binding
 to override the content back on. The error names the binding that did not.
 
-### "input_serializer must be a DRF Serializer subclass or a dataclass type"
+### "input_serializer must be a DRF Serializer subclass" or "output serializer must be a DRF BaseSerializer subclass"
 
-The serializer declared for a tool is a shape no MCP path can use. The usual
-cause is an instance where the class belongs:
+The serializer declared for a tool or resource is a shape no MCP path can use.
+The usual cause is an instance where the class belongs:
 
 ```python
 ServiceSpec(service=create_invoice, input_serializer=InvoiceSerializer(many=True))  # refused
@@ -136,12 +136,16 @@ ServiceSpec(service=create_invoice, input_serializer=InvoiceSerializer)  # accep
 The two sides accept different shapes. An **input** serializer is validated, so
 it must be a `Serializer` subclass or a dataclass type. An **output** serializer
 is only rendered, so any `BaseSerializer` subclass is accepted there, including
-DRF's read-only pattern that implements just `to_representation`. For a chain
-tool the message names the step whose serializer was refused.
+DRF's read-only pattern that implements just `to_representation`. A dataclass
+is accepted on both sides: as output it renders through a `DataclassSerializer`
+built for it. For a chain tool the message names the step whose serializer was
+refused. A resource has only an output serializer, and it is held to the same
+rule.
 
-Such a tool used to register cleanly. Every call to it then failed, and from
-djangorestframework-services 0.50 `tools/list` failed too, for every tool on the
-server, because this transport derives each tool's schema on each listing.
+Such a tool used to register cleanly. Every call to it then failed, and `tools/list`
+failed too, for every tool on the server, because this transport derives each
+tool's schema on each listing. A resource never had a schema to derive, so it
+failed on every read instead.
 
 ## `ValueError` when registering a resource
 
