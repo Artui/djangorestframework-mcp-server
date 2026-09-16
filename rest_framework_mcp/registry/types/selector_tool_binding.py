@@ -15,6 +15,7 @@ from rest_framework_services import (
 )
 from rest_framework_services.types.selector_kind import SelectorKind
 from rest_framework_services.types.selector_spec import SelectorSpec
+from rest_framework_services.types.service_spec import ServiceSpec
 
 from rest_framework_mcp.constants import (
     ArgumentBinding,
@@ -212,6 +213,16 @@ class SelectorToolBinding(Generic[ResultT, ExtraT]):
     def output_serializer(self) -> type | None:
         """The serializer whose rendered output reaches the caller, if any."""
         return self.spec.output_serializer
+
+    @property
+    def rendered_affordances(self) -> Mapping[str, ServiceSpec[Any, Any, Any]] | None:
+        """The ``affordances`` answered on every rendered item, if any are declared.
+
+        The spec's own mapping, which drf-services' renderer adds to each item
+        wherever the item sits: the retrieved object, each array element, or
+        each entry in the pagination envelope's ``items``. Feeds the advertised
+        ``outputSchema``, so the schema names the key the payload carries."""
+        return self.spec.affordances
 
     @cached_property
     def audience_projection(self) -> AudienceProjection:

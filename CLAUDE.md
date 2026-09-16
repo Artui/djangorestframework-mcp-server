@@ -155,7 +155,10 @@ The three direct paths are direct for structural reasons, not by neglect:
   binding, and the pool each step receives — `inputs(ctx)` returns the callable's
   kwargs, which is not the flat client `params` mapping `dispatch_spec` takes. What
   `dispatch_spec` would have contributed is therefore run explicitly per step:
-  `enforce_permissions` against the resolved target, and the spec's `preconditions`.
+  `enforce_permissions` against the resolved target, a service's `affordances`
+  through `enforce_affordances`, and the spec's `preconditions`, in that order. The
+  affordances were once the missing one: a service refused as a tool of its own ran
+  and succeeded as a chain step.
 - **`resources/read`.** A `ResourceBinding` holds a bare selector callable, not the
   spec it was lifted from, so there is no spec to dispatch. It composes
   `base_serializer_context` for rendering and resolves the output declaration

@@ -151,15 +151,15 @@ failed on every read instead.
 
 ### "sets ..., which the resource read path does not apply"
 
-`register_resource` refuses a `SelectorSpec` carrying any of ten behavioural
+`register_resource` refuses a `SelectorSpec` carrying any of eleven behavioural
 fields — `preconditions`, `filter_set`, `select_related`, `prefetch_related`,
 `annotations`, `extend_queryset`, `allow_none`, `output_serializer_context`,
-`progress_reporter`, `metadata`. `resources/read` dispatches the bare selector
-callable, so those would be silently dropped, and a `filter_set` that scopes a
-tenant over HTTP would return every row here with nothing in the response
-saying so.
+`progress_reporter`, `metadata`, `affordances`. `resources/read` dispatches the
+bare selector callable, so those would be silently dropped, and a `filter_set`
+that scopes a tenant over HTTP would return every row here with nothing in the
+response saying so.
 
-Register the same spec as a selector *tool* — which honours all ten — or move
+Register the same spec as a selector *tool* — which honours all eleven — or move
 the behaviour into the callable, where it travels with every dispatch.
 [What a resource cannot carry, and why registration refuses it](concepts.md#what-a-resource-cannot-carry-and-why-registration-refuses-it)
 has the field-by-field consequences.

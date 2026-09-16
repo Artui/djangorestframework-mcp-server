@@ -194,6 +194,19 @@ class ToolBinding(Generic[InputT, ResultT, ExtraT]):
         spec = self.spec
         return spec.output_selector_spec.output_serializer if spec.output_selector_spec else None
 
+    @property
+    def rendered_affordances(self) -> Mapping[str, ServiceSpec[Any, Any, Any]] | None:
+        """The ``affordances`` answered on every rendered item, if any are declared.
+
+        Read off ``output_selector_spec``, the selector spec the result renders
+        through, exactly where drf-services' renderer reads it. The service's
+        *own* ``spec.affordances`` are a different declaration -- the conditions
+        a call is refused against -- and are never rendered, so they are not
+        this. Feeds the advertised ``outputSchema``, so the schema names the key
+        the payload carries."""
+        spec = self.spec
+        return spec.output_selector_spec.affordances if spec.output_selector_spec else None
+
     @cached_property
     def audience_projection(self) -> AudienceProjection:
         """This tool's resolved audience markings, derived once per binding.

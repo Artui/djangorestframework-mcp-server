@@ -314,7 +314,7 @@ selector callable** through `run_selector`: a `ResourceBinding` holds the
 callable that was lifted out of the spec, not the spec itself, so there is no
 spec left to dispatch and nothing to apply the rest against.
 
-A `SelectorSpec` that sets any of the following ten is **refused at
+A `SelectorSpec` that sets any of the following eleven is **refused at
 registration**, with a `ValueError` naming the ones it set:
 
 | Field | What would not happen on a read |
@@ -329,6 +329,7 @@ registration**, with a `ValueError` naming the ones it set:
 | `output_serializer_context` | The provider is not resolved, so a serializer reading that context sees only the baseline. |
 | `progress_reporter` | Nothing is reported; a read is a single response with nowhere to stream to. |
 | `metadata` | The consumer-owned mapping is not attached, so a permission or downstream reader looking for it finds nothing. |
+| `affordances` | No row carries its answers. The renderer that adds them is not the one a read renders through, so a client is never told what it can do to a row. |
 
 Refusing is the deliberate choice over the two alternatives. Carrying them is
 not available — the read path has no spec to carry them on. That leaves
@@ -341,7 +342,7 @@ and lands on the person who can act on it.
 Two ways forward, both of which keep the behaviour:
 
 - **Register the spec as a selector tool instead.** Selector tools dispatch
-  through `dispatch_spec`, which honours all ten. This is the default answer,
+  through `dispatch_spec`, which honours all eleven. This is the default answer,
   and it costs the URI addressing rather than the behaviour.
 - **Fold the behaviour into the callable.** A selector that does its own
   filtering and its own precondition checks carries them wherever it is
