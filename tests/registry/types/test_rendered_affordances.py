@@ -20,7 +20,12 @@ from rest_framework_mcp.registry.types.chain_step import ChainStep
 from rest_framework_mcp.registry.types.chain_tool_binding import ChainToolBinding
 from rest_framework_mcp.registry.types.selector_tool_binding import SelectorToolBinding
 from rest_framework_mcp.registry.types.tool_binding import ToolBinding
-from tests.testapp.affordances import CANCEL_ORDER, OrderSerializer, order_selector_spec
+from tests.testapp.affordances import (
+    ARCHIVE_ORDER,
+    CANCEL_ORDER,
+    OrderSerializer,
+    order_selector_spec,
+)
 
 
 def _service(output_selector_spec: SelectorSpec[Any, Any] | None) -> ServiceSpec[Any, Any, Any]:
@@ -36,26 +41,40 @@ def _service(output_selector_spec: SelectorSpec[Any, Any] | None) -> ServiceSpec
 
 def test_every_binding_kind_answers_the_mapping_it_renders() -> None:
     rendered = order_selector_spec(SelectorKind.RETRIEVE, selector=lambda result, **_: result)
+    # A chain renders only a declaration that asks no condition -- one that does is
+    # refused at registration -- so the chains carry that one instead.
+    chain_rendered = order_selector_spec(
+        SelectorKind.RETRIEVE,
+        selector=lambda result, **_: result,
+        affordances={"archive": ARCHIVE_ORDER},
+    )
     bindings: list[Any] = [
         ToolBinding(name="svc", description=None, spec=_service(rendered)),
         SelectorToolBinding(
             name="sel", description=None, spec=order_selector_spec(SelectorKind.RETRIEVE)
         ),
         ChainToolBinding(
-            name="chain_svc", description=None, steps=(ChainStep("a", _service(rendered)),)
+            name="chain_svc", description=None, steps=(ChainStep("a", _service(chain_rendered)),)
         ),
         ChainToolBinding(
             name="chain_sel",
             description=None,
-            steps=(ChainStep("a", order_selector_spec(SelectorKind.RETRIEVE)),),
+            steps=(
+                ChainStep(
+                    "a",
+                    order_selector_spec(
+                        SelectorKind.RETRIEVE, affordances={"archive": ARCHIVE_ORDER}
+                    ),
+                ),
+            ),
         ),
     ]
 
     assert {b.name: b.rendered_affordances for b in bindings} == {
         "svc": {"cancel": CANCEL_ORDER},
         "sel": {"cancel": CANCEL_ORDER},
-        "chain_svc": {"cancel": CANCEL_ORDER},
-        "chain_sel": {"cancel": CANCEL_ORDER},
+        "chain_svc": {"archive": ARCHIVE_ORDER},
+        "chain_sel": {"archive": ARCHIVE_ORDER},
     }
 
 
@@ -85,9 +104,14 @@ def test_output_all_answers_none_even_when_the_output_step_declares_them() -> No
     binding = ChainToolBinding(
         name="chain",
         description=None,
-        steps=(ChainStep("a", order_selector_spec(SelectorKind.RETRIEVE)),),
+        steps=(
+            ChainStep(
+                "a",
+                order_selector_spec(SelectorKind.RETRIEVE, affordances={"archive": ARCHIVE_ORDER}),
+            ),
+        ),
         output_all=True,
     )
 
-    assert binding.output_step.spec.affordances == {"cancel": CANCEL_ORDER}
+    assert binding.output_step.spec.affordances == {"archive": ARCHIVE_ORDER}
     assert binding.rendered_affordances is None

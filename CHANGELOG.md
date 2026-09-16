@@ -7,6 +7,28 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- **Chain registration refuses a rendered step whose `affordances` a chain cannot
+  answer.** From `djangorestframework-services` 0.51 a selector spec's
+  `affordances` render from answers its selector dispatch computes while fetching
+  the rows. A chain runs each step's selector, and a service step's output
+  re-fetch, directly, so no answers were computed and rendering raised
+  `ImproperlyConfigured: The rendered row carries no 'affordance__...' answer` on
+  every call, while the chain registered cleanly and its `outputSchema` advertised
+  the `affordances` object. Three shapes failed that way, and registration now
+  raises `ImproperlyConfigured` naming the chain and the step for each of them: an
+  output step that is a `SelectorSpec` declaring affordances, retrieve or list; an
+  output step that is a `ServiceSpec` whose `output_selector_spec` declares them;
+  and, under `output_all=True`, any step whose rendered spec declares them.
+  Register such a spec as a selector or service tool of its own, where affordances
+  render, or drop them from the step. Nothing that works is refused: an
+  intermediate step is never rendered and may declare affordances, a step with no
+  output serializer passes its value through unrendered, and a declared name
+  whose service asks no condition renders `{"available": true}` without an answer
+  to read. Computing the answers inside a chain needs drf-services to export the
+  step that computes them, which it does not today.
+
 ### Fixed
 
 - **A refused call's error result now carries the refusal's `code`.** When one of

@@ -98,6 +98,24 @@ output_selector_spec.output_serializer` or
 the resolved data (`result` / `instance` / `page`), exactly as a
 single-spec tool does.
 
+### Affordances on a rendered step
+
+A selector spec's `affordances` render as an `affordances` object on each
+item, from answers the selector tool's dispatch computes as it fetches the
+rows. A chain step runs its selector directly and computes none, so
+registering a chain **refuses** a rendered step — the output step, or any
+step under `output_all` — whose serializer would render affordances that ask
+a condition:
+
+```text
+ImproperlyConfigured: Chain tool 'orders': step 'out' is rendered through a
+selector spec declaring affordances ['cancel'], ...
+```
+
+Register that spec as a selector or service tool of its own, where the
+answers are computed and rendered, or drop the affordances from the step.
+An intermediate step is not rendered, so it may declare them freely.
+
 ## Permissions
 
 Each step's `spec.permission_classes` are AND-combined with the

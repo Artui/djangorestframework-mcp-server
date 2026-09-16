@@ -20,7 +20,9 @@ from rest_framework_services.types.selector_spec import SelectorSpec
 from rest_framework_services.types.service_spec import ServiceSpec
 
 from rest_framework_mcp import ChainStep, MCPServer
+from rest_framework_mcp.testing import assert_tool_result_conforms
 from tests.testapp.affordances import (
+    ARCHIVE_ORDER,
     CANCEL_ORDER,
     DECLARED_CODES,
     OrderSerializer,
@@ -126,18 +128,49 @@ def test_a_service_s_own_affordances_are_not_advertised() -> None:
     assert _output_schema(server, "cancel_order") == _ORDER_ITEM
 
 
+_ARCHIVABLE: dict[str, Any] = {"affordances": {"archive": ARCHIVE_ORDER}}
+"""A declaration a chain can render. One asking a condition is refused at chain
+registration (see ``test_chain_tool_binding_affordances``), so this is the only
+shape through which a chain's schema still reaches the ``affordances`` object."""
+
+
 @pytest.mark.parametrize(
     "spec",
     [
-        pytest.param(order_selector_spec(SelectorKind.RETRIEVE), id="selector-step"),
-        pytest.param(_order_service(), id="service-step"),
+        pytest.param(order_selector_spec(SelectorKind.RETRIEVE, **_ARCHIVABLE), id="selector-step"),
+        pytest.param(
+            _order_service(
+                output_selector_spec=order_selector_spec(
+                    SelectorKind.RETRIEVE, selector=lambda result, **_: result, **_ARCHIVABLE
+                )
+            ),
+            id="service-step",
+        ),
     ],
 )
-def test_a_chain_tool_advertises_its_output_step_s_affordances(spec: Any) -> None:
-    server = fresh_server()
-    server.register_chain_tool(name="chain", steps=[ChainStep("out", spec)], permissions=[])
+async def test_a_chain_tool_advertises_its_output_step_s_affordances(spec: Any) -> None:
+    """Advertised, and served in the advertised shape.
 
-    _assert_advertises_cancel(_output_schema(server, "chain"))
+    The call is what keeps this honest: a chain once advertised the object for
+    declarations that then failed every call, so a schema assertion alone would
+    agree with that bug."""
+    server = fresh_server()
+    server.register_chain_tool(
+        name="chain", steps=[ChainStep("out", spec)], atomic=False, permissions=[]
+    )
+
+    schema = _output_schema(server, "chain")
+    archive = schema["properties"]["affordances"]["properties"]["archive"]
+    # No conditions, so no code to enumerate and no reason to give.
+    assert archive == {
+        "type": "object",
+        "properties": {"available": {"type": "boolean"}},
+        "required": ["available"],
+    }
+    tool: Any = next(t for t in server.list_tools(user=None)["tools"] if t["name"] == "chain")
+    result: Any = await server.acall_tool("chain", user=None)
+    assert result["structuredContent"]["affordances"] == {"archive": {"available": True}}
+    assert_tool_result_conforms(tool, result)
 
 
 def test_a_chain_under_output_all_still_advertises_no_schema() -> None:
@@ -145,7 +178,7 @@ def test_a_chain_under_output_all_still_advertises_no_schema() -> None:
     server = fresh_server()
     server.register_chain_tool(
         name="chain",
-        steps=[ChainStep("out", order_selector_spec(SelectorKind.RETRIEVE))],
+        steps=[ChainStep("out", order_selector_spec(SelectorKind.RETRIEVE, **_ARCHIVABLE))],
         output_all=True,
         permissions=[],
     )

@@ -161,7 +161,10 @@ The three direct paths are direct for structural reasons, not by neglect:
   `enforce_permissions` against the resolved target, a service's `affordances`
   through `enforce_affordances`, and the spec's `preconditions`, in that order. The
   affordances were once the missing one: a service refused as a tool of its own ran
-  and succeeded as a chain step.
+  and succeeded as a chain step. What a chain does **not** reproduce is computing the
+  answers a rendered selector spec's `affordances` need, because that step is not
+  part of drf-services' public surface; `ChainToolBinding` refuses at registration a
+  rendered step whose declaration would need them, rather than failing every call.
 - **`resources/read`.** A `ResourceBinding` holds a bare selector callable, not the
   spec it was lifted from, so there is no spec to dispatch. It composes
   `base_serializer_context` for rendering and resolves the output declaration
