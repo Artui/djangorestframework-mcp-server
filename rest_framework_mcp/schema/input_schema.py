@@ -12,6 +12,13 @@ def build_input_schema(input_serializer: type | None, *, partial: bool = False) 
     takes a DRF ``Serializer`` subclass, a bare ``@dataclass`` type, or ``None``
     (the tool takes no input), and drops ``required`` when ``partial``. The
     conversion is shared with every other transport rather than reproduced here.
+
+    Anything else raises ``TypeError`` from drf-services 0.50 — the error its
+    dispatch path already raised for such a tool at call time. Earlier releases
+    answered ``{"type": "object"}`` instead, so the tool advertised no arguments
+    and no call to it could succeed. Nothing here catches the error: ``tools/list``
+    builds every schema on each request, so one such tool fails the whole listing
+    rather than dropping out of it.
     """
     return serializer_to_json_schema(input_serializer, partial=partial)
 

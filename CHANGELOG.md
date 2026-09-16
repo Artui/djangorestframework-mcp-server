@@ -7,6 +7,29 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- **With `djangorestframework-services` 0.50 or later, a tool whose input
+  serializer is neither a DRF `Serializer` subclass nor a dataclass fails
+  `tools/list` instead of advertising no arguments.** drf-services now raises
+  `TypeError` when deriving that schema, where it used to return
+  `{"type": "object"}`: byte-identical to a tool that takes no input, while
+  every call to it raised the same `TypeError` at dispatch and failed with an
+  HTTP 500. A serializer *instance* such as `InvoiceSerializer(many=True)`,
+  passed where the class belongs, gets there as readily as an unrelated class.
+
+  **The failure is wider than the one tool.** This transport builds every
+  advertised schema on each `tools/list` request, and the refusal is not caught,
+  so the whole listing fails with an HTTP 500, on both the WSGI and ASGI
+  transports. Every other tool on the server drops out of discovery with it.
+  Registration still accepts such a tool, so nothing reports the problem until
+  a client lists tools.
+
+  No change in this package produces this, and the floor stays at `>=0.49`: the
+  dependency is unbounded, so any environment resolving drf-services 0.50 already
+  behaves this way. The entry is here because this is where the effect shows.
+  The fix is to pass the serializer class, or a dataclass, as `input_serializer`.
+
 ### Documentation
 
 - **The Pydantic-AI client recipe had the two protocol eras the wrong way
