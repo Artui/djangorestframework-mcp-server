@@ -2006,14 +2006,14 @@ tool's schema on each listing. A resource never had a schema to derive, so it
 failed on every read instead.</p>
 <h2 id="valueerror-when-registering-a-resource"><code>ValueError</code> when registering a resource<a class="headerlink" href="#valueerror-when-registering-a-resource" title="Permanent link">&para;</a></h2>
 <h3 id="sets-which-the-resource-read-path-does-not-apply">"sets ..., which the resource read path does not apply"<a class="headerlink" href="#sets-which-the-resource-read-path-does-not-apply" title="Permanent link">&para;</a></h3>
-<p><code>register_resource</code> refuses a <code>SelectorSpec</code> carrying any of ten behavioural
+<p><code>register_resource</code> refuses a <code>SelectorSpec</code> carrying any of eleven behavioural
 fields — <code>preconditions</code>, <code>filter_set</code>, <code>select_related</code>, <code>prefetch_related</code>,
 <code>annotations</code>, <code>extend_queryset</code>, <code>allow_none</code>, <code>output_serializer_context</code>,
-<code>progress_reporter</code>, <code>metadata</code>. <code>resources/read</code> dispatches the bare selector
-callable, so those would be silently dropped, and a <code>filter_set</code> that scopes a
-tenant over HTTP would return every row here with nothing in the response
-saying so.</p>
-<p>Register the same spec as a selector <em>tool</em> — which honours all ten — or move
+<code>progress_reporter</code>, <code>metadata</code>, <code>affordances</code>. <code>resources/read</code> dispatches the
+bare selector callable, so those would be silently dropped, and a <code>filter_set</code>
+that scopes a tenant over HTTP would return every row here with nothing in the
+response saying so.</p>
+<p>Register the same spec as a selector <em>tool</em> — which honours all eleven — or move
 the behaviour into the callable, where it travels with every dispatch.
 <a href="../concepts/#what-a-resource-cannot-carry-and-why-registration-refuses-it">What a resource cannot carry, and why registration refuses it</a>
 has the field-by-field consequences.</p>

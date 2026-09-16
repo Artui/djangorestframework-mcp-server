@@ -3008,7 +3008,7 @@ boilerplate; it wraps the function in a <code>SelectorSpec</code> for you.</p>
 selector callable</strong> through <code>run_selector</code>: a <code>ResourceBinding</code> holds the
 callable that was lifted out of the spec, not the spec itself, so there is no
 spec left to dispatch and nothing to apply the rest against.</p>
-<p>A <code>SelectorSpec</code> that sets any of the following ten is <strong>refused at
+<p>A <code>SelectorSpec</code> that sets any of the following eleven is <strong>refused at
 registration</strong>, with a <code>ValueError</code> naming the ones it set:</p>
 <table>
 <thead>
@@ -3058,6 +3058,10 @@ registration</strong>, with a <code>ValueError</code> naming the ones it set:</p
 <td><code>metadata</code></td>
 <td>The consumer-owned mapping is not attached, so a permission or downstream reader looking for it finds nothing.</td>
 </tr>
+<tr>
+<td><code>affordances</code></td>
+<td>No row carries its answers. The renderer that adds them is not the one a read renders through, so a client is never told what it can do to a row.</td>
+</tr>
 </tbody>
 </table>
 <p>Refusing is the deliberate choice over the two alternatives. Carrying them is
@@ -3070,7 +3074,7 @@ and lands on the person who can act on it.</p>
 <p>Two ways forward, both of which keep the behaviour:</p>
 <ul>
 <li><strong>Register the spec as a selector tool instead.</strong> Selector tools dispatch
-  through <code>dispatch_spec</code>, which honours all ten. This is the default answer,
+  through <code>dispatch_spec</code>, which honours all eleven. This is the default answer,
   and it costs the URI addressing rather than the behaviour.</li>
 <li><strong>Fold the behaviour into the callable.</strong> A selector that does its own
   filtering and its own precondition checks carries them wherever it is

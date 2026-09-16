@@ -1507,6 +1507,17 @@
 </li>
         
           <li class="md-nav__item">
+  <a href="#rest_framework_mcp.registry.types.tool_binding.ToolBinding.rendered_affordances" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        rendered_affordances
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
   <a href="#rest_framework_mcp.registry.types.tool_binding.ToolBinding.audience_projection" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -1737,6 +1748,17 @@
     <span class="md-ellipsis">
       
         output_serializer
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#rest_framework_mcp.registry.types.selector_tool_binding.SelectorToolBinding.rendered_affordances" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        rendered_affordances
       
     </span>
   </a>
@@ -2546,6 +2568,17 @@
     <span class="md-ellipsis">
       
         output_serializer
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#rest_framework_mcp.registry.types.chain_tool_binding.ChainToolBinding.rendered_affordances" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        rendered_affordances
       
     </span>
   </a>
@@ -3244,6 +3277,17 @@
 </li>
         
           <li class="md-nav__item">
+  <a href="#rest_framework_mcp.registry.types.tool_binding.ToolBinding.rendered_affordances" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        rendered_affordances
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
   <a href="#rest_framework_mcp.registry.types.tool_binding.ToolBinding.audience_projection" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -3474,6 +3518,17 @@
     <span class="md-ellipsis">
       
         output_serializer
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#rest_framework_mcp.registry.types.selector_tool_binding.SelectorToolBinding.rendered_affordances" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        rendered_affordances
       
     </span>
   </a>
@@ -4283,6 +4338,17 @@
     <span class="md-ellipsis">
       
         output_serializer
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#rest_framework_mcp.registry.types.chain_tool_binding.ChainToolBinding.rendered_affordances" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        rendered_affordances
       
     </span>
   </a>
@@ -5228,6 +5294,36 @@ agent transport served it.</p>
 
 
 
+<h3 id="rest_framework_mcp.registry.types.tool_binding.ToolBinding.rendered_affordances" class="doc doc-heading">
+            <span class="doc doc-object-name doc-attribute-name">rendered_affordances</span>
+
+
+  <span class="doc doc-labels">
+      <small class="doc doc-label doc-label-property"><code>property</code></small>
+  </span>
+
+<a href="#rest_framework_mcp.registry.types.tool_binding.ToolBinding.rendered_affordances" class="headerlink" title="Permanent link">&para;</a></h3>
+<div class="language-python doc-signature highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="n">rendered_affordances</span><span class="p">:</span> <span class="n">Mapping</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">ServiceSpec</span><span class="p">[</span><span class="n">Any</span><span class="p">,</span> <span class="n">Any</span><span class="p">,</span> <span class="n">Any</span><span class="p">]]</span> <span class="o">|</span> <span class="kc">None</span>
+</span></code></pre></div>
+
+    <div class="doc doc-contents ">
+
+        <p>The <code>affordances</code> answered on every rendered item, if any are declared.</p>
+<p>Read off <code>output_selector_spec</code>, the selector spec the result renders
+through, exactly where drf-services' renderer reads it. The service's
+<em>own</em> <code>spec.affordances</code> are a different declaration -- the conditions
+a call is refused against -- and are never rendered, so they are not
+this. Feeds the advertised <code>outputSchema</code>, so the schema names the key
+the payload carries.</p>
+
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-attribute">
+
+
+
 <h3 id="rest_framework_mcp.registry.types.tool_binding.ToolBinding.audience_projection" class="doc doc-heading">
             <span class="doc doc-object-name doc-attribute-name">audience_projection</span>
 
@@ -5877,6 +5973,34 @@ agent transport served it.</p>
     <div class="doc doc-contents ">
 
         <p>The serializer whose rendered output reaches the caller, if any.</p>
+
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-attribute">
+
+
+
+<h3 id="rest_framework_mcp.registry.types.selector_tool_binding.SelectorToolBinding.rendered_affordances" class="doc doc-heading">
+            <span class="doc doc-object-name doc-attribute-name">rendered_affordances</span>
+
+
+  <span class="doc doc-labels">
+      <small class="doc doc-label doc-label-property"><code>property</code></small>
+  </span>
+
+<a href="#rest_framework_mcp.registry.types.selector_tool_binding.SelectorToolBinding.rendered_affordances" class="headerlink" title="Permanent link">&para;</a></h3>
+<div class="language-python doc-signature highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="n">rendered_affordances</span><span class="p">:</span> <span class="n">Mapping</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">ServiceSpec</span><span class="p">[</span><span class="n">Any</span><span class="p">,</span> <span class="n">Any</span><span class="p">,</span> <span class="n">Any</span><span class="p">]]</span> <span class="o">|</span> <span class="kc">None</span>
+</span></code></pre></div>
+
+    <div class="doc doc-contents ">
+
+        <p>The <code>affordances</code> answered on every rendered item, if any are declared.</p>
+<p>The spec's own mapping, which drf-services' renderer adds to each item
+wherever the item sits: the retrieved object, each array element, or
+each entry in the pagination envelope's <code>items</code>. Feeds the advertised
+<code>outputSchema</code>, so the schema names the key the payload carries.</p>
 
     </div>
 
@@ -9397,6 +9521,36 @@ cannot drift.</p>
 output_serializer</code> or <code>SelectorSpec.output_serializer</code>). <code>None</code>
 under <code>output_all</code>, where the response is a multi-key object with no
 single schema, or when the output step declares no serializer.</p>
+
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-attribute">
+
+
+
+<h3 id="rest_framework_mcp.registry.types.chain_tool_binding.ChainToolBinding.rendered_affordances" class="doc doc-heading">
+            <span class="doc doc-object-name doc-attribute-name">rendered_affordances</span>
+
+
+  <span class="doc doc-labels">
+      <small class="doc doc-label doc-label-property"><code>property</code></small>
+  </span>
+
+<a href="#rest_framework_mcp.registry.types.chain_tool_binding.ChainToolBinding.rendered_affordances" class="headerlink" title="Permanent link">&para;</a></h3>
+<div class="language-python doc-signature highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="n">rendered_affordances</span><span class="p">:</span> <span class="n">Mapping</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">ServiceSpec</span><span class="p">[</span><span class="n">Any</span><span class="p">,</span> <span class="n">Any</span><span class="p">,</span> <span class="n">Any</span><span class="p">]]</span> <span class="o">|</span> <span class="kc">None</span>
+</span></code></pre></div>
+
+    <div class="doc doc-contents ">
+
+        <p>The <code>affordances</code> answered on the rendered output, for <code>outputSchema</code>.</p>
+<p>Read from the output step's spec the way drf-services' renderer reads
+it, which dispatches on the class: a <code>SelectorSpec</code>'s own mapping, a
+<code>ServiceSpec</code>'s <code>output_selector_spec</code> mapping -- never the
+service's own <code>affordances</code>, which are the conditions a call is
+refused against and are not rendered. <code>None</code> under <code>output_all</code>, for
+the reason <code>output_serializer</code> is: that response has no single schema.</p>
 
     </div>
 
