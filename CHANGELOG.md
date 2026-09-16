@@ -31,6 +31,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **A tool whose result is an unpaginated list now advertises an array in
+  `outputSchema`, and a chain renders a service step's list as one.**
+  `build_output_schema` has always described a `LIST` as `{type: array, items}`,
+  but `tools/list` passed the kind only for selector tools. A service tool whose
+  `output_selector_spec` re-fetches a `LIST`, and a chain whose output step is a
+  `LIST` selector, advertised the bare item object while `structuredContent`
+  carried an array, which `assert_tool_result_conforms` and every strict client
+  reject. A chain whose output step is a service re-fetching a `LIST` did not get
+  that far: the chain rendered every service step as a single object, so the
+  serializer was handed the whole set as one row and each call raised
+  `AttributeError`, under `output_all` as well. Every binding now exposes
+  `rendered_kind`, read from the same answer the chain renderer picks `many` by,
+  and the schema is built from it: a bare array wherever the payload is an
+  unpaginated list, since neither service tools nor chains paginate. A
+  `LIST` output spec with no `selector` performs no re-fetch, renders the
+  service's own value as one object, and is advertised as one. Selector tools,
+  and every retrieve-shaped result, advertise exactly what they did before.
+
 - **A refused call's error result now carries the refusal's `code`.** When one of
   a spec's `affordances` refuses a call, drf-services raises `ActionUnavailable`
   carrying the affordance's `code` and its `reason`, and asks a transport serving

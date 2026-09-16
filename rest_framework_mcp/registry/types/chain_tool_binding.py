@@ -13,6 +13,7 @@ from rest_framework_services import (
     UnsetType,
     build_audience_projection,
 )
+from rest_framework_services.types.selector_kind import SelectorKind
 from rest_framework_services.types.selector_spec import SelectorSpec
 from rest_framework_services.types.service_spec import ServiceSpec
 
@@ -24,7 +25,7 @@ from rest_framework_mcp.constants import (
 )
 from rest_framework_mcp.protocol.types.icon import Icon
 from rest_framework_mcp.registry.types.chain_step import ChainStep
-from rest_framework_mcp.registry.types.utils import validate_content_kind
+from rest_framework_mcp.registry.types.utils import rendered_kind, validate_content_kind
 
 
 @dataclass(frozen=True)
@@ -258,6 +259,19 @@ class ChainToolBinding:
         if isinstance(spec, ServiceSpec):
             return spec.output_selector_spec.affordances if spec.output_selector_spec else None
         return spec.affordances
+
+    @property
+    def rendered_kind(self) -> SelectorKind | None:
+        """Whether the output step renders as one object or a list, for ``outputSchema``.
+
+        The output step's answer from ``registry.types.utils.rendered_kind``,
+        the same one the chain renderer picks ``many`` by. A chain never
+        paginates, so a ``LIST`` is served as a bare array. ``None`` under
+        ``output_all``, whose ``{alias: rendered}`` object has no single kind.
+        """
+        if self.output_all:
+            return None
+        return rendered_kind(self.output_step.spec)
 
 
 def _refuse_unanswered_affordances(chain_name: str, step: ChainStep) -> None:

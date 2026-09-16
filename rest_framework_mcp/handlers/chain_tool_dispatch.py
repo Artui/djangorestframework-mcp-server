@@ -27,7 +27,8 @@ unwinds, then returned.
 
 Chains deliberately do **not** run the selector post-fetch pipeline (filter /
 order / paginate) — that is a selector-tool concern. A selector step's result is
-used as-is, rendered ``many=True`` for ``kind=LIST``.
+used as-is, rendered ``many=True`` for ``kind=LIST``, as is a service step whose
+``output_selector_spec`` re-fetches a ``LIST``.
 """
 
 from __future__ import annotations
@@ -75,6 +76,7 @@ from rest_framework_mcp.protocol.types.json_rpc_error import JsonRpcError
 from rest_framework_mcp.registry.types.chain_context import ChainContext
 from rest_framework_mcp.registry.types.chain_step import ChainStep
 from rest_framework_mcp.registry.types.chain_tool_binding import ChainToolBinding
+from rest_framework_mcp.registry.types.utils import rendered_kind
 
 
 class _ChainAbort(Exception):
@@ -378,12 +380,19 @@ def _render_step(step: ChainStep, ctx: ChainContext, drf_request: Any) -> Any:
     """
     result: Any = ctx.outputs[step.alias]
     spec = step.spec
-    if isinstance(spec, SelectorSpec):
-        many: bool = spec.kind is SelectorKind.LIST
-        extra_name: str = "page" if many else "instance"
-    else:
-        many = False
-        extra_name = "result"
+    # ``many`` from the same answer the binding advertises ``outputSchema`` by, so
+    # the payload and its schema cannot disagree about cardinality. A service step
+    # was once always rendered as one object, so a ``LIST`` output re-fetch handed
+    # its whole set to the serializer as a single row and failed on every call.
+    many: bool = rendered_kind(spec) is SelectorKind.LIST
+    # The extra's name follows ``dispatch_spec``'s: a list result is the ``page``
+    # whichever spec produced it, and a single one is the selector's ``instance``
+    # or the service's ``result``.
+    extra_name: str = "result"
+    if many:
+        extra_name = "page"
+    elif isinstance(spec, SelectorSpec):
+        extra_name = "instance"
     if _step_output_serializer(step) is None:
         return {} if result is None else result
     # Derived per step rather than taken from the binding: a chain renders

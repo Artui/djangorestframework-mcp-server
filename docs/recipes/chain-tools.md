@@ -96,7 +96,10 @@ A step is rendered through its serializer — `ServiceSpec.
 output_selector_spec.output_serializer` or
 `SelectorSpec.output_serializer` — and its output-context provider sees
 the resolved data (`result` / `instance` / `page`), exactly as a
-single-spec tool does.
+single-spec tool does. A `LIST` renders as a list, whether the step is a
+`LIST` selector or a service whose `output_selector_spec` re-fetches a
+`LIST`, and a chain never paginates, so the tool's `outputSchema` advertises
+a bare array for such an output step.
 
 ### Affordances on a rendered step
 

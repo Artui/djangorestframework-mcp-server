@@ -1604,7 +1604,11 @@ The MCP package owns its own dispatch flow. It does **not** import
    kwarg-pool dispatch), then render through
    `output_selector_spec.output_serializer` with `many=` driven by
    `output_selector_spec.kind`. If `output_selector_spec` is `None`,
-   the service's return value is passed through unchanged.
+   the service's return value is passed through unchanged. A `LIST`
+   re-fetch serves a bare array — a service tool never paginates — and the
+   tool's `outputSchema` advertises `{type: array, items}` to match. With no
+   `selector` there is no re-fetch, so the result is one object whatever the
+   nested `kind` says.
 9. Wrap as a `ToolResult` with `OutputFormat`-driven encoding for the human-
    readable `content[0]` block. `structuredContent` is always JSON.
 
@@ -1615,7 +1619,11 @@ QuerySet return is materialized via `.first()`, and a missing row is a
 result instead. LIST tools advertise a kind-aware `outputSchema`: a bare
 array schema unpaginated, the `{items, page, totalPages, hasNext}`
 envelope with `paginate=True` (enable pagination for a fully
-spec-compliant *object*-shaped `structuredContent`).
+spec-compliant *object*-shaped `structuredContent`). The array schema is not
+special to selector tools: wherever a result renders as an unpaginated list —
+a service tool whose `output_selector_spec` re-fetches a `LIST`, or a chain
+whose output step is either kind of `LIST` — the tool advertises the same bare
+array, because that is what it serves.
 
 `resources/read`:
 

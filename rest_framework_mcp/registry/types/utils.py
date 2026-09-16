@@ -7,7 +7,12 @@ type surface.
 
 from __future__ import annotations
 
+from typing import Any
+
 from django.core.exceptions import ImproperlyConfigured
+from rest_framework_services.types.selector_kind import SelectorKind
+from rest_framework_services.types.selector_spec import SelectorSpec
+from rest_framework_services.types.service_spec import ServiceSpec
 
 from rest_framework_mcp.constants import ToolContentKind
 
@@ -52,4 +57,31 @@ def validate_content_kind(
         )
 
 
-__all__ = ["validate_content_kind"]
+def rendered_kind(spec: ServiceSpec[Any, Any, Any] | SelectorSpec[Any, Any]) -> SelectorKind:
+    """Whether ``spec``'s rendered result is one object or a list of them.
+
+    The cardinality drf-services' ``dispatch_spec`` gives the result, which is
+    what the payload is rendered ``many=`` by:
+
+    - A ``SelectorSpec`` answers its own ``kind``.
+    - A ``ServiceSpec`` answers ``LIST`` only when its ``output_selector_spec``
+      is a ``LIST`` *and has a selector*: the re-fetch is what produces the set,
+      and with no selector the service's own return value renders as one object
+      whatever the nested ``kind`` says. Anything else is a single object.
+
+    One answer read by both halves of a tool -- each binding's ``rendered_kind``,
+    which picks the advertised ``outputSchema`` shape, and the chain renderer,
+    which picks ``many`` -- because they were once answered separately. Only a
+    selector tool's schema was kind-aware, so every other ``LIST`` output
+    advertised one object while serving an array, and a chain rendered a
+    service step's ``LIST`` re-fetch as a single object and failed.
+    """
+    if isinstance(spec, SelectorSpec):
+        return spec.kind
+    nested = spec.output_selector_spec
+    if nested is not None and nested.selector is not None and nested.kind is SelectorKind.LIST:
+        return SelectorKind.LIST
+    return SelectorKind.RETRIEVE
+
+
+__all__ = ["rendered_kind", "validate_content_kind"]

@@ -224,6 +224,15 @@ class SelectorToolBinding(Generic[ResultT, ExtraT]):
         ``outputSchema``, so the schema names the key the payload carries."""
         return self.spec.affordances
 
+    @property
+    def rendered_kind(self) -> SelectorKind:
+        """The spec's ``kind``, under the name every tool binding answers it by.
+
+        Paired with ``paginate`` when the schema is built: a ``LIST`` is an array
+        unpaginated and the pagination envelope otherwise, which only a selector
+        tool can produce."""
+        return self.kind
+
     @cached_property
     def audience_projection(self) -> AudienceProjection:
         """This tool's resolved audience markings, derived once per binding.
