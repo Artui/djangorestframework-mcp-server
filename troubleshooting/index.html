@@ -623,6 +623,17 @@
   
 </li>
         
+          <li class="md-nav__item">
+  <a href="#input_serializer-must-be-a-drf-serializer-subclass-or-output-serializer-must-be-a-drf-baseserializer-subclass" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        "input_serializer must be a DRF Serializer subclass" or "output serializer must be a DRF BaseSerializer subclass"
+      
+    </span>
+  </a>
+  
+</li>
+        
       </ul>
     </nav>
   
@@ -1745,6 +1756,17 @@
   
 </li>
         
+          <li class="md-nav__item">
+  <a href="#input_serializer-must-be-a-drf-serializer-subclass-or-output-serializer-must-be-a-drf-baseserializer-subclass" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        "input_serializer must be a DRF Serializer subclass" or "output serializer must be a DRF BaseSerializer subclass"
+      
+    </span>
+  </a>
+  
+</li>
+        
       </ul>
     </nav>
   
@@ -1964,6 +1986,24 @@ rather than on the first call.</p>
 <p>Note that server-wide <code>INCLUDE_OUTPUT_SCHEMA=True</code> with
 <code>INCLUDE_STRUCTURED_CONTENT=False</code> is <strong>legal</strong> — it just requires every binding
 to override the content back on. The error names the binding that did not.</p>
+<h3 id="input_serializer-must-be-a-drf-serializer-subclass-or-output-serializer-must-be-a-drf-baseserializer-subclass">"input_serializer must be a DRF Serializer subclass" or "output serializer must be a DRF BaseSerializer subclass"<a class="headerlink" href="#input_serializer-must-be-a-drf-serializer-subclass-or-output-serializer-must-be-a-drf-baseserializer-subclass" title="Permanent link">&para;</a></h3>
+<p>The serializer declared for a tool or resource is a shape no MCP path can use.
+The usual cause is an instance where the class belongs:</p>
+<div class="language-python highlight"><pre><span></span><code><span id="__span-4-1"><a id="__codelineno-4-1" name="__codelineno-4-1" href="#__codelineno-4-1"></a><span class="n">ServiceSpec</span><span class="p">(</span><span class="n">service</span><span class="o">=</span><span class="n">create_invoice</span><span class="p">,</span> <span class="n">input_serializer</span><span class="o">=</span><span class="n">InvoiceSerializer</span><span class="p">(</span><span class="n">many</span><span class="o">=</span><span class="kc">True</span><span class="p">))</span>  <span class="c1"># refused</span>
+</span><span id="__span-4-2"><a id="__codelineno-4-2" name="__codelineno-4-2" href="#__codelineno-4-2"></a><span class="n">ServiceSpec</span><span class="p">(</span><span class="n">service</span><span class="o">=</span><span class="n">create_invoice</span><span class="p">,</span> <span class="n">input_serializer</span><span class="o">=</span><span class="n">InvoiceSerializer</span><span class="p">)</span>  <span class="c1"># accepted</span>
+</span></code></pre></div>
+<p>The two sides accept different shapes. An <strong>input</strong> serializer is validated, so
+it must be a <code>Serializer</code> subclass or a dataclass type. An <strong>output</strong> serializer
+is only rendered, so any <code>BaseSerializer</code> subclass is accepted there, including
+DRF's read-only pattern that implements just <code>to_representation</code>. A dataclass
+is accepted on both sides: as output it renders through a <code>DataclassSerializer</code>
+built for it. For a chain tool the message names the step whose serializer was
+refused. A resource has only an output serializer, and it is held to the same
+rule.</p>
+<p>Such a tool used to register cleanly. Every call to it then failed, and <code>tools/list</code>
+failed too, for every tool on the server, because this transport derives each
+tool's schema on each listing. A resource never had a schema to derive, so it
+failed on every read instead.</p>
 <h2 id="valueerror-when-registering-a-resource"><code>ValueError</code> when registering a resource<a class="headerlink" href="#valueerror-when-registering-a-resource" title="Permanent link">&para;</a></h2>
 <h3 id="sets-which-the-resource-read-path-does-not-apply">"sets ..., which the resource read path does not apply"<a class="headerlink" href="#sets-which-the-resource-read-path-does-not-apply" title="Permanent link">&para;</a></h3>
 <p><code>register_resource</code> refuses a <code>SelectorSpec</code> carrying any of ten behavioural
@@ -1984,20 +2024,20 @@ advertises as <em>its</em> issuer (<code>https://host/oauth</code>) publishes
 <code>https://host/oauth/oauth/authorize/</code> and two siblings like it. Pass the site
 root. Since 0.25.0 this warns at construction; if you genuinely mount elsewhere,
 set the paths instead:</p>
-<div class="language-python highlight"><pre><span></span><code><span id="__span-4-1"><a id="__codelineno-4-1" name="__codelineno-4-1" href="#__codelineno-4-1"></a><span class="n">DjangoOAuthToolkitBackend</span><span class="p">(</span>
-</span><span id="__span-4-2"><a id="__codelineno-4-2" name="__codelineno-4-2" href="#__codelineno-4-2"></a>    <span class="n">authorization_servers</span><span class="o">=</span><span class="p">[</span><span class="s2">&quot;https://host&quot;</span><span class="p">],</span>
-</span><span id="__span-4-3"><a id="__codelineno-4-3" name="__codelineno-4-3" href="#__codelineno-4-3"></a>    <span class="n">authorize_path</span><span class="o">=</span><span class="s2">&quot;/custom/authorize/&quot;</span><span class="p">,</span>
-</span><span id="__span-4-4"><a id="__codelineno-4-4" name="__codelineno-4-4" href="#__codelineno-4-4"></a><span class="p">)</span>
+<div class="language-python highlight"><pre><span></span><code><span id="__span-5-1"><a id="__codelineno-5-1" name="__codelineno-5-1" href="#__codelineno-5-1"></a><span class="n">DjangoOAuthToolkitBackend</span><span class="p">(</span>
+</span><span id="__span-5-2"><a id="__codelineno-5-2" name="__codelineno-5-2" href="#__codelineno-5-2"></a>    <span class="n">authorization_servers</span><span class="o">=</span><span class="p">[</span><span class="s2">&quot;https://host&quot;</span><span class="p">],</span>
+</span><span id="__span-5-3"><a id="__codelineno-5-3" name="__codelineno-5-3" href="#__codelineno-5-3"></a>    <span class="n">authorize_path</span><span class="o">=</span><span class="s2">&quot;/custom/authorize/&quot;</span><span class="p">,</span>
+</span><span id="__span-5-4"><a id="__codelineno-5-4" name="__codelineno-5-4" href="#__codelineno-5-4"></a><span class="p">)</span>
 </span></code></pre></div>
 <h3 id="mount-order-against-oauth2_provider">Mount order against <code>oauth2_provider</code><a class="headerlink" href="#mount-order-against-oauth2_provider" title="Permanent link">&para;</a></h3>
 <p>django-oauth-toolkit 3.4.0 serves its own <code>register/</code> and
 <code>.well-known/oauth-authorization-server</code>. Django resolves first-match, so
 mounting DOT's urls <strong>before</strong> <code>build_oauth_urlpatterns(...)</code> means DOT answers
 those paths — silently, with different content.</p>
-<div class="language-python highlight"><pre><span></span><code><span id="__span-5-1"><a id="__codelineno-5-1" name="__codelineno-5-1" href="#__codelineno-5-1"></a><span class="k">def</span><span class="w"> </span><span class="nf">test_our_oauth_routes_are_not_shadowed</span><span class="p">():</span>
-</span><span id="__span-5-2"><a id="__codelineno-5-2" name="__codelineno-5-2" href="#__codelineno-5-2"></a>    <span class="kn">from</span><span class="w"> </span><span class="nn">rest_framework_mcp.contrib.oauth</span><span class="w"> </span><span class="kn">import</span> <span class="n">check_oauth_url_shadowing</span>
-</span><span id="__span-5-3"><a id="__codelineno-5-3" name="__codelineno-5-3" href="#__codelineno-5-3"></a>
-</span><span id="__span-5-4"><a id="__codelineno-5-4" name="__codelineno-5-4" href="#__codelineno-5-4"></a>    <span class="k">assert</span> <span class="n">check_oauth_url_shadowing</span><span class="p">()</span> <span class="o">==</span> <span class="p">[]</span>
+<div class="language-python highlight"><pre><span></span><code><span id="__span-6-1"><a id="__codelineno-6-1" name="__codelineno-6-1" href="#__codelineno-6-1"></a><span class="k">def</span><span class="w"> </span><span class="nf">test_our_oauth_routes_are_not_shadowed</span><span class="p">():</span>
+</span><span id="__span-6-2"><a id="__codelineno-6-2" name="__codelineno-6-2" href="#__codelineno-6-2"></a>    <span class="kn">from</span><span class="w"> </span><span class="nn">rest_framework_mcp.contrib.oauth</span><span class="w"> </span><span class="kn">import</span> <span class="n">check_oauth_url_shadowing</span>
+</span><span id="__span-6-3"><a id="__codelineno-6-3" name="__codelineno-6-3" href="#__codelineno-6-3"></a>
+</span><span id="__span-6-4"><a id="__codelineno-6-4" name="__codelineno-6-4" href="#__codelineno-6-4"></a>    <span class="k">assert</span> <span class="n">check_oauth_url_shadowing</span><span class="p">()</span> <span class="o">==</span> <span class="p">[]</span>
 </span></code></pre></div>
 <p>It is a function you call rather than a Django system check because this package
 is a library with no <code>AppConfig</code> — there is nowhere to register one.</p>
