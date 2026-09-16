@@ -11,6 +11,7 @@ from rest_framework_mcp.adapters.utils import (
     merge_tool_annotations,
     validate_input_serializer_against_callable,
     validate_query_params,
+    validate_serializer_shapes,
     validate_url_kwargs,
 )
 from rest_framework_mcp.auth.permissions.wrap_spec_permissions import wrap_spec_permissions
@@ -73,6 +74,13 @@ def service_spec_to_tool(
     entry carries. It goes through ``merge_meta`` so a later
     framework-derived contribution slots in at this one call site.
     """
+    validate_serializer_shapes(
+        label=f"service tool {name!r}",
+        input_serializer=spec.input_serializer,
+        output_serializer=(
+            spec.output_selector_spec.output_serializer if spec.output_selector_spec else None
+        ),
+    )
     validate_input_serializer_against_callable(
         label=f"service tool {name!r}",
         input_serializer=spec.input_serializer,

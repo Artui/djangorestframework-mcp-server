@@ -72,10 +72,11 @@ def test_build_output_schema_dataclass() -> None:
 
 def test_build_output_schema_unknown_type() -> None:
     # Not refused, unlike the input side. drf-services 0.50 refuses an unwalkable
-    # *input* serializer, while its output walk still answers ``None`` -- the
-    # answer for "no output declared". Its changelog and the refusal's own wording
-    # both name output serializers too, so this is the half that disagrees with
-    # upstream's stated intent rather than a guarantee to rely on.
+    # *input* serializer, while its output walk answers ``None``, which is also
+    # the right answer for a renderable ``BaseSerializer`` subclass that simply
+    # has no schema to derive. So a blanket output refusal upstream would be
+    # wrong, whatever its changelog says. A class that cannot render at all is
+    # refused at registration here and never reaches this builder.
     class NotASerializer:
         pass
 

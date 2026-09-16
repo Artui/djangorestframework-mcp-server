@@ -51,12 +51,11 @@ dependencies = [
     # nests itself takes the server down at discovery rather than at the one call
     # that used it. The floor is here to keep that crash out of reach, not because
     # anything below imports a 0.49 symbol.
-    # 0.50 is deliberately not the floor. It refuses an input serializer that is
-    # neither a ``Serializer`` subclass nor a dataclass, where 0.49 advertised the
-    # tool as taking no arguments, and nothing here depends on either answer: the
-    # package runs unchanged against both. The refusal also surfaces at the same
-    # place as the crash above -- ``tools/list``, for every tool at once -- so
-    # flooring on it would force that failure on anyone still holding 0.49.
+    # 0.50 is deliberately not the floor. It refuses to derive a schema for an
+    # input serializer that is neither a ``Serializer`` subclass nor a dataclass,
+    # where 0.49 advertised the tool as taking no arguments. Nothing here depends
+    # on either answer: registration refuses that shape itself, on every release
+    # in the window, before a schema is ever derived for it.
     "djangorestframework-services>=0.49",
     "djangorestframework-dataclasses>=1.3.1",
     # ``typing_extensions.Unpack`` is used at runtime by the strict service /

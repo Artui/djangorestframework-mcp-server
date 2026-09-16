@@ -9,26 +9,34 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
-- **With `djangorestframework-services` 0.50 or later, a tool whose input
-  serializer is neither a DRF `Serializer` subclass nor a dataclass fails
-  `tools/list` instead of advertising no arguments.** drf-services now raises
-  `TypeError` when deriving that schema, where it used to return
-  `{"type": "object"}`: byte-identical to a tool that takes no input, while
-  every call to it raised the same `TypeError` at dispatch and failed with an
-  HTTP 500. A serializer *instance* such as `InvoiceSerializer(many=True)`,
-  passed where the class belongs, gets there as readily as an unrelated class.
+- **Registration refuses a tool whose serializer no MCP path can use**, with
+  `ImproperlyConfigured` naming the tool, and the step for a chain. An input
+  serializer must be a DRF `Serializer` subclass or a dataclass type. An output
+  serializer must be a `BaseSerializer` subclass or a dataclass type. The
+  likeliest mistake is an instance where the class belongs, such as
+  `InvoiceSerializer(many=True)`, and the message says so when that is the case.
 
-  **The failure is wider than the one tool.** This transport builds every
-  advertised schema on each `tools/list` request, and the refusal is not caught,
-  so the whole listing fails with an HTTP 500, on both the WSGI and ASGI
-  transports. Every other tool on the server drops out of discovery with it.
-  Registration still accepts such a tool, so nothing reports the problem until
-  a client lists tools.
+  **This can stop a server that used to start.** Such a tool registered cleanly
+  before, but it never worked. Every call to it raised `TypeError` at dispatch,
+  an HTTP 500 on both transports. With `djangorestframework-services` 0.50 it
+  also broke discovery: that release refuses to derive a schema for such an input
+  where it used to return `{"type": "object"}`, and this transport derives every
+  tool's schema on each `tools/list` request. So the whole listing failed with an
+  HTTP 500, and every other tool on the server dropped out of discovery with it.
+  The dependency has no upper bound, so any environment resolving 0.50 was
+  already there. Refusing at registration reports the mistake once, against the
+  tool that made it.
 
-  No change in this package produces this, and the floor stays at `>=0.49`: the
-  dependency is unbounded, so any environment resolving drf-services 0.50 already
-  behaves this way. The entry is here because this is where the effect shows.
-  The fix is to pass the serializer class, or a dataclass, as `input_serializer`.
+  **The two sides accept different shapes on purpose.** Output is only
+  rendered, as `serializer(value, many=..., context=...).data`. A read-only
+  `BaseSerializer` subclass, which DRF documents for exactly that, therefore
+  stays accepted: it renders and advertises no `outputSchema`. A dataclass output
+  is accepted too, because upstream's schema derivation accepts one, although
+  `djangorestframework-services` does not render one yet. Every call to such a
+  tool still fails with a `TypeError` about `many`, and that fix belongs upstream.
+
+  The dependency floor stays at `>=0.49`, because the check holds on every
+  release in that window.
 
 ### Documentation
 

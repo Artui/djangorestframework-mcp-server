@@ -6,7 +6,11 @@ from typing import Any
 from rest_framework_services import UNSET, FieldMarking, UnsetType
 from rest_framework_services.types.selector_spec import SelectorSpec
 
-from rest_framework_mcp.adapters.utils import merge_meta, merge_tool_annotations
+from rest_framework_mcp.adapters.utils import (
+    merge_meta,
+    merge_tool_annotations,
+    validate_serializer_shapes,
+)
 from rest_framework_mcp.auth.permissions.wrap_spec_permissions import wrap_spec_permissions
 from rest_framework_mcp.constants import (
     OutputFormat,
@@ -75,7 +79,7 @@ def chain_steps_to_tool(
     # A chain is read-only only when every step is a selector; any service
     # step makes the whole chain a mutation (it may write).
     read_only: bool = all(isinstance(step.spec, SelectorSpec) for step in steps)
-    return ChainToolBinding(
+    binding = ChainToolBinding(
         name=name,
         field_audiences=field_audiences,
         description=description,
@@ -104,6 +108,28 @@ def chain_steps_to_tool(
         max_result_bytes=max_result_bytes,
         dispatch_timeout=dispatch_timeout,
     )
+    # After construction rather than before, unlike the two spec adapters: the
+    # serializers a chain actually uses are read off the binding, which is where
+    # "explicit input, else the first step's" and "the output step, or every step
+    # under output_all" are decided, and where ``__post_init__`` has already
+    # refused an empty or ill-aliased chain those rules would otherwise index into.
+    validate_serializer_shapes(
+        label=f"chain tool {name!r}", input_serializer=binding.resolved_input_serializer
+    )
+    for step in binding.steps if binding.output_all else (binding.output_step,):
+        validate_serializer_shapes(
+            label=f"chain tool {name!r}, step {step.alias!r}",
+            output_serializer=_step_output_serializer(step),
+        )
+    return binding
+
+
+def _step_output_serializer(step: ChainStep) -> type | None:
+    """The serializer a step renders through -- the same lookup the dispatcher makes."""
+    spec = step.spec
+    if isinstance(spec, SelectorSpec):
+        return spec.output_serializer
+    return spec.output_selector_spec.output_serializer if spec.output_selector_spec else None
 
 
 __all__ = ["chain_steps_to_tool"]

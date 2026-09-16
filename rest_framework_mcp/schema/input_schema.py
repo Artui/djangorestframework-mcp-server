@@ -16,9 +16,11 @@ def build_input_schema(input_serializer: type | None, *, partial: bool = False) 
     Anything else raises ``TypeError`` from drf-services 0.50 — the error its
     dispatch path already raised for such a tool at call time. Earlier releases
     answered ``{"type": "object"}`` instead, so the tool advertised no arguments
-    and no call to it could succeed. Nothing here catches the error: ``tools/list``
-    builds every schema on each request, so one such tool fails the whole listing
-    rather than dropping out of it.
+    and no call to it could succeed. Nothing here catches the error, and nothing
+    needs to: registration refuses those shapes first
+    (``adapters.utils.validate_serializer_shapes``). Left to this function, one
+    such tool would fail the whole ``tools/list`` rather than drop out of it,
+    because every schema is rebuilt on each request.
     """
     return serializer_to_json_schema(input_serializer, partial=partial)
 
