@@ -70,17 +70,20 @@ def test_build_output_schema_dataclass() -> None:
     assert "name" in out["properties"]
 
 
-def test_build_output_schema_unknown_type() -> None:
-    # Not refused, unlike the input side. drf-services 0.50 refuses an unwalkable
-    # *input* serializer, while its output walk answers ``None``, which is also
-    # the right answer for a renderable ``BaseSerializer`` subclass that simply
-    # has no schema to derive. So a blanket output refusal upstream would be
-    # wrong, whatever its changelog says. A class that cannot render at all is
-    # refused at registration here and never reaches this builder.
-    class NotASerializer:
-        pass
+def test_build_output_schema_read_only_serializer_is_none() -> None:
+    # DRF's read-only pattern renders and declares no fields, so ``None`` -- no
+    # schema to advertise -- is the honest answer, and registration admits it.
+    #
+    # This replaces a test asserting ``None`` for an unrelated class. That answer
+    # is upstream's to change, and it has: drf-services refuses such a class on
+    # its main branch while still reporting 0.50.0, so no version gate could tell
+    # the two apart. Registration here refuses that shape before this builder is
+    # reached, so what the builder does with it is not this package's contract.
+    class ReadOnly(serializers.BaseSerializer):
+        def to_representation(self, instance: object) -> dict[str, object]:
+            return {}
 
-    assert build_output_schema(NotASerializer) is None
+    assert build_output_schema(ReadOnly) is None
 
 
 def test_build_input_schema_partial_drops_required() -> None:

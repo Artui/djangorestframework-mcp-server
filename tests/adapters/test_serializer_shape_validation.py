@@ -31,6 +31,8 @@ from rest_framework_mcp.adapters.service_to_tool import service_spec_to_tool
 from rest_framework_mcp.adapters.utils import validate_serializer_shapes
 from rest_framework_mcp.auth.backends.allow_any_backend import AllowAnyBackend
 from rest_framework_mcp.constants import ArgumentBinding
+from rest_framework_mcp.schema.input_schema import build_input_schema
+from rest_framework_mcp.schema.output_schema import build_output_schema
 
 
 class _Input(drf_serializers.Serializer):
@@ -64,6 +66,23 @@ def test_input_accepts_what_validation_can_run(value: object) -> None:
 @pytest.mark.parametrize("value", [None, _Input, _ReadOnly, _DC])
 def test_output_accepts_what_rendering_can_call(value: object) -> None:
     validate_serializer_shapes(label="x", output_serializer=value)
+
+
+@pytest.mark.parametrize("value", [None, _Input, _DC])
+def test_every_admitted_input_derives_a_schema(value: object) -> None:
+    """The guard is only worth having if what it admits cannot fail discovery.
+
+    ``tools/list`` derives each schema per request, so an admitted shape whose
+    derivation raised would take the whole listing down. That is decided
+    upstream, which is why it is pinned here: a drf-services release narrowing
+    either rule fails this before it fails a server.
+    """
+    build_input_schema(value)
+
+
+@pytest.mark.parametrize("value", [None, _Input, _ReadOnly, _DC])
+def test_every_admitted_output_derives_a_schema(value: object) -> None:
+    build_output_schema(value)
 
 
 def test_input_refuses_an_unrelated_class() -> None:
