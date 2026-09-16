@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.45.0] — 2026-09-16
+
 ### Changed
 
 - **Chain registration refuses a rendered step whose `affordances` a chain cannot
@@ -4877,7 +4879,8 @@ Pinned to `djangorestframework-services==0.6.0`.
 - 100% line + branch coverage enforced by pytest (**451 tests** at
   release).
 
-[Unreleased]: https://github.com/Artui/djangorestframework-mcp-server/compare/v0.44.0...HEAD
+[Unreleased]: https://github.com/Artui/djangorestframework-mcp-server/compare/v0.45.0...HEAD
+[0.45.0]: https://github.com/Artui/djangorestframework-mcp-server/compare/v0.44.0...v0.45.0
 [0.44.0]: https://github.com/Artui/djangorestframework-mcp-server/compare/v0.43.0...v0.44.0
 [0.43.0]: https://github.com/Artui/djangorestframework-mcp-server/compare/v0.42.0...v0.43.0
 [0.42.0]: https://github.com/Artui/djangorestframework-mcp-server/compare/v0.41.0...v0.42.0
