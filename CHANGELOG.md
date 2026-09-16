@@ -7,6 +7,29 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- **A tool's `outputSchema` now declares the `affordances` object its results
+  carry.** From `djangorestframework-services` 0.51, a selector spec declaring
+  `affordances` renders an `affordances` key into every item, and tools render
+  through it, so `structuredContent` carried the key. The advertised schema was
+  derived from the output serializer alone, which declares no such key, so a
+  client or a model reading the schema could not learn it existed or which
+  refusal `code` values to expect. Nothing failed: the schema does not forbid
+  extra keys, so every result still conformed, `assert_tool_result_conforms`
+  included. The schema now declares the object wherever the item sits, on a
+  retrieved object, on each array element, or on each item in the pagination
+  envelope, with each name's declared codes enumerated.
+
+  It is read from the declaration the renderer reads, now exposed on every
+  binding as `rendered_affordances`: a selector tool's own spec, a service
+  tool's `output_selector_spec`, and a chain's output step by the same rule. A
+  service's own `affordances` are the conditions a call is refused against and
+  are never rendered, so they stay out of the schema. A chain under
+  `output_all` still advertises no schema. `build_output_schema` takes the
+  mapping as `affordances=`. A tool whose spec declares none advertises exactly
+  what it did before.
+
 ## [0.43.0] — 2026-09-16
 
 ### Changed

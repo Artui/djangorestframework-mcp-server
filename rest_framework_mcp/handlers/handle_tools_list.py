@@ -87,6 +87,8 @@ def handle_tools_list(
         # its response serializer, and carries the same agent markings the
         # dispatch path projects the payload through -- one declaration, so a
         # schema cannot advertise a field the payload no longer carries.
+        # ``rendered_affordances`` is reconciled the same way, because the
+        # renderer adds an ``affordances`` key no serializer declares.
         # ``outputSchema`` must match the payload shape the dispatch pipeline
         # actually emits — a LIST tool returns a bare array or the pagination
         # envelope — so the selector schema is kind-aware.
@@ -96,10 +98,13 @@ def handle_tools_list(
                 kind=binding.kind,
                 paginate=binding.paginate,
                 projection=binding.audience_projection,
+                affordances=binding.rendered_affordances,
             )
         else:
             output_schema = build_output_schema(
-                binding.output_serializer, projection=binding.audience_projection
+                binding.output_serializer,
+                projection=binding.audience_projection,
+                affordances=binding.rendered_affordances,
             )
         # A media tool has no JSON result to describe, so the schema is dropped
         # rather than advertised over a payload arriving as an image block.

@@ -233,5 +233,23 @@ class ChainToolBinding:
             )
         return spec.output_serializer
 
+    @property
+    def rendered_affordances(self) -> Mapping[str, ServiceSpec[Any, Any, Any]] | None:
+        """The ``affordances`` answered on the rendered output, for ``outputSchema``.
+
+        Read from the output step's spec the way drf-services' renderer reads
+        it, which dispatches on the class: a ``SelectorSpec``'s own mapping, a
+        ``ServiceSpec``'s ``output_selector_spec`` mapping -- never the
+        service's own ``affordances``, which are the conditions a call is
+        refused against and are not rendered. ``None`` under ``output_all``, for
+        the reason ``output_serializer`` is: that response has no single schema.
+        """
+        if self.output_all:
+            return None
+        spec = self.output_step.spec
+        if isinstance(spec, ServiceSpec):
+            return spec.output_selector_spec.affordances if spec.output_selector_spec else None
+        return spec.affordances
+
 
 __all__ = ["ChainToolBinding"]
