@@ -7,6 +7,37 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- **Registration refuses a tool whose serializer no MCP path can use**, with
+  `ImproperlyConfigured` naming the tool, and the step for a chain. An input
+  serializer must be a DRF `Serializer` subclass or a dataclass type. An output
+  serializer must be a `BaseSerializer` subclass or a dataclass type. The
+  likeliest mistake is an instance where the class belongs, such as
+  `InvoiceSerializer(many=True)`, and the message says so when that is the case.
+
+  **This can stop a server that used to start.** Such a tool registered cleanly
+  before, but it never worked. Every call to it raised `TypeError` at dispatch,
+  an HTTP 500 on both transports. With `djangorestframework-services` 0.50 it
+  also broke discovery: that release refuses to derive a schema for such an input
+  where it used to return `{"type": "object"}`, and this transport derives every
+  tool's schema on each `tools/list` request. So the whole listing failed with an
+  HTTP 500, and every other tool on the server dropped out of discovery with it.
+  The dependency has no upper bound, so any environment resolving 0.50 was
+  already there. Refusing at registration reports the mistake once, against the
+  tool that made it.
+
+  **The two sides accept different shapes on purpose.** Output is only
+  rendered, as `serializer(value, many=..., context=...).data`. A read-only
+  `BaseSerializer` subclass, which DRF documents for exactly that, therefore
+  stays accepted: it renders and advertises no `outputSchema`. A dataclass output
+  is accepted too, because upstream's schema derivation accepts one, although
+  `djangorestframework-services` does not render one yet. Every call to such a
+  tool still fails with a `TypeError` about `many`, and that fix belongs upstream.
+
+  The dependency floor stays at `>=0.49`, because the check holds on every
+  release in that window.
+
 ### Documentation
 
 - **The Pydantic-AI client recipe had the two protocol eras the wrong way

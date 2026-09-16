@@ -27,6 +27,79 @@ from rest_framework_mcp.registry.types.query_param import QueryParam
 from rest_framework_mcp.registry.types.url_kwarg import UrlKwarg
 
 
+def validate_serializer_shapes(
+    *, label: str, input_serializer: object = None, output_serializer: object = None
+) -> None:
+    """Fail-fast at registration time on a serializer no MCP path can use.
+
+    **Input** must be ``None``, a DRF ``Serializer`` subclass or a dataclass type.
+    That is the one rule every consumer of it shares: drf-services'
+    ``build_input_serializer_from_data`` refuses anything else at dispatch, its
+    ``serializer_to_json_schema`` refuses it at schema derivation from 0.50, and
+    this package's own ``build_validated_input_serializer`` (the chain path)
+    reads ``.fields`` off whatever it builds.
+
+    **Output** must be ``None``, a DRF ``BaseSerializer`` subclass or a dataclass
+    type. It is deliberately wider than input, because output is only rendered —
+    ``render_spec_output`` calls ``serializer(value, many=..., context=...).data``
+    — and a read-only ``BaseSerializer`` subclass, which DRF documents for exactly
+    that job, answers it. ``output_to_json_schema`` derives no schema for one,
+    which is honest rather than a failure. A dataclass is admitted because that
+    same schema derivation accepts it, even though drf-services' renderer does
+    not wrap one yet: refusing it here would outlive the upstream fix.
+
+    **Why at registration.** ``tools/list`` derives every tool's schema on each
+    request, so a shape upstream refuses fails discovery for the whole server,
+    not for the one tool; and a shape dispatch refuses fails every call to the
+    tool whether or not its schema derived. Registration is the only place the
+    mistake is reported once, against the tool that made it. It runs first in
+    each adapter, ahead of the callable-parameter checks, which would otherwise
+    read an unusable serializer as one with no fields and blame the callable.
+    """
+    if input_serializer is not None and not (
+        _is_class_of(input_serializer, drf_serializers.Serializer)
+        or _is_dataclass_type(input_serializer)
+    ):
+        raise ImproperlyConfigured(
+            f"{label}: input_serializer must be a DRF Serializer subclass or a dataclass "
+            f"type, got {input_serializer!r}. Anything else is refused when the tool is "
+            "called, and from djangorestframework-services 0.50 also when its schema is "
+            "derived, which fails tools/list for every tool on the server."
+            f"{_instance_hint(input_serializer)}"
+        )
+    if output_serializer is not None and not (
+        _is_class_of(output_serializer, drf_serializers.BaseSerializer)
+        or _is_dataclass_type(output_serializer)
+    ):
+        raise ImproperlyConfigured(
+            f"{label}: output serializer must be a DRF BaseSerializer subclass or a "
+            f"dataclass type, got {output_serializer!r}. Rendering calls it as "
+            "serializer(value, many=..., context=...).data, so every call to the tool "
+            f"would fail.{_instance_hint(output_serializer)}"
+        )
+
+
+def _is_class_of(value: object, base: type) -> bool:
+    return isinstance(value, type) and issubclass(value, base)
+
+
+def _is_dataclass_type(value: object) -> bool:
+    return isinstance(value, type) and dataclasses.is_dataclass(value)
+
+
+def _instance_hint(value: object) -> str:
+    """Name the likeliest cause when the value is an instance of an accepted shape.
+
+    ``InvoiceSerializer(many=True)`` in place of the class is the usual form:
+    ``many`` is decided per dispatch, never at declaration.
+    """
+    if isinstance(value, drf_serializers.BaseSerializer) or (
+        dataclasses.is_dataclass(value) and not isinstance(value, type)
+    ):
+        return " Pass the class itself, not an instance of it."
+    return ""
+
+
 def validate_url_kwargs(*, label: str, url_kwargs: tuple[UrlKwarg, ...]) -> None:
     """Fail-fast at registration time on a bad ``url_kwargs`` declaration.
 
@@ -374,5 +447,6 @@ __all__ = [
     "merge_tool_annotations",
     "validate_input_serializer_against_callable",
     "validate_query_params",
+    "validate_serializer_shapes",
     "validate_url_kwargs",
 ]

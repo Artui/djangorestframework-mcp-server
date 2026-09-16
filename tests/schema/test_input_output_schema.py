@@ -1,12 +1,16 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from importlib.metadata import version
 
+import pytest
 from rest_framework import serializers
 from rest_framework_services.types.selector_kind import SelectorKind
 
 from rest_framework_mcp.schema.input_schema import build_input_schema
 from rest_framework_mcp.schema.output_schema import build_output_schema
+
+_DRFS_VERSION = tuple(int(part) for part in version("djangorestframework-services").split(".")[:2])
 
 
 class _Ser(serializers.Serializer):
@@ -33,11 +37,21 @@ def test_build_input_schema_dataclass() -> None:
     assert out["required"] == ["name"]
 
 
-def test_build_input_schema_unknown_type_falls_back() -> None:
+@pytest.mark.skipif(
+    _DRFS_VERSION < (0, 50),
+    reason="djangorestframework-services refuses an unwalkable input serializer from 0.50",
+)
+def test_build_input_schema_refuses_unknown_type() -> None:
+    # Below 0.50 this answered ``{"type": "object"}`` -- byte-identical to a tool
+    # declaring no input, so the tool advertised no arguments and dispatch then
+    # refused every call. The declared floor still admits that release, which is
+    # why this is gated rather than the floor moved: nothing in the package needs
+    # the refusal, it only passes it through.
     class NotASerializer:
         pass
 
-    assert build_input_schema(NotASerializer) == {"type": "object"}
+    with pytest.raises(TypeError, match="must be a dataclass type or a Serializer subclass"):
+        build_input_schema(NotASerializer)
 
 
 def test_build_output_schema_none() -> None:
@@ -56,11 +70,20 @@ def test_build_output_schema_dataclass() -> None:
     assert "name" in out["properties"]
 
 
-def test_build_output_schema_unknown_type() -> None:
-    class NotASerializer:
-        pass
+def test_build_output_schema_read_only_serializer_is_none() -> None:
+    # DRF's read-only pattern renders and declares no fields, so ``None`` -- no
+    # schema to advertise -- is the honest answer, and registration admits it.
+    #
+    # This replaces a test asserting ``None`` for an unrelated class. That answer
+    # is upstream's to change, and it has: drf-services refuses such a class on
+    # its main branch while still reporting 0.50.0, so no version gate could tell
+    # the two apart. Registration here refuses that shape before this builder is
+    # reached, so what the builder does with it is not this package's contract.
+    class ReadOnly(serializers.BaseSerializer):
+        def to_representation(self, instance: object) -> dict[str, object]:
+            return {}
 
-    assert build_output_schema(NotASerializer) is None
+    assert build_output_schema(ReadOnly) is None
 
 
 def test_build_input_schema_partial_drops_required() -> None:
