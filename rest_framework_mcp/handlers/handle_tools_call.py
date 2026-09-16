@@ -33,6 +33,7 @@ from rest_framework_mcp.handlers.utils import (
     effective_rate_limits,
     enforce_result_ceiling,
     resolve_bound,
+    service_error_result,
     services_dispatch_policies,
     split_query_params,
     split_url_kwargs,
@@ -239,7 +240,7 @@ def _dispatch_tool_call(
             # input-shape feedback, not a server fault.
             if context.config.record_service_exceptions:
                 otel_span.record_exception(exc)
-            return build_error_tool_result(exc.message, error_type="service_error").to_dict()
+            return service_error_result(exc).to_dict()
 
         if result.kind == "not_found":
             return build_error_tool_result(

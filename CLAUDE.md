@@ -122,7 +122,10 @@ Import these — do not parallel them:
   (`error_type="validation_error"` for `ServiceValidationError`, `"service_error"`
   for `ServiceError`), not to JSON-RPC error envelopes. A dispatch failure surfaces
   as a failed *tool result*, so the caller still gets a well-formed `tools/call`
-  response.
+  response. Every `ServiceError` arm builds its result through
+  `handlers.utils.service_error_result`, which adds the `code` an
+  `ActionUnavailable` carries and no key for any other member; a new arm calling
+  `build_error_tool_result` directly would drop the code again.
 
 The dispatch leaves are **top-level exports** of `rest_framework_services` (its
 documented "stable dispatch surface", 0.17+) — import them from the package root,

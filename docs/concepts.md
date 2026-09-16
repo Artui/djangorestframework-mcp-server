@@ -1587,7 +1587,14 @@ The MCP package owns its own dispatch flow. It does **not** import
    can read and self-correct from, with a JSON `{"error": {"type":
    "validation_error" | "service_error", "message": ..., "detail": ...}}`
    payload in `content[0]` (and no `structuredContent`, which is tied to
-   the success schema). Chain steps add `failedStep`. Setting
+   the success schema). Chain steps add `failedStep`. A call refused by one
+   of the spec's declared `affordances` raises drf-services'
+   `ActionUnavailable`, and its error object also carries that affordance's
+   `code` — `{"type": "service_error", "message": "The books are closed.",
+   "code": "books_closed"}` — so a client branches on the stable name while
+   the model reads the sentence. `type` is still `"service_error"`, and any
+   other `ServiceError` (a `ServiceConflict` raised by hand, say) carries no
+   `code` key at all. Setting
    `REST_FRAMEWORK_MCP["INCLUDE_VALIDATION_VALUE"] = True` additionally
    echoes the offending `arguments` dict back under `value` — handy for
    debugging schema mismatches against opaque client SDKs, off by default

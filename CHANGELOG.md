@@ -7,6 +7,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- **A refused call's error result now carries the refusal's `code`.** When one of
+  a spec's `affordances` refuses a call, drf-services raises `ActionUnavailable`
+  carrying the affordance's `code` and its `reason`, and asks a transport serving
+  an agent to pass on both. Every `ServiceError` arm served the reason alone, as
+  `{"error": {"type": "service_error", "message": "The books are closed."}}`, so a
+  client could only branch on a sentence that is expected to be reworded. The
+  error object now also carries `"code": "books_closed"`, on every path a refusal
+  can take: a service tool over both transports, `MCPServer.call_tool`, a selector
+  tool whose precondition raises the refusal, and a chain step, where it sits
+  beside `failedStep`. The change is additive: `type` is still `"service_error"`,
+  so a client branching on it is unaffected, and any other `ServiceError` (a
+  `ServiceConflict` raised by hand, say) carries no `code` key at all rather than
+  a `null` one.
+
 ## [0.44.0] — 2026-09-16
 
 ### Changed

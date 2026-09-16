@@ -64,12 +64,24 @@ service step whose callable takes the validated input as `data`.
 
 `atomic=True` (the default) wraps every step in a single
 `transaction.atomic()`. If any step raises `ServiceError` or
-`ServiceValidationError`, every prior write rolls back and the client
-gets a JSON-RPC error whose `data` names the failing step:
+`ServiceValidationError`, every prior write rolls back and the call
+answers with an `isError: true` tool result, as a single-spec tool does,
+whose error object names the failing step:
 
 ```json
-{"code": -32000, "message": "…", "data": {"failedStep": "sub"}}
+{"error": {"type": "service_error", "message": "…", "failedStep": "sub"}}
 ```
+
+A step refused by its service's `affordances` also carries the refusal's
+`code` beside `failedStep`, so a client can tell which rule stopped the
+chain without matching on the sentence:
+
+```json
+{"error": {"type": "service_error", "message": "The books are closed.",
+           "code": "books_closed", "failedStep": "void"}}
+```
+
+Any other `ServiceError` carries no `code` key.
 
 Set `atomic=False` to let each step commit independently (no rollback).
 

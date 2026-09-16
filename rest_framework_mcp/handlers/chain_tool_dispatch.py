@@ -20,7 +20,8 @@ against the step's resolved target, a service's ``affordances`` through
 on a spec holds on this path as well.
 
 A step raising ``ServiceValidationError`` / ``ServiceError`` is mapped to an
-error carrying ``failedStep``; under an atomic chain the mapped error is
+error carrying ``failedStep`` (and, for a refusal, the affordance's ``code``
+beside it); under an atomic chain the mapped error is
 re-raised as a private abort signal so the surrounding ``transaction.atomic()``
 unwinds, then returned.
 
@@ -63,6 +64,7 @@ from rest_framework_mcp.handlers.utils import (
     check_permissions,
     consume_rate_limits,
     effective_rate_limits,
+    service_error_result,
     validate_input_against_serializer,
     validation_error_data,
 )
@@ -285,11 +287,9 @@ def _run_step(
     except ServiceError as exc:
         if config.record_service_exceptions:
             otel_span.record_exception(exc)
-        return build_error_tool_result(
-            exc.message,
-            error_type="service_error",
-            detail={"failedStep": step.alias},
-        ).to_dict()
+        # A refusal's ``code`` rides beside ``failedStep``: the step says where
+        # the chain stopped, the code says which rule stopped it.
+        return service_error_result(exc, detail={"failedStep": step.alias}).to_dict()
     ctx.outputs[step.alias] = result
     return None
 

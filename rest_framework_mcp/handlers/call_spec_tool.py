@@ -35,6 +35,7 @@ from rest_framework_services.exceptions.service_validation_error import ServiceV
 
 from rest_framework_mcp.config.types.mcp_config import MCPConfig
 from rest_framework_mcp.handlers.utils import (
+    service_error_result,
     services_dispatch_policies,
     split_query_params,
     split_url_kwargs,
@@ -128,7 +129,7 @@ def call_spec_tool(
             ),
         )
     except ServiceError as exc:
-        return build_error_tool_result(exc.message, error_type="service_error")
+        return service_error_result(exc)
 
     if result.kind == "not_found":
         return build_error_tool_result(

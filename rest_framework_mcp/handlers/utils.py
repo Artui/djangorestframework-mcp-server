@@ -18,6 +18,8 @@ from rest_framework_services import UNSET, UnsetType
 # rename upstream breaks this import loudly at start-up rather than quietly at
 # the wire, which is the failure mode to prefer here.
 from rest_framework_services.dispatch.utils import declared_input_keys
+from rest_framework_services.exceptions.action_unavailable import ActionUnavailable
+from rest_framework_services.exceptions.service_error import ServiceError
 from rest_framework_services.exceptions.service_validation_error import (
     ServiceValidationError,
 )
@@ -40,6 +42,7 @@ from rest_framework_mcp.handlers.types.context import MCPCallContext
 from rest_framework_mcp.output.enforce_result_bytes import enforce_result_bytes
 from rest_framework_mcp.output.error_tool_result import build_error_tool_result
 from rest_framework_mcp.protocol.types.json_rpc_error import JsonRpcError
+from rest_framework_mcp.protocol.types.tool_result import ToolResult
 from rest_framework_mcp.registry.types.chain_tool_binding import ChainToolBinding
 from rest_framework_mcp.registry.types.query_param import QueryParam
 from rest_framework_mcp.registry.types.selector_tool_binding import SelectorToolBinding
@@ -471,6 +474,38 @@ def validation_error_data(detail: Any, value: Any, *, include_value: bool) -> di
     if include_value:
         payload["value"] = value
     return payload
+
+
+def service_error_result(
+    exc: ServiceError, *, detail: Mapping[str, Any] | None = None
+) -> ToolResult:
+    """The ``isError`` tool result for a ``ServiceError`` a dispatch raised.
+
+    ``type`` stays ``"service_error"`` for every member of the family, because
+    that is what an existing client branches on. An
+    [`ActionUnavailable`][rest_framework_services.exceptions.action_unavailable.ActionUnavailable]
+    -- a declared affordance refusing the call -- also carries its ``code``: the
+    message is the affordance's ``reason``, a sentence that gets reworded, and the
+    code is the stable name a client switches on. drf-services asks a transport
+    serving an agent to pass on both, and every arm once passed on only the
+    sentence.
+
+    The key is **absent**, not ``null``, for any other ``ServiceError``. A
+    ``ServiceConflict`` raised by hand from a precondition has no code and never
+    will, which is why drf-services made the code a subclass field rather than a
+    nullable one on the parent; a ``null`` here would reintroduce the field that
+    lies at every other call site.
+
+    Every ``ServiceError`` arm builds its result here -- the service tool paths
+    sync and async, the in-process ``call_tool``, both selector tool siblings and
+    each chain step -- so a refusal answers the same way whichever path served
+    it. ``detail`` is merged in as ``build_error_tool_result`` merges it, which is
+    how a chain step adds ``failedStep`` beside the code.
+    """
+    error_detail: dict[str, Any] = dict(detail or {})
+    if isinstance(exc, ActionUnavailable):
+        error_detail["code"] = exc.code
+    return build_error_tool_result(exc.message, error_type="service_error", detail=error_detail)
 
 
 def resolve_bound(override: Any, default: Any) -> Any:
