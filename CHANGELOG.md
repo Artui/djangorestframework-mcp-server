@@ -7,7 +7,33 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- **Floored at `djangorestframework-services>=0.52`, and it is a hard floor.**
+  `enforce_affordances` first exists there, and the chain dispatcher imports it at
+  module level, so below 0.52 this package does not import. It is what closes the
+  chain-step refusal bypass (see Fixed).
+
+- **Resource registration refuses a `SelectorSpec` declaring `affordances`**, with
+  the `ValueError` it already raises for every other spec field a read cannot
+  apply. drf-services' renderer adds the answers to each row, and a resource
+  renders without it, so such a resource registered cleanly and no row ever
+  carried an answer. Register the spec as a selector tool, which renders them.
+
 ### Fixed
+
+- **A chain step no longer runs a service its own `affordances` refuse.** A chain
+  dispatches each step's service directly rather than through `dispatch_spec`, and
+  re-runs the gates the core would have applied: permissions, then preconditions.
+  It did not re-run the affordances drf-services 0.51 added, so a call refused as a
+  tool of its own ran, and reported success, as a chain step. With a condition
+  declared "a shipped order cannot be cancelled", the tool answered `isError` and
+  never ran the service, while a one-step chain over the same spec cancelled the
+  order. The step now runs drf-services' `enforce_affordances` after its
+  permissions and before its preconditions, the order the core uses, and a refusal
+  comes back as the step's error with `failedStep`. Permissions were never skipped,
+  so this was a state rule going unenforced rather than an access bypass, and only
+  a spec declaring `affordances` was affected.
 
 - **A tool's `outputSchema` now declares the `affordances` object its results
   carry.** From `djangorestframework-services` 0.51, a selector spec declaring

@@ -17,6 +17,7 @@ import pytest
 from rest_framework import serializers
 from rest_framework_services.types.selector_kind import SelectorKind
 from rest_framework_services.types.selector_spec import SelectorSpec
+from rest_framework_services.types.service_spec import ServiceSpec
 
 from rest_framework_mcp.adapters.selector_to_resource import selector_to_resource
 
@@ -40,6 +41,7 @@ class _Out(serializers.Serializer):
 @pytest.mark.parametrize(
     ("field", "value"),
     [
+        ("affordances", {"cancel": ServiceSpec(service=lambda **_: None)}),
         ("allow_none", True),
         ("annotations", {"n": 1}),
         ("extend_queryset", lambda qs, view, request: qs),

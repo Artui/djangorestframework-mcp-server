@@ -5,7 +5,7 @@ Flow (sync; the async sibling bridges the whole thing through ``acall``):
     auth + rate limit
       → validate(arguments, resolved_input_serializer)   → ctx.args
       → for each step:  inputs(ctx) → pool → the step spec's own
-                        permission_classes + preconditions
+                        permission_classes + affordances + preconditions
                         → run service/selector
                         → store result under step.alias
         (the loop runs inside transaction.atomic() when binding.atomic)
@@ -13,10 +13,11 @@ Flow (sync; the async sibling bridges the whole thing through ``acall``):
 
 A step's spec is dispatched directly rather than through ``dispatch_spec``:
 a chain owns the transaction, the argument binding and the pool, and hands each
-callable the mapping ``inputs`` built. The two things ``dispatch_spec`` would
+callable the mapping ``inputs`` built. The three gates ``dispatch_spec`` would
 otherwise contribute are therefore run here explicitly — ``enforce_permissions``
-against the step's resolved target, and the spec's ``preconditions`` — so a
-rule written once on a spec holds on this path as well.
+against the step's resolved target, a service's ``affordances`` through
+``enforce_affordances``, and the spec's ``preconditions`` — so a rule written once
+on a spec holds on this path as well.
 
 A step raising ``ServiceValidationError`` / ``ServiceError`` is mapped to an
 error carrying ``failedStep``; under an atomic chain the mapped error is
@@ -40,6 +41,7 @@ from rest_framework_services import (
     OfflineServiceView,
     base_serializer_context,
     build_offline_context,
+    enforce_affordances,
     enforce_permissions,
     render_for_audience,
     resolve_callable_kwargs,
@@ -300,6 +302,11 @@ def _run_service_step(
     # permission judges. A step with no target still runs the class-level pass,
     # which is a no-op unless the spec declares ``permission_classes``.
     enforce_permissions(spec, offline, instance=pool.get("instance"))
+    # Then the service's own affordances, before its preconditions: the order
+    # ``dispatch_spec`` runs them in, through the same drf-services function, so a
+    # call refused as a tool of its own is refused as a chain step as well. They
+    # were skipped here once -- the step ran, and the chain reported success.
+    enforce_affordances(spec, pool, instance=pool.get("instance"))
     _run_preconditions(spec, pool)
     # atomic=False: the chain owns the transaction (binding.atomic). The
     # service's own spec.atomic is subordinate under a chain.

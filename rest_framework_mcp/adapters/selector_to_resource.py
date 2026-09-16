@@ -21,6 +21,9 @@ from rest_framework_mcp.registry.types.resource_binding import ResourceBinding
 # on one transport while holding on every other is the worst of the three
 # outcomes and is indistinguishable from success.
 _UNCARRIED_SPEC_FIELDS: tuple[tuple[str, Any], ...] = (
+    # ``affordances`` answers are added by drf-services' renderer, and a resource
+    # renders in ``build_resource_contents`` instead, so a read would carry none.
+    ("affordances", None),
     ("allow_none", False),
     ("annotations", None),
     ("extend_queryset", None),
