@@ -108,3 +108,29 @@ async def test_async_chain_atomic_rollback() -> None:
         return Invoice.objects.count()
 
     assert await _count() == 0
+
+
+@pytest.mark.django_db(transaction=True)
+async def test_async_retrieve_step_resolves_its_queryset_to_the_row() -> None:
+    """The row is fetched inside the worker thread the async transport runs a
+    chain in, so resolving a queryset there is not an async-context ORM call."""
+    pk: int = await sync_to_async(lambda: _create(number="QA-1", amount_cents=1).pk)()
+    server = _server()
+    server.register_chain_tool(
+        name="chain",
+        steps=[
+            ChainStep(
+                "target",
+                SelectorSpec(
+                    kind=SelectorKind.RETRIEVE,
+                    selector=lambda *, pk: Invoice.objects.filter(pk=pk),
+                    output_serializer=InvoiceOutputSerializer,
+                ),
+                inputs=lambda ctx: {"pk": pk},
+            )
+        ],
+    )
+
+    out = await handle_tools_call_async({"name": "chain", "arguments": {}}, _ctx(server))
+
+    assert out["structuredContent"]["number"] == "QA-1"

@@ -235,6 +235,109 @@ def test_chain_selector_step_object_permission_blocks_the_write_behind_it() -> N
     assert theirs.sent is False
 
 
+def _get_invoice_set(*, pk: str) -> Any:
+    return Invoice.objects.filter(pk=int(pk))
+
+
+def _queryset_target_chain(server: MCPServer) -> None:
+    server.register_chain_tool(
+        name="chain",
+        steps=[
+            ChainStep(
+                alias="target",
+                spec=SelectorSpec(
+                    kind=SelectorKind.RETRIEVE,
+                    selector=_get_invoice_set,
+                    permission_classes=[IsAliceInvoice],
+                ),
+                inputs=lambda ctx: {"pk": ctx.args["pk"]},
+            ),
+            ChainStep(
+                alias="sent",
+                spec=ServiceSpec(
+                    service=_mark_sent,
+                    atomic=False,
+                    output_selector_spec=SelectorSpec(
+                        kind=SelectorKind.RETRIEVE, output_serializer=InvoiceOutputSerializer
+                    ),
+                ),
+                inputs=lambda ctx: {"instance": ctx["target"]},
+            ),
+        ],
+    )
+
+
+@pytest.mark.django_db
+def test_chain_selector_step_judges_the_row_a_queryset_selector_resolves() -> None:
+    """The guard runs ``has_object_permission`` only for a model instance, and a
+    selector written ``filter(pk=pk)`` used to hand it the queryset, so the
+    object-level rule never ran for that step. Here the next step then failed on a
+    queryset where it expected a row, which hid it; a step that tolerated one acted
+    on a row the caller may not touch (see the rollback test below, whose chain
+    answered with the refused row's text). Asserting the denial, and not merely a
+    failure, is what holds the rule rather than the crash."""
+    theirs = Invoice.objects.create(number="bob-7", amount_cents=100)
+    server = _server()
+    _queryset_target_chain(server)
+
+    out = handle_tools_call({"name": "chain", "arguments": {"pk": str(theirs.pk)}}, _ctx(server))
+
+    assert isinstance(out, JsonRpcError)
+    assert out.code == JsonRpcErrorCode.FORBIDDEN
+    theirs.refresh_from_db()
+    assert theirs.sent is False
+
+
+@pytest.mark.django_db
+def test_chain_selector_step_hands_the_next_step_the_row_not_the_queryset() -> None:
+    mine = Invoice.objects.create(number="alice-7", amount_cents=100)
+    server = _server()
+    _queryset_target_chain(server)
+
+    out = handle_tools_call({"name": "chain", "arguments": {"pk": str(mine.pk)}}, _ctx(server))
+
+    assert isinstance(out, dict)
+    assert out["structuredContent"]["sent"] is True
+    mine.refresh_from_db()
+    assert mine.sent is True
+
+
+@pytest.mark.django_db
+def test_an_object_level_denial_rolls_back_the_earlier_steps_of_an_atomic_chain() -> None:
+    """The output step has no serializer, so nothing downstream fails on a
+    queryset: before the fix this chain committed ``first`` and answered with
+    ``"<QuerySet [<Invoice: bob-8>]>"``."""
+    theirs = Invoice.objects.create(number="bob-8", amount_cents=100)
+    server = _server()
+    server.register_chain_tool(
+        name="chain",
+        steps=[
+            ChainStep(
+                alias="first",
+                spec=ServiceSpec(
+                    service=lambda: Invoice.objects.create(number="alice-new", amount_cents=1),
+                    atomic=False,
+                ),
+            ),
+            ChainStep(
+                alias="target",
+                spec=SelectorSpec(
+                    kind=SelectorKind.RETRIEVE,
+                    selector=_get_invoice_set,
+                    permission_classes=[IsAliceInvoice],
+                ),
+                inputs=lambda ctx: {"pk": ctx.args["pk"]},
+            ),
+        ],
+    )
+
+    out = handle_tools_call({"name": "chain", "arguments": {"pk": str(theirs.pk)}}, _ctx(server))
+
+    assert isinstance(out, JsonRpcError)
+    assert out.code == JsonRpcErrorCode.FORBIDDEN
+    assert not Invoice.objects.filter(number="alice-new").exists()
+
+
 @pytest.mark.django_db
 def test_chain_service_step_object_permission_guards_the_resolved_instance() -> None:
     """A write step's target is whatever ``inputs`` resolved as ``instance``,

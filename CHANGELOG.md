@@ -11,6 +11,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- **Floored at `djangorestframework-services>=0.52.1`, and it is a hard floor.**
+  `materialize_retrieve` is first exported there, and the chain dispatcher imports
+  it at module level, so below 0.52.1 this package does not import. The same
+  release renders a single `None` as `null` rather than as the output serializer's
+  blank row, which is what a service tool whose service returns nothing, and a
+  chain step with `allow_none=True` that finds nothing, now answer.
+
+- **A `ServiceSpec` with `many=True` is refused at registration** with
+  `ImproperlyConfigured`, from `register_service_tool` and from `register_specs`
+  alike. Such a spec validates its input as a JSON array, and MCP tool `arguments`
+  is always a JSON object, so the tool registered, advertised the single item's
+  object as its `inputSchema`, and failed every call: the default `BUNDLE`
+  argument binding made drf-services raise `ValueError` before validation ran.
+  The message names the tool and the shape that works, a named list field on the
+  input serializer (`items = ItemSerializer(many=True)`), and how to leave the spec
+  out of a registry. Refusing it leaves the wire open: accepting a list under an
+  argument name chosen now would fix that name for good.
+
 - **Chain registration refuses a rendered step whose `affordances` a chain cannot
   answer.** From `djangorestframework-services` 0.51 a selector spec's
   `affordances` render from answers its selector dispatch computes while fetching
@@ -32,6 +50,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   step that computes them, which it does not today.
 
 ### Fixed
+
+- **A chain's `RETRIEVE` step resolves to its row, and the object-level
+  permission judges that row.** A chain ran each step's selector and used the
+  result as-is, so a selector written `Invoice.objects.filter(pk=pk)`, a form
+  drf-services supports, handed the next step, and the renderer, a queryset. The
+  step's `has_object_permission` never ran, because the guard judges only a model
+  instance. A model-shaped next step, or a serializer, then failed on the
+  queryset, which mostly hid it; a step rendered without an output serializer did
+  not fail, and answered with the queryset's text, which names the row the rule
+  refuses, after committing every earlier step. The same missing collapse broke a service step whose
+  `output_selector_spec` re-fetches a `RETRIEVE` through a queryset. A step now
+  resolves the row with drf-services' own `materialize_retrieve`, so the row is
+  permission-checked, passed on and rendered; a missing row, from an empty
+  queryset or `DoesNotExist`, fails the step as `not_found` with `failedStep`, in
+  the selector tool's wording, and rolls back an atomic chain; and a spec with
+  `allow_none=True` passes `None` on and renders `null`.
 
 - **A tool whose result is an unpaginated list now advertises an array in
   `outputSchema`, and a chain renders a service step's list as one.**

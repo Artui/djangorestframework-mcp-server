@@ -319,6 +319,132 @@ def test_passthrough_render_none_result_becomes_empty_object() -> None:
     assert out["structuredContent"] == {}
 
 
+# ---------- RETRIEVE resolution ----------
+#
+# A ``RETRIEVE`` step collapses its selector's return to one row the way
+# ``dispatch_spec`` does. A selector written ``Invoice.objects.filter(pk=pk)`` --
+# a form drf-services supports -- used to reach the renderer as a queryset, so
+# every such chain failed on the first serializer field; a missing row raised out
+# of dispatch instead of answering ``not_found``.
+
+
+def _invoice_qs(*, pk: str) -> Any:
+    return Invoice.objects.filter(pk=int(pk))
+
+
+def _invoice_get(*, pk: str) -> Invoice:
+    return Invoice.objects.get(pk=int(pk))
+
+
+def _read_chain(server: MCPServer, selector: Any, *, allow_none: bool = False) -> None:
+    server.register_chain_tool(
+        name="chain",
+        steps=[
+            ChainStep(
+                "target",
+                SelectorSpec(
+                    kind=SelectorKind.RETRIEVE,
+                    selector=selector,
+                    output_serializer=InvoiceOutputSerializer,
+                    allow_none=allow_none,
+                ),
+                inputs=lambda ctx: {"pk": ctx.args["pk"]},
+            )
+        ],
+    )
+
+
+@pytest.mark.django_db
+def test_a_retrieve_step_renders_the_row_its_queryset_selector_resolves() -> None:
+    inv = Invoice.objects.create(number="Q-1", amount_cents=5)
+    server = _server()
+    _read_chain(server, _invoice_qs)
+
+    out = _call(server, {"pk": str(inv.pk)})
+
+    assert out["structuredContent"]["number"] == "Q-1"
+
+
+@pytest.mark.django_db
+@pytest.mark.parametrize("selector", [_invoice_qs, _invoice_get], ids=["queryset", "get"])
+def test_a_retrieve_step_that_finds_no_row_fails_as_not_found(selector: Any) -> None:
+    """Both ways a selector reports a missing row -- an empty queryset and
+    ``DoesNotExist`` -- answer as the selector tool answers, naming the step."""
+    server = _server()
+    _read_chain(server, selector)
+
+    error = tool_error(_call(server, {"pk": "9999"}))
+
+    assert error == {
+        "type": "not_found",
+        "message": "target: no matching instance found",
+        "failedStep": "target",
+    }
+
+
+@pytest.mark.django_db
+def test_an_allow_none_retrieve_step_that_finds_no_row_renders_null() -> None:
+    """Not the serializer's blank object, which read as a row with empty fields."""
+    server = _server()
+    _read_chain(server, _invoice_qs, allow_none=True)
+
+    out = _call(server, {"pk": "9999"})
+
+    assert out["structuredContent"] is None
+    assert out["content"][0]["text"] == "null"
+
+
+@pytest.mark.django_db
+def test_a_missing_row_rolls_back_an_atomic_chain() -> None:
+    server = _server()
+    server.register_chain_tool(
+        name="chain",
+        steps=[
+            ChainStep(
+                "first",
+                ServiceSpec(service=_create, atomic=False),
+                inputs=lambda ctx: {"number": "ROLLED", "amount_cents": 1},
+            ),
+            ChainStep(
+                "target",
+                SelectorSpec(kind=SelectorKind.RETRIEVE, selector=_invoice_qs),
+                inputs=lambda ctx: {"pk": "9999"},
+            ),
+        ],
+    )
+
+    assert tool_error(_call(server, {}))["failedStep"] == "target"
+    assert not Invoice.objects.filter(number="ROLLED").exists()
+
+
+@pytest.mark.django_db
+def test_a_service_steps_retrieve_refetch_renders_the_row() -> None:
+    inv = Invoice.objects.create(number="R-1", amount_cents=5)
+    server = _server()
+    server.register_chain_tool(
+        name="chain",
+        steps=[
+            ChainStep(
+                "touch",
+                ServiceSpec(
+                    service=lambda *, pk: int(pk),
+                    atomic=False,
+                    output_selector_spec=SelectorSpec(
+                        kind=SelectorKind.RETRIEVE,
+                        selector=lambda *, result: Invoice.objects.filter(pk=result),
+                        output_serializer=InvoiceOutputSerializer,
+                    ),
+                ),
+                inputs=lambda ctx: {"pk": ctx.args["pk"]},
+            )
+        ],
+    )
+
+    out = _call(server, {"pk": str(inv.pk)})
+
+    assert out["structuredContent"]["number"] == "R-1"
+
+
 # ---------- atomicity + errors ----------
 
 

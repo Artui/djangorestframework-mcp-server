@@ -125,9 +125,29 @@ Each step's `spec.permission_classes` are AND-combined with the
 chain-level `permissions=` and evaluated up front: a failing step
 permission blocks the whole chain before any step runs.
 
+The object-level half, `has_object_permission`, cannot run up front, because
+there is no row yet. It runs on each row as its step resolves it: a `RETRIEVE`
+selector step's row, and the instance a service step's `instance_selector_spec`
+fetches. A denial answers the whole call as a JSON-RPC permission error, not as
+a failed step, and under `atomic=True` every earlier write rolls back.
+
 ## Scope
 
 Chains deliberately do **not** run the selector post-fetch pipeline
 (filter / order / paginate) — that belongs on a single
 [`register_selector_tool`](selector-tool-with-filterset.md). A selector
 step's result is used as-is (rendered `many=True` for `kind=LIST`).
+
+A `RETRIEVE` step resolves to its one row the way the selector tool does, so a
+selector may return a queryset (`Invoice.objects.filter(pk=pk)`) or the instance
+(`Invoice.objects.get(pk=pk)`) and the next step receives the row either way. A
+service step whose `output_selector_spec` re-fetches a `RETRIEVE` resolves it the
+same way. When there is no row, the step fails as the selector tool does, naming
+the step, and an atomic chain rolls back:
+
+```json
+{"error": {"type": "not_found", "message": "target: no matching instance found",
+           "failedStep": "target"}}
+```
+
+A spec with `allow_none=True` passes `None` on instead, and renders it as `null`.

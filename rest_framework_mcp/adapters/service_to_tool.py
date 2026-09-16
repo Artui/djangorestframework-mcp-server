@@ -3,6 +3,7 @@ from __future__ import annotations
 from collections.abc import Mapping
 from typing import Any
 
+from django.core.exceptions import ImproperlyConfigured
 from rest_framework_services import UNSET, FieldMarking, UnsetType
 from rest_framework_services.types.service_spec import ServiceSpec
 
@@ -73,7 +74,10 @@ def service_spec_to_tool(
     ``meta`` is the base-protocol ``_meta`` bundle the tool's ``tools/list``
     entry carries. It goes through ``merge_meta`` so a later
     framework-derived contribution slots in at this one call site.
+
+    A ``many=True`` spec is refused: see ``_refuse_list_input``.
     """
+    _refuse_list_input(name, spec)
     validate_serializer_shapes(
         label=f"service tool {name!r}",
         input_serializer=spec.input_serializer,
@@ -129,6 +133,30 @@ def service_spec_to_tool(
         query_params=query_params,
         max_result_bytes=max_result_bytes,
         dispatch_timeout=dispatch_timeout,
+    )
+
+
+def _refuse_list_input(name: str, spec: ServiceSpec) -> None:
+    """Refuse a spec whose input is a list, which no ``tools/call`` can deliver.
+
+    ``many=True`` makes drf-services validate the payload as a JSON array, and
+    MCP ``arguments`` is always a JSON object. Such a tool used to register, list
+    the single item's object schema as its ``inputSchema``, and fail on every
+    call: the binding's ``BUNDLE`` default made drf-services raise ``ValueError``
+    before validation, and without it the object would fail validation as not a
+    list. Refusing leaves the wire undecided: a list could later be accepted
+    under a named argument, where accepting it now would fix that name for good.
+    """
+    if not spec.many:
+        return
+    raise ImproperlyConfigured(
+        f"Service tool {name!r}: the spec declares many=True, so its input is a JSON "
+        "array, and MCP tool arguments are always a JSON object -- every call would "
+        "fail. Declare the list as a named field of the input serializer instead "
+        "(for example `items = ItemSerializer(many=True)`) and loop over "
+        "`data['items']` in the service, or leave this spec out of the tools you "
+        "register; a SpecRegistry passed to register_specs can be narrowed with "
+        "by_tag."
     )
 
 

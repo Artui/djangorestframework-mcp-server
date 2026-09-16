@@ -26,9 +26,11 @@ re-raised as a private abort signal so the surrounding ``transaction.atomic()``
 unwinds, then returned.
 
 Chains deliberately do **not** run the selector post-fetch pipeline (filter /
-order / paginate) — that is a selector-tool concern. A selector step's result is
-used as-is, rendered ``many=True`` for ``kind=LIST``, as is a service step whose
-``output_selector_spec`` re-fetches a ``LIST``.
+order / paginate) — that is a selector-tool concern. A ``LIST`` selector step's
+result is used as-is and rendered ``many=True``, as is a service step whose
+``output_selector_spec`` re-fetches a ``LIST``. A ``RETRIEVE`` is collapsed to
+its one row first, the way ``dispatch_spec`` collapses it, and a row that is not
+there fails the step as ``not_found`` unless the spec sets ``allow_none``.
 """
 
 from __future__ import annotations
@@ -36,6 +38,7 @@ from __future__ import annotations
 from collections.abc import Mapping
 from typing import Any
 
+from django.core.exceptions import ObjectDoesNotExist
 from django.db import transaction
 from rest_framework import serializers as drf_serializers
 from rest_framework.exceptions import PermissionDenied
@@ -45,6 +48,7 @@ from rest_framework_services import (
     build_offline_context,
     enforce_affordances,
     enforce_permissions,
+    materialize_retrieve,
     render_for_audience,
     resolve_callable_kwargs,
     run_selector,
@@ -77,6 +81,14 @@ from rest_framework_mcp.registry.types.chain_context import ChainContext
 from rest_framework_mcp.registry.types.chain_step import ChainStep
 from rest_framework_mcp.registry.types.chain_tool_binding import ChainToolBinding
 from rest_framework_mcp.registry.types.utils import rendered_kind
+
+
+class _MissingInstance(Exception):
+    """A ``RETRIEVE`` step resolved no row and its spec does not allow ``None``.
+
+    Raised from the step runner and mapped to a ``not_found`` result in
+    ``_run_step``, which is where the step's alias is in hand.
+    """
 
 
 class _ChainAbort(Exception):
@@ -286,6 +298,14 @@ def _run_step(
                 ),
             },
         ).to_dict()
+    except _MissingInstance:
+        # The selector tool's wording and error type, with the step as the name:
+        # the same missing row answers the same way whichever tool fetched it.
+        return build_error_tool_result(
+            f"{step.alias}: no matching instance found",
+            error_type="not_found",
+            detail={"failedStep": step.alias},
+        ).to_dict()
     except ServiceError as exc:
         if config.record_service_exceptions:
             otel_span.record_exception(exc)
@@ -321,6 +341,11 @@ def _run_service_step(
         result = run_selector(
             out_spec.selector, resolve_callable_kwargs(out_spec.selector, sel_pool)
         )
+        # A ``RETRIEVE`` re-fetch renders one row, so a queryset collapses here as
+        # ``dispatch_spec`` collapses it; handed to the renderer whole, every
+        # serializer field was looked up on the queryset and the call failed.
+        if out_spec.kind is SelectorKind.RETRIEVE:
+            result = materialize_retrieve(result)
     return result
 
 
@@ -329,14 +354,39 @@ def _run_selector_step(
 ) -> Any:
     selector = spec.selector
     assert selector is not None  # guaranteed by ChainToolBinding validation  # noqa: S101
-    result: Any = run_selector(selector, resolve_callable_kwargs(selector, pool))
-    # After the fetch, because an object-level rule needs the row — the same
-    # point ``dispatch_spec`` guards a read at. A ``LIST`` step resolves a set,
-    # which the guard authorizes per-set, never per-row.
-    enforce_permissions(spec, offline, instance=result)
-    pool["collection" if spec.kind is SelectorKind.LIST else "instance"] = result
+    if spec.kind is SelectorKind.LIST:
+        result: Any = run_selector(selector, resolve_callable_kwargs(selector, pool))
+        # A set is authorized per-set, never per-row: the guard runs the
+        # class-level half only for anything that is not a model instance.
+        enforce_permissions(spec, offline, instance=result)
+        pool["collection"] = result
+        _run_preconditions(spec, pool)
+        return result
+    # ``RETRIEVE`` resolves to its row before anything judges it, through the
+    # function ``dispatch_spec`` resolves it with -- the sync one, since the async
+    # transport runs a chain in a worker thread. The guard checks
+    # ``has_object_permission`` only for a model instance, so a selector written
+    # ``Model.objects.filter(pk=pk)`` -- a form drf-services supports -- used to
+    # reach it as a queryset and skip the object-level rule entirely; the step
+    # then handed that queryset on as ``instance``.
+    try:
+        instance: Any = materialize_retrieve(
+            run_selector(selector, resolve_callable_kwargs(selector, pool))
+        )
+    except ObjectDoesNotExist:
+        # ``Model.objects.get(...)`` reports a missing row by raising; the
+        # queryset form reports it as ``None``. Both mean the same thing.
+        instance = None
+    if instance is None:
+        if spec.allow_none:
+            # The nullable contract: no row to guard or to test preconditions
+            # against, so neither runs, as in ``dispatch_spec``.
+            return None
+        raise _MissingInstance
+    enforce_permissions(spec, offline, instance=instance)
+    pool["instance"] = instance
     _run_preconditions(spec, pool)
-    return result
+    return instance
 
 
 def _run_preconditions(
