@@ -75,9 +75,17 @@ def service_spec_to_tool(
     entry carries. It goes through ``merge_meta`` so a later
     framework-derived contribution slots in at this one call site.
 
-    A ``many=True`` spec is refused: see ``_refuse_list_input``.
+    A ``many=True`` spec takes its list under the one argument
+    ``spec.many_argument`` names; ``_validate_list_payload`` refuses what would stop
+    that list reaching dispatch.
     """
-    _refuse_list_input(name, spec)
+    _validate_list_payload(
+        name,
+        spec,
+        argument_binding=argument_binding,
+        url_kwargs=url_kwargs,
+        query_params=query_params,
+    )
     validate_serializer_shapes(
         label=f"service tool {name!r}",
         input_serializer=spec.input_serializer,
@@ -136,28 +144,65 @@ def service_spec_to_tool(
     )
 
 
-def _refuse_list_input(name: str, spec: ServiceSpec) -> None:
-    """Refuse a spec whose input is a list, which no ``tools/call`` can deliver.
+def _validate_list_payload(
+    name: str,
+    spec: ServiceSpec,
+    *,
+    argument_binding: ArgumentBinding,
+    url_kwargs: tuple[UrlKwarg, ...],
+    query_params: tuple[QueryParam, ...],
+) -> None:
+    """Refuse a ``many=True`` spec declared in a way no ``tools/call`` could serve.
 
-    ``many=True`` makes drf-services validate the payload as a JSON array, and
-    MCP ``arguments`` is always a JSON object. Such a tool used to register, list
-    the single item's object schema as its ``inputSchema``, and fail on every
-    call: the binding's ``BUNDLE`` default made drf-services raise ``ValueError``
-    before validation, and without it the object would fail validation as not a
-    list. Refusing leaves the wire undecided: a list could later be accepted
-    under a named argument, where accepting it now would fix that name for good.
+    MCP ``arguments`` is always an object, so the list travels under the one
+    argument ``spec.many_argument`` names, and every dispatch passes drf-services
+    ``many_as_argument=True`` to read it from there. Three declarations beside it
+    would fail every call rather than any one of them:
+
+    - A ``UrlKwarg`` or ``QueryParam`` of the same name. Both channels pop their
+      name out of the arguments before dispatch, so the list would be routed to
+      ``view.kwargs`` or the query string and dispatch would answer every call as
+      if the argument were missing.
+    - A ``SPREAD_*`` argument binding. The service receives the whole list as one
+      ``data``, so drf-services raises ``ValueError`` on each dispatch rather than
+      at registration.
+    - A ``collection_selector_spec``. The list-payload dispatch never resolves a
+      target, so the selector would be declared and never run. drf-services' own
+      views refuse the pair in ``validate_service_spec`` for the same reason; this
+      transport mounts no view, so the check is made here.
     """
     if not spec.many:
         return
-    raise ImproperlyConfigured(
-        f"Service tool {name!r}: the spec declares many=True, so its input is a JSON "
-        "array, and MCP tool arguments are always a JSON object -- every call would "
-        "fail. Declare the list as a named field of the input serializer instead "
-        "(for example `items = ItemSerializer(many=True)`) and loop over "
-        "`data['items']` in the service, or leave this spec out of the tools you "
-        "register; a SpecRegistry passed to register_specs can be narrowed with "
-        "by_tag."
-    )
+    argument: str = spec.many_argument
+    taken: list[str] = [
+        f"{kind} {argument!r}"
+        for kind, names in (
+            ("UrlKwarg", {url_kwarg.name for url_kwarg in url_kwargs}),
+            ("QueryParam", {query_param.name for query_param in query_params}),
+        )
+        if argument in names
+    ]
+    if taken:
+        raise ImproperlyConfigured(
+            f"Service tool {name!r}: {' and '.join(taken)} takes the name the spec's "
+            f"list travels under (ServiceSpec.many_argument={argument!r}). The value "
+            "would be routed out of the arguments before dispatch and the list would "
+            "never arrive. Rename the channel, or set many_argument on the spec."
+        )
+    if argument_binding is not ArgumentBinding.BUNDLE:
+        raise ImproperlyConfigured(
+            f"Service tool {name!r}: argument_binding={argument_binding.name} cannot "
+            "apply to a spec declaring many=True, whose service receives the whole "
+            "list as one `data` argument, so there is nothing to spread. Leave "
+            "argument_binding at its BUNDLE default."
+        )
+    if spec.collection_selector_spec is not None:
+        raise ImproperlyConfigured(
+            f"Service tool {name!r}: the spec declares both many=True and a "
+            "collection_selector_spec. A list payload and a collection target are "
+            "different bulk shapes, and the list-payload dispatch never resolves the "
+            "collection. Declare one of them."
+        )
 
 
 __all__ = ["service_spec_to_tool"]

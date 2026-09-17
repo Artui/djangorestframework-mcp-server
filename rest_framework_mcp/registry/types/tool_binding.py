@@ -213,7 +213,8 @@ class ToolBinding(Generic[InputT, ResultT, ExtraT]):
         """Whether a result renders as one object or as a list, for ``outputSchema``.
 
         ``LIST`` when ``output_selector_spec`` re-fetches a set, which drf-services
-        dispatches to a list result the handler renders ``many=True``. A service
+        dispatches to a list result the handler renders ``many=True``, and for a
+        ``many=True`` spec, whose result is the service's own list. A service
         tool never paginates, so a ``LIST`` is served as a bare array and the
         schema has to say so; it once advertised the item alone. See
         ``registry.types.utils.rendered_kind``."""

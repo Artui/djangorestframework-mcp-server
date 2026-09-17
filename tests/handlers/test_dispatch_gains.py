@@ -6,9 +6,10 @@ via ``collection_selector_spec`` and object-level permission enforcement via the
 ``on_target_resolved=enforce_permissions`` hook. Both were shipped untested;
 these exercise them over ``tools/call``.
 
-(A ``many=True`` *list-payload* bulk create is HTTP-only: MCP ``arguments`` is
-always a JSON object, so the wire never carries a bare list. The bulk gain that
-*is* reachable over MCP is ``collection_selector_spec`` — a filtered-set
+(A ``many=True`` *list-payload* bulk create never carries a bare list over MCP,
+whose ``arguments`` is always a JSON object: the list travels under the spec's
+``many_argument``, which ``tests/handlers/test_many_argument_tools.py`` covers.
+The bulk gain exercised here is ``collection_selector_spec`` — a filtered-set
 mutation driven by object-shaped arguments.)
 """
 

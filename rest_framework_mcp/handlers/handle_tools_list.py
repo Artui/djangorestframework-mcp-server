@@ -7,9 +7,11 @@ from rest_framework_mcp.handlers.is_binding_listable import is_binding_listable
 from rest_framework_mcp.handlers.pagination import paginate
 from rest_framework_mcp.handlers.types.context import MCPCallContext
 from rest_framework_mcp.handlers.utils import (
+    advertises_closed_items,
     advertises_closed_schema,
     catalog_cache_hints,
     resolve_bound,
+    takes_list_payload,
 )
 from rest_framework_mcp.output.resolve_structured_output import resolve_structured_output
 from rest_framework_mcp.protocol.types.json_rpc_error import JsonRpcError
@@ -71,6 +73,8 @@ def handle_tools_list(
         # returns a ``"type": "object"`` shape, so this reaches every schema.
         input_schema = dict(input_schema)
         input_schema["additionalProperties"] = not advertises_closed_schema(binding)
+        if takes_list_payload(binding):
+            input_schema = _stamp_items(input_schema, binding)
         # ``outputSchema`` and ``structuredContent`` are independently
         # toggleable, but the spec forbids advertising the schema while
         # suppressing the content — ``resolve_structured_output`` raises
@@ -129,6 +133,35 @@ def handle_tools_list(
     if next_cursor is not None:
         response["nextCursor"] = next_cursor
     return response
+
+
+def _stamp_items(input_schema: dict[str, Any], binding: Any) -> dict[str, Any]:
+    """Stamp a ``many=True`` service tool's item schema with the closedness dispatch
+    enforces on each item.
+
+    The object holding the list is closed whatever the policy, so the policy is
+    advertised where it applies, one level down. Each level is copied rather than
+    written through, so nothing the reflection returned is mutated.
+
+    A ``metadata["json_schema"]["input"]`` fragment replaces the reflection's keys
+    whole, so one declaring its own ``properties`` may leave no object item schema
+    to stamp. That schema is the author's and is served as written, rather than
+    failing the whole listing on a lookup.
+    """
+    argument: str = binding.spec.many_argument
+    properties: Any = input_schema.get("properties")
+    array: Any = properties.get(argument) if isinstance(properties, dict) else None
+    item: Any = array.get("items") if isinstance(array, dict) else None
+    if not isinstance(item, dict):
+        return input_schema
+    closed: bool = advertises_closed_items(binding)
+    return {
+        **input_schema,
+        "properties": {
+            **properties,
+            argument: {**array, "items": {**item, "additionalProperties": not closed}},
+        },
+    }
 
 
 __all__ = ["handle_tools_list"]
