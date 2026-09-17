@@ -4328,7 +4328,14 @@ carries the hashed-URI workaround.</p>
    can read and self-correct from, with a JSON <code>{"error": {"type":
    "validation_error" | "service_error", "message": ..., "detail": ...}}</code>
    payload in <code>content[0]</code> (and no <code>structuredContent</code>, which is tied to
-   the success schema). Chain steps add <code>failedStep</code>. Setting
+   the success schema). Chain steps add <code>failedStep</code>. A call refused by one
+   of the spec's declared <code>affordances</code> raises drf-services'
+   <code>ActionUnavailable</code>, and its error object also carries that affordance's
+   <code>code</code> — <code>{"type": "service_error", "message": "The books are closed.",
+   "code": "books_closed"}</code> — so a client branches on the stable name while
+   the model reads the sentence. <code>type</code> is still <code>"service_error"</code>, and any
+   other <code>ServiceError</code> (a <code>ServiceConflict</code> raised by hand, say) carries no
+   <code>code</code> key at all. Setting
    <code>REST_FRAMEWORK_MCP["INCLUDE_VALIDATION_VALUE"] = True</code> additionally
    echoes the offending <code>arguments</code> dict back under <code>value</code> — handy for
    debugging schema mismatches against opaque client SDKs, off by default
@@ -4338,7 +4345,11 @@ carries the hashed-URI workaround.</p>
    kwarg-pool dispatch), then render through
    <code>output_selector_spec.output_serializer</code> with <code>many=</code> driven by
    <code>output_selector_spec.kind</code>. If <code>output_selector_spec</code> is <code>None</code>,
-   the service's return value is passed through unchanged.</li>
+   the service's return value is passed through unchanged. A <code>LIST</code>
+   re-fetch serves a bare array — a service tool never paginates — and the
+   tool's <code>outputSchema</code> advertises <code>{type: array, items}</code> to match. With no
+   <code>selector</code> there is no re-fetch, so the result is one object whatever the
+   nested <code>kind</code> says.</li>
 <li>Wrap as a <code>ToolResult</code> with <code>OutputFormat</code>-driven encoding for the human-
    readable <code>content[0]</code> block. <code>structuredContent</code> is always JSON.</li>
 </ol>
@@ -4349,7 +4360,11 @@ QuerySet return is materialized via <code>.first()</code>, and a missing row is 
 result instead. LIST tools advertise a kind-aware <code>outputSchema</code>: a bare
 array schema unpaginated, the <code>{items, page, totalPages, hasNext}</code>
 envelope with <code>paginate=True</code> (enable pagination for a fully
-spec-compliant <em>object</em>-shaped <code>structuredContent</code>).</p>
+spec-compliant <em>object</em>-shaped <code>structuredContent</code>). The array schema is not
+special to selector tools: wherever a result renders as an unpaginated list —
+a service tool whose <code>output_selector_spec</code> re-fetches a <code>LIST</code>, or a chain
+whose output step is either kind of <code>LIST</code> — the tool advertises the same bare
+array, because that is what it serves.</p>
 <p><code>resources/read</code>:</p>
 <ol>
 <li>Resolve URI through <code>ResourceRegistry</code> (returns binding + URI-template

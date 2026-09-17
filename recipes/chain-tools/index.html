@@ -1041,6 +1041,23 @@
     </span>
   </a>
   
+    <nav class="md-nav" aria-label="What the tool returns">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#affordances-on-a-rendered-step" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Affordances on a rendered step
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
 </li>
       
         <li class="md-nav__item">
@@ -1536,6 +1553,23 @@
     </span>
   </a>
   
+    <nav class="md-nav" aria-label="What the tool returns">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#affordances-on-a-rendered-step" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Affordances on a rendered step
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
 </li>
       
         <li class="md-nav__item">
@@ -1640,10 +1674,18 @@ service step whose callable takes the validated input as <code>data</code>.</p>
 <h2 id="atomicity-and-errors">Atomicity and errors<a class="headerlink" href="#atomicity-and-errors" title="Permanent link">&para;</a></h2>
 <p><code>atomic=True</code> (the default) wraps every step in a single
 <code>transaction.atomic()</code>. If any step raises <code>ServiceError</code> or
-<code>ServiceValidationError</code>, every prior write rolls back and the client
-gets a JSON-RPC error whose <code>data</code> names the failing step:</p>
-<div class="language-json highlight"><pre><span></span><code><span id="__span-2-1"><a id="__codelineno-2-1" name="__codelineno-2-1" href="#__codelineno-2-1"></a><span class="p">{</span><span class="nt">&quot;code&quot;</span><span class="p">:</span><span class="w"> </span><span class="mi">-32000</span><span class="p">,</span><span class="w"> </span><span class="nt">&quot;message&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;…&quot;</span><span class="p">,</span><span class="w"> </span><span class="nt">&quot;data&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">{</span><span class="nt">&quot;failedStep&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;sub&quot;</span><span class="p">}}</span>
+<code>ServiceValidationError</code>, every prior write rolls back and the call
+answers with an <code>isError: true</code> tool result, as a single-spec tool does,
+whose error object names the failing step:</p>
+<div class="language-json highlight"><pre><span></span><code><span id="__span-2-1"><a id="__codelineno-2-1" name="__codelineno-2-1" href="#__codelineno-2-1"></a><span class="p">{</span><span class="nt">&quot;error&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">{</span><span class="nt">&quot;type&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;service_error&quot;</span><span class="p">,</span><span class="w"> </span><span class="nt">&quot;message&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;…&quot;</span><span class="p">,</span><span class="w"> </span><span class="nt">&quot;failedStep&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;sub&quot;</span><span class="p">}}</span>
 </span></code></pre></div>
+<p>A step refused by its service's <code>affordances</code> also carries the refusal's
+<code>code</code> beside <code>failedStep</code>, so a client can tell which rule stopped the
+chain without matching on the sentence:</p>
+<div class="language-json highlight"><pre><span></span><code><span id="__span-3-1"><a id="__codelineno-3-1" name="__codelineno-3-1" href="#__codelineno-3-1"></a><span class="p">{</span><span class="nt">&quot;error&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">{</span><span class="nt">&quot;type&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;service_error&quot;</span><span class="p">,</span><span class="w"> </span><span class="nt">&quot;message&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;The books are closed.&quot;</span><span class="p">,</span>
+</span><span id="__span-3-2"><a id="__codelineno-3-2" name="__codelineno-3-2" href="#__codelineno-3-2"></a><span class="w">           </span><span class="nt">&quot;code&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;books_closed&quot;</span><span class="p">,</span><span class="w"> </span><span class="nt">&quot;failedStep&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;void&quot;</span><span class="p">}}</span>
+</span></code></pre></div>
+<p>Any other <code>ServiceError</code> carries no <code>code</code> key.</p>
 <p>Set <code>atomic=False</code> to let each step commit independently (no rollback).</p>
 <h2 id="what-the-tool-returns">What the tool returns<a class="headerlink" href="#what-the-tool-returns" title="Permanent link">&para;</a></h2>
 <ul>
@@ -1656,16 +1698,47 @@ gets a JSON-RPC error whose <code>data</code> names the failing step:</p>
 output_selector_spec.output_serializer</code> or
 <code>SelectorSpec.output_serializer</code> — and its output-context provider sees
 the resolved data (<code>result</code> / <code>instance</code> / <code>page</code>), exactly as a
-single-spec tool does.</p>
+single-spec tool does. A <code>LIST</code> renders as a list, whether the step is a
+<code>LIST</code> selector or a service whose <code>output_selector_spec</code> re-fetches a
+<code>LIST</code>, and a chain never paginates, so the tool's <code>outputSchema</code> advertises
+a bare array for such an output step.</p>
+<h3 id="affordances-on-a-rendered-step">Affordances on a rendered step<a class="headerlink" href="#affordances-on-a-rendered-step" title="Permanent link">&para;</a></h3>
+<p>A selector spec's <code>affordances</code> render as an <code>affordances</code> object on each
+item, from answers the selector tool's dispatch computes as it fetches the
+rows. A chain step runs its selector directly and computes none, so
+registering a chain <strong>refuses</strong> a rendered step — the output step, or any
+step under <code>output_all</code> — whose serializer would render affordances that ask
+a condition:</p>
+<div class="language-text highlight"><pre><span></span><code><span id="__span-4-1"><a id="__codelineno-4-1" name="__codelineno-4-1" href="#__codelineno-4-1"></a>ImproperlyConfigured: Chain tool &#39;orders&#39;: step &#39;out&#39; is rendered through a
+</span><span id="__span-4-2"><a id="__codelineno-4-2" name="__codelineno-4-2" href="#__codelineno-4-2"></a>selector spec declaring affordances [&#39;cancel&#39;], ...
+</span></code></pre></div>
+<p>Register that spec as a selector or service tool of its own, where the
+answers are computed and rendered, or drop the affordances from the step.
+An intermediate step is not rendered, so it may declare them freely.</p>
 <h2 id="permissions">Permissions<a class="headerlink" href="#permissions" title="Permanent link">&para;</a></h2>
 <p>Each step's <code>spec.permission_classes</code> are AND-combined with the
 chain-level <code>permissions=</code> and evaluated up front: a failing step
 permission blocks the whole chain before any step runs.</p>
+<p>The object-level half, <code>has_object_permission</code>, cannot run up front, because
+there is no row yet. It runs on each row as its step resolves it: a <code>RETRIEVE</code>
+selector step's row, and the instance a service step's <code>instance_selector_spec</code>
+fetches. A denial answers the whole call as a JSON-RPC permission error, not as
+a failed step, and under <code>atomic=True</code> every earlier write rolls back.</p>
 <h2 id="scope">Scope<a class="headerlink" href="#scope" title="Permanent link">&para;</a></h2>
 <p>Chains deliberately do <strong>not</strong> run the selector post-fetch pipeline
 (filter / order / paginate) — that belongs on a single
 <a href="../selector-tool-with-filterset/"><code>register_selector_tool</code></a>. A selector
 step's result is used as-is (rendered <code>many=True</code> for <code>kind=LIST</code>).</p>
+<p>A <code>RETRIEVE</code> step resolves to its one row the way the selector tool does, so a
+selector may return a queryset (<code>Invoice.objects.filter(pk=pk)</code>) or the instance
+(<code>Invoice.objects.get(pk=pk)</code>) and the next step receives the row either way. A
+service step whose <code>output_selector_spec</code> re-fetches a <code>RETRIEVE</code> resolves it the
+same way. When there is no row, the step fails as the selector tool does, naming
+the step, and an atomic chain rolls back:</p>
+<div class="language-json highlight"><pre><span></span><code><span id="__span-5-1"><a id="__codelineno-5-1" name="__codelineno-5-1" href="#__codelineno-5-1"></a><span class="p">{</span><span class="nt">&quot;error&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">{</span><span class="nt">&quot;type&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;not_found&quot;</span><span class="p">,</span><span class="w"> </span><span class="nt">&quot;message&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;target: no matching instance found&quot;</span><span class="p">,</span>
+</span><span id="__span-5-2"><a id="__codelineno-5-2" name="__codelineno-5-2" href="#__codelineno-5-2"></a><span class="w">           </span><span class="nt">&quot;failedStep&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;target&quot;</span><span class="p">}}</span>
+</span></code></pre></div>
+<p>A spec with <code>allow_none=True</code> passes <code>None</code> on instead, and renders it as <code>null</code>.</p>
 
 
 

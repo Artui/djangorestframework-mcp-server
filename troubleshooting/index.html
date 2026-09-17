@@ -634,6 +634,17 @@
   
 </li>
         
+          <li class="md-nav__item">
+  <a href="#the-spec-declares-manytrue-so-its-input-is-a-json-array" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        "the spec declares many=True, so its input is a JSON array"
+      
+    </span>
+  </a>
+  
+</li>
+        
       </ul>
     </nav>
   
@@ -1767,6 +1778,17 @@
   
 </li>
         
+          <li class="md-nav__item">
+  <a href="#the-spec-declares-manytrue-so-its-input-is-a-json-array" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        "the spec declares many=True, so its input is a JSON array"
+      
+    </span>
+  </a>
+  
+</li>
+        
       </ul>
     </nav>
   
@@ -2004,6 +2026,33 @@ rule.</p>
 failed too, for every tool on the server, because this transport derives each
 tool's schema on each listing. A resource never had a schema to derive, so it
 failed on every read instead.</p>
+<h3 id="the-spec-declares-manytrue-so-its-input-is-a-json-array">"the spec declares many=True, so its input is a JSON array"<a class="headerlink" href="#the-spec-declares-manytrue-so-its-input-is-a-json-array" title="Permanent link">&para;</a></h3>
+<p>A <code>ServiceSpec</code> with <code>many=True</code> validates its input as a list, and the
+<code>arguments</code> of an MCP <code>tools/call</code> is always a JSON object, so no call could
+reach the service. Declare the list as a named field of the input serializer and
+loop over it in the service:</p>
+<div class="language-python highlight"><pre><span></span><code><span id="__span-5-1"><a id="__codelineno-5-1" name="__codelineno-5-1" href="#__codelineno-5-1"></a><span class="k">class</span><span class="w"> </span><span class="nc">BulkInvoiceInput</span><span class="p">(</span><span class="n">serializers</span><span class="o">.</span><span class="n">Serializer</span><span class="p">):</span>
+</span><span id="__span-5-2"><a id="__codelineno-5-2" name="__codelineno-5-2" href="#__codelineno-5-2"></a>    <span class="n">items</span> <span class="o">=</span> <span class="n">InvoiceSerializer</span><span class="p">(</span><span class="n">many</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+</span><span id="__span-5-3"><a id="__codelineno-5-3" name="__codelineno-5-3" href="#__codelineno-5-3"></a>
+</span><span id="__span-5-4"><a id="__codelineno-5-4" name="__codelineno-5-4" href="#__codelineno-5-4"></a>
+</span><span id="__span-5-5"><a id="__codelineno-5-5" name="__codelineno-5-5" href="#__codelineno-5-5"></a><span class="k">def</span><span class="w"> </span><span class="nf">create_invoices</span><span class="p">(</span><span class="o">*</span><span class="p">,</span> <span class="n">data</span><span class="p">):</span>
+</span><span id="__span-5-6"><a id="__codelineno-5-6" name="__codelineno-5-6" href="#__codelineno-5-6"></a>    <span class="k">return</span> <span class="p">[</span><span class="n">create_invoice</span><span class="p">(</span><span class="o">**</span><span class="n">item</span><span class="p">)</span> <span class="k">for</span> <span class="n">item</span> <span class="ow">in</span> <span class="n">data</span><span class="p">[</span><span class="s2">&quot;items&quot;</span><span class="p">]]</span>
+</span><span id="__span-5-7"><a id="__codelineno-5-7" name="__codelineno-5-7" href="#__codelineno-5-7"></a>
+</span><span id="__span-5-8"><a id="__codelineno-5-8" name="__codelineno-5-8" href="#__codelineno-5-8"></a>
+</span><span id="__span-5-9"><a id="__codelineno-5-9" name="__codelineno-5-9" href="#__codelineno-5-9"></a><span class="n">server</span><span class="o">.</span><span class="n">register_service_tool</span><span class="p">(</span>
+</span><span id="__span-5-10"><a id="__codelineno-5-10" name="__codelineno-5-10" href="#__codelineno-5-10"></a>    <span class="n">name</span><span class="o">=</span><span class="s2">&quot;invoices.bulk_create&quot;</span><span class="p">,</span>
+</span><span id="__span-5-11"><a id="__codelineno-5-11" name="__codelineno-5-11" href="#__codelineno-5-11"></a>    <span class="n">spec</span><span class="o">=</span><span class="n">ServiceSpec</span><span class="p">(</span><span class="n">service</span><span class="o">=</span><span class="n">create_invoices</span><span class="p">,</span> <span class="n">input_serializer</span><span class="o">=</span><span class="n">BulkInvoiceInput</span><span class="p">),</span>
+</span><span id="__span-5-12"><a id="__codelineno-5-12" name="__codelineno-5-12" href="#__codelineno-5-12"></a><span class="p">)</span>
+</span></code></pre></div>
+<p>The tool advertises <code>items</code> as an array, and an invalid item's errors are
+reported at its index. From Django REST framework 3.18 that is an object keyed
+by the invalid items' indexes, <code>{"items": {"1": {"amount_cents": [...]}}}</code>; below
+3.18 it is a list holding an empty object for each valid item,
+<code>{"items": [{}, {"amount_cents": [...]}]}</code>. If the spec is shared with a REST view
+that takes a bare list, keep it off the MCP server instead: tag it in the
+<code>SpecRegistry</code> and narrow the registry with <code>by_tag</code> before <code>register_specs</code>.</p>
+<p>Such a tool used to register and list the single item's schema as its
+<code>inputSchema</code>, and every call to it failed.</p>
 <h2 id="valueerror-when-registering-a-resource"><code>ValueError</code> when registering a resource<a class="headerlink" href="#valueerror-when-registering-a-resource" title="Permanent link">&para;</a></h2>
 <h3 id="sets-which-the-resource-read-path-does-not-apply">"sets ..., which the resource read path does not apply"<a class="headerlink" href="#sets-which-the-resource-read-path-does-not-apply" title="Permanent link">&para;</a></h3>
 <p><code>register_resource</code> refuses a <code>SelectorSpec</code> carrying any of eleven behavioural
@@ -2024,20 +2073,20 @@ advertises as <em>its</em> issuer (<code>https://host/oauth</code>) publishes
 <code>https://host/oauth/oauth/authorize/</code> and two siblings like it. Pass the site
 root. Since 0.25.0 this warns at construction; if you genuinely mount elsewhere,
 set the paths instead:</p>
-<div class="language-python highlight"><pre><span></span><code><span id="__span-5-1"><a id="__codelineno-5-1" name="__codelineno-5-1" href="#__codelineno-5-1"></a><span class="n">DjangoOAuthToolkitBackend</span><span class="p">(</span>
-</span><span id="__span-5-2"><a id="__codelineno-5-2" name="__codelineno-5-2" href="#__codelineno-5-2"></a>    <span class="n">authorization_servers</span><span class="o">=</span><span class="p">[</span><span class="s2">&quot;https://host&quot;</span><span class="p">],</span>
-</span><span id="__span-5-3"><a id="__codelineno-5-3" name="__codelineno-5-3" href="#__codelineno-5-3"></a>    <span class="n">authorize_path</span><span class="o">=</span><span class="s2">&quot;/custom/authorize/&quot;</span><span class="p">,</span>
-</span><span id="__span-5-4"><a id="__codelineno-5-4" name="__codelineno-5-4" href="#__codelineno-5-4"></a><span class="p">)</span>
+<div class="language-python highlight"><pre><span></span><code><span id="__span-6-1"><a id="__codelineno-6-1" name="__codelineno-6-1" href="#__codelineno-6-1"></a><span class="n">DjangoOAuthToolkitBackend</span><span class="p">(</span>
+</span><span id="__span-6-2"><a id="__codelineno-6-2" name="__codelineno-6-2" href="#__codelineno-6-2"></a>    <span class="n">authorization_servers</span><span class="o">=</span><span class="p">[</span><span class="s2">&quot;https://host&quot;</span><span class="p">],</span>
+</span><span id="__span-6-3"><a id="__codelineno-6-3" name="__codelineno-6-3" href="#__codelineno-6-3"></a>    <span class="n">authorize_path</span><span class="o">=</span><span class="s2">&quot;/custom/authorize/&quot;</span><span class="p">,</span>
+</span><span id="__span-6-4"><a id="__codelineno-6-4" name="__codelineno-6-4" href="#__codelineno-6-4"></a><span class="p">)</span>
 </span></code></pre></div>
 <h3 id="mount-order-against-oauth2_provider">Mount order against <code>oauth2_provider</code><a class="headerlink" href="#mount-order-against-oauth2_provider" title="Permanent link">&para;</a></h3>
 <p>django-oauth-toolkit 3.4.0 serves its own <code>register/</code> and
 <code>.well-known/oauth-authorization-server</code>. Django resolves first-match, so
 mounting DOT's urls <strong>before</strong> <code>build_oauth_urlpatterns(...)</code> means DOT answers
 those paths — silently, with different content.</p>
-<div class="language-python highlight"><pre><span></span><code><span id="__span-6-1"><a id="__codelineno-6-1" name="__codelineno-6-1" href="#__codelineno-6-1"></a><span class="k">def</span><span class="w"> </span><span class="nf">test_our_oauth_routes_are_not_shadowed</span><span class="p">():</span>
-</span><span id="__span-6-2"><a id="__codelineno-6-2" name="__codelineno-6-2" href="#__codelineno-6-2"></a>    <span class="kn">from</span><span class="w"> </span><span class="nn">rest_framework_mcp.contrib.oauth</span><span class="w"> </span><span class="kn">import</span> <span class="n">check_oauth_url_shadowing</span>
-</span><span id="__span-6-3"><a id="__codelineno-6-3" name="__codelineno-6-3" href="#__codelineno-6-3"></a>
-</span><span id="__span-6-4"><a id="__codelineno-6-4" name="__codelineno-6-4" href="#__codelineno-6-4"></a>    <span class="k">assert</span> <span class="n">check_oauth_url_shadowing</span><span class="p">()</span> <span class="o">==</span> <span class="p">[]</span>
+<div class="language-python highlight"><pre><span></span><code><span id="__span-7-1"><a id="__codelineno-7-1" name="__codelineno-7-1" href="#__codelineno-7-1"></a><span class="k">def</span><span class="w"> </span><span class="nf">test_our_oauth_routes_are_not_shadowed</span><span class="p">():</span>
+</span><span id="__span-7-2"><a id="__codelineno-7-2" name="__codelineno-7-2" href="#__codelineno-7-2"></a>    <span class="kn">from</span><span class="w"> </span><span class="nn">rest_framework_mcp.contrib.oauth</span><span class="w"> </span><span class="kn">import</span> <span class="n">check_oauth_url_shadowing</span>
+</span><span id="__span-7-3"><a id="__codelineno-7-3" name="__codelineno-7-3" href="#__codelineno-7-3"></a>
+</span><span id="__span-7-4"><a id="__codelineno-7-4" name="__codelineno-7-4" href="#__codelineno-7-4"></a>    <span class="k">assert</span> <span class="n">check_oauth_url_shadowing</span><span class="p">()</span> <span class="o">==</span> <span class="p">[]</span>
 </span></code></pre></div>
 <p>It is a function you call rather than a Django system check because this package
 is a library with no <code>AppConfig</code> — there is nowhere to register one.</p>

@@ -1518,6 +1518,17 @@
 </li>
         
           <li class="md-nav__item">
+  <a href="#rest_framework_mcp.registry.types.tool_binding.ToolBinding.rendered_kind" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        rendered_kind
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
   <a href="#rest_framework_mcp.registry.types.tool_binding.ToolBinding.audience_projection" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -1759,6 +1770,17 @@
     <span class="md-ellipsis">
       
         rendered_affordances
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#rest_framework_mcp.registry.types.selector_tool_binding.SelectorToolBinding.rendered_kind" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        rendered_kind
       
     </span>
   </a>
@@ -2579,6 +2601,17 @@
     <span class="md-ellipsis">
       
         rendered_affordances
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#rest_framework_mcp.registry.types.chain_tool_binding.ChainToolBinding.rendered_kind" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        rendered_kind
       
     </span>
   </a>
@@ -3288,6 +3321,17 @@
 </li>
         
           <li class="md-nav__item">
+  <a href="#rest_framework_mcp.registry.types.tool_binding.ToolBinding.rendered_kind" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        rendered_kind
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
   <a href="#rest_framework_mcp.registry.types.tool_binding.ToolBinding.audience_projection" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -3529,6 +3573,17 @@
     <span class="md-ellipsis">
       
         rendered_affordances
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#rest_framework_mcp.registry.types.selector_tool_binding.SelectorToolBinding.rendered_kind" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        rendered_kind
       
     </span>
   </a>
@@ -4349,6 +4404,17 @@
     <span class="md-ellipsis">
       
         rendered_affordances
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#rest_framework_mcp.registry.types.chain_tool_binding.ChainToolBinding.rendered_kind" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        rendered_kind
       
     </span>
   </a>
@@ -5324,6 +5390,35 @@ the payload carries.</p>
 
 
 
+<h3 id="rest_framework_mcp.registry.types.tool_binding.ToolBinding.rendered_kind" class="doc doc-heading">
+            <span class="doc doc-object-name doc-attribute-name">rendered_kind</span>
+
+
+  <span class="doc doc-labels">
+      <small class="doc doc-label doc-label-property"><code>property</code></small>
+  </span>
+
+<a href="#rest_framework_mcp.registry.types.tool_binding.ToolBinding.rendered_kind" class="headerlink" title="Permanent link">&para;</a></h3>
+<div class="language-python doc-signature highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="n">rendered_kind</span><span class="p">:</span> <span class="n">SelectorKind</span>
+</span></code></pre></div>
+
+    <div class="doc doc-contents ">
+
+        <p>Whether a result renders as one object or as a list, for <code>outputSchema</code>.</p>
+<p><code>LIST</code> when <code>output_selector_spec</code> re-fetches a set, which drf-services
+dispatches to a list result the handler renders <code>many=True</code>. A service
+tool never paginates, so a <code>LIST</code> is served as a bare array and the
+schema has to say so; it once advertised the item alone. See
+<code>registry.types.utils.rendered_kind</code>.</p>
+
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-attribute">
+
+
+
 <h3 id="rest_framework_mcp.registry.types.tool_binding.ToolBinding.audience_projection" class="doc doc-heading">
             <span class="doc doc-object-name doc-attribute-name">audience_projection</span>
 
@@ -6001,6 +6096,33 @@ agent transport served it.</p>
 wherever the item sits: the retrieved object, each array element, or
 each entry in the pagination envelope's <code>items</code>. Feeds the advertised
 <code>outputSchema</code>, so the schema names the key the payload carries.</p>
+
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-attribute">
+
+
+
+<h3 id="rest_framework_mcp.registry.types.selector_tool_binding.SelectorToolBinding.rendered_kind" class="doc doc-heading">
+            <span class="doc doc-object-name doc-attribute-name">rendered_kind</span>
+
+
+  <span class="doc doc-labels">
+      <small class="doc doc-label doc-label-property"><code>property</code></small>
+  </span>
+
+<a href="#rest_framework_mcp.registry.types.selector_tool_binding.SelectorToolBinding.rendered_kind" class="headerlink" title="Permanent link">&para;</a></h3>
+<div class="language-python doc-signature highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="n">rendered_kind</span><span class="p">:</span> <span class="n">SelectorKind</span>
+</span></code></pre></div>
+
+    <div class="doc doc-contents ">
+
+        <p>The spec's <code>kind</code>, under the name every tool binding answers it by.</p>
+<p>Paired with <code>paginate</code> when the schema is built: a <code>LIST</code> is an array
+unpaginated and the pagination envelope otherwise, which only a selector
+tool can produce.</p>
 
     </div>
 
@@ -9551,6 +9673,39 @@ it, which dispatches on the class: a <code>SelectorSpec</code>'s own mapping, a
 service's own <code>affordances</code>, which are the conditions a call is
 refused against and are not rendered. <code>None</code> under <code>output_all</code>, for
 the reason <code>output_serializer</code> is: that response has no single schema.</p>
+<p>On a registered chain this can only be a declaration that asks no
+condition: one that does is refused in <code>__post_init__</code>, because a chain
+step computes no answers for the renderer to read. Kept general rather
+than hard-wired to <code>None</code>, so the schema still describes the
+<code>{"available": true}</code> object such a declaration does render.</p>
+
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-attribute">
+
+
+
+<h3 id="rest_framework_mcp.registry.types.chain_tool_binding.ChainToolBinding.rendered_kind" class="doc doc-heading">
+            <span class="doc doc-object-name doc-attribute-name">rendered_kind</span>
+
+
+  <span class="doc doc-labels">
+      <small class="doc doc-label doc-label-property"><code>property</code></small>
+  </span>
+
+<a href="#rest_framework_mcp.registry.types.chain_tool_binding.ChainToolBinding.rendered_kind" class="headerlink" title="Permanent link">&para;</a></h3>
+<div class="language-python doc-signature highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="n">rendered_kind</span><span class="p">:</span> <span class="n">SelectorKind</span> <span class="o">|</span> <span class="kc">None</span>
+</span></code></pre></div>
+
+    <div class="doc doc-contents ">
+
+        <p>Whether the output step renders as one object or a list, for <code>outputSchema</code>.</p>
+<p>The output step's answer from <code>registry.types.utils.rendered_kind</code>,
+the same one the chain renderer picks <code>many</code> by. A chain never
+paginates, so a <code>LIST</code> is served as a bare array. <code>None</code> under
+<code>output_all</code>, whose <code>{alias: rendered}</code> object has no single kind.</p>
 
     </div>
 
