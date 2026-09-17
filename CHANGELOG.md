@@ -35,6 +35,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- **Floored at `djangorestframework-services>=0.53.0` (was `>=0.52.1`), and it is a
+  hard floor.** Every service dispatch passes `many_as_argument=True`, which
+  first exists there, so below it every service tool call raises `TypeError`.
+  The package still imports, so nothing fails until a call.
+
 - **A `many=True` chain step renders the list its service returned.** Its output
   re-fetch, which was handed the whole list as `instance`, no longer runs, matching
   drf-services' own dispatch of the same spec. A step whose re-fetch was a
