@@ -97,12 +97,16 @@ def test_the_list_as_a_named_field_the_refusal_suggests_works() -> None:
         {"name": "bulk", "arguments": {"items": [item, item]}}, _ctx(server)
     )
     bad: Any = handle_tools_call(
-        {"name": "bulk", "arguments": {"items": [{**item, "amount_cents": -1}]}}, _ctx(server)
+        {"name": "bulk", "arguments": {"items": [item, {**item, "amount_cents": -1}]}},
+        _ctx(server),
     )
 
     assert schema["properties"]["items"]["type"] == "array"
     assert ok["structuredContent"] == {"count": 2}
-    # Read as encoded, which is what reaches the client: the int index becomes a key.
-    assert json.loads(json.dumps(bad.to_dict()))["data"]["detail"] == {
-        "items": {"0": {"amount_cents": ["Ensure this value is greater than or equal to 0."]}}
-    }
+    # Read as encoded, which is what reaches the client. DRF 3.18 keys a nested
+    # list's errors by the invalid items' indexes, which encoding turns into string
+    # keys; below it they are a list holding an empty object for each valid item.
+    # The floor is below 3.18, so both shapes reach clients.
+    items = json.loads(json.dumps(bad.to_dict()))["data"]["detail"]["items"]
+    by_index = items if isinstance(items, dict) else {str(i): e for i, e in enumerate(items) if e}
+    assert by_index == {"1": {"amount_cents": ["Ensure this value is greater than or equal to 0."]}}

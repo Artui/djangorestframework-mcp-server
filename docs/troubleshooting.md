@@ -170,8 +170,11 @@ server.register_service_tool(
 ```
 
 The tool advertises `items` as an array, and an invalid item's errors are
-reported under its index, as `{"items": {"0": {"amount_cents": [...]}}}`. If the spec is shared with a REST view that
-takes a bare list, keep it off the MCP server instead: tag it in the
+reported at its index. From Django REST framework 3.18 that is an object keyed
+by the invalid items' indexes, `{"items": {"1": {"amount_cents": [...]}}}`; below
+3.18 it is a list holding an empty object for each valid item,
+`{"items": [{}, {"amount_cents": [...]}]}`. If the spec is shared with a REST view
+that takes a bare list, keep it off the MCP server instead: tag it in the
 `SpecRegistry` and narrow the registry with `by_tag` before `register_specs`.
 
 Such a tool used to register and list the single item's schema as its
