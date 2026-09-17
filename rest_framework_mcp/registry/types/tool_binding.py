@@ -13,6 +13,7 @@ from rest_framework_services import (
     UnsetType,
     build_audience_projection,
 )
+from rest_framework_services.types.selector_kind import SelectorKind
 from rest_framework_services.types.service_spec import ServiceSpec
 
 from rest_framework_mcp.constants import (
@@ -25,7 +26,7 @@ from rest_framework_mcp.constants import (
 from rest_framework_mcp.protocol.types.icon import Icon
 from rest_framework_mcp.registry.types.query_param import QueryParam
 from rest_framework_mcp.registry.types.url_kwarg import UrlKwarg
-from rest_framework_mcp.registry.types.utils import validate_content_kind
+from rest_framework_mcp.registry.types.utils import rendered_kind, validate_content_kind
 
 InputT = TypeVar("InputT")
 ResultT = TypeVar("ResultT")
@@ -206,6 +207,17 @@ class ToolBinding(Generic[InputT, ResultT, ExtraT]):
         the payload carries."""
         spec = self.spec
         return spec.output_selector_spec.affordances if spec.output_selector_spec else None
+
+    @property
+    def rendered_kind(self) -> SelectorKind:
+        """Whether a result renders as one object or as a list, for ``outputSchema``.
+
+        ``LIST`` when ``output_selector_spec`` re-fetches a set, which drf-services
+        dispatches to a list result the handler renders ``many=True``. A service
+        tool never paginates, so a ``LIST`` is served as a bare array and the
+        schema has to say so; it once advertised the item alone. See
+        ``registry.types.utils.rendered_kind``."""
+        return rendered_kind(self.spec)
 
     @cached_property
     def audience_projection(self) -> AudienceProjection:

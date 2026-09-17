@@ -64,12 +64,24 @@ service step whose callable takes the validated input as `data`.
 
 `atomic=True` (the default) wraps every step in a single
 `transaction.atomic()`. If any step raises `ServiceError` or
-`ServiceValidationError`, every prior write rolls back and the client
-gets a JSON-RPC error whose `data` names the failing step:
+`ServiceValidationError`, every prior write rolls back and the call
+answers with an `isError: true` tool result, as a single-spec tool does,
+whose error object names the failing step:
 
 ```json
-{"code": -32000, "message": "…", "data": {"failedStep": "sub"}}
+{"error": {"type": "service_error", "message": "…", "failedStep": "sub"}}
 ```
+
+A step refused by its service's `affordances` also carries the refusal's
+`code` beside `failedStep`, so a client can tell which rule stopped the
+chain without matching on the sentence:
+
+```json
+{"error": {"type": "service_error", "message": "The books are closed.",
+           "code": "books_closed", "failedStep": "void"}}
+```
+
+Any other `ServiceError` carries no `code` key.
 
 Set `atomic=False` to let each step commit independently (no rollback).
 
@@ -84,7 +96,28 @@ A step is rendered through its serializer — `ServiceSpec.
 output_selector_spec.output_serializer` or
 `SelectorSpec.output_serializer` — and its output-context provider sees
 the resolved data (`result` / `instance` / `page`), exactly as a
-single-spec tool does.
+single-spec tool does. A `LIST` renders as a list, whether the step is a
+`LIST` selector or a service whose `output_selector_spec` re-fetches a
+`LIST`, and a chain never paginates, so the tool's `outputSchema` advertises
+a bare array for such an output step.
+
+### Affordances on a rendered step
+
+A selector spec's `affordances` render as an `affordances` object on each
+item, from answers the selector tool's dispatch computes as it fetches the
+rows. A chain step runs its selector directly and computes none, so
+registering a chain **refuses** a rendered step — the output step, or any
+step under `output_all` — whose serializer would render affordances that ask
+a condition:
+
+```text
+ImproperlyConfigured: Chain tool 'orders': step 'out' is rendered through a
+selector spec declaring affordances ['cancel'], ...
+```
+
+Register that spec as a selector or service tool of its own, where the
+answers are computed and rendered, or drop the affordances from the step.
+An intermediate step is not rendered, so it may declare them freely.
 
 ## Permissions
 
@@ -92,9 +125,29 @@ Each step's `spec.permission_classes` are AND-combined with the
 chain-level `permissions=` and evaluated up front: a failing step
 permission blocks the whole chain before any step runs.
 
+The object-level half, `has_object_permission`, cannot run up front, because
+there is no row yet. It runs on each row as its step resolves it: a `RETRIEVE`
+selector step's row, and the instance a service step's `instance_selector_spec`
+fetches. A denial answers the whole call as a JSON-RPC permission error, not as
+a failed step, and under `atomic=True` every earlier write rolls back.
+
 ## Scope
 
 Chains deliberately do **not** run the selector post-fetch pipeline
 (filter / order / paginate) — that belongs on a single
 [`register_selector_tool`](selector-tool-with-filterset.md). A selector
 step's result is used as-is (rendered `many=True` for `kind=LIST`).
+
+A `RETRIEVE` step resolves to its one row the way the selector tool does, so a
+selector may return a queryset (`Invoice.objects.filter(pk=pk)`) or the instance
+(`Invoice.objects.get(pk=pk)`) and the next step receives the row either way. A
+service step whose `output_selector_spec` re-fetches a `RETRIEVE` resolves it the
+same way. When there is no row, the step fails as the selector tool does, naming
+the step, and an atomic chain rolls back:
+
+```json
+{"error": {"type": "not_found", "message": "target: no matching instance found",
+           "failedStep": "target"}}
+```
+
+A spec with `allow_none=True` passes `None` on instead, and renders it as `null`.

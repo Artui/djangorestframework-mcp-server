@@ -33,8 +33,9 @@ def build_error_tool_result(
     tool's ``outputSchema``, which describes the *success* shape, so a strict
     client validating an error payload against it would reject the result.
 
-    ``detail`` is merged into the ``error`` object — per-field validation detail
-    and chain-tool ``failedStep`` markers.
+    ``detail`` is merged into the ``error`` object — per-field validation detail,
+    chain-tool ``failedStep`` markers, and the ``code`` a refused call carries
+    (``handlers.utils.service_error_result`` adds it for an ``ActionUnavailable``).
     """
     error: dict[str, Any] = {"type": error_type, "message": message}
     if detail:

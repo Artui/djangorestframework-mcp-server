@@ -38,6 +38,12 @@ CANCEL_ORDER: ServiceSpec[Any, Any, Any] = ServiceSpec(
 
 DECLARED_CODES: list[str] = ["already_shipped", "books_closed"]
 
+ARCHIVE_ORDER: ServiceSpec[Any, Any, Any] = ServiceSpec(service=lambda **_: None, atomic=False)
+"""Declares no conditions, so every row answers ``{"available": true}`` without its
+answer being read off the row. That makes it the one declaration a chain can
+render: a chain step computes no answers, and registration refuses a rendered step
+whose declaration would need them."""
+
 
 def order_selector_spec(kind: SelectorKind, **overrides: Any) -> SelectorSpec[Any, Any]:
     """A selector spec rendering one order, declaring ``cancel`` as an affordance."""

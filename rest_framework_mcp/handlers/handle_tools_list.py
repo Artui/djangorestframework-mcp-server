@@ -90,22 +90,19 @@ def handle_tools_list(
         # ``rendered_affordances`` is reconciled the same way, because the
         # renderer adds an ``affordances`` key no serializer declares.
         # ``outputSchema`` must match the payload shape the dispatch pipeline
-        # actually emits — a LIST tool returns a bare array or the pagination
-        # envelope — so the selector schema is kind-aware.
-        if isinstance(binding, SelectorToolBinding):
-            output_schema = build_output_schema(
-                binding.output_serializer,
-                kind=binding.kind,
-                paginate=binding.paginate,
-                projection=binding.audience_projection,
-                affordances=binding.rendered_affordances,
-            )
-        else:
-            output_schema = build_output_schema(
-                binding.output_serializer,
-                projection=binding.audience_projection,
-                affordances=binding.rendered_affordances,
-            )
+        # actually emits — a LIST result is a bare array, or the pagination
+        # envelope — so the schema is kind-aware on every binding, and
+        # ``rendered_kind`` is reconciled per binding like the two above. Only
+        # the selector schema once was: a service tool re-fetching a LIST, or a
+        # chain whose output step is one, advertised a single object and served
+        # an array. Only a selector tool paginates, so only it passes the flag.
+        output_schema = build_output_schema(
+            binding.output_serializer,
+            kind=binding.rendered_kind,
+            paginate=isinstance(binding, SelectorToolBinding) and binding.paginate,
+            projection=binding.audience_projection,
+            affordances=binding.rendered_affordances,
+        )
         # A media tool has no JSON result to describe, so the schema is dropped
         # rather than advertised over a payload arriving as an image block.
         # Resource links keep theirs: the links are JSON.

@@ -147,6 +147,39 @@ failed too, for every tool on the server, because this transport derives each
 tool's schema on each listing. A resource never had a schema to derive, so it
 failed on every read instead.
 
+### "the spec declares many=True, so its input is a JSON array"
+
+A `ServiceSpec` with `many=True` validates its input as a list, and the
+`arguments` of an MCP `tools/call` is always a JSON object, so no call could
+reach the service. Declare the list as a named field of the input serializer and
+loop over it in the service:
+
+```python
+class BulkInvoiceInput(serializers.Serializer):
+    items = InvoiceSerializer(many=True)
+
+
+def create_invoices(*, data):
+    return [create_invoice(**item) for item in data["items"]]
+
+
+server.register_service_tool(
+    name="invoices.bulk_create",
+    spec=ServiceSpec(service=create_invoices, input_serializer=BulkInvoiceInput),
+)
+```
+
+The tool advertises `items` as an array, and an invalid item's errors are
+reported at its index. From Django REST framework 3.18 that is an object keyed
+by the invalid items' indexes, `{"items": {"1": {"amount_cents": [...]}}}`; below
+3.18 it is a list holding an empty object for each valid item,
+`{"items": [{}, {"amount_cents": [...]}]}`. If the spec is shared with a REST view
+that takes a bare list, keep it off the MCP server instead: tag it in the
+`SpecRegistry` and narrow the registry with `by_tag` before `register_specs`.
+
+Such a tool used to register and list the single item's schema as its
+`inputSchema`, and every call to it failed.
+
 ## `ValueError` when registering a resource
 
 ### "sets ..., which the resource read path does not apply"

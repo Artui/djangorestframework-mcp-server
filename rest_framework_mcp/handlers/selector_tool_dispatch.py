@@ -54,6 +54,7 @@ from rest_framework_mcp.handlers.utils import (
     consume_rate_limits,
     effective_rate_limits,
     resolve_bound,
+    service_error_result,
     services_dispatch_policies,
     split_query_params,
     split_url_kwargs,
@@ -116,7 +117,7 @@ def dispatch_selector_tool(
     except ServiceError as exc:
         if context.config.record_service_exceptions:
             otel_span.record_exception(exc)
-        return build_error_tool_result(exc.message, error_type="service_error").to_dict()
+        return service_error_result(exc).to_dict()
 
     return _post_fetch_and_render(
         binding, result, drf_request, view, arguments_raw, params, context.config
@@ -183,7 +184,7 @@ async def dispatch_selector_tool_async(
     except ServiceError as exc:
         if context.config.record_service_exceptions:
             otel_span.record_exception(exc)
-        return build_error_tool_result(exc.message, error_type="service_error").to_dict()
+        return service_error_result(exc).to_dict()
 
     return await _post_fetch_and_render_async(
         binding, result, drf_request, view, arguments_raw, params, context.config

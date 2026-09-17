@@ -13,6 +13,7 @@ from rest_framework_services import (
     UnsetType,
     build_audience_projection,
 )
+from rest_framework_services.types.selector_kind import SelectorKind
 from rest_framework_services.types.selector_spec import SelectorSpec
 from rest_framework_services.types.service_spec import ServiceSpec
 
@@ -24,7 +25,7 @@ from rest_framework_mcp.constants import (
 )
 from rest_framework_mcp.protocol.types.icon import Icon
 from rest_framework_mcp.registry.types.chain_step import ChainStep
-from rest_framework_mcp.registry.types.utils import validate_content_kind
+from rest_framework_mcp.registry.types.utils import rendered_kind, validate_content_kind
 
 
 @dataclass(frozen=True)
@@ -179,6 +180,8 @@ class ChainToolBinding:
                 f"Chain tool {self.name!r}: output_alias={self.output_alias!r} is not a "
                 f"known step alias {sorted(set(aliases))!r}."
             )
+        for step in self.steps if self.output_all else (self.output_step,):
+            _refuse_unanswered_affordances(self.name, step)
         if self.include_output_schema is True and self.include_structured_content is False:
             raise ImproperlyConfigured(
                 f"Chain tool {self.name!r}: include_output_schema=True is incompatible "
@@ -243,6 +246,12 @@ class ChainToolBinding:
         service's own ``affordances``, which are the conditions a call is
         refused against and are not rendered. ``None`` under ``output_all``, for
         the reason ``output_serializer`` is: that response has no single schema.
+
+        On a registered chain this can only be a declaration that asks no
+        condition: one that does is refused in ``__post_init__``, because a chain
+        step computes no answers for the renderer to read. Kept general rather
+        than hard-wired to ``None``, so the schema still describes the
+        ``{"available": true}`` object such a declaration does render.
         """
         if self.output_all:
             return None
@@ -250,6 +259,67 @@ class ChainToolBinding:
         if isinstance(spec, ServiceSpec):
             return spec.output_selector_spec.affordances if spec.output_selector_spec else None
         return spec.affordances
+
+    @property
+    def rendered_kind(self) -> SelectorKind | None:
+        """Whether the output step renders as one object or a list, for ``outputSchema``.
+
+        The output step's answer from ``registry.types.utils.rendered_kind``,
+        the same one the chain renderer picks ``many`` by. A chain never
+        paginates, so a ``LIST`` is served as a bare array. ``None`` under
+        ``output_all``, whose ``{alias: rendered}`` object has no single kind.
+        """
+        if self.output_all:
+            return None
+        return rendered_kind(self.output_step.spec)
+
+
+def _refuse_unanswered_affordances(chain_name: str, step: ChainStep) -> None:
+    """Refuse a rendered step whose rendering would read affordance answers nobody computed.
+
+    drf-services renders a selector spec's ``affordances`` by reading, off each
+    row, answers its selector dispatch computed -- an annotation on a queryset, or
+    the answers it attached to rows returned directly. A chain runs each step's
+    selector (and a service step's output re-fetch) through the bare
+    ``run_selector``, because it owns the pool and the transaction, and the step
+    that computes the answers is not part of drf-services' public surface. So the
+    renderer finds no answer and raises on **every** call, while the tool
+    registered cleanly and ``tools/list`` advertised the ``affordances`` object.
+
+    Refused here, where the mistake is made, and only in exactly the shape that
+    fails, so nothing that works today is turned away:
+
+    - **Only a rendered step.** The output step, or every step under
+      ``output_all``. An intermediate step's result feeds the next step and is
+      never rendered, so its declaration reads no answer.
+    - **Only through a serializer.** A step with no output serializer passes its
+      value through unrendered, and ``output_all`` skips it.
+    - **Only a declaration that asks something.** A name whose service declares
+      no conditions renders ``{"available": true}`` without reading a row.
+
+    The wording follows the refusal ``register_resource`` raises for the same
+    declaration: what is dropped, and where the spec does render it.
+    """
+    spec = step.spec
+    rendered_through: SelectorSpec[Any, Any] | None = (
+        spec.output_selector_spec if isinstance(spec, ServiceSpec) else spec
+    )
+    if rendered_through is None or rendered_through.output_serializer is None:
+        return
+    asked: list[str] = sorted(
+        name
+        for name, service_spec in (rendered_through.affordances or {}).items()
+        if service_spec.affordances
+    )
+    if not asked:
+        return
+    raise ImproperlyConfigured(
+        f"Chain tool {chain_name!r}: step {step.alias!r} is rendered through a selector "
+        f"spec declaring affordances {asked!r}, and a chain step does not compute their "
+        "answers -- it runs the selector directly -- so every call would fail while "
+        "rendering. Register that spec as a selector or service tool of its own, where "
+        "affordances render, or drop the affordances from this step."
+    )
 
 
 __all__ = ["ChainToolBinding"]

@@ -7,6 +7,99 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.45.0] — 2026-09-16
+
+### Changed
+
+- **Floored at `djangorestframework-services>=0.52.1`, and it is a hard floor.**
+  `materialize_retrieve` is first exported there, and the chain dispatcher imports
+  it at module level, so below 0.52.1 this package does not import. The same
+  release renders a single `None` as `null` rather than as the output serializer's
+  blank row, which is what a service tool whose service returns nothing, and a
+  chain step with `allow_none=True` that finds nothing, now answer.
+
+- **A `ServiceSpec` with `many=True` is refused at registration** with
+  `ImproperlyConfigured`, from `register_service_tool` and from `register_specs`
+  alike. Such a spec validates its input as a JSON array, and MCP tool `arguments`
+  is always a JSON object, so the tool registered, advertised the single item's
+  object as its `inputSchema`, and failed every call: the default `BUNDLE`
+  argument binding made drf-services raise `ValueError` before validation ran.
+  The message names the tool and the shape that works, a named list field on the
+  input serializer (`items = ItemSerializer(many=True)`), and how to leave the spec
+  out of a registry. Refusing it leaves the wire open: accepting a list under an
+  argument name chosen now would fix that name for good.
+
+- **Chain registration refuses a rendered step whose `affordances` a chain cannot
+  answer.** From `djangorestframework-services` 0.51 a selector spec's
+  `affordances` render from answers its selector dispatch computes while fetching
+  the rows. A chain runs each step's selector, and a service step's output
+  re-fetch, directly, so no answers were computed and rendering raised
+  `ImproperlyConfigured: The rendered row carries no 'affordance__...' answer` on
+  every call, while the chain registered cleanly and its `outputSchema` advertised
+  the `affordances` object. Three shapes failed that way, and registration now
+  raises `ImproperlyConfigured` naming the chain and the step for each of them: an
+  output step that is a `SelectorSpec` declaring affordances, retrieve or list; an
+  output step that is a `ServiceSpec` whose `output_selector_spec` declares them;
+  and, under `output_all=True`, any step whose rendered spec declares them.
+  Register such a spec as a selector or service tool of its own, where affordances
+  render, or drop them from the step. Nothing that works is refused: an
+  intermediate step is never rendered and may declare affordances, a step with no
+  output serializer passes its value through unrendered, and a declared name
+  whose service asks no condition renders `{"available": true}` without an answer
+  to read. Computing the answers inside a chain needs drf-services to export the
+  step that computes them, which it does not today.
+
+### Fixed
+
+- **A chain's `RETRIEVE` step resolves to its row, and the object-level permission
+  judges that row.** A chain ran each step's selector and used the result as-is,
+  so a selector written `Invoice.objects.filter(pk=pk)`, a form drf-services
+  supports, handed the next step, and the renderer, a queryset. The step's
+  `has_object_permission` never ran, because the guard judges only a model
+  instance. A model-shaped next step, or a serializer, then failed on the
+  queryset, which mostly hid it; a step rendered without an output serializer did
+  not fail, and answered with the queryset's text, which names the row the rule
+  refuses, after committing every earlier step. The same missing collapse broke a
+  service step whose `output_selector_spec` re-fetches a `RETRIEVE` through a
+  queryset. A step now resolves the row with drf-services' own
+  `materialize_retrieve`, so the row is permission-checked, passed on and
+  rendered; a missing row, from an empty queryset or `DoesNotExist`, fails the
+  step as `not_found` with `failedStep`, in the selector tool's wording, and rolls
+  back an atomic chain; and a spec with `allow_none=True` passes `None` on and
+  renders `null`.
+
+- **A tool whose result is an unpaginated list now advertises an array in
+  `outputSchema`, and a chain renders a service step's list as one.**
+  `build_output_schema` has always described a `LIST` as `{type: array, items}`,
+  but `tools/list` passed the kind only for selector tools. A service tool whose
+  `output_selector_spec` re-fetches a `LIST`, and a chain whose output step is a
+  `LIST` selector, advertised the bare item object while `structuredContent`
+  carried an array, which `assert_tool_result_conforms` and every strict client
+  reject. A chain whose output step is a service re-fetching a `LIST` did not get
+  that far: the chain rendered every service step as a single object, so the
+  serializer was handed the whole set as one row and each call raised
+  `AttributeError`, under `output_all` as well. Every binding now exposes
+  `rendered_kind`, read from the same answer the chain renderer picks `many` by,
+  and the schema is built from it: a bare array wherever the payload is an
+  unpaginated list, since neither service tools nor chains paginate. A
+  `LIST` output spec with no `selector` performs no re-fetch, renders the
+  service's own value as one object, and is advertised as one. Selector tools,
+  and every retrieve-shaped result, advertise exactly what they did before.
+
+- **A refused call's error result now carries the refusal's `code`.** When one of
+  a spec's `affordances` refuses a call, drf-services raises `ActionUnavailable`
+  carrying the affordance's `code` and its `reason`, and asks a transport serving
+  an agent to pass on both. Every `ServiceError` arm served the reason alone, as
+  `{"error": {"type": "service_error", "message": "The books are closed."}}`, so a
+  client could only branch on a sentence that is expected to be reworded. The
+  error object now also carries `"code": "books_closed"`, on every path a refusal
+  can take: a service tool over both transports, `MCPServer.call_tool`, a selector
+  tool whose precondition raises the refusal, and a chain step, where it sits
+  beside `failedStep`. The change is additive: `type` is still `"service_error"`,
+  so a client branching on it is unaffected, and any other `ServiceError` (a
+  `ServiceConflict` raised by hand, say) carries no `code` key at all rather than
+  a `null` one.
+
 ## [0.44.0] — 2026-09-16
 
 ### Changed
@@ -4821,7 +4914,8 @@ Pinned to `djangorestframework-services==0.6.0`.
 - 100% line + branch coverage enforced by pytest (**451 tests** at
   release).
 
-[Unreleased]: https://github.com/Artui/djangorestframework-mcp-server/compare/v0.44.0...HEAD
+[Unreleased]: https://github.com/Artui/djangorestframework-mcp-server/compare/v0.45.0...HEAD
+[0.45.0]: https://github.com/Artui/djangorestframework-mcp-server/compare/v0.44.0...v0.45.0
 [0.44.0]: https://github.com/Artui/djangorestframework-mcp-server/compare/v0.43.0...v0.44.0
 [0.43.0]: https://github.com/Artui/djangorestframework-mcp-server/compare/v0.42.0...v0.43.0
 [0.42.0]: https://github.com/Artui/djangorestframework-mcp-server/compare/v0.41.0...v0.42.0
