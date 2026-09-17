@@ -51,21 +51,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
-- **A chain's `RETRIEVE` step resolves to its row, and the object-level
-  permission judges that row.** A chain ran each step's selector and used the
-  result as-is, so a selector written `Invoice.objects.filter(pk=pk)`, a form
-  drf-services supports, handed the next step, and the renderer, a queryset. The
-  step's `has_object_permission` never ran, because the guard judges only a model
+- **A chain's `RETRIEVE` step resolves to its row, and the object-level permission
+  judges that row.** A chain ran each step's selector and used the result as-is,
+  so a selector written `Invoice.objects.filter(pk=pk)`, a form drf-services
+  supports, handed the next step, and the renderer, a queryset. The step's
+  `has_object_permission` never ran, because the guard judges only a model
   instance. A model-shaped next step, or a serializer, then failed on the
   queryset, which mostly hid it; a step rendered without an output serializer did
   not fail, and answered with the queryset's text, which names the row the rule
-  refuses, after committing every earlier step. The same missing collapse broke a service step whose
-  `output_selector_spec` re-fetches a `RETRIEVE` through a queryset. A step now
-  resolves the row with drf-services' own `materialize_retrieve`, so the row is
-  permission-checked, passed on and rendered; a missing row, from an empty
-  queryset or `DoesNotExist`, fails the step as `not_found` with `failedStep`, in
-  the selector tool's wording, and rolls back an atomic chain; and a spec with
-  `allow_none=True` passes `None` on and renders `null`.
+  refuses, after committing every earlier step. The same missing collapse broke a
+  service step whose `output_selector_spec` re-fetches a `RETRIEVE` through a
+  queryset. A step now resolves the row with drf-services' own
+  `materialize_retrieve`, so the row is permission-checked, passed on and
+  rendered; a missing row, from an empty queryset or `DoesNotExist`, fails the
+  step as `not_found` with `failedStep`, in the selector tool's wording, and rolls
+  back an atomic chain; and a spec with `allow_none=True` passes `None` on and
+  renders `null`.
 
 - **A tool whose result is an unpaginated list now advertises an array in
   `outputSchema`, and a chain renders a service step's list as one.**
