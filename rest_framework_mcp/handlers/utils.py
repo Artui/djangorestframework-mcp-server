@@ -159,6 +159,13 @@ def binding_input_serializer(binding: Any) -> type | None:
 def advertises_closed_schema(binding: Any) -> bool:
     """Whether ``tools/list`` may stamp ``additionalProperties: false`` for ``binding``.
 
+    A ``many=True`` service spec is closed whatever its policy. Its list travels
+    under ``spec.many_argument``, and drf-services refuses any argument beside it
+    under every ``unknown_arguments`` value; URL kwargs and query params are split
+    out before dispatch and advertised as properties of their own. The policy
+    governs the keys inside each item there, which ``advertises_closed_items``
+    answers. Everything below describes the arguments of every other binding.
+
     ``REJECT`` is a silent no-op for a serializer-less binding —
     ``services_dispatch_policies`` downgrades it and
     ``build_validated_input_serializer`` short-circuits before the
@@ -171,6 +178,32 @@ def advertises_closed_schema(binding: Any) -> bool:
     open set is answered by accepting and silently dropping every undeclared
     key. Where nothing is enforced, nothing closed may be advertised.
     """
+    if takes_list_payload(binding):
+        return True
+    return _enforces_unknown_keys(binding)
+
+
+def advertises_closed_items(binding: Any) -> bool:
+    """Whether each item of a ``many=True`` service tool's list may be advertised closed.
+
+    drf-services checks ``unknown_arguments`` against every item as it checks a
+    single-item call's arguments, against the same child serializer and the same
+    declared key set, so the item gets the answer a single-item spec would.
+    """
+    return _enforces_unknown_keys(binding)
+
+
+def takes_list_payload(binding: Any) -> bool:
+    """Whether ``binding`` is a service tool whose spec validates a list (``many=True``).
+
+    Selector and chain bindings never do: a chain dispatches its steps itself, and
+    a selector spec has no ``many``.
+    """
+    spec: Any = getattr(binding, "spec", None)
+    return isinstance(spec, ServiceSpec) and spec.many
+
+
+def _enforces_unknown_keys(binding: Any) -> bool:
     if binding.unknown_arguments is not UnknownArguments.REJECT:
         return False
     if binding_input_serializer(binding) is None:
@@ -588,6 +621,7 @@ async def run_with_deadline(coro: Awaitable[Any], seconds: float | None) -> Any:
 
 
 __all__ = [
+    "advertises_closed_items",
     "advertises_closed_schema",
     "binding_input_serializer",
     "build_validated_input_serializer",
@@ -602,6 +636,7 @@ __all__ = [
     "services_dispatch_policies",
     "split_query_params",
     "split_url_kwargs",
+    "takes_list_payload",
     "validate_input_against_serializer",
     "validate_output_format",
     "validation_error_data",

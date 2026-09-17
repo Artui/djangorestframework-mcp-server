@@ -7,6 +7,48 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- **A `ServiceSpec` with `many=True` registers as a tool, and takes its list under
+  one named argument.** It was refused at registration, because MCP tool
+  `arguments` is always a JSON object and such a spec validates a JSON array. The
+  list now travels under the argument the spec's `many_argument` names, `items`
+  unless the spec sets another, and every service dispatch (`tools/call` on both
+  transports, and `call_tool`) passes drf-services `many_as_argument=True` to read
+  it from there; the flag does nothing for any other spec.
+  - The `inputSchema` is drf-services' `spec_to_json_schema` for the spec: an
+    object with that one required array property, carrying any `minItems` or
+    `maxItems` the list serializer declares, with URL kwargs and query params
+    merged in beside it. A single-item service tool's schema is unchanged.
+  - Any other argument beside the list is refused under every `unknown_arguments`
+    value, so the arguments object is advertised with `additionalProperties:
+    false` on every such tool. The policy applies inside each item instead, and
+    each item's own `additionalProperties` advertises it.
+  - Validation errors are keyed under the argument, and an item's errors under its
+    index: `{"items": {"1": {"amount_cents": [...]}}}` on the wire.
+  - The result is the service's list, rendered as a list with no output re-fetch,
+    and the `outputSchema` is an array of the item schema. It said one object,
+    from the `RETRIEVE` a bulk spec's output selector carries by convention.
+  - Registration refuses what would fail every call: a `UrlKwarg` or `QueryParam`
+    named as the list's argument, a `SPREAD_*` `argument_binding`, and a
+    `collection_selector_spec` beside `many=True`.
+
+### Changed
+
+- **A `many=True` chain step renders the list its service returned.** Its output
+  re-fetch, which was handed the whole list as `instance`, no longer runs, matching
+  drf-services' own dispatch of the same spec. A step whose re-fetch was a
+  `RETRIEVE` collapsed the list to one row. The chain's `outputSchema` is an array
+  for such an output step, where it advertised one object, and rendering no longer
+  hands the whole list to the output serializer as a single row.
+
+- **A chain refuses to inherit a `many=True` first step's `input_serializer`.**
+  That serializer describes one item of the step's list, so the chain advertised
+  and validated a single item as its arguments and handed the bulk service that
+  one object as `data`. `ImproperlyConfigured` names the chain and the step;
+  declare the chain's own `input_serializer` and build the step's list in
+  `inputs`.
+
 ## [0.45.0] — 2026-09-16
 
 ### Changed

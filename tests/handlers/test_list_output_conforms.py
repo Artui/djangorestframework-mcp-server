@@ -21,6 +21,7 @@ from __future__ import annotations
 from typing import Any
 
 import pytest
+from rest_framework import serializers
 from rest_framework_services.types.selector_kind import SelectorKind
 from rest_framework_services.types.service_spec import ServiceSpec
 
@@ -133,4 +134,102 @@ async def test_a_list_output_spec_with_no_selector_renders_and_advertises_one_ob
 
     assert result["structuredContent"] == _ROW
     assert tool["outputSchema"]["type"] == "object"
+    assert_tool_result_conforms(tool, result)
+
+
+class _Order(serializers.Serializer):
+    number = serializers.CharField()
+
+
+class _Orders(serializers.Serializer):
+    items = _Order(many=True)
+
+
+def _placed(*, data: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    return [dict(item) for item in data]
+
+
+@pytest.mark.parametrize("shape", ["service_tool", "chain_service_step"])
+async def test_a_list_payload_service_renders_and_advertises_an_array(shape: str) -> None:
+    """drf-services dispatches a ``many=True`` spec to a list result and renders it
+    ``many=True`` whatever its output declaration says, so its result is an array
+    with no ``LIST`` re-fetch. The schema said one object, and a chain handed the
+    whole list to the serializer as a single row and failed. The ``RETRIEVE`` here
+    is what a bulk spec reusing its single-item output declaration carries."""
+    spec = ServiceSpec(
+        service=_placed,
+        atomic=False,
+        many=True,
+        input_serializer=_Order,
+        output_selector_spec=order_selector_spec(
+            SelectorKind.RETRIEVE, selector=None, affordances=None
+        ),
+    )
+    server = fresh_server()
+    common: dict[str, Any] = {"name": "orders", "permissions": [], "include_output_schema": True}
+    if shape == "service_tool":
+        server.register_service_tool(spec=spec, **common)
+    else:
+        server.register_chain_tool(
+            steps=[ChainStep("out", spec, inputs=lambda ctx: {"data": ctx.args["items"]})],
+            input_serializer=_Orders,
+            atomic=False,
+            **common,
+        )
+
+    listing: Any = server.list_tools(user=None)
+    tool: Any = next(entry for entry in listing["tools"] if entry["name"] == "orders")
+    result: Any = await server.acall_tool("orders", {"items": [_ROW, _ROW]}, user=None)
+
+    assert result.get("isError") is not True, result
+    assert result["structuredContent"] == [_ROW, _ROW]
+    assert tool["outputSchema"]["type"] == "array"
+    assert_tool_result_conforms(tool, result)
+
+
+_RE_FETCHED: dict[str, Any] = {"number": "Z-9"}
+
+
+@pytest.mark.parametrize("shape", ["service_tool", "chain_service_step"])
+@pytest.mark.parametrize(
+    ("kind", "re_fetched"),
+    [
+        pytest.param(SelectorKind.LIST, [_RE_FETCHED], id="list"),
+        pytest.param(SelectorKind.RETRIEVE, _RE_FETCHED, id="retrieve"),
+    ],
+)
+async def test_a_list_payload_service_is_never_re_fetched(
+    shape: str, kind: SelectorKind, re_fetched: Any
+) -> None:
+    """drf-services never runs a ``many=True`` spec's output selector, so the list
+    the service returned is what renders. A chain step ran it, handing it the whole
+    list as ``instance``; under ``RETRIEVE`` the re-fetch then collapsed to one row,
+    which the array this step advertises cannot hold."""
+    spec = ServiceSpec(
+        service=_placed,
+        atomic=False,
+        many=True,
+        input_serializer=_Order,
+        output_selector_spec=order_selector_spec(
+            kind, selector=lambda **_: re_fetched, affordances=None
+        ),
+    )
+    server = fresh_server()
+    common: dict[str, Any] = {"name": "orders", "permissions": [], "include_output_schema": True}
+    if shape == "service_tool":
+        server.register_service_tool(spec=spec, **common)
+    else:
+        server.register_chain_tool(
+            steps=[ChainStep("out", spec, inputs=lambda ctx: {"data": ctx.args["items"]})],
+            input_serializer=_Orders,
+            atomic=False,
+            **common,
+        )
+
+    listing: Any = server.list_tools(user=None)
+    tool: Any = next(entry for entry in listing["tools"] if entry["name"] == "orders")
+    result: Any = await server.acall_tool("orders", {"items": [_ROW, _ROW]}, user=None)
+
+    assert result.get("isError") is not True, result
+    assert result["structuredContent"] == [_ROW, _ROW]
     assert_tool_result_conforms(tool, result)

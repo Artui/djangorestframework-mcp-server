@@ -119,6 +119,9 @@ def call_spec_tool(
             argument_binding=argument_binding,
             unknown_arguments=unknown_arguments,
             on_target_resolved=enforce_permissions,
+            # A ``many=True`` spec's list arrives under ``spec.many_argument``, as
+            # tool arguments are always an object; a no-op for any other spec.
+            many_as_argument=True,
         )
     except ServiceValidationError as exc:
         return build_error_tool_result(

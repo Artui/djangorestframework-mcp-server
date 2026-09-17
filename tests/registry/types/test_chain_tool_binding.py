@@ -86,6 +86,34 @@ def test_resolved_input_serializer_falls_back_to_first_service_step() -> None:
     assert b.resolved_input_serializer is InvoiceInputSerializer
 
 
+def test_rejects_inheriting_a_list_payload_step_s_item_serializer() -> None:
+    """With no ``input_serializer`` of its own a chain validates and advertises its
+    arguments as the first step's, which on a ``many=True`` step describes one item:
+    the chain listed an item as its arguments and, by default, handed the bulk
+    service that one object as ``data``."""
+    with pytest.raises(ImproperlyConfigured, match=r"'c'.*'a'.*many=True.*input_serializer"):
+        _binding([ChainStep("a", _svc_spec(input_serializer=InvoiceInputSerializer, many=True))])
+
+
+def test_a_list_payload_first_step_is_accepted_under_a_declared_input_serializer() -> None:
+    """The chain's own arguments are then described by the chain, and ``inputs``
+    decides what list the step receives."""
+    binding = _binding(
+        [ChainStep("a", _svc_spec(input_serializer=InvoiceInputSerializer, many=True))],
+        input_serializer=InvoiceOutputSerializer,
+    )
+
+    assert binding.resolved_input_serializer is InvoiceOutputSerializer
+
+
+def test_a_serializer_less_list_payload_first_step_is_accepted() -> None:
+    """Nothing is inherited, so nothing is advertised as one item. Holds the
+    serializer conjunct of the refusal."""
+    binding = _binding([ChainStep("a", _svc_spec(many=True))])
+
+    assert binding.resolved_input_serializer is None
+
+
 def test_resolved_input_serializer_none_for_selector_first_step() -> None:
     b = _binding([ChainStep("a", _sel_spec())])
     assert b.resolved_input_serializer is None

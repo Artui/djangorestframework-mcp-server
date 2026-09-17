@@ -270,6 +270,88 @@ Three rules worth knowing:
 re-exported here for the same reason as `UrlKwarg` — one declaration, whichever
 transport carries it.
 
+### A list payload: `many=True` service tools { #list-payload }
+
+A `ServiceSpec` with `many=True` validates its input as a list and hands the
+service that list as `data`. Over HTTP the list is the request body. A
+`tools/call`'s `arguments` is always a JSON object, so here the list travels
+under one argument, named by the spec's `many_argument` and `items` unless the
+spec says otherwise:
+
+```python
+def create_invoices(*, data):
+    return [create_invoice(**item) for item in data]
+
+
+server.register_service_tool(
+    name="invoices.bulk_create",
+    spec=ServiceSpec(
+        service=create_invoices,
+        input_serializer=InvoiceSerializer,  # describes one item
+        many=True,
+        many_argument="invoices",  # optional; the default is "items"
+    ),
+)
+```
+
+Every service dispatch, `tools/call` on both transports and `call_tool` alike,
+passes drf-services `many_as_argument=True`, which reads the list out of that
+argument. For a spec without `many` the flag does nothing. The tool advertises
+the argument as an array of the item schema, taken from drf-services'
+`spec_to_json_schema`, so any `minItems` or `maxItems` the list serializer
+declares are advertised too:
+
+```json
+{
+  "type": "object",
+  "properties": {
+    "invoices": {"type": "array", "items": {"type": "object", "properties": {"number": {"type": "string"}}}}
+  },
+  "required": ["invoices"],
+  "additionalProperties": false
+}
+```
+
+What a caller should know:
+
+- **Nothing travels beside the list.** Any other argument is refused, whatever the
+  tool's `unknown_arguments` says, with
+  `{"non_field_errors": ["Unexpected argument(s): 'note'."]}`. That is why the
+  arguments object is advertised closed on every such tool. URL kwargs and query
+  params are the exception: they are taken out of the arguments before dispatch,
+  and advertised beside the list.
+- **`unknown_arguments` applies inside each item.** Each item is checked as a
+  single-item tool's arguments are, and each item's own `additionalProperties`
+  says whether an undeclared key in it is refused.
+- **Errors are keyed under the argument, and item errors by index.** An invalid
+  second item is a `-32602` whose `data.detail` is
+  `{"invoices": {"1": {"amount_cents": ["Ensure this value is greater than or equal to 0."]}}}`.
+  JSON object keys are strings, so the index arrives as `"1"`; with
+  `INCLUDE_VALIDATION_VALUE` on, `data.value["invoices"][1]` is the item it names.
+  drf-services gives item errors this shape on every Django REST framework
+  version, and an undeclared key refused inside an item is keyed by its index the
+  same way. A call with no list is refused as `{"invoices": ["This field is required."]}`.
+- **The result is the service's list.** It is rendered through the output
+  serializer as a list, no output re-fetch runs, and the `outputSchema` is an
+  array of the item schema. `structuredContent` is that bare array, as for every
+  unpaginated list result this server returns, not an object wrapping it.
+- **A service cannot ask the user a question.** An elicitation answer returns as
+  an argument, which would sit beside the list and be refused, so a `many=True`
+  service raising `AdditionalInputRequired` can never receive its answer.
+
+Registration refuses three declarations that would make every call fail: a
+`UrlKwarg` or `QueryParam` named as the list's argument, a `SPREAD_*`
+`argument_binding`, and a `collection_selector_spec` beside `many=True`. A chain
+refuses to inherit a `many=True` first step's `input_serializer` as its own.
+[Troubleshooting](troubleshooting.md#takes-the-name-the-specs-list-travels-under)
+has each message.
+
+A tool that needs arguments beside the list can still declare the list as a named
+field of its input serializer, `items = InvoiceSerializer(many=True)`, and loop
+over `data["items"]` in the service. Its item errors come back keyed by index too
+from Django REST framework 3.18; below 3.18 they are a list holding an empty object
+for each valid item, `{"items": [{}, {"amount_cents": [...]}]}`.
+
 ### `SelectorSpec` for resources
 
 `register_resource(selector=...)` requires a
@@ -1573,7 +1655,9 @@ The MCP package owns its own dispatch flow. It does **not** import
    `spec.partial=True` validates partially (and drops `required` from the
    advertised `inputSchema`); the resolved instance is threaded into the
    serializer DRF-style so instance-dependent `validate()` sees
-   `self.instance`.
+   `self.instance`. A `many=True` spec validates the list under its
+   `many_argument` instead, item by item, with no target to resolve
+   ([A list payload](#list-payload)).
 5. Build a kwarg pool: `{request, user, data}` plus — when present — the
    resolved `instance` and the bound, validated `serializer` (both
    reserved seeds clients cannot poison; services opt in by declaring
@@ -1608,7 +1692,8 @@ The MCP package owns its own dispatch flow. It does **not** import
    re-fetch serves a bare array — a service tool never paginates — and the
    tool's `outputSchema` advertises `{type: array, items}` to match. With no
    `selector` there is no re-fetch, so the result is one object whatever the
-   nested `kind` says.
+   nested `kind` says. A `many=True` spec never re-fetches: the service's
+   list is rendered as a list and advertised as an array.
 9. Wrap as a `ToolResult` with `OutputFormat`-driven encoding for the human-
    readable `content[0]` block. `structuredContent` is always JSON.
 

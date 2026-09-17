@@ -64,10 +64,16 @@ def rendered_kind(spec: ServiceSpec[Any, Any, Any] | SelectorSpec[Any, Any]) -> 
     what the payload is rendered ``many=`` by:
 
     - A ``SelectorSpec`` answers its own ``kind``.
-    - A ``ServiceSpec`` answers ``LIST`` only when its ``output_selector_spec``
-      is a ``LIST`` *and has a selector*: the re-fetch is what produces the set,
-      and with no selector the service's own return value renders as one object
-      whatever the nested ``kind`` says. Anything else is a single object.
+    - A ``many=True`` ``ServiceSpec`` answers ``LIST``. Its result is the list the
+      service returns, rendered ``many``, and no re-fetch runs; its
+      ``output_selector_spec`` is ``RETRIEVE`` by convention, because that kind
+      describes one row of it. drf-services' own ``spec_to_json_schema`` answers
+      the output phase the same way.
+    - Any other ``ServiceSpec`` answers ``LIST`` only when its
+      ``output_selector_spec`` is a ``LIST`` *and has a selector*: the re-fetch is
+      what produces the set, and with no selector the service's own return value
+      renders as one object whatever the nested ``kind`` says. Anything else is a
+      single object.
 
     One answer read by both halves of a tool -- each binding's ``rendered_kind``,
     which picks the advertised ``outputSchema`` shape, and the chain renderer,
@@ -78,6 +84,8 @@ def rendered_kind(spec: ServiceSpec[Any, Any, Any] | SelectorSpec[Any, Any]) -> 
     """
     if isinstance(spec, SelectorSpec):
         return spec.kind
+    if spec.many:
+        return SelectorKind.LIST
     nested = spec.output_selector_spec
     if nested is not None and nested.selector is not None and nested.kind is SelectorKind.LIST:
         return SelectorKind.LIST

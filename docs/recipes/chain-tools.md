@@ -99,7 +99,12 @@ the resolved data (`result` / `instance` / `page`), exactly as a
 single-spec tool does. A `LIST` renders as a list, whether the step is a
 `LIST` selector or a service whose `output_selector_spec` re-fetches a
 `LIST`, and a chain never paginates, so the tool's `outputSchema` advertises
-a bare array for such an output step.
+a bare array for such an output step. A `many=True` service step renders the
+list its service returned the same way, and, as when it is dispatched as a tool
+of its own, its output re-fetch never runs. The step is handed whatever `data`
+its `inputs` put in the pool, so build the list there; a chain whose first step
+is `many=True` must declare its own `input_serializer` rather than inherit the
+step's, which describes one item.
 
 ### Affordances on a rendered step
 
