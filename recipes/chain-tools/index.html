@@ -1701,7 +1701,12 @@ the resolved data (<code>result</code> / <code>instance</code> / <code>page</cod
 single-spec tool does. A <code>LIST</code> renders as a list, whether the step is a
 <code>LIST</code> selector or a service whose <code>output_selector_spec</code> re-fetches a
 <code>LIST</code>, and a chain never paginates, so the tool's <code>outputSchema</code> advertises
-a bare array for such an output step.</p>
+a bare array for such an output step. A <code>many=True</code> service step renders the
+list its service returned the same way, and, as when it is dispatched as a tool
+of its own, its output re-fetch never runs. The step is handed whatever <code>data</code>
+its <code>inputs</code> put in the pool, so build the list there; a chain whose first step
+is <code>many=True</code> must declare its own <code>input_serializer</code> rather than inherit the
+step's, which describes one item.</p>
 <h3 id="affordances-on-a-rendered-step">Affordances on a rendered step<a class="headerlink" href="#affordances-on-a-rendered-step" title="Permanent link">&para;</a></h3>
 <p>A selector spec's <code>affordances</code> render as an <code>affordances</code> object on each
 item, from answers the selector tool's dispatch computes as it fetches the

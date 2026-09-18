@@ -5406,7 +5406,8 @@ the payload carries.</p>
 
         <p>Whether a result renders as one object or as a list, for <code>outputSchema</code>.</p>
 <p><code>LIST</code> when <code>output_selector_spec</code> re-fetches a set, which drf-services
-dispatches to a list result the handler renders <code>many=True</code>. A service
+dispatches to a list result the handler renders <code>many=True</code>, and for a
+<code>many=True</code> spec, whose result is the service's own list. A service
 tool never paginates, so a <code>LIST</code> is served as a bare array and the
 schema has to say so; it once advertised the item alone. See
 <code>registry.types.utils.rendered_kind</code>.</p>
@@ -9614,7 +9615,8 @@ so the two cannot disagree about which fields a caller will receive.</p>
 <p><code>input_serializer</code> when set, else the <strong>first step's</strong>
 <code>ServiceSpec.input_serializer</code>. Shared by the <code>tools/list</code> schema
 builder and the dispatcher, so the advertised schema and the validation
-cannot drift.</p>
+cannot drift. A <code>many=True</code> first step's serializer describes one item
+of its list, so <code>__post_init__</code> refuses inheriting it.</p>
 
     </div>
 
