@@ -1666,8 +1666,9 @@ and now raise <code>ImproperlyConfigured</code> if still present: <code>AUTH_BAC
 <code>SESSION_STORE</code>, <code>AUTH_USER_ADAPTER</code>.</p>
 <h2 id="protocol">Protocol<a class="headerlink" href="#protocol" title="Permanent link">&para;</a></h2>
 <p>The companion <code>cacheScope</code> is <strong>derived, not configured</strong>: a listing filtered by
-<code>FILTER_LISTINGS_BY_PERMISSIONS</code> is <code>private</code>, an unfiltered one is <code>public</code>, and
-a resource body is always <code>private</code>. <code>public</code> licenses a shared proxy to serve
+<code>FILTER_LISTINGS_BY_PERMISSIONS</code> is <code>private</code>, and so is a <code>tools/list</code> that asked
+a tool's operation-scope affordance, since that answer is this caller's; any other
+listing is <code>public</code>, and a resource body is always <code>private</code>. <code>public</code> licenses a shared proxy to serve
 one response across authorization contexts, which is not a preference — getting
 it wrong is a cross-tenant disclosure with a cache in front of it.</p>
 <div class="admonition note">
@@ -1675,7 +1676,9 @@ it wrong is a cross-tenant disclosure with a cache in front of it.</p>
 <p>The spec's criterion for <code>public</code> is that <em>"the response does not contain
 user-specific data"</em> — which an unfiltered catalog satisfies exactly: every
 caller gets byte-identical output, so the derivation is the spec's own test
-rather than a judgement call.</p>
+rather than a judgement call. It is also why asking an affordance makes a
+<code>tools/list</code> <code>private</code> even with filtering off: the answer is asked against
+the caller's user and request, so two callers may be told different things.</p>
 <p>It is worth being clear what follows, though. <code>public</code> is not a statement
 that the catalog is <em>non-confidential</em>. It permits a shared intermediary to
 serve a stored copy across authorization contexts, and a tool catalog does
@@ -1711,7 +1714,7 @@ derivation follows it to <code>private</code>.</p>
 <tr>
 <td><code>CATALOG_CACHE_TTL_MS</code></td>
 <td><code>60000</code></td>
-<td>How long a client may cache a catalog result — <code>server/discover</code> plus the four list methods — emitted as <code>ttlMs</code>. <code>0</code> means "immediately stale". A catalog is fixed once the process boots, so the honest ceiling is "until the next deploy", which nothing here can know; a minute costs a client one stale minute after a release rather than a stale catalog for the life of its connection.</td>
+<td>How long a client may cache a catalog result — <code>server/discover</code> plus the four list methods — emitted as <code>ttlMs</code>. <code>0</code> means "immediately stale". The registered bindings are fixed once the process boots, so for them the honest ceiling is "until the next deploy", which nothing here can know; a minute costs a client one stale minute after a release rather than a stale catalog for the life of its connection. A tool an operation-scope affordance leaves out of <code>tools/list</code> is the exception: it can come and go under a running client, and one honouring <code>ttlMs</code> may not re-list for this long unless it is sent <code>notifications/tools/list_changed</code> — see <a href="../../concepts/#a-tool-that-cannot-run-now-is-not-listed">Concepts</a>.</td>
 </tr>
 <tr>
 <td><code>RESOURCE_CACHE_TTL_MS</code></td>
@@ -1918,7 +1921,7 @@ See <a href="../../performance/#what-the-package-bounds">What the package bounds
 <tr>
 <td><code>FILTER_LISTINGS_BY_PERMISSIONS</code></td>
 <td><code>False</code></td>
-<td>Drop bindings whose <code>permissions</code> deny the caller from <code>tools/list</code>, <code>resources/list</code>, <code>resources/templates/list</code> and <code>prompts/list</code>. Per-binding <code>always_listed=True</code> opts one back in as a discovery aid.</td>
+<td>Drop bindings whose <code>permissions</code> deny the caller from <code>tools/list</code>, <code>resources/list</code>, <code>resources/templates/list</code> and <code>prompts/list</code>. Per-binding <code>always_listed=True</code> opts one back in as a discovery aid. A tool whose operation-scope affordance is unmet is left out of <code>tools/list</code> whatever this says.</td>
 </tr>
 </tbody>
 </table>

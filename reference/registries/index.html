@@ -2498,6 +2498,17 @@
 </li>
         
           <li class="md-nav__item">
+  <a href="#rest_framework_mcp.registry.types.chain_tool_binding.ChainToolBinding.always_listed" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        always_listed
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
   <a href="#rest_framework_mcp.registry.types.chain_tool_binding.ChainToolBinding.content_kind" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -4301,6 +4312,17 @@
 </li>
         
           <li class="md-nav__item">
+  <a href="#rest_framework_mcp.registry.types.chain_tool_binding.ChainToolBinding.always_listed" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        always_listed
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
   <a href="#rest_framework_mcp.registry.types.chain_tool_binding.ChainToolBinding.content_kind" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -5106,10 +5128,13 @@ top-level kwargs would conflict with that shape.</p>
 
     <div class="doc doc-contents ">
 
-        <p>Keep this binding in <code>tools/list</code> even when
-<code>FILTER_LISTINGS_BY_PERMISSIONS</code> would drop it because its
-<code>permissions</code> deny the caller. A discovery aid for tools the caller can
-see but not invoke — <code>tools/call</code> still 403s.</p>
+        <p>Keep this binding in <code>tools/list</code> whatever would otherwise leave it out:
+<code>FILTER_LISTINGS_BY_PERMISSIONS</code> dropping it because its <code>permissions</code>
+deny the caller, or an operation-scope condition in the spec's
+<code>affordances</code> that is unmet right now, which leaves a tool out with or
+without that setting. A discovery aid for tools the caller can see but not
+invoke — <code>tools/call</code> still 403s, or is refused with the affordance's
+<code>code</code>. The condition is not asked at list time at all.</p>
 
     </div>
 
@@ -9383,6 +9408,40 @@ never emitted on the MCP wire.</p>
 
         <p>Display icons, emitted in this tool's listing entry. Purely
 presentational; nothing in dispatch reads them.</p>
+
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-attribute">
+
+
+
+<h3 id="rest_framework_mcp.registry.types.chain_tool_binding.ChainToolBinding.always_listed" class="doc doc-heading">
+            <span class="doc doc-object-name doc-attribute-name">always_listed</span>
+
+
+  <span class="doc doc-labels">
+      <small class="doc doc-label doc-label-class-attribute"><code>class-attribute</code></small>
+      <small class="doc doc-label doc-label-instance-attribute"><code>instance-attribute</code></small>
+  </span>
+
+<a href="#rest_framework_mcp.registry.types.chain_tool_binding.ChainToolBinding.always_listed" class="headerlink" title="Permanent link">&para;</a></h3>
+<div class="language-python doc-signature highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="n">always_listed</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span>
+</span></code></pre></div>
+
+    <div class="doc doc-contents ">
+
+        <p>Keep this chain in <code>tools/list</code> even when <code>FILTER_LISTINGS_BY_PERMISSIONS</code>
+would drop it, or a service step's operation-scope <code>affordances</code> condition is
+unmet right now — same semantics as
+<a class="autorefs autorefs-internal" title="always_listed
+
+
+  
+      class-attribute
+      instance-attribute
+  " href="#rest_framework_mcp.registry.types.tool_binding.ToolBinding.always_listed"><code>ToolBinding.always_listed</code></a>.</p>
 
     </div>
 

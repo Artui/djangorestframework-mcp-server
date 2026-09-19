@@ -4058,8 +4058,9 @@ serve the response <em>across authorization contexts</em>, so a result that vari
 by caller and is labelled <code>PUBLIC</code> is a cross-tenant disclosure with a
 cache in front of it — precisely the mistake a settings knob would invite.
 The handlers work it out from what shaped the response: a
-permission-filtered listing is <code>PRIVATE</code>, an unfiltered one <code>PUBLIC</code>,
-and a resource body always <code>PRIVATE</code>.</p>
+permission-filtered listing is <code>PRIVATE</code>, and so is a <code>tools/list</code> that
+asked an operation-scope affordance of this caller; any other listing is
+<code>PUBLIC</code>, and a resource body always <code>PRIVATE</code>.</p>
 
 
 

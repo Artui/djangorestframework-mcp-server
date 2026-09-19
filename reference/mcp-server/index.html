@@ -2530,11 +2530,13 @@ pass the returned <code>nextCursor</code> back for the next page. A
 signals a bad cursor.</p>
 <p><code>scopes</code> are the caller's granted scopes; pass them so a
 <code>ScopeRequired</code>-gated tool is visible under
-<code>FILTER_LISTINGS_BY_PERMISSIONS</code> exactly as it would be on the wire.</p>
+<code>FILTER_LISTINGS_BY_PERMISSIONS</code> exactly as it would be on the wire.
+A tool whose operation-scope <code>affordances</code> condition is unmet for
+<code>user</code> right now is left out, as on the wire.</p>
 <p>Unlike <code>call_tool</code> (the spec core) this is the full transport
 surface. Under an event loop use <code>alist_tools</code> — a listing
-permission filter that hits the DB raises <code>SynchronousOnlyOperation</code>
-from a sync call on the loop.</p>
+permission filter or an affordance condition that hits the DB raises
+<code>SynchronousOnlyOperation</code> from a sync call on the loop.</p>
 
 
     </div>
@@ -2566,9 +2568,10 @@ from a sync call on the loop.</p>
 
         <p>Async <code>list_tools</code> — safe to call from an event loop.</p>
 <p>Listing itself is pure Python, but the per-caller permission filter
-(<code>FILTER_LISTINGS_BY_PERMISSIONS</code>) may run a DB-backed check, which
-raises <code>SynchronousOnlyOperation</code> when reached synchronously from
-within an event loop. The whole sync handler therefore runs in Django's
+(<code>FILTER_LISTINGS_BY_PERMISSIONS</code>) and a tool's operation-scope
+<code>affordances</code> condition may each run a DB-backed check, which raises
+<code>SynchronousOnlyOperation</code> when reached synchronously from within an
+event loop. The whole sync handler therefore runs in Django's
 thread-sensitive executor.</p>
 
 
@@ -2720,10 +2723,16 @@ Django-native answer.</p>
     <div class="doc doc-contents ">
 
         <p>Tell subscribers that one of the catalogs changed.</p>
-<p>Rarely needed: registration happens once at configuration time, so a
-catalog is fixed for the life of the process. It exists for the server
-that registers tools from data — a plugin loader, a per-tenant
-catalog — where the list genuinely can change under a running client.</p>
+<p>Registration happens once at configuration time, so the set of
+registered bindings is fixed for the life of the process. Two things
+still change a catalog under a running client: a server that registers
+tools from data — a plugin loader, a per-tenant catalog — and a tool
+whose operation-scope <code>affordances</code> condition flips, which
+<code>tools/list</code> answers on every request and so starts or stops listing
+it. Call this with <code>TOOLS_LIST_CHANGED</code> after the event that flipped
+the condition, once it has committed. It reaches only clients this
+server can push to: a subscription broker configured and a modern-era
+caller listening, the same two things <code>listChanged</code> is advertised on.</p>
 
 
     </div>

@@ -2182,7 +2182,11 @@ a set is authorized per-set.</p>
 <h3 id="filtering-listings-by-permissions">Filtering listings by permissions<a class="headerlink" href="#filtering-listings-by-permissions" title="Permanent link">&para;</a></h3>
 <p>By default <code>tools/list</code>, <code>resources/list</code>, <code>resources/templates/list</code>,
 and <code>prompts/list</code> return every registered binding regardless of whether
-the current caller could invoke it. Set
+the current caller's permissions would let it invoke one. (A tool that an
+operation-scope affordance refuses right now is the exception: <code>tools/list</code>
+leaves it out either way, because that condition cannot depend on the
+call's arguments — see
+<a href="../concepts/#a-tool-that-cannot-run-now-is-not-listed">Concepts</a>.) Set
 <code>REST_FRAMEWORK_MCP["FILTER_LISTINGS_BY_PERMISSIONS"] = True</code> to drop
 bindings whose permissions deny the caller before paginating.</p>
 <p>This is <strong>binding-level</strong> gating — permissions are evaluated against a
