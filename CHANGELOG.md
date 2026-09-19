@@ -7,6 +7,26 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- **An in-process consumer can learn which tools a listing leaves out, and why.**
+  A listing only omits a tool whose operation-scope affordance is unmet; nothing
+  says which tools were omitted or for what reason, so an agent loop offering its
+  model the listing could not tell it an operation exists and cannot run now.
+  - `MCPServer.unavailable_tools(user=, request=, scopes=)` maps each tool
+    `list_tools` would leave out to the `Affordance` that left it out, with its
+    `code` and `reason`. It is computed by the same pass over the same tools as the
+    listing, so a name is reported exactly when the listing omits it: never an
+    `always_listed` tool, never one `FILTER_LISTINGS_BY_PERMISSIONS` hides from
+    this caller, and for a chain the first unmet step in order.
+  - `MCPServer.aunavailable_tools` is its twin for an event loop, and answers `{}`
+    without an executor hop when no tool declares a condition to ask.
+  - `list_tools` and `alist_tools` take `include_unavailable=True`, which lists
+    every tool the caller may see and asks no condition, so a consumer can build
+    its tool definitions once and follow availability per step with
+    `unavailable_tools` instead of re-listing.
+  - Nothing changes on the wire.
+
 ## [0.47.0] — 2026-09-19
 
 ### Changed

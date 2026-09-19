@@ -11,6 +11,7 @@ from django.urls import URLPattern, path
 from rest_framework.serializers import Serializer
 from rest_framework_services import UNSET, OfflineContract, UnsetType
 from rest_framework_services.registry.spec_registry import SpecRegistry
+from rest_framework_services.types.affordance import Affordance
 from rest_framework_services.types.selector_kind import SelectorKind
 from rest_framework_services.types.selector_spec import SelectorSpec
 from rest_framework_services.types.service_spec import ServiceSpec
@@ -47,6 +48,11 @@ from rest_framework_mcp.constants import (
 from rest_framework_mcp.handlers.call_spec_tool import call_spec_tool
 from rest_framework_mcp.handlers.handle_tools_call_async import handle_tools_call_async
 from rest_framework_mcp.handlers.handle_tools_list import handle_tools_list
+from rest_framework_mcp.handlers.listable_tool_bindings import listable_tool_bindings
+from rest_framework_mcp.handlers.offered_tools import (
+    declares_operation_conditions,
+    unavailable_tools,
+)
 from rest_framework_mcp.handlers.types.context import MCPCallContext
 from rest_framework_mcp.output.resolve_structured_output import resolve_structured_output
 from rest_framework_mcp.protocol.build_server_info import build_server_info
@@ -762,6 +768,7 @@ class MCPServer:
         user: Any,
         request: Any = None,
         scopes: Sequence[str] | None = None,
+        include_unavailable: bool = False,
     ) -> dict[str, Any] | JsonRpcError:
         """List the tools this server exposes, exactly as the wire would.
 
@@ -778,7 +785,12 @@ class MCPServer:
         ``ScopeRequired``-gated tool is visible under
         ``FILTER_LISTINGS_BY_PERMISSIONS`` exactly as it would be on the wire.
         A tool whose operation-scope ``affordances`` condition is unmet for
-        ``user`` right now is left out, as on the wire.
+        ``user`` right now is left out, as on the wire, unless
+        ``include_unavailable=True``, which lists every tool the caller may see
+        and asks no condition. That is for a consumer that builds its tool
+        definitions once and asks ``unavailable_tools`` each step: it needs a
+        definition for a tool that is unavailable when it lists and becomes
+        available later. The wire has no such parameter.
 
         Unlike ``call_tool`` (the spec core) this is the full transport
         surface. Under an event loop use ``alist_tools`` — a listing
@@ -787,7 +799,9 @@ class MCPServer:
         """
         params = {"cursor": cursor} if cursor is not None else None
         return handle_tools_list(
-            params, self._call_context(user=user, request=request, scopes=scopes)
+            params,
+            self._call_context(user=user, request=request, scopes=scopes),
+            include_unavailable=include_unavailable,
         )
 
     async def alist_tools(
@@ -797,6 +811,7 @@ class MCPServer:
         user: Any,
         request: Any = None,
         scopes: Sequence[str] | None = None,
+        include_unavailable: bool = False,
     ) -> dict[str, Any] | JsonRpcError:
         """Async ``list_tools`` — safe to call from an event loop.
 
@@ -809,7 +824,60 @@ class MCPServer:
         """
         params = {"cursor": cursor} if cursor is not None else None
         context = self._call_context(user=user, request=request, scopes=scopes)
-        return await sync_to_async(handle_tools_list, thread_sensitive=True)(params, context)
+        return await sync_to_async(handle_tools_list, thread_sensitive=True)(
+            params, context, include_unavailable=include_unavailable
+        )
+
+    def unavailable_tools(
+        self,
+        *,
+        user: Any,
+        request: Any = None,
+        scopes: Sequence[str] | None = None,
+    ) -> dict[str, Affordance]:
+        """The tools ``list_tools`` leaves out for this caller right now, and why.
+
+        Maps each omitted tool's name to the operation-scope ``Affordance`` whose
+        condition is unmet: its ``code`` and its ``reason``, the sentence written
+        for people and models alike. For a chain it is the first unmet one in step
+        order. The answer comes from the same pass ``tools/list`` makes, over the
+        same tools the caller may see (``FILTER_LISTINGS_BY_PERMISSIONS``
+        included), so a name is here exactly when the listing omits it, and a
+        tool hidden from this caller is never named with its reason.
+
+        For an in-process consumer that lists once with
+        ``include_unavailable=True`` and asks this each step: it offers its model
+        what a fresh ``tools/list`` would, and can tell the model why the rest
+        are missing, which a listing cannot, since it only leaves them out.
+        ``always_listed=True`` tools are never here, as they are never left out.
+        Advisory like the listing: ``acall_tool`` still enforces every condition.
+
+        Under an event loop use ``aunavailable_tools``; a condition or listing
+        permission that queries raises ``SynchronousOnlyOperation`` from here.
+        """
+        context = self._call_context(user=user, request=request, scopes=scopes)
+        return unavailable_tools(listable_tool_bindings(context), context)
+
+    async def aunavailable_tools(
+        self,
+        *,
+        user: Any,
+        request: Any = None,
+        scopes: Sequence[str] | None = None,
+    ) -> dict[str, Affordance]:
+        """Async ``unavailable_tools`` -- safe to call from an event loop.
+
+        Runs in Django's thread-sensitive executor, as ``alist_tools`` does, since
+        a condition or a listing permission may query. A server none of whose
+        tools declares an operation-scope condition answers ``{}`` without the
+        hop: that is decided from the declarations alone, and a consumer asking
+        on every model step should not pay a thread switch per step to learn it.
+        """
+        if not declares_operation_conditions(self._tools.all()):
+            return {}
+        return await sync_to_async(self.unavailable_tools, thread_sensitive=True)(
+            user=user, request=request, scopes=scopes
+        )
 
     async def acall_tool(
         self,

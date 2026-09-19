@@ -590,6 +590,13 @@ asks again — so the question is when a client asks:
 A listing that asked any condition is served with `cacheScope: private`, because
 it was answered for this caller and is no longer identical for every caller.
 
+**Saying why a tool is missing.** A listing only leaves a tool out; nothing on the
+wire says which tools were left out or why. An in-process consumer can ask:
+`MCPServer.unavailable_tools` names each tool the listing omits with the
+`Affordance` that omitted it, from the same pass, so a model can be told the
+operation exists and why it cannot run now rather than guessing (see
+[Full in-process transport](#full-in-process-transport-acall_tool-list_tools)).
+
 ### Tool annotations
 
 Every tool advertises the MCP-standard `ToolAnnotations` hints, derived
@@ -747,7 +754,10 @@ result["structuredContent"]  # the wire's result payload (dict, not ToolResult)
   catalog with the same merged `inputSchema` (serializer fields **plus** a
   selector tool's filter / ordering / pagination arguments and the
   `additionalProperties` policy), the same `FILTER_LISTINGS_BY_PERMISSIONS`
-  per-caller filter, and the same opaque-cursor pagination the HTTP transport uses.
+  per-caller filter, the same
+  [availability filter](#a-tool-that-cannot-run-now-is-not-listed), and the same
+  opaque-cursor pagination the HTTP transport uses. `alist_tools` is its twin for
+  an event loop, running the listing in Django's thread-sensitive executor.
 - `acall_tool(name, arguments=None, *, user, request=None)` invokes a tool with
   the **full** transport applied: the transport-level MCP permissions and rate
   limits, the selector post-fetch pipeline (filter / order / paginate), a selector
@@ -759,8 +769,43 @@ result["structuredContent"]  # the wire's result payload (dict, not ToolResult)
 Both build the call context internally from `user` + `request` (a minimal request
 is synthesised when `request` is `None`). `JsonRpcError` and `JsonRpcErrorCode`
 are re-exported from the package root so a consumer can branch on faults. This is
-the surface the `django-ag-ui` bridge consumes to run drf-mcp tools in-process
-with HTTP-equivalent semantics.
+the surface django-pydantic-agent's drf-mcp bridge consumes to run drf-mcp tools
+in-process with HTTP-equivalent semantics.
+
+**A consumer that lists once and follows availability per step.** An agent loop
+offers its model tools on every step, and whether a tool can run may change
+between steps. Re-listing each step would rebuild every schema to learn a few
+booleans, so the transport splits the two:
+
+```python
+page = server.list_tools(user=request.user, request=request, include_unavailable=True)
+# ... build the model's tool definitions from page["tools"] once, then each step:
+missing = await server.aunavailable_tools(user=request.user, request=request)
+offered = [tool for tool in definitions if tool.name not in missing]
+for name, affordance in missing.items():
+    ...  # tell the model: `name` exists but cannot run now, because affordance.reason
+```
+
+- `list_tools(..., include_unavailable=True)` (and `alist_tools`) lists every tool
+  the caller may see and asks no condition, so a tool that is unavailable when the
+  consumer lists still has a definition when it becomes available. The listing
+  asked nothing about the caller, so its `cacheScope` is decided as if no tool
+  declared a condition. The wire has no such parameter.
+- `unavailable_tools(*, user, request=None, scopes=None)` maps each tool a plain
+  `list_tools` would leave out to the `Affordance` that left it out — its `code`
+  and its `reason`, the sentence written for people and models alike. It is the
+  same pass over the same tools, so a name is reported exactly when the listing
+  omits it: never an `always_listed` tool, never one
+  `FILTER_LISTINGS_BY_PERMISSIONS` hides from this caller, and for a chain the
+  first unmet step in order. It asks again on every call; nothing is remembered.
+- `aunavailable_tools` is its twin for an event loop. A server none of whose tools
+  declares a condition on the operation answers `{}` without leaving the loop,
+  since that is decided from the declarations alone and a consumer asks every
+  step.
+
+Like the listing, the answer is advisory: `acall_tool` still enforces every
+condition, so a tool that became unavailable after the step began is refused with
+its `code`.
 
 ## Documenting tools
 
