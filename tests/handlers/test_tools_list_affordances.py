@@ -123,6 +123,9 @@ def test_a_service_s_own_affordances_are_not_advertised() -> None:
             ),
         ),
         permissions=[],
+        # Its ``books_closed`` condition is unmet, which on its own would leave
+        # it out of the listing this test reads.
+        always_listed=True,
     )
 
     assert _output_schema(server, "cancel_order") == _ORDER_ITEM

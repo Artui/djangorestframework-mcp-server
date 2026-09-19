@@ -71,12 +71,18 @@ dependencies = [
     # result to the row, which is what the object-level permission judges; handed
     # a queryset, that check skipped the step. The same release renders a single
     # ``None`` as ``None`` rather than as the output serializer's blank row.
-    # 0.53.0 is the floor, and it is a hard one: every service dispatch passes
-    # ``many_as_argument=True``, which first exists there, so below it every
-    # service tool call raises ``TypeError`` -- the import succeeds and nothing
-    # fails until a call. It is also where a ``many=True`` spec's list is read from
-    # the one argument ``ServiceSpec.many_argument`` names.
-    "djangorestframework-services>=0.53.0",
+    # 0.53.0: every service dispatch passes ``many_as_argument=True``, which first
+    # exists there, so below it every service tool call raises ``TypeError`` --
+    # the import succeeds and nothing fails until a call. It is also where a
+    # ``many=True`` spec's list is read from the one argument
+    # ``ServiceSpec.many_argument`` names.
+    # 0.54.0 is the floor, and it is a hard one: ``operation_affordances`` and
+    # ``unmet_operation_affordance`` first exist there, and ``tools/list`` imports
+    # both at module level to leave out a tool whose operation condition is unmet.
+    # They answer a condition against the names drf-services itself enforces it
+    # with at the call, which is why the listing asks them rather than restating
+    # that rule.
+    "djangorestframework-services>=0.54.0",
     "djangorestframework-dataclasses>=1.3.1",
     # ``typing_extensions.Unpack`` is used at runtime by the strict service /
     # selector Protocols (PEP 692) we re-export from the sister package.
@@ -274,7 +280,7 @@ root = ["./rest_framework_mcp"]
 # block under a new dated heading. Run via `uvx bump-my-version` (no
 # permanent dependency added to the project).
 [tool.bumpversion]
-current_version = "0.46.0"
+current_version = "0.47.0"
 allow_dirty = false
 commit = false
 tag = false

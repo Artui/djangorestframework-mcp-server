@@ -565,16 +565,19 @@ def resource_not_found_code(protocol_version: str) -> JsonRpcErrorCode:
     return JsonRpcErrorCode.RESOURCE_NOT_FOUND
 
 
-def catalog_cache_hints(*, ttl_ms: int, filtered_by_permissions: bool) -> dict[str, Any]:
+def catalog_cache_hints(*, ttl_ms: int, per_caller: bool) -> dict[str, Any]:
     """``ttlMs`` / ``cacheScope`` for a catalog result.
 
     Covers ``server/discover`` and the four list methods. ``cacheScope`` is
-    derived from ``FILTER_LISTINGS_BY_PERMISSIONS``, not configured: with
-    filtering on a listing is a function of the caller's permissions, so
-    ``public`` would licence a shared proxy to serve one tenant's visible tools
-    to another.
+    derived, not configured: ``per_caller`` says whether anything about this
+    caller shaped the result. ``FILTER_LISTINGS_BY_PERMISSIONS`` does for every
+    list, since a listing is then a function of the caller's permissions;
+    ``tools/list`` also does whenever it asked an operation-scope affordance,
+    which is answered against the caller's ``user`` and ``request``. Either way
+    ``public`` would licence a shared proxy to serve one tenant's listing to
+    another.
     """
-    scope = CacheScope.PRIVATE if filtered_by_permissions else CacheScope.PUBLIC
+    scope = CacheScope.PRIVATE if per_caller else CacheScope.PUBLIC
     return {"ttlMs": ttl_ms, "cacheScope": scope.value}
 
 

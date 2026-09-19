@@ -92,8 +92,10 @@ class MCPConfig:
     ``ServiceValidationError`` never is — client input failure, not a fault."""
 
     filter_listings_by_permissions: bool
-    """Whether list-style calls hide bindings the caller can't invoke.
-    Per-binding ``always_listed=True`` opts back in."""
+    """Whether list-style calls hide bindings whose ``permissions`` deny the caller.
+    Per-binding ``always_listed=True`` opts back in. A tool whose operation-scope
+    ``affordances`` condition is unmet is left out of ``tools/list`` whatever
+    this says."""
 
     require_tool_permissions: bool
     """Whether registering a tool with no permissions raises instead of warning.

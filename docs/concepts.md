@@ -500,9 +500,95 @@ forms) accept three behavior knobs:
 - **`always_listed=`** — when
   `REST_FRAMEWORK_MCP["FILTER_LISTINGS_BY_PERMISSIONS"]` is enabled,
   bindings are dropped from `tools/list` / `resources/list` /
-  `prompts/list` when their permissions deny the current caller.
-  Setting `always_listed=True` keeps the binding visible as a discovery
-  aid; the permission still gates the actual invocation.
+  `prompts/list` when their permissions deny the current caller, and a
+  tool is left out of `tools/list` whenever an operation-scope affordance
+  refuses it right now (see [below](#a-tool-that-cannot-run-now-is-not-listed)).
+  Setting `always_listed=True` keeps the binding visible through both as a
+  discovery aid; the permission and the affordance still gate the actual
+  invocation.
+
+### A tool that cannot run now is not listed
+
+A service's `affordances` say when the operation is possible. A condition written
+as a callable is answered against the pool's seeds — `user`, `request`, `progress`
+— and never against the call's arguments, so when it is unmet **every** call of
+the tool is refused, whatever the client sends. `tools/list` therefore asks each
+such condition, through drf-services' `unmet_operation_affordance`, and leaves the
+tool out while any is unmet:
+
+```python
+from rest_framework_services import Affordance, ServiceSpec
+
+server.register_service_tool(
+    name="ledger.close_period",
+    spec=ServiceSpec(
+        service=close_period,
+        affordances=[
+            Affordance(
+                code="books_closed",
+                reason="The books for this period are already closed.",
+                when=lambda user: user.ledger.is_open,
+            ),
+        ],
+    ),
+)
+```
+
+- **Asked on every `tools/list`, with the request and user a call would use.** The
+  condition sees the same kind of `request` a call's condition sees — the DRF
+  `Request` built around the transport's own, method `POST`, with no arguments and
+  no query string — and the token's user. It is not gated by
+  `FILTER_LISTINGS_BY_PERMISSIONS`: that setting is off by default because a
+  permission may read arguments that do not exist at list time, and a condition
+  answered against the seeds cannot read arguments at all.
+- **A condition on the row is never asked here.** One written as an ORM expression
+  (`when=~Q(status="shipped")`) has no row at list time; it is skipped without a
+  query and goes on being answered per object at the call. A tool declaring only
+  those is always listed.
+- **Declaring nothing costs nothing.** A listing builds one pool, and only once a
+  listed tool declares a condition on the operation; each such condition then runs
+  once per listing, so keep it cheap. One that raises fails the listing, as it would fail the call.
+- **Selector tools are never left out.** A `SelectorSpec`'s `affordances` names
+  *other* operations to project onto its rows; it is not a condition on the read.
+- **A chain is left out when any service step's condition is unmet.** Every step
+  runs, in order, and nothing can skip one, so such a step refuses every call
+  that reaches it, and a call that does not reach it has already failed earlier.
+- **Resources and prompts are unaffected.** They are reads, and neither holds a
+  spec for an affordance to sit on.
+- **The listing is advisory; the call is the authority.** `tools/call` looks the
+  tool up by name without consulting any listing, so a client holding an older
+  one gets the refusal it would have got anyway: an `isError` result carrying the
+  affordance's `code` (see [Dispatch flow](#dispatch-flow)), not an unknown tool.
+
+**Keeping clients current.** Nothing is cached on the server — each `tools/list`
+asks again — so the question is when a client asks:
+
+- **A condition that flips on an event** (an admin closes the books): announce it
+  once the change has committed, and a client re-lists.
+
+    ```python
+    from asgiref.sync import async_to_sync
+    from django.db import transaction
+    from rest_framework_mcp import NotificationKind
+
+    transaction.on_commit(
+        lambda: async_to_sync(server.notify_list_changed)(NotificationKind.TOOLS_LIST_CHANGED)
+    )
+    ```
+
+    This reaches a client only when a
+    [subscription broker](#server-pushed-notifications-subscriptions) is configured
+    and the client speaks the modern era, the same two conditions `listChanged` is
+    advertised on, and has opted in to `toolsListChanged` on its subscription.
+    Without a broker it is a no-op, so it is safe to call unconditionally.
+
+- **A condition that flips with the clock** (a period ends at midnight): nothing
+  announces it. The client sees it on its next `tools/list`, which one honouring
+  the catalog's `ttlMs` may put off for up to `CATALOG_CACHE_TTL_MS`; a call made
+  in between is refused with the code.
+
+A listing that asked any condition is served with `cacheScope: private`, because
+it was answered for this caller and is no longer identical for every caller.
 
 ### Tool annotations
 

@@ -54,9 +54,7 @@ def handle_server_discover(
     # not which bindings this caller may see, so nothing varies by caller.
     return {
         **result,
-        **catalog_cache_hints(
-            ttl_ms=context.config.catalog_cache_ttl_ms, filtered_by_permissions=False
-        ),
+        **catalog_cache_hints(ttl_ms=context.config.catalog_cache_ttl_ms, per_caller=False),
     }
 
 

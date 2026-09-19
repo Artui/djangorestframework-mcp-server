@@ -4,6 +4,7 @@ from typing import Any
 
 from rest_framework_mcp.constants import JsonRpcErrorCode, ToolContentKind
 from rest_framework_mcp.handlers.is_binding_listable import is_binding_listable
+from rest_framework_mcp.handlers.offered_tools import offered_tools
 from rest_framework_mcp.handlers.pagination import paginate
 from rest_framework_mcp.handlers.types.context import MCPCallContext
 from rest_framework_mcp.handlers.utils import (
@@ -37,6 +38,11 @@ def handle_tools_list(
 
     Pagination is opaque-cursor per the MCP spec: clients pass back the
     ``nextCursor`` they received without inspecting it.
+
+    A tool that an operation-scope affordance refuses right now is left out,
+    and is still callable by name: ``tools/call`` never consults the listing,
+    so a client holding an older one gets the refusal and its ``code``, not an
+    unknown tool. See ``offered_tools``.
     """
     cursor: Any = (params or {}).get("cursor")
     if cursor is not None and not isinstance(cursor, str):
@@ -49,6 +55,11 @@ def handle_tools_list(
         bindings = [
             b for b in bindings if is_binding_listable(b, context.http_request, context.token)
         ]
+    # Availability runs whatever the permissions flag says, and after it, so a
+    # tool this caller may not see is never asked about. Also before paginating,
+    # for the same reason as above: a cursor over a slice the client never sees
+    # would hand back a short or empty page.
+    bindings, asked = offered_tools(bindings, context)
 
     try:
         page, next_cursor = paginate(bindings, cursor, page_size=context.config.page_size)
@@ -127,7 +138,7 @@ def handle_tools_list(
         "tools": tools,
         **catalog_cache_hints(
             ttl_ms=context.config.catalog_cache_ttl_ms,
-            filtered_by_permissions=context.config.filter_listings_by_permissions,
+            per_caller=context.config.filter_listings_by_permissions or asked,
         ),
     }
     if next_cursor is not None:

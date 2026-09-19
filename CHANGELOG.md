@@ -7,6 +7,51 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.47.0] — 2026-09-19
+
+### Changed
+
+- **`tools/list` leaves out a tool that an operation-scope affordance refuses right
+  now.** A callable `when` in a service's `affordances` is answered against the
+  pool's seeds and never against the call's arguments, so while it is unmet every
+  call of the tool is refused whatever the client sends, and listing the tool only
+  invited that refusal. Each `tools/list` now asks those conditions, through
+  drf-services' `unmet_operation_affordance`, with the token's user and the same
+  kind of `request` a call's condition reads, and omits the tool while any is
+  unmet.
+  - Not gated by `FILTER_LISTINGS_BY_PERMISSIONS`. That setting is off by default
+    because a permission may read arguments that do not exist at list time; these
+    conditions cannot read arguments at all.
+  - A condition on the row (an ORM expression) is never asked at list time and
+    runs no query. A selector tool is never left out, since its `affordances`
+    names other operations. A chain is left out when any service step's condition
+    is unmet, because every step runs and none can be skipped. Resources and
+    prompts are unchanged.
+  - `always_listed=True` keeps such a tool listed, and asks nothing.
+  - `tools/call` is unchanged: a client holding an older listing still reaches the
+    tool and is refused with the affordance's `code`, not told the tool is unknown.
+  - `MCPServer.list_tools()` and `alist_tools()` serve the same handler, so they
+    leave the tool out too, for the `user` and `request` they are given. An agent
+    toolset built from them in process is offered what a remote client is offered.
+    The listing names no reason for an omitted tool, so such a toolset cannot tell
+    its model why one is missing.
+  - One pool per listing, built only once a listed tool declares a condition on the
+    operation, so a server declaring none, or only conditions on the row, does no
+    extra work and keeps a public listing.
+  - A `tools/list` that asked any condition is served with `cacheScope: private`,
+    as a permission-filtered one is, because the answer is this caller's. Nothing
+    is cached on the server. After an event that flips a condition, call
+    `server.notify_list_changed(NotificationKind.TOOLS_LIST_CHANGED)`, which
+    reaches clients only through a subscription broker on the modern era; a flip
+    driven by the clock is seen on the client's next `tools/list`.
+
+- **Floored at `djangorestframework-services>=0.54.0` (was `>=0.53.0`), and it is a
+  hard floor.** `operation_affordances` and `unmet_operation_affordance` first
+  exist there, and the `tools/list` handler imports both at module level, so
+  below it the package does not import. They answer a condition against the
+  names drf-services enforces it with at the call, so a listing and the
+  `tools/call` that follows cannot disagree about what a condition sees.
+
 ## [0.46.0] — 2026-09-18
 
 ### Added
@@ -4963,7 +5008,8 @@ Pinned to `djangorestframework-services==0.6.0`.
 - 100% line + branch coverage enforced by pytest (**451 tests** at
   release).
 
-[Unreleased]: https://github.com/Artui/djangorestframework-mcp-server/compare/v0.46.0...HEAD
+[Unreleased]: https://github.com/Artui/djangorestframework-mcp-server/compare/v0.47.0...HEAD
+[0.47.0]: https://github.com/Artui/djangorestframework-mcp-server/compare/v0.46.0...v0.47.0
 [0.46.0]: https://github.com/Artui/djangorestframework-mcp-server/compare/v0.45.0...v0.46.0
 [0.45.0]: https://github.com/Artui/djangorestframework-mcp-server/compare/v0.44.0...v0.45.0
 [0.44.0]: https://github.com/Artui/djangorestframework-mcp-server/compare/v0.43.0...v0.44.0
