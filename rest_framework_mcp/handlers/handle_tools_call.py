@@ -207,6 +207,9 @@ def _dispatch_tool_call(
                 # task worker runs *this* function and its reporter writes to
                 # the task record. ``None`` for an ordinary sync request.
                 progress=context.progress,
+                # ``arguments`` is always an object, so a ``many=True`` spec's list
+                # travels under ``spec.many_argument``; a no-op for any other spec.
+                many_as_argument=True,
             )
         except drf_serializers.ValidationError as exc:
             # A malformed input *shape* is a protocol fault (-32602).

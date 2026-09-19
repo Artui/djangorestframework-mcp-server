@@ -212,6 +212,9 @@ async def _dispatch_tool_call_async(
                 # ``None`` unless the client asked for progress; drf-services
                 # substitutes its no-op, so the service body is unchanged.
                 progress=context.progress,
+                # ``arguments`` is always an object, so a ``many=True`` spec's list
+                # travels under ``spec.many_argument``; a no-op for any other spec.
+                many_as_argument=True,
             )
         except drf_serializers.ValidationError as exc:
             return JsonRpcError(

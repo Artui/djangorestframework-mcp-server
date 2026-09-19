@@ -28,9 +28,11 @@ unwinds, then returned.
 Chains deliberately do **not** run the selector post-fetch pipeline (filter /
 order / paginate) — that is a selector-tool concern. A ``LIST`` selector step's
 result is used as-is and rendered ``many=True``, as is a service step whose
-``output_selector_spec`` re-fetches a ``LIST``. A ``RETRIEVE`` is collapsed to
-its one row first, the way ``dispatch_spec`` collapses it, and a row that is not
-there fails the step as ``not_found`` unless the spec sets ``allow_none``.
+``output_selector_spec`` re-fetches a ``LIST``, and a ``many=True`` service step,
+whose re-fetch never runs, as ``dispatch_spec`` never runs it. A ``RETRIEVE`` is
+collapsed to its one row first, the way ``dispatch_spec`` collapses it, and a row
+that is not there fails the step as ``not_found`` unless the spec sets
+``allow_none``.
 """
 
 from __future__ import annotations
@@ -336,7 +338,11 @@ def _run_service_step(
         spec.service, resolve_callable_kwargs(spec.service, pool), atomic=False
     )
     out_spec = spec.output_selector_spec
-    if out_spec is not None and out_spec.selector is not None:
+    # A ``many=True`` step's result is the list its service returned, as
+    # ``dispatch_spec`` leaves it: drf-services never runs the re-fetch for a list
+    # payload, whose selector would be handed the whole list as ``instance``, and
+    # ``rendered_kind`` renders that list ``many`` for a step and a tool alike.
+    if out_spec is not None and out_spec.selector is not None and not spec.many:
         sel_pool: dict[str, Any] = {**pool, "instance": result, "result": result}
         result = run_selector(
             out_spec.selector, resolve_callable_kwargs(out_spec.selector, sel_pool)

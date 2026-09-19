@@ -170,6 +170,28 @@ class ChainToolBinding:
                     f"Chain tool {self.name!r}: selector step {step.alias!r} has no "
                     "selector. Set SelectorSpec(selector=...)."
                 )
+        first: ChainStep = self.steps[0]
+        if (
+            self.input_serializer is None
+            and isinstance(first.spec, ServiceSpec)
+            and first.spec.many
+            and first.spec.input_serializer is not None
+        ):
+            # Inherited, the first step's serializer would describe the chain's
+            # arguments as one item of its list, and a chain with no ``inputs``
+            # would hand the bulk service that one object as ``data``. One branch
+            # arc, so coverage cannot see a dropped conjunct; each is held in
+            # tests/registry/types/test_chain_tool_binding.py, by
+            # test_a_list_payload_first_step_is_accepted_under_a_declared_input_serializer,
+            # test_resolved_input_serializer_none_for_selector_first_step,
+            # test_resolved_input_serializer_falls_back_to_first_service_step and
+            # test_a_serializer_less_list_payload_first_step_is_accepted, in order.
+            raise ImproperlyConfigured(
+                f"Chain tool {self.name!r}: first step {first.alias!r} declares "
+                "many=True, so its input_serializer describes one item of a list and "
+                "cannot describe the chain's arguments. Set the chain's own "
+                "input_serializer, and build the step's list from it in inputs."
+            )
         if self.output_all and self.output_alias is not None:
             raise ImproperlyConfigured(
                 f"Chain tool {self.name!r}: output_all=True is incompatible with "
@@ -211,7 +233,8 @@ class ChainToolBinding:
         ``input_serializer`` when set, else the **first step's**
         ``ServiceSpec.input_serializer``. Shared by the ``tools/list`` schema
         builder and the dispatcher, so the advertised schema and the validation
-        cannot drift.
+        cannot drift. A ``many=True`` first step's serializer describes one item
+        of its list, so ``__post_init__`` refuses inheriting it.
         """
         if self.input_serializer is not None:
             return self.input_serializer

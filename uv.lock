@@ -691,7 +691,7 @@ requires-dist = [
     { name = "django-oauth-toolkit", marker = "extra == 'oauth'", specifier = ">=3.4" },
     { name = "djangorestframework", specifier = ">=3.14" },
     { name = "djangorestframework-dataclasses", specifier = ">=1.3.1" },
-    { name = "djangorestframework-services", specifier = ">=0.52.1" },
+    { name = "djangorestframework-services", specifier = ">=0.53.0" },
     { name = "djangorestframework-simplejwt", marker = "extra == 'jwt'", specifier = ">=5.3.1" },
     { name = "drf-spectacular", marker = "extra == 'spectacular'", specifier = ">=0.27" },
     { name = "jsonschema", extras = ["format-nongpl"], marker = "extra == 'test'", specifier = ">=4.0.1" },
@@ -733,7 +733,7 @@ docs = [
 
 [[package]]
 name = "djangorestframework-services"
-version = "0.52.1"
+version = "0.53.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "django", version = "5.2.17", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.12'" },
@@ -742,9 +742,9 @@ dependencies = [
     { name = "djangorestframework-dataclasses" },
     { name = "typing-extensions" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/f0/38/32505cabcc8f5d42c2ff065d29641a4a84b276cc1b5f501e6e391add5b5c/djangorestframework_services-0.52.1.tar.gz", hash = "sha256:7b381fe779739a429cf242467d8ba2bddd4d19b2854bee81f001d2dd19da22a3", size = 739389, upload-time = "2026-09-16T21:03:25.711Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/a1/28/b6a3a3c15de18a3c5ce07f3b1d8ca990d4950ed3555b465c6f844b6c7c52/djangorestframework_services-0.53.0.tar.gz", hash = "sha256:9875d885ae6fb96984da758f50dbd3c37736bfdbbec765e3f1f800d03a9f98f2", size = 752463, upload-time = "2026-09-17T16:23:40.224Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/ad/99/402332cb70d9ecf438d0981080407e4b1eac54ad86e0b20ea6d9b4997da5/djangorestframework_services-0.52.1-py3-none-any.whl", hash = "sha256:22f135db5b43b67fa8f92c96c83415536261ec7971d688481de4fe650fab11a6", size = 333052, upload-time = "2026-09-16T21:03:24.034Z" },
+    { url = "https://files.pythonhosted.org/packages/01/fe/768df14832fe128c25aa6909bfc85bfa479f57014f25ee886233f9310d12/djangorestframework_services-0.53.0-py3-none-any.whl", hash = "sha256:c97c01933da2853b2b07678c663b94f637ab0951b5db330a6d1e60b1dac876c9", size = 338629, upload-time = "2026-09-17T16:23:38.862Z" },
 ]
 
 [[package]]
