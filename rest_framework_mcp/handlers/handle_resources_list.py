@@ -51,7 +51,7 @@ def handle_resources_list(
         "resources": items,
         **catalog_cache_hints(
             ttl_ms=context.config.catalog_cache_ttl_ms,
-            filtered_by_permissions=context.config.filter_listings_by_permissions,
+            per_caller=context.config.filter_listings_by_permissions,
         ),
     }
     if next_cursor is not None:

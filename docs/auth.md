@@ -217,7 +217,11 @@ a set is authorized per-set.
 
 By default `tools/list`, `resources/list`, `resources/templates/list`,
 and `prompts/list` return every registered binding regardless of whether
-the current caller could invoke it. Set
+the current caller's permissions would let it invoke one. (A tool that an
+operation-scope affordance refuses right now is the exception: `tools/list`
+leaves it out either way, because that condition cannot depend on the
+call's arguments — see
+[Concepts](concepts.md#a-tool-that-cannot-run-now-is-not-listed).) Set
 `REST_FRAMEWORK_MCP["FILTER_LISTINGS_BY_PERMISSIONS"] = True` to drop
 bindings whose permissions deny the caller before paginating.
 

@@ -120,10 +120,13 @@ class ToolBinding(Generic[InputT, ResultT, ExtraT]):
     - ``IGNORE`` advertises an open schema and drops them."""
 
     always_listed: bool = False
-    """Keep this binding in ``tools/list`` even when
-    ``FILTER_LISTINGS_BY_PERMISSIONS`` would drop it because its
-    ``permissions`` deny the caller. A discovery aid for tools the caller can
-    see but not invoke — ``tools/call`` still 403s."""
+    """Keep this binding in ``tools/list`` whatever would otherwise leave it out:
+    ``FILTER_LISTINGS_BY_PERMISSIONS`` dropping it because its ``permissions``
+    deny the caller, or an operation-scope condition in the spec's
+    ``affordances`` that is unmet right now, which leaves a tool out with or
+    without that setting. A discovery aid for tools the caller can see but not
+    invoke — ``tools/call`` still 403s, or is refused with the affordance's
+    ``code``. The condition is not asked at list time at all."""
 
     query_params: tuple[QueryParam, ...] = ()
     """Read-shaping params routed to ``request.query_params`` at dispatch.

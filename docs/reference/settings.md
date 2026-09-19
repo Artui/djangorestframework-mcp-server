@@ -45,8 +45,9 @@ and now raise `ImproperlyConfigured` if still present: `AUTH_BACKEND`,
 ## Protocol
 
 The companion `cacheScope` is **derived, not configured**: a listing filtered by
-`FILTER_LISTINGS_BY_PERMISSIONS` is `private`, an unfiltered one is `public`, and
-a resource body is always `private`. `public` licenses a shared proxy to serve
+`FILTER_LISTINGS_BY_PERMISSIONS` is `private`, and so is a `tools/list` that asked
+a tool's operation-scope affordance, since that answer is this caller's; any other
+listing is `public`, and a resource body is always `private`. `public` licenses a shared proxy to serve
 one response across authorization contexts, which is not a preference — getting
 it wrong is a cross-tenant disclosure with a cache in front of it.
 
@@ -55,7 +56,9 @@ it wrong is a cross-tenant disclosure with a cache in front of it.
     The spec's criterion for `public` is that *"the response does not contain
     user-specific data"* — which an unfiltered catalog satisfies exactly: every
     caller gets byte-identical output, so the derivation is the spec's own test
-    rather than a judgement call.
+    rather than a judgement call. It is also why asking an affordance makes a
+    `tools/list` `private` even with filtering off: the answer is asked against
+    the caller's user and request, so two callers may be told different things.
 
     It is worth being clear what follows, though. `public` is not a statement
     that the catalog is *non-confidential*. It permits a shared intermediary to
@@ -70,7 +73,7 @@ it wrong is a cross-tenant disclosure with a cache in front of it.
 | `PROTOCOL_VERSIONS` | `["2026-07-28", "2025-11-25", "2025-06-18"]` | Every revision this server speaks, most-preferred first, across **both eras** — `2026-07-28` is modern (per-request metadata, no session), the rest are legacy (`initialize` handshake). `server/discover` reports the whole list; each era validates against its own half. `initialize` never offers a modern version whatever heads the list: the handshake does not exist there, so answering with it would hand the client a protocol the transport would refuse on its next request. |
 | `REQUIRE_PROTOCOL_VERSION_HEADER` | `True` | Reject a post-`initialize` request that omits `MCP-Protocol-Version` (HTTP 400). Set `False` for clients that never send it. A header that is *present but unsupported* is rejected either way — downgrading silently there would mask a real version mismatch. |
 | `SERVER_INFO` | `{"name": "djangorestframework-mcp-server"}` | Default `serverInfo` for `initialize`. Recognised keys: `name`, `version`, `title`, `description`, `websiteUrl`, `icons` (a list of `{src, mimeType, sizes, theme}` dicts). Prefer per-server identity: `MCPServer(name=…, version=…, title=…, website_url=…, icons=…)`. `description` is settings-only — the constructor's `description=` is the `initialize` `instructions` string, which is written for the model rather than for a connection list. |
-| `CATALOG_CACHE_TTL_MS` | `60000` | How long a client may cache a catalog result — `server/discover` plus the four list methods — emitted as `ttlMs`. `0` means "immediately stale". A catalog is fixed once the process boots, so the honest ceiling is "until the next deploy", which nothing here can know; a minute costs a client one stale minute after a release rather than a stale catalog for the life of its connection. |
+| `CATALOG_CACHE_TTL_MS` | `60000` | How long a client may cache a catalog result — `server/discover` plus the four list methods — emitted as `ttlMs`. `0` means "immediately stale". The registered bindings are fixed once the process boots, so for them the honest ceiling is "until the next deploy", which nothing here can know; a minute costs a client one stale minute after a release rather than a stale catalog for the life of its connection. A tool an operation-scope affordance leaves out of `tools/list` is the exception: it can come and go under a running client, and one honouring `ttlMs` may not re-list for this long unless it is sent `notifications/tools/list_changed` — see [Concepts](../concepts.md#a-tool-that-cannot-run-now-is-not-listed). |
 | `RESOURCE_CACHE_TTL_MS` | `0` | The same for `resources/read`. `0` by default because a resource body is whatever a selector just produced. A genuinely static resource — an interactive view, a rendered document — opts in per binding with `cache_ttl_ms=`. |
 | `TASK_TTL_MS` | `86400000` (24 h) | How long a created task stays readable, reported to the client as `ttlMs`. Both a promise and a bound: after it elapses the record may be dropped, and a client still politely polling gets "unknown task" — which looks exactly like work that vanished, hence the generous default. `None` disables expiry, which is only sound for a store that evicts on its own (the cache-backed one falls back to a week so an un-polled task cannot pin memory). |
 | `TASK_POLL_INTERVAL_MS` | `5000` | Suggested `tasks/get` cadence, sent as `pollIntervalMs`. Advisory — clients *SHOULD* honour it, and a server *MAY* rate-limit one that polls faster. Worth tuning to how long the work actually takes: too low and every task costs a stream of no-op polls, too high and a finished task sits while its client waits. `None` omits the hint. |
@@ -133,7 +136,7 @@ See [What the package bounds](../performance.md#what-the-package-bounds).
 |---|---|---|
 | `REQUIRE_TOOL_PERMISSIONS` | `True` | Registering a **tool, resource or prompt** with no permissions at all (neither `spec.permission_classes` nor `permissions=[…]`) raises `ImproperlyConfigured`. Set it to `False` to downgrade that to an `UnguardedToolWarning` while migrating a large surface. The warning exists because guarding the *viewset* — or relying on `REST_FRAMEWORK`'s default permission classes — has **no effect over MCP**: this package bypasses DRF's view-layer pipeline, so a spec that looks guarded over HTTP ships as an unguarded binding. Interactive views (`register_ui_resource`) are exempt: a view carries no tenant data by construction. See [Authentication](../auth.md). |
 | `REQUIRE_TOOL_DESCRIPTIONS` | `False` | Registering a tool with no `description` raises `ImproperlyConfigured` instead of emitting `UndescribedToolWarning`. The description is the only thing a model reads to decide whether and how to call a tool, so an empty one ships a tool that cannot be used correctly — and `tools/list` renders it indistinguishably from a documented one. There is deliberately **no docstring fallback**: a docstring is written for the next developer, not for a model choosing between tools. See [Documenting tools](../concepts.md#documenting-tools). |
-| `FILTER_LISTINGS_BY_PERMISSIONS` | `False` | Drop bindings whose `permissions` deny the caller from `tools/list`, `resources/list`, `resources/templates/list` and `prompts/list`. Per-binding `always_listed=True` opts one back in as a discovery aid. |
+| `FILTER_LISTINGS_BY_PERMISSIONS` | `False` | Drop bindings whose `permissions` deny the caller from `tools/list`, `resources/list`, `resources/templates/list` and `prompts/list`. Per-binding `always_listed=True` opts one back in as a discovery aid. A tool whose operation-scope affordance is unmet is left out of `tools/list` whatever this says. |
 
 ## OAuth
 

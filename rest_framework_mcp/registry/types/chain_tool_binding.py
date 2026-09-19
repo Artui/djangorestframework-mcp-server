@@ -96,6 +96,10 @@ class ChainToolBinding:
     dispatch_timeout: float | None | UnsetType = UNSET
     unknown_arguments: UnknownArguments = UnknownArguments.REJECT
     always_listed: bool = False
+    """Keep this chain in ``tools/list`` even when ``FILTER_LISTINGS_BY_PERMISSIONS``
+    would drop it, or a service step's operation-scope ``affordances`` condition is
+    unmet right now — same semantics as
+    [`ToolBinding.always_listed`][rest_framework_mcp.registry.types.tool_binding.ToolBinding.always_listed]."""
 
     content_kind: ToolContentKind = ToolContentKind.TEXT
     """What this tool's payload becomes in the result's ``content`` array. ``TEXT``

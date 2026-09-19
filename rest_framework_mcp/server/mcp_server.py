@@ -777,11 +777,13 @@ class MCPServer:
         ``scopes`` are the caller's granted scopes; pass them so a
         ``ScopeRequired``-gated tool is visible under
         ``FILTER_LISTINGS_BY_PERMISSIONS`` exactly as it would be on the wire.
+        A tool whose operation-scope ``affordances`` condition is unmet for
+        ``user`` right now is left out, as on the wire.
 
         Unlike ``call_tool`` (the spec core) this is the full transport
         surface. Under an event loop use ``alist_tools`` — a listing
-        permission filter that hits the DB raises ``SynchronousOnlyOperation``
-        from a sync call on the loop.
+        permission filter or an affordance condition that hits the DB raises
+        ``SynchronousOnlyOperation`` from a sync call on the loop.
         """
         params = {"cursor": cursor} if cursor is not None else None
         return handle_tools_list(
@@ -799,9 +801,10 @@ class MCPServer:
         """Async ``list_tools`` — safe to call from an event loop.
 
         Listing itself is pure Python, but the per-caller permission filter
-        (``FILTER_LISTINGS_BY_PERMISSIONS``) may run a DB-backed check, which
-        raises ``SynchronousOnlyOperation`` when reached synchronously from
-        within an event loop. The whole sync handler therefore runs in Django's
+        (``FILTER_LISTINGS_BY_PERMISSIONS``) and a tool's operation-scope
+        ``affordances`` condition may each run a DB-backed check, which raises
+        ``SynchronousOnlyOperation`` when reached synchronously from within an
+        event loop. The whole sync handler therefore runs in Django's
         thread-sensitive executor.
         """
         params = {"cursor": cursor} if cursor is not None else None
@@ -976,10 +979,16 @@ class MCPServer:
     async def notify_list_changed(self, kind: NotificationKind) -> int:
         """Tell subscribers that one of the catalogs changed.
 
-        Rarely needed: registration happens once at configuration time, so a
-        catalog is fixed for the life of the process. It exists for the server
-        that registers tools from data — a plugin loader, a per-tenant
-        catalog — where the list genuinely can change under a running client.
+        Registration happens once at configuration time, so the set of
+        registered bindings is fixed for the life of the process. Two things
+        still change a catalog under a running client: a server that registers
+        tools from data — a plugin loader, a per-tenant catalog — and a tool
+        whose operation-scope ``affordances`` condition flips, which
+        ``tools/list`` answers on every request and so starts or stops listing
+        it. Call this with ``TOOLS_LIST_CHANGED`` after the event that flipped
+        the condition, once it has committed. It reaches only clients this
+        server can push to: a subscription broker configured and a modern-era
+        caller listening, the same two things ``listChanged`` is advertised on.
         """
         return await self._publish(
             topic_for_kind(kind), {"jsonrpc": JSONRPC_VERSION, "method": kind.method}
