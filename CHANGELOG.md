@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.47.0] — 2026-09-19
+
 ### Changed
 
 - **`tools/list` leaves out a tool that an operation-scope affordance refuses right
@@ -5006,7 +5008,8 @@ Pinned to `djangorestframework-services==0.6.0`.
 - 100% line + branch coverage enforced by pytest (**451 tests** at
   release).
 
-[Unreleased]: https://github.com/Artui/djangorestframework-mcp-server/compare/v0.46.0...HEAD
+[Unreleased]: https://github.com/Artui/djangorestframework-mcp-server/compare/v0.47.0...HEAD
+[0.47.0]: https://github.com/Artui/djangorestframework-mcp-server/compare/v0.46.0...v0.47.0
 [0.46.0]: https://github.com/Artui/djangorestframework-mcp-server/compare/v0.45.0...v0.46.0
 [0.45.0]: https://github.com/Artui/djangorestframework-mcp-server/compare/v0.44.0...v0.45.0
 [0.44.0]: https://github.com/Artui/djangorestframework-mcp-server/compare/v0.43.0...v0.44.0
