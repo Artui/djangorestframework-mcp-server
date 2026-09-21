@@ -3,7 +3,7 @@ from __future__ import annotations
 from typing import Any
 
 from rest_framework_mcp.constants import JsonRpcErrorCode, ToolContentKind
-from rest_framework_mcp.handlers.is_binding_listable import is_binding_listable
+from rest_framework_mcp.handlers.listable_tool_bindings import listable_tool_bindings
 from rest_framework_mcp.handlers.offered_tools import offered_tools
 from rest_framework_mcp.handlers.pagination import paginate
 from rest_framework_mcp.handlers.types.context import MCPCallContext
@@ -29,6 +29,8 @@ from rest_framework_mcp.schema.service_tool_schema import build_service_tool_inp
 def handle_tools_list(
     params: dict[str, Any] | None,
     context: MCPCallContext,
+    *,
+    include_unavailable: bool = False,
 ) -> dict[str, Any] | JsonRpcError:
     """Return the catalog of tools the server exposes, paginated.
 
@@ -43,6 +45,12 @@ def handle_tools_list(
     and is still callable by name: ``tools/call`` never consults the listing,
     so a client holding an older one gets the refusal and its ``code``, not an
     unknown tool. See ``offered_tools``.
+
+    ``include_unavailable=True`` skips that question and lists every tool the
+    caller may see. The wire never passes it: it is for ``MCPServer.list_tools``,
+    whose in-process consumer builds its tool definitions once and asks
+    ``unavailable_tools`` each step, and so needs a definition for a tool that
+    is unavailable when it lists and becomes available later.
     """
     cursor: Any = (params or {}).get("cursor")
     if cursor is not None and not isinstance(cursor, str):
@@ -50,16 +58,16 @@ def handle_tools_list(
 
     # Filtered before paginating, so ``nextCursor`` reflects the visible slice
     # rather than the full registry.
-    bindings = list(context.tools.all())
-    if context.config.filter_listings_by_permissions:
-        bindings = [
-            b for b in bindings if is_binding_listable(b, context.http_request, context.token)
-        ]
+    bindings = listable_tool_bindings(context)
     # Availability runs whatever the permissions flag says, and after it, so a
     # tool this caller may not see is never asked about. Also before paginating,
     # for the same reason as above: a cursor over a slice the client never sees
-    # would hand back a short or empty page.
-    bindings, asked = offered_tools(bindings, context)
+    # would hand back a short or empty page. Nothing is asked when the caller
+    # asked for every tool, so such a listing's ``cacheScope`` owes nothing to
+    # an answer about this caller.
+    asked: bool = False
+    if not include_unavailable:
+        bindings, asked = offered_tools(bindings, context)
 
     try:
         page, next_cursor = paginate(bindings, cursor, page_size=context.config.page_size)

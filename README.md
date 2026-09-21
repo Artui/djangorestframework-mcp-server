@@ -75,6 +75,8 @@ See the [quickstart](docs/quickstart.md) for the full end-to-end recipe.
   `MCPServer.call_tool` / `acall_tool` and `list_tools` / `alist_tools`
   drive the same dispatch and permission checks as the wire path, for
   embedding in agent bridges, toolsets, or management commands.
+  `unavailable_tools` / `aunavailable_tools` name each tool the listing leaves
+  out with the reason, so a bridge can tell its model why one is missing.
 - **Tool annotations** — pass `annotations=` at registration (or rely on the
   read/mutation default) to advertise MCP hints like `readOnlyHint` /
   `destructiveHint` on `tools/list`.

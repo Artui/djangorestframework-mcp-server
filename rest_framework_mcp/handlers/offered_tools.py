@@ -26,6 +26,7 @@ drf-services' async twin would add a second hop for nothing.
 
 from __future__ import annotations
 
+from collections.abc import Iterable
 from typing import Any
 
 from rest_framework_services import (
@@ -34,6 +35,7 @@ from rest_framework_services import (
     operation_affordances,
     unmet_operation_affordance,
 )
+from rest_framework_services.types.affordance import Affordance
 from rest_framework_services.types.service_spec import ServiceSpec
 
 from rest_framework_mcp.handlers.types.context import MCPCallContext
@@ -51,36 +53,93 @@ def offered_tools(
     shaped by an answer asked against this caller's ``user`` and ``request`` is
     no longer byte-identical across callers, so ``public`` would licence a shared
     proxy to serve one caller's answer to another.
+    """
+    answers, asked = _answer(bindings, context)
+    return [binding for binding, unmet in answers if unmet is None], asked
 
-    ``always_listed=True`` keeps a binding listed without asking, as it keeps one
-    that ``FILTER_LISTINGS_BY_PERMISSIONS`` would drop: the name promises the
-    binding is always in the list, and a discovery aid whose ``tools/call`` is
-    refused with a ``code`` is the same trade the permission case already makes.
 
-    **One pool per listing, built only when first needed.** Most tools declare no
-    condition, so a listing of them builds nothing; the first binding that does
+def unavailable_tools(
+    bindings: list[ToolBindingLike], context: MCPCallContext
+) -> dict[str, Affordance]:
+    """The bindings ``offered_tools`` leaves out, by name, each with the condition that did.
+
+    The same pass over the same bindings, so a name is here exactly when the
+    listing omits it: an in-process consumer that lists once and asks this each
+    step offers what a fresh ``tools/list`` would, and can say why the rest are
+    missing. For a chain the affordance is the first unmet one in step order,
+    which is the step whose refusal a call would meet first.
+    """
+    answers, _asked = _answer(bindings, context)
+    return {binding.name: unmet for binding, unmet in answers if unmet is not None}
+
+
+def declares_operation_conditions(bindings: Iterable[ToolBindingLike]) -> bool:
+    """Whether any of ``bindings`` would be asked a condition at all.
+
+    Pure Python over the declarations -- no pool, no query, no permission check
+    -- so a caller can skip an executor hop when the answer is certain to be
+    empty. ``True`` for exactly the bindings ``_answer`` asks about, so a skip
+    taken on ``False`` cannot change a result.
+    """
+    return any(_asked_specs(binding) for binding in bindings)
+
+
+def _answer(
+    bindings: list[ToolBindingLike], context: MCPCallContext
+) -> tuple[list[tuple[ToolBindingLike, Affordance | None]], bool]:
+    """Each binding with the first condition refusing it now, or ``None``.
+
+    ``always_listed=True`` answers ``None`` without asking, as it keeps a
+    binding listed that ``FILTER_LISTINGS_BY_PERMISSIONS`` would drop: the name
+    promises the binding is always in the list, and a discovery aid whose
+    ``tools/call`` is refused with a ``code`` is the same trade the permission
+    case already makes.
+
+    **One pool per pass, built only when first needed.** Most tools declare no
+    condition, so a pass over them builds nothing; the first binding that does
     builds the pool every later one is asked against, since the seeds are the
     same for every tool in one request.
     """
     pool: dict[str, Any] | None = None
-    offered: list[ToolBindingLike] = []
+    answers: list[tuple[ToolBindingLike, Affordance | None]] = []
     for binding in bindings:
-        gating: tuple[ServiceSpec[Any, Any, Any], ...] = _gating_specs(binding)
-        # One branch arc, so coverage cannot see either condition dropped; each
-        # is held in tests/handlers/test_offered_tools.py, by
-        # test_always_listed_keeps_an_unavailable_tool and
-        # test_a_listing_of_tools_declaring_nothing_builds_no_pool, in order.
-        if binding.always_listed or not gating:
-            offered.append(binding)
+        gating: tuple[ServiceSpec[Any, Any, Any], ...] = _asked_specs(binding)
+        if not gating:
+            answers.append((binding, None))
             continue
         if pool is None:
             pool = _list_time_pool(context)
-        # ``reserved`` is left at drf-services' default because this server
-        # registers no ``PoolSeeds``: dispatch runs with the default seeds, so
-        # the condition is asked here with the names it sees there.
-        if all(unmet_operation_affordance(spec, pool) is None for spec in gating):
-            offered.append(binding)
-    return offered, pool is not None
+        answers.append((binding, _first_unmet(gating, pool)))
+    return answers, pool is not None
+
+
+def _asked_specs(binding: ToolBindingLike) -> tuple[ServiceSpec[Any, Any, Any], ...]:
+    """The specs a pass asks about for ``binding``: none when ``always_listed``.
+
+    A conditional rather than an ``and``, so each way out is a branch coverage
+    can see: test_always_listed_keeps_an_unavailable_tool holds the first, and
+    test_a_listing_of_tools_declaring_nothing_builds_no_pool the empty gating.
+    """
+    return () if binding.always_listed else _gating_specs(binding)
+
+
+def _first_unmet(
+    gating: tuple[ServiceSpec[Any, Any, Any], ...], pool: dict[str, Any]
+) -> Affordance | None:
+    """The first unmet condition across ``gating``, in order, or ``None``.
+
+    Stops at the first spec refusing, as the listing always did, so a later
+    step's condition is not asked once an earlier one has decided.
+
+    ``reserved`` is left at drf-services' default because this server registers
+    no ``PoolSeeds``: dispatch runs with the default seeds, so the condition is
+    asked here with the names it sees there.
+    """
+    for spec in gating:
+        unmet: Affordance | None = unmet_operation_affordance(spec, pool)
+        if unmet is not None:
+            return unmet
+    return None
 
 
 def _gating_specs(binding: ToolBindingLike) -> tuple[ServiceSpec[Any, Any, Any], ...]:
@@ -137,4 +196,4 @@ def _list_time_pool(context: MCPCallContext) -> dict[str, Any]:
     return base_pool(user=context.token.user, request=offline.request)
 
 
-__all__ = ["offered_tools"]
+__all__ = ["declares_operation_conditions", "offered_tools", "unavailable_tools"]
