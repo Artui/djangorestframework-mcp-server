@@ -1363,6 +1363,28 @@
 </li>
         
           <li class="md-nav__item">
+  <a href="#rest_framework_mcp.server.mcp_server.MCPServer.unavailable_tools" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        unavailable_tools
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#rest_framework_mcp.server.mcp_server.MCPServer.aunavailable_tools" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        aunavailable_tools
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
   <a href="#rest_framework_mcp.server.mcp_server.MCPServer.acall_tool" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -1825,6 +1847,28 @@
     <span class="md-ellipsis">
       
         alist_tools
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#rest_framework_mcp.server.mcp_server.MCPServer.unavailable_tools" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        unavailable_tools
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#rest_framework_mcp.server.mcp_server.MCPServer.aunavailable_tools" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        aunavailable_tools
       
     </span>
   </a>
@@ -2509,7 +2553,8 @@ several specs and raise <code>TypeError</code> here.</p>
 </span><span id="__span-0-4"><a id="__codelineno-0-4" name="__codelineno-0-4" href="#__codelineno-0-4"></a>    <span class="n">user</span><span class="p">:</span> <span class="n">Any</span><span class="p">,</span>
 </span><span id="__span-0-5"><a id="__codelineno-0-5" name="__codelineno-0-5" href="#__codelineno-0-5"></a>    <span class="n">request</span><span class="p">:</span> <span class="n">Any</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
 </span><span id="__span-0-6"><a id="__codelineno-0-6" name="__codelineno-0-6" href="#__codelineno-0-6"></a>    <span class="n">scopes</span><span class="p">:</span> <span class="n">Sequence</span><span class="p">[</span><span class="nb">str</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
-</span><span id="__span-0-7"><a id="__codelineno-0-7" name="__codelineno-0-7" href="#__codelineno-0-7"></a><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]</span> <span class="o">|</span> <span class="n">JsonRpcError</span>
+</span><span id="__span-0-7"><a id="__codelineno-0-7" name="__codelineno-0-7" href="#__codelineno-0-7"></a>    <span class="n">include_unavailable</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">,</span>
+</span><span id="__span-0-8"><a id="__codelineno-0-8" name="__codelineno-0-8" href="#__codelineno-0-8"></a><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]</span> <span class="o">|</span> <span class="n">JsonRpcError</span>
 </span></code></pre></div>
 
     <div class="doc doc-contents ">
@@ -2532,7 +2577,12 @@ signals a bad cursor.</p>
 <code>ScopeRequired</code>-gated tool is visible under
 <code>FILTER_LISTINGS_BY_PERMISSIONS</code> exactly as it would be on the wire.
 A tool whose operation-scope <code>affordances</code> condition is unmet for
-<code>user</code> right now is left out, as on the wire.</p>
+<code>user</code> right now is left out, as on the wire, unless
+<code>include_unavailable=True</code>, which lists every tool the caller may see
+and asks no condition. That is for a consumer that builds its tool
+definitions once and asks <code>unavailable_tools</code> each step: it needs a
+definition for a tool that is unavailable when it lists and becomes
+available later. The wire has no such parameter.</p>
 <p>Unlike <code>call_tool</code> (the spec core) this is the full transport
 surface. Under an event loop use <code>alist_tools</code> — a listing
 permission filter or an affordance condition that hits the DB raises
@@ -2561,7 +2611,8 @@ permission filter or an affordance condition that hits the DB raises
 </span><span id="__span-0-4"><a id="__codelineno-0-4" name="__codelineno-0-4" href="#__codelineno-0-4"></a>    <span class="n">user</span><span class="p">:</span> <span class="n">Any</span><span class="p">,</span>
 </span><span id="__span-0-5"><a id="__codelineno-0-5" name="__codelineno-0-5" href="#__codelineno-0-5"></a>    <span class="n">request</span><span class="p">:</span> <span class="n">Any</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
 </span><span id="__span-0-6"><a id="__codelineno-0-6" name="__codelineno-0-6" href="#__codelineno-0-6"></a>    <span class="n">scopes</span><span class="p">:</span> <span class="n">Sequence</span><span class="p">[</span><span class="nb">str</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
-</span><span id="__span-0-7"><a id="__codelineno-0-7" name="__codelineno-0-7" href="#__codelineno-0-7"></a><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]</span> <span class="o">|</span> <span class="n">JsonRpcError</span>
+</span><span id="__span-0-7"><a id="__codelineno-0-7" name="__codelineno-0-7" href="#__codelineno-0-7"></a>    <span class="n">include_unavailable</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">,</span>
+</span><span id="__span-0-8"><a id="__codelineno-0-8" name="__codelineno-0-8" href="#__codelineno-0-8"></a><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]</span> <span class="o">|</span> <span class="n">JsonRpcError</span>
 </span></code></pre></div>
 
     <div class="doc doc-contents ">
@@ -2573,6 +2624,74 @@ permission filter or an affordance condition that hits the DB raises
 <code>SynchronousOnlyOperation</code> when reached synchronously from within an
 event loop. The whole sync handler therefore runs in Django's
 thread-sensitive executor.</p>
+
+
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-function">
+
+
+<h3 id="rest_framework_mcp.server.mcp_server.MCPServer.unavailable_tools" class="doc doc-heading">
+            <span class="doc doc-object-name doc-function-name">unavailable_tools</span>
+
+
+<a href="#rest_framework_mcp.server.mcp_server.MCPServer.unavailable_tools" class="headerlink" title="Permanent link">&para;</a></h3>
+<div class="language-python doc-signature highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="nf">unavailable_tools</span><span class="p">(</span>
+</span><span id="__span-0-2"><a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a>    <span class="o">*</span><span class="p">,</span> <span class="n">user</span><span class="p">:</span> <span class="n">Any</span><span class="p">,</span> <span class="n">request</span><span class="p">:</span> <span class="n">Any</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span> <span class="n">scopes</span><span class="p">:</span> <span class="n">Sequence</span><span class="p">[</span><span class="nb">str</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span>
+</span><span id="__span-0-3"><a id="__codelineno-0-3" name="__codelineno-0-3" href="#__codelineno-0-3"></a><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Affordance</span><span class="p">]</span>
+</span></code></pre></div>
+
+    <div class="doc doc-contents ">
+
+        <p>The tools <code>list_tools</code> leaves out for this caller right now, and why.</p>
+<p>Maps each omitted tool's name to the operation-scope <code>Affordance</code> whose
+condition is unmet: its <code>code</code> and its <code>reason</code>, the sentence written
+for people and models alike. For a chain it is the first unmet one in step
+order. The answer comes from the same pass <code>tools/list</code> makes, over the
+same tools the caller may see (<code>FILTER_LISTINGS_BY_PERMISSIONS</code>
+included), so a name is here exactly when the listing omits it, and a
+tool hidden from this caller is never named with its reason.</p>
+<p>For an in-process consumer that lists once with
+<code>include_unavailable=True</code> and asks this each step: it offers its model
+what a fresh <code>tools/list</code> would, and can tell the model why the rest
+are missing, which a listing cannot, since it only leaves them out.
+<code>always_listed=True</code> tools are never here, as they are never left out.
+Advisory like the listing: <code>acall_tool</code> still enforces every condition.</p>
+<p>Under an event loop use <code>aunavailable_tools</code>; a condition or listing
+permission that queries raises <code>SynchronousOnlyOperation</code> from here.</p>
+
+
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-function">
+
+
+<h3 id="rest_framework_mcp.server.mcp_server.MCPServer.aunavailable_tools" class="doc doc-heading">
+            <span class="doc doc-object-name doc-function-name">aunavailable_tools</span>
+
+
+  <span class="doc doc-labels">
+      <small class="doc doc-label doc-label-async"><code>async</code></small>
+  </span>
+
+<a href="#rest_framework_mcp.server.mcp_server.MCPServer.aunavailable_tools" class="headerlink" title="Permanent link">&para;</a></h3>
+<div class="language-python doc-signature highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="nf">aunavailable_tools</span><span class="p">(</span>
+</span><span id="__span-0-2"><a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a>    <span class="o">*</span><span class="p">,</span> <span class="n">user</span><span class="p">:</span> <span class="n">Any</span><span class="p">,</span> <span class="n">request</span><span class="p">:</span> <span class="n">Any</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span> <span class="n">scopes</span><span class="p">:</span> <span class="n">Sequence</span><span class="p">[</span><span class="nb">str</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span>
+</span><span id="__span-0-3"><a id="__codelineno-0-3" name="__codelineno-0-3" href="#__codelineno-0-3"></a><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Affordance</span><span class="p">]</span>
+</span></code></pre></div>
+
+    <div class="doc doc-contents ">
+
+        <p>Async <code>unavailable_tools</code> -- safe to call from an event loop.</p>
+<p>Runs in Django's thread-sensitive executor, as <code>alist_tools</code> does, since
+a condition or a listing permission may query. A server none of whose
+tools declares an operation-scope condition answers <code>{}</code> without the
+hop: that is decided from the declarations alone, and a consumer asking
+on every model step should not pay a thread switch per step to learn it.</p>
 
 
     </div>
