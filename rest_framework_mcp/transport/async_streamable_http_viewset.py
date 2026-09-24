@@ -18,6 +18,7 @@ from rest_framework_mcp.auth.principal_for_token import principal_for_token
 from rest_framework_mcp.auth.types.auth_backend import MCPAuthBackend
 from rest_framework_mcp.config.types.mcp_config import MCPConfig
 from rest_framework_mcp.constants import (
+    INTERNAL_ERROR_MESSAGE,
     MCP_ERROR_HEADER,
     MODERN_PROTOCOL_VERSIONS,
     SESSIONLESS_METHODS,
@@ -94,6 +95,25 @@ def _error_response(
         # Summarises the body for clients that surface only the status line.
         response[MCP_ERROR_HEADER] = error_hint
     return response
+
+
+def _internal_error_response(message: JsonRpcRequest) -> JsonResponse:
+    """Answer a dispatch that raised with a JSON-RPC ``-32603``, and log why.
+
+    The same backstop as the sync sibling's, where the reasoning lives: a
+    ``500`` so monitoring still counts a server fault, a generic message, and
+    the exception in the log. Must be called from inside the ``except`` block,
+    because ``logger.exception`` reads the exception being handled.
+    """
+    logger.exception(
+        "Unhandled exception dispatching %s (request id %r)", message.method, message.id
+    )
+    return _error_response(
+        code=JsonRpcErrorCode.INTERNAL_ERROR,
+        message=INTERNAL_ERROR_MESSAGE,
+        status=500,
+        request_id=message.id,
+    )
 
 
 class AsyncStreamableHttpViewSet(ViewSet):
@@ -324,11 +344,17 @@ class AsyncStreamableHttpViewSet(ViewSet):
                 code=JsonRpcErrorCode.INVALID_REQUEST, message="Expected a JSON-RPC request"
             )
 
-        streamed: HttpResponseBase | None = await self._maybe_stream(message, context)
-        if streamed is not None:
-            return streamed
-
-        result: Any = await adispatch(message.method, _params_dict(message.params), context)
+        # The stream decision sits inside the backstop with the dispatch: its
+        # permission pre-flight runs the same consumer permission classes the
+        # dispatch would, so a raise there is the same server fault, and it
+        # happens before any stream has committed a status.
+        try:
+            streamed: HttpResponseBase | None = await self._maybe_stream(message, context)
+            if streamed is not None:
+                return streamed
+            result: Any = await adispatch(message.method, _params_dict(message.params), context)
+        except Exception:  # noqa: BLE001 — the backstop; see ``_internal_error_response``
+            return _internal_error_response(message)
 
         if isinstance(result, JsonRpcError):
             response_body = JsonRpcResponse(id=message.id, error=result).to_dict()
@@ -409,15 +435,23 @@ class AsyncStreamableHttpViewSet(ViewSet):
         # Necessarily a request by now. The era test reads ``params``, which a
         # JSON-RPC *response* does not carry, so a response body is always
         # routed to the legacy path — and rejected there.
-        subscribed: HttpResponseBase | None = await self._maybe_subscribe(message, context)
-        if subscribed is not None:
-            return subscribed
-
-        streamed: HttpResponseBase | None = await self._maybe_stream(message, context)
-        if streamed is not None:
-            return streamed
-
-        result: Any = await adispatch(message.method, _params_dict(message.params), context)
+        #
+        # Everything that runs consumer code for this request sits inside the
+        # backstop: the subscription grant and the stream's permission
+        # pre-flight evaluate the same permission classes a dispatch does.
+        # Neither has committed a status when it raises, so a JSON-RPC answer
+        # is still possible; once a stream is open, the stream's own error
+        # frame takes over.
+        try:
+            subscribed: HttpResponseBase | None = await self._maybe_subscribe(message, context)
+            if subscribed is not None:
+                return subscribed
+            streamed: HttpResponseBase | None = await self._maybe_stream(message, context)
+            if streamed is not None:
+                return streamed
+            result: Any = await adispatch(message.method, _params_dict(message.params), context)
+        except Exception:  # noqa: BLE001 — the backstop; see ``_internal_error_response``
+            return _internal_error_response(message)
         if isinstance(result, JsonRpcError):
             body = JsonRpcResponse(id=message.id, error=result).to_dict()
             status: int = modern_error_status(result)

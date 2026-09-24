@@ -9,12 +9,15 @@ from typing import Any
 from django.http import StreamingHttpResponse
 from rest_framework_services.types.progress_reporter import ProgressReporter
 
-from rest_framework_mcp.constants import JSONRPC_VERSION, JsonRpcErrorCode
+from rest_framework_mcp.constants import INTERNAL_ERROR_MESSAGE, JSONRPC_VERSION, JsonRpcErrorCode
+from rest_framework_mcp.observability import get_logger
 from rest_framework_mcp.protocol.types.json_rpc_error import JsonRpcError
 from rest_framework_mcp.protocol.types.json_rpc_response import JsonRpcResponse
 from rest_framework_mcp.transport.sse_response import format_event, keepalive_interval_seconds
 
 _PROGRESS_METHOD: str = "notifications/progress"
+
+logger = get_logger(__name__)
 
 
 @dataclass(frozen=True)
@@ -117,6 +120,13 @@ async def _run(coro: Awaitable[Any], queue: asyncio.Queue[Any], *, request_id: A
     a stream there is no status left to change and propagating would truncate
     the connection with no explanation — so it becomes an in-stream ``-32603``,
     which the client can at least read.
+
+    **The frame says ``Internal error`` and nothing else**, as the JSON-mode
+    backstop in both viewsets does: the exception's text used to ride in the
+    message, and it is written for an operator, not a client (a DRF
+    ``ValidationError`` arrived as ``ValidationError: [ErrorDetail(...)]``).
+    The traceback goes to the log instead, under the request id the frame
+    carries.
     """
     try:
         result: Any = await coro
@@ -124,10 +134,11 @@ async def _run(coro: Awaitable[Any], queue: asyncio.Queue[Any], *, request_id: A
         # The client went away, so there is nobody to report to. Re-raising is
         # what lets the task finish as cancelled rather than as a success.
         raise
-    except Exception as exc:  # noqa: BLE001 — see the docstring
+    except Exception:  # noqa: BLE001 — see the docstring
+        logger.exception("Unhandled exception in a streamed dispatch (request id %r)", request_id)
         body = JsonRpcResponse(
             id=request_id,
-            error=JsonRpcError(JsonRpcErrorCode.INTERNAL_ERROR, f"{type(exc).__name__}: {exc}"),
+            error=JsonRpcError(JsonRpcErrorCode.INTERNAL_ERROR, INTERNAL_ERROR_MESSAGE),
         ).to_dict()
     else:
         body = (

@@ -278,7 +278,10 @@ async def test_an_exception_becomes_an_in_stream_error_not_a_truncated_body() ->
     frames = await _frames(await _post(server))
     assert frames[0]["method"] == "notifications/progress"
     assert frames[-1]["error"]["code"] == -32603
-    assert "nope" in frames[-1]["error"]["message"]
+    # Generic, with the exception's own text in the log only: see
+    # ``test_dispatch_backstop.py`` for the log half.
+    assert frames[-1]["error"]["message"] == "Internal error"
+    assert "nope" not in json.dumps(frames)
 
 
 # ----- the stream's own mechanics -----
