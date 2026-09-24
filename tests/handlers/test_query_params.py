@@ -138,6 +138,25 @@ def test_an_undeclared_param_is_absent_rather_than_empty() -> None:
     assert out["structuredContent"] == {"seen": {}}
 
 
+def test_an_explicit_null_falls_through_to_the_default() -> None:
+    """``{"fields": null}`` is a model declining to fill the param, not a value.
+
+    Routed on, it was stringified as HTTP would and reached the serializer as
+    the four characters ``None``.
+    """
+    server = _server()
+    _register_service(server, query_params=(QueryParam("fields", default="id"),))
+    out = _call(server, "echo", {"fields": None}, _ctx(server))
+    assert out["structuredContent"] == {"seen": {"fields": "id"}}
+
+
+def test_an_explicit_null_without_a_default_reaches_nothing() -> None:
+    server = _server()
+    _register_service(server, query_params=(QueryParam("fields"),))
+    out = _call(server, "echo", {"fields": None}, _ctx(server))
+    assert out["structuredContent"] == {"seen": {}}
+
+
 def test_values_are_stringified_as_on_http() -> None:
     server = _server()
     _register_service(server, query_params=(QueryParam("page_size", type="integer"),))
@@ -319,3 +338,12 @@ def test_split_pops_declared_names_and_leaves_the_rest() -> None:
     )
     assert params == {"other": 2}
     assert values == {"fields": "id"}
+
+
+def test_split_treats_an_explicit_null_as_omitted_and_still_pops_it() -> None:
+    params, values = split_query_params(
+        {"fields": None, "expand": None, "other": 2},
+        (QueryParam("fields"), QueryParam("expand", default="true")),
+    )
+    assert params == {"other": 2}
+    assert values == {"expand": "true"}

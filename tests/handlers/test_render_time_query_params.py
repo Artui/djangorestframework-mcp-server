@@ -529,6 +529,21 @@ def test_an_explicit_null_is_not_supplied() -> None:
 
 
 @pytest.mark.django_db
+def test_an_explicit_null_on_a_strict_restql_tool_renders_unselected() -> None:
+    """A declined param must not reach restql as the string ``None``.
+
+    If it did, restql would refuse it as a malformed selection, and because a
+    null is not the caller's value that refusal would escape as a server fault
+    for a call that asked for nothing.
+    """
+    _seed()
+    result = _call(_selector_server(RestqlInvoice), "invoices.list", {"query": None})
+
+    assert result.get("isError") in (None, False), result
+    assert [row["number"] for row in result["structuredContent"]["items"]] == ["A", "B"]
+
+
+@pytest.mark.django_db
 def test_a_non_validation_error_is_never_the_callers() -> None:
     """An ``AttributeError`` in a serializer is a bug whatever the caller sent."""
 

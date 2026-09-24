@@ -92,9 +92,8 @@ def split_url_kwargs(
     to its ``default`` and then to the ``required`` check, exactly as an omitted
     key does. Routing the ``None`` on instead would satisfy ``required=True``
     with nothing, and would reach the ORM as ``IS NULL`` — an unscoped read that
-    answers successfully with the wrong rows. ``split_query_params`` deliberately
-    does *not* mirror this: a query param carries no ``required`` flag and never
-    scopes a lookup, so there is nothing there for a null to defeat.
+    answers successfully with the wrong rows. ``split_query_params`` applies the
+    same rule for a different reason, which its own docstring gives.
     """
     if not url_kwargs:
         return arguments, {}
@@ -131,14 +130,26 @@ def split_query_params(
     the tool schema and flow through as ordinary ``params``, which is where
     ``dispatch_spec`` reads them (as ``filter_data``); declaring one here pops it
     out of the args and it silently stops filtering.
+
+    **An explicit ``null`` is not a supplied value**, which is the contract
+    ``QueryParam`` itself states for every transport: over HTTP a query param is
+    always a string, so nothing a caller sends there means null, and off-HTTP
+    ``{"fields": null}`` is how a model says it chose not to fill an optional
+    param. So a null falls through to the ``default`` and otherwise produces no
+    value, exactly as an omitted key does. Routing it on is not harmless:
+    ``build_offline_context`` stringifies every value as HTTP would, so the
+    serializer read the four characters ``None`` — which django-restql refuses as
+    a malformed selection, failing the render of a call whose caller asked for
+    nothing. The name is still popped from ``params`` either way.
     """
     if not query_params:
         return arguments, {}
     names = {qp.name for qp in query_params}
     values: dict[str, Any] = {}
     for query_param in query_params:
-        if query_param.name in arguments:
-            values[query_param.name] = arguments[query_param.name]
+        supplied: Any = arguments.get(query_param.name)
+        if supplied is not None:
+            values[query_param.name] = supplied
         elif declares_default(query_param.default):
             values[query_param.name] = query_param.default
     params = {key: value for key, value in arguments.items() if key not in names}
