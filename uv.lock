@@ -560,6 +560,21 @@ wheels = [
 ]
 
 [[package]]
+name = "django-restql"
+version = "0.18.0"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "django", version = "5.2.17", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.12'" },
+    { name = "django", version = "6.1", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.12'" },
+    { name = "djangorestframework" },
+    { name = "pypeg2" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/f9/b0/c05c16c67e5ddb7d40951c40b234470e040bfc81056d500424cdae30accc/django-restql-0.18.0.tar.gz", hash = "sha256:8e433886d387d80519ebd1bd43fc8bcae22b046704ce3f6f1670d7f036d0cbf8", size = 30048, upload-time = "2025-08-13T12:31:45.89Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/06/d2/bd65dc52350a544f789e3a9bd3ef4b0dcfe06972d0d3d48b347a29a030eb/django_restql-0.18.0-py3-none-any.whl", hash = "sha256:4975b8ef3e27a4ef15ddf3158b2b5ce31af69e59d1834a2b4eacef728d01e986", size = 20625, upload-time = "2025-08-13T12:31:44.199Z" },
+]
+
+[[package]]
 name = "django-stubs"
 version = "6.0.9"
 source = { registry = "https://pypi.org/simple" }
@@ -659,6 +674,7 @@ toon = [
 dev = [
     { name = "django-filter" },
     { name = "django-oauth-toolkit" },
+    { name = "django-restql" },
     { name = "django-stubs" },
     { name = "djangorestframework-simplejwt" },
     { name = "djangorestframework-stubs" },
@@ -706,6 +722,7 @@ provides-extras = ["filter", "jwt", "oauth", "otel", "redis", "spectacular", "te
 dev = [
     { name = "django-filter", specifier = ">=23" },
     { name = "django-oauth-toolkit", specifier = ">=3.4" },
+    { name = "django-restql", specifier = ">=0.18" },
     { name = "django-stubs", specifier = ">=5.0" },
     { name = "djangorestframework-simplejwt", specifier = ">=5.3.1" },
     { name = "djangorestframework-stubs", specifier = ">=3.15" },
@@ -1556,6 +1573,12 @@ sdist = { url = "https://files.pythonhosted.org/packages/21/a9/5f0c535ba3b08fe09
 wheels = [
     { url = "https://files.pythonhosted.org/packages/d6/54/da572c98c0b77626a91b5d3b89f0231d8bff5125c225420908632f8b342d/pymdown_extensions-11.0.1-py3-none-any.whl", hash = "sha256:db3943a62bab7e03af1364f0c4083e64b91fb097675a4b6cceccfbe9a77e5eb2", size = 269455, upload-time = "2026-07-02T17:59:21.271Z" },
 ]
+
+[[package]]
+name = "pypeg2"
+version = "2.15.2"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/f9/bd/10398e2c2d2070cc8a9c7153abfbd4ddb2895a2c52a32722ab8689e0cc7d/pyPEG2-2.15.2.tar.gz", hash = "sha256:2b2d4f80d8e1a9370b2a91f4a25f4abf7f69b85c8da84cd23ec36451958a1f6d", size = 40334, upload-time = "2015-10-07T19:27:49.747Z" }
 
 [[package]]
 name = "pytest"

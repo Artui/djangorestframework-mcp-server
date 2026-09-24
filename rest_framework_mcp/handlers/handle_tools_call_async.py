@@ -31,6 +31,7 @@ from rest_framework_mcp.handlers.utils import (
     consume_rate_limits,
     effective_rate_limits,
     enforce_result_ceiling,
+    read_shaping_error_result,
     resolve_bound,
     run_with_deadline,
     service_error_result,
@@ -248,7 +249,18 @@ async def _dispatch_tool_call_async(
             ).to_dict()
 
         # Rendering may evaluate a lazy list queryset → run it off the event loop.
-        payload: Any = await acall(_render, binding, result, offline)
+        # Wrapped as in the sync handler, which says why it sits outside the
+        # dispatch ``try``.
+        try:
+            payload: Any = await acall(_render, binding, result, offline)
+        except (drf_serializers.ValidationError, ServiceValidationError) as exc:
+            return read_shaping_error_result(
+                exc,
+                query_params=binding.query_params,
+                arguments=arguments_raw,
+                paginated=False,
+                config=context.config,
+            ).to_dict()
         output_format: OutputFormat = OutputFormat.coerce(
             params.get("outputFormat") or binding.output_format
         )

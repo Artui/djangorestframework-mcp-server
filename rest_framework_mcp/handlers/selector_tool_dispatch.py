@@ -53,6 +53,7 @@ from rest_framework_mcp.handlers.utils import (
     check_permissions,
     consume_rate_limits,
     effective_rate_limits,
+    read_shaping_error_result,
     resolve_bound,
     service_error_result,
     services_dispatch_policies,
@@ -119,9 +120,26 @@ def dispatch_selector_tool(
             otel_span.record_exception(exc)
         return service_error_result(exc).to_dict()
 
-    return _post_fetch_and_render(
-        binding, result, drf_request, view, arguments_raw, params, context.config
-    )
+    # Rendering is where a read-shaping ``QueryParam`` is actually read — a
+    # django-restql selection is parsed by the output serializer, per row — so
+    # a bad one fails here, after every arm above has already been passed. Both
+    # siblings wrap the post-fetch call as a whole: it holds all three renders
+    # (a retrieve, a page's items, an unpaginated list), and the rest of it —
+    # ``paginate_output`` and building the result — raises no validation error
+    # of its own. Only what the caller shaped is theirs to fix;
+    # ``read_shaping_error_result`` re-raises anything else unchanged.
+    try:
+        return _post_fetch_and_render(
+            binding, result, drf_request, view, arguments_raw, params, context.config
+        )
+    except (drf_serializers.ValidationError, ServiceValidationError) as exc:
+        return read_shaping_error_result(
+            exc,
+            query_params=binding.query_params,
+            arguments=arguments_raw,
+            paginated=binding.paginate,
+            config=context.config,
+        ).to_dict()
 
 
 async def _post_fetch_and_render_async(
@@ -186,9 +204,20 @@ async def dispatch_selector_tool_async(
             otel_span.record_exception(exc)
         return service_error_result(exc).to_dict()
 
-    return await _post_fetch_and_render_async(
-        binding, result, drf_request, view, arguments_raw, params, context.config
-    )
+    # See the sync sibling. ``acall`` re-raises the worker thread's exception
+    # as-is, so the same two types arrive here.
+    try:
+        return await _post_fetch_and_render_async(
+            binding, result, drf_request, view, arguments_raw, params, context.config
+        )
+    except (drf_serializers.ValidationError, ServiceValidationError) as exc:
+        return read_shaping_error_result(
+            exc,
+            query_params=binding.query_params,
+            arguments=arguments_raw,
+            paginated=binding.paginate,
+            config=context.config,
+        ).to_dict()
 
 
 # ---------- helpers shared between sync + async ----------

@@ -8,7 +8,7 @@ MCP using every public registration surface of
 |--------------------------------|--------------------------------------------------------------|
 | `register_service_tool`        | `invoices.create` — creates a new invoice (atomic mutation). |
 | `register_service_tool`        | `invoices.mark_sent` — flips the `sent` flag.                |
-| `register_selector_tool`       | `invoices.list` — list with `FilterSet`, ordering, pagination.|
+| `register_selector_tool`       | `invoices.list` — list with `FilterSet`, ordering, pagination, and a `QueryParam` for field selection.|
 | `register_resource`            | `invoice` — single invoice by PK via `invoices://{pk}` URI.  |
 | `register_prompt`              | `compose_invoice_email` — render an email body for an invoice.|
 
@@ -95,19 +95,32 @@ curl -s -X POST http://localhost:8000/mcp/ $H \
        "params":{"name":"invoices.list",
                  "arguments":{"sent":false,"ordering":"-created","page":1,"limit":2}}}'
 
-# Mark one as sent
+# Select fields. The tool pages, so `fields` names an invoice's fields and
+# applies to each item in `items`; its advertised description says so.
 curl -s -X POST http://localhost:8000/mcp/ $H \
   -d '{"jsonrpc":"2.0","id":4,"method":"tools/call",
+       "params":{"name":"invoices.list","arguments":{"fields":"id,number"}}}'
+
+# Selecting the page envelope instead is refused as an `isError` result with
+# `"type": "validation_error"` and `detail.fields`, which a model can correct
+# from, rather than answered with a page of empty rows
+curl -s -X POST http://localhost:8000/mcp/ $H \
+  -d '{"jsonrpc":"2.0","id":5,"method":"tools/call",
+       "params":{"name":"invoices.list","arguments":{"fields":"items"}}}'
+
+# Mark one as sent
+curl -s -X POST http://localhost:8000/mcp/ $H \
+  -d '{"jsonrpc":"2.0","id":6,"method":"tools/call",
        "params":{"name":"invoices.mark_sent","arguments":{"pk":1}}}'
 
 # Read it back via the resource template
 curl -s -X POST http://localhost:8000/mcp/ $H \
-  -d '{"jsonrpc":"2.0","id":5,"method":"resources/read",
+  -d '{"jsonrpc":"2.0","id":7,"method":"resources/read",
        "params":{"uri":"invoices://1"}}'
 
 # Render the email prompt
 curl -s -X POST http://localhost:8000/mcp/ $H \
-  -d '{"jsonrpc":"2.0","id":6,"method":"prompts/get",
+  -d '{"jsonrpc":"2.0","id":8,"method":"prompts/get",
        "params":{"name":"compose_invoice_email","arguments":{"pk":"1"}}}'
 ```
 

@@ -196,6 +196,11 @@ dev = [
     # --all-groups`` installs groups but not extras — the suite that covers the
     # conformance helper would otherwise run without it in the test matrix.
     "jsonschema[format-nongpl]>=4.0.1",
+    # The field-selection library a read-shaping ``QueryParam`` most often
+    # carries. The render-time tests keep a stand-in serializer for most cases
+    # and hold it to this producer, so the double cannot drift into describing
+    # an error restql does not raise. 0.18 is the release those tests checked.
+    "django-restql>=0.18",
 ]
 docs = [
     "mkdocs>=1.6",
@@ -216,6 +221,14 @@ testpaths = ["tests"]
 # `DJANGO_SETTINGS_MODULE` is applied, which breaks collection outright.
 filterwarnings = [
     "ignore:MCP tool .* is registered with no description",
+    # pypeg2 (django-restql's parser, last released 2015) has unescaped regex
+    # literals that Python reports when it compiles the module: a SyntaxWarning
+    # from 3.12, a DeprecationWarning on 3.10 and 3.11, worded differently. It is
+    # emitted once per fresh bytecode cache, so it shows up in CI and not on a
+    # warm checkout. Scoped to that package's path: a compile-time warning names
+    # the file, not an importable module, hence the leading `.*`.
+    "ignore:.*invalid escape sequence:SyntaxWarning:.*pypeg2",
+    "ignore:.*invalid escape sequence:DeprecationWarning:.*pypeg2",
 ]
 
 [tool.coverage.run]
