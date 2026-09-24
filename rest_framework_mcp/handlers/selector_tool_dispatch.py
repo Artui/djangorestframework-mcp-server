@@ -121,7 +121,7 @@ def dispatch_selector_tool(
         return service_error_result(exc).to_dict()
 
     # Rendering is where a read-shaping ``QueryParam`` is actually read — a
-    # django-restql selection is parsed by the output serializer, per row — so
+    # field selection, say, is applied by the output serializer, per row — so
     # a bad one fails here, after every arm above has already been passed. Both
     # siblings wrap the post-fetch call as a whole: it holds all three renders
     # (a retrieve, a page's items, an unpaginated list), and the rest of it —

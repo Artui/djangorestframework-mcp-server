@@ -274,9 +274,10 @@ transport carries it.
 
 With `paginate=True` the tool serves the `{items, page, totalPages, hasNext}`
 envelope, and the serializer never sees it: the envelope is built *around* the
-rows the serializer rendered, so the param reaches only a row. A restql
-selection therefore names the fields of one item — `{id, number}` — never the
-envelope's (`{items{id, number}}`). That is the easy mistake to make, because
+rows the serializer rendered, so the param reaches only a row. A selection
+therefore names the fields of one item, never the envelope's: `fields=id,number`
+rather than `fields=items`, or in django-restql's grammar `{id, number}` rather
+than `{items{id, number}}`. That is the easy mistake to make, because
 the `outputSchema` a model reads describes the envelope. So on a paged tool,
 each query param's description in the `inputSchema` ends with:
 
@@ -291,12 +292,13 @@ declaration to it — so correcting one would mean knowing every grammar a
 serializer might parse. What it controls is what the caller hears when the
 serializer refuses a value, and that depends on how the serializer selects:
 
-- **Strict selection**, django-restql's default, raises a `ValidationError`
-  for a field the serializer does not have. That comes back as an
+- **Strict selection**, a serializer that raises a `ValidationError` for a
+  name it does not know (django-restql's default, for one). That comes back as an
   `isError: true` tool result of type `validation_error`, the same shape a
   service's `ServiceValidationError` produces ([Dispatch flow](#dispatch-flow)),
-  and its message names the argument: "`query` was rejected while rendering
-  the result: `items` field is not found." On a paged tool the per-item
+  and its message names the argument, then gives the serializer's own words:
+  "`fields` was rejected while rendering the result: Unknown field `items`." The
+  transport adds nothing about any one library's grammar. On a paged tool the per-item
   sentence follows it. The detail is keyed under the argument's name; when a
   call supplied several read-shaping values it sits under `non_field_errors`
   and the message names them all, because nothing says which one the

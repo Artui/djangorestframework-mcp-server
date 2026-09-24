@@ -32,12 +32,11 @@ class SelectableInvoiceSerializer(InvoiceOutputSerializer):
     Reads ``fields`` (``id,number``) off ``request.query_params``, which is
     where ``invoices.list``'s ``fields`` argument arrives: a ``QueryParam``
     routes a tool argument there, so a serializer written for HTTP's
-    ``?fields=`` works unchanged. django-restql's ``?query=`` is read the same
-    way; this is written by hand only because restql is not a dependency of the
-    example.
+    ``?fields=`` works unchanged. Any read-shaping serializer works the same
+    way, a field-selection library included; the transport never reads the
+    value, only routes it and reports what the serializer says about it.
 
-    Two things are copied from restql's default, because they are what a model
-    calling the tool depends on:
+    Two things a model calling the tool depends on, whatever does the selecting:
 
     - **It runs per row.** On a paged tool the selection names an *item*'s
       fields. ``fields=items`` selects the page envelope, the shape the tool's
@@ -56,7 +55,5 @@ class SelectableInvoiceSerializer(InvoiceOutputSerializer):
         wanted = [name.strip() for name in raw.split(",") if name.strip()]
         for name in wanted:
             if name not in data:
-                # restql's own message and code, so a consumer switching to it
-                # sees the same error.
-                raise serializers.ValidationError(f"`{name}` field is not found", code="not_found")
+                raise serializers.ValidationError(f"Unknown field `{name}`.", code="unknown_field")
         return {name: data[name] for name in wanted}

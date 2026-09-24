@@ -274,10 +274,11 @@ as DRF's own body, anything else as a server error. A client matching
 responses by `id` has nothing to match, and most report a parse failure rather
 than the error.
 
-The common cause is a restql selection written against the page envelope. On
-a `paginate=True` tool the serializer renders each item, so
-`{items{id, number}}` names a field no item has and the serializer raises
-while rendering. Select per item — `{id, number}` — see
+The common cause is a field selection written against the page envelope, for
+example django-restql's `{items{id, number}}`, or `fields=items` for a
+hand-written one. On a `paginate=True` tool the serializer renders each item,
+so the selection names a field no item has and the serializer raises while
+rendering. Select per item, `{id, number}` or `fields=id,number`: see
 [Query params](concepts.md#query-param-per-item).
 
 Fixed in 0.49.0, which answers every such exception as JSON-RPC:

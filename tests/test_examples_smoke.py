@@ -135,8 +135,8 @@ def test_invoicing_field_selection_is_per_item_and_refuses_the_envelope() -> Non
     assert tool_result["isError"] is True
     error = json.loads(tool_result["content"][0]["text"])["error"]
     assert error["type"] == "validation_error"
-    assert error["detail"] == {"fields": ["`items` field is not found"]}
+    assert error["detail"] == {"fields": ["Unknown field `items`."]}
     assert error["message"].startswith(
-        "`fields` was rejected while rendering the result: `items` field is not found."
+        "`fields` was rejected while rendering the result: Unknown field `items`."
     )
     assert "never to the page envelope" in error["message"]

@@ -1,14 +1,20 @@
 """A read-shaping ``QueryParam`` refused while the result is rendered.
 
-A field-selection param (django-restql's ``query``) is read by the *output
-serializer*, one row at a time, after ``dispatch_spec`` has returned. Every
-``except`` that decides whether a failure is the caller's wrapped only the
-dispatch, so a selection the serializer refused escaped as whatever the
-transport made of an unhandled exception: a bare DRF body in JSON mode (not a
-JSON-RPC response at all), a ``-32603`` in a stream, a raised ``ValidationError``
-from ``acall_tool``. On a paged tool the likeliest bad selection is the
-envelope, ``{items{id, number}}``, because that is exactly the shape the tool's
-``outputSchema`` shows.
+A read-shaping param (a ``fields`` or ``expand`` a serializer reads itself,
+django-restql's ``query``) is read by the *output serializer*, one row at a
+time, after ``dispatch_spec`` has returned. Every ``except`` that decides
+whether a failure is the caller's wrapped only the dispatch, so a value the
+serializer refused escaped as whatever the transport made of an unhandled
+exception: a bare DRF body in JSON mode (not a JSON-RPC response at all), a
+``-32603`` in a stream, a raised ``ValidationError`` from ``acall_tool``. On a
+paged tool the likeliest bad selection names the envelope, because that is
+exactly the shape the tool's ``outputSchema`` shows.
+
+Nothing under test reads the value, so the producers here are deliberately
+mixed: real django-restql and a stand-in held to its exact error, because it is
+the strict selector most likely to be in use, and serializers raising their own
+wording, a per-field dict and a service error, because the transport must carry
+whatever a serializer says.
 
 It is now the caller's ``isError`` + ``validation_error`` whenever the caller
 supplied a read-shaping value on the call, and still raises when they did not:

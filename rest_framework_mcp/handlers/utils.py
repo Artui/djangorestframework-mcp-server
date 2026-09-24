@@ -138,9 +138,9 @@ def split_query_params(
     param. So a null falls through to the ``default`` and otherwise produces no
     value, exactly as an omitted key does. Routing it on is not harmless:
     ``build_offline_context`` stringifies every value as HTTP would, so the
-    serializer read the four characters ``None`` — which django-restql refuses as
-    a malformed selection, failing the render of a call whose caller asked for
-    nothing. The name is still popped from ``params`` either way.
+    serializer read the four characters ``None`` — which a selection parser
+    refuses as malformed (django-restql does), failing the render of a call whose
+    caller asked for nothing. The name is still popped from ``params`` either way.
     """
     if not query_params:
         return arguments, {}
@@ -565,17 +565,17 @@ def read_shaping_error_result(
 ) -> ToolResult:
     """The ``isError`` result for a validation error raised while *rendering*.
 
-    A read-shaping ``QueryParam`` is the one caller input used while the output
-    is rendered rather than while the spec is dispatched: a django-restql
-    ``query`` is parsed by the output serializer, one row at a time, long after
-    ``dispatch_spec`` has returned. So a bad selection fails outside every
-    ``except`` that decides whether a failure is the caller's to fix, and it
-    escaped as whatever the transport made of an unhandled exception — a bare DRF
-    body in JSON mode, a ``-32603`` in a stream, a raised ``ValidationError`` from
+    A read-shaping ``QueryParam`` is the one caller input used while the output is
+    rendered rather than while the spec is dispatched: a field selection, whichever
+    library parses it, is applied by the output serializer one row at a time, long
+    after ``dispatch_spec`` has returned. So a bad selection fails outside every
+    ``except`` that decides whether a failure is the caller's to fix, and it escaped
+    as whatever the transport made of an unhandled exception — a bare DRF body in
+    JSON mode, a ``-32603`` in a stream, a raised ``ValidationError`` from
     ``acall_tool``. This turns it into the channel the dispatch path already uses
     for "your argument was wrong": ``validation_error``, built exactly as the
-    ``ServiceValidationError`` arms build it, which an in-process toolset maps to
-    a retry the model can act on.
+    ``ServiceValidationError`` arms build it, which an in-process toolset maps to a
+    retry the model can act on.
 
     **Only when the caller shaped the render.** With no read-shaping value
     supplied on this call nothing the model sends can change the outcome, so the

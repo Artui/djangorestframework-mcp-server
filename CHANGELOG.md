@@ -15,22 +15,28 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `validation_error` tool result, not a broken reply.** A `QueryParam` is the one
   argument used while the result is rendered rather than while the spec runs,
   and the render sat outside every `except` that decides whether a failure is the
-  caller's to fix. So strict django-restql refusing a selection, most often
-  `{items{id, number}}` written against a paged tool's envelope, escaped as
-  whatever the transport made of an unhandled exception:
+  caller's to fix. So a serializer refusing a selection escaped as whatever the
+  transport made of an unhandled exception. The likeliest case is a field
+  selection written against a paged tool's envelope, such as `fields=items` or
+  django-restql's `{items{id, number}}`:
   - in JSON response mode, on both transports: HTTP `400` with DRF's own body,
-    ``["`items` field is not found"]``, with no `jsonrpc` and no `id`;
+    `["..."]`, with no `jsonrpc` and no `id`;
   - on a progress-carrying call: an in-stream `-32603`;
   - from `call_tool` / `acall_tool`: the raw `ValidationError`.
 
   It is now an `isError` result with `error_type` `validation_error`, built like
-  every other validation failure, whose message names the argument:
+  every other validation failure, whose message names the argument and then
+  gives the serializer's own words:
 
   ```text
-  `query` was rejected while rendering the result: `items` field is not found. On a
+  `fields` was rejected while rendering the result: Unknown field `items`. On a
   paged result it applies to each item in `items`, never to the page envelope
   (`items`, `page`, `totalPages`, `hasNext`).
   ```
+
+  Nothing here is specific to one selection library. The transport never reads a
+  `QueryParam`'s value, so `query`, `fields` and `expand` are handled alike, and
+  whatever a serializer raises as a `ValidationError` is what the caller reads.
 
   The detail is keyed under that argument, or under `non_field_errors` when
   several were sent, since the serializer does not say which one it refused. The
@@ -47,8 +53,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **An explicit `null` for a `QueryParam` is treated as omitted,** as the
   `QueryParam` contract states. The declared `default` applies, and with none
   nothing reaches `request.query_params`. It used to be forwarded and
-  stringified, so the serializer received the four characters `None`, which
-  strict django-restql refuses to parse.
+  stringified, so the serializer received the four characters `None`, which a
+  selection parser refuses as malformed.
 - **An exception that escapes a dispatch is answered as JSON-RPC.** In JSON
   response mode it left the view and DRF's exception handler rendered it: an
   `APIException` as DRF's bare body under its own status, anything else as
