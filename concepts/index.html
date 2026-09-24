@@ -453,6 +453,23 @@
     </span>
   </a>
   
+    <nav class="md-nav" aria-label="Query params: read-shaping values the serializer reads">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#query-param-per-item" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        On a paged tool it shapes each item, never the page
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
 </li>
         
           <li class="md-nav__item">
@@ -2159,6 +2176,23 @@
     </span>
   </a>
   
+    <nav class="md-nav" aria-label="Query params: read-shaping values the serializer reads">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#query-param-per-item" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        On a paged tool it shapes each item, never the page
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
 </li>
         
           <li class="md-nav__item">
@@ -3014,6 +3048,55 @@ whose variables already route to <code>view.kwargs</code>.</p>
 <a href="https://github.com/Artui/djangorestframework-services/blob/main/rest_framework_services/types/query_param.py">drf-services' type</a>,
 re-exported here for the same reason as <code>UrlKwarg</code> — one declaration, whichever
 transport carries it.</p>
+<h4 id="query-param-per-item">On a paged tool it shapes each item, never the page<a class="headerlink" href="#query-param-per-item" title="Permanent link">&para;</a></h4>
+<p>With <code>paginate=True</code> the tool serves the <code>{items, page, totalPages, hasNext}</code>
+envelope, and the serializer never sees it: the envelope is built <em>around</em> the
+rows the serializer rendered, so the param reaches only a row. A selection
+therefore names the fields of one item, never the envelope's: <code>fields=id,number</code>
+rather than <code>fields=items</code>, or in django-restql's grammar <code>{id, number}</code> rather
+than <code>{items{id, number}}</code>. That is the easy mistake to make, because
+the <code>outputSchema</code> a model reads describes the envelope. So on a paged tool,
+each query param's description in the <code>inputSchema</code> ends with:</p>
+<blockquote>
+<p>On a paged result it applies to each item in <code>items</code>, never to the page
+envelope (<code>items</code>, <code>page</code>, <code>totalPages</code>, <code>hasNext</code>).</p>
+</blockquote>
+<p>A service tool and an unpaginated list have no envelope, and get no sentence.</p>
+<p>The package does not rewrite a selection written the other way. <code>QueryParam</code> is
+opaque on purpose — <code>query</code>, <code>fields=id,name</code> and <code>expand=true</code> are the same
+declaration to it — so correcting one would mean knowing every grammar a
+serializer might parse. What it controls is what the caller hears when the
+serializer refuses a value, and that depends on how the serializer selects:</p>
+<ul>
+<li><strong>Strict selection</strong>, a serializer that raises a <code>ValidationError</code> for a
+  name it does not know (django-restql's default, for one). That comes back as an
+  <code>isError: true</code> tool result of type <code>validation_error</code>, the same shape a
+  service's <code>ServiceValidationError</code> produces (<a href="#dispatch-flow">Dispatch flow</a>),
+  and its message names the argument, then gives the serializer's own words:
+  "<code>fields</code> was rejected while rendering the result: Unknown field <code>items</code>." The
+  transport adds nothing about any one library's grammar. On a paged tool the per-item
+  sentence follows it. The detail is keyed under the argument's name; when a
+  call supplied several read-shaping values it sits under <code>non_field_errors</code>
+  and the message names them all, because nothing says which one the
+  serializer refused. A model reads the result and retries with a corrected
+  selection.</li>
+<li><strong>Tolerant selection</strong>, a serializer that drops the names it does not know,
+  answers <code>{items{id, number}}</code> with a page of <code>{}</code>: one empty object per row,
+  a well-formed result no transport can tell from a real one. It opts out of
+  the error signal entirely, so <strong>tools an agent calls should select
+  strictly</strong> — that is the setting in which the model can correct itself.</li>
+</ul>
+<p>The tool result is reserved for the failures the caller caused. A render-time
+<code>ValidationError</code> (or drf-services' <code>ServiceValidationError</code>) becomes one only
+when the call <strong>supplied</strong> a non-null value for at least one declared
+<code>QueryParam</code>. A value seeded from <code>QueryParam.default</code> because the caller
+omitted the argument does not count: a bad default is a configuration bug. With
+nothing supplied the serializer refused on its own, no retry could change the
+outcome, and it stays a server error — over HTTP a JSON-RPC <code>-32603</code> reading
+<code>Internal error</code> under a <code>500</code>, with the exception in the log; from
+<code>acall_tool</code>, the exception itself. Any other exception raised while rendering
+is a server error whatever the caller sent: an <code>AttributeError</code> in a serializer
+is a bug, not a bad argument.</p>
 <h3 id="list-payload">A list payload: <code>many=True</code> service tools<a class="headerlink" href="#list-payload" title="Permanent link">&para;</a></h3>
 <p>A <code>ServiceSpec</code> with <code>many=True</code> validates its input as a list and hands the
 service that list as <code>data</code>. Over HTTP the list is the request body. A
@@ -4596,6 +4679,17 @@ carries the hashed-URI workaround.</p>
 <li>Wrap as a <code>ToolResult</code> with <code>OutputFormat</code>-driven encoding for the human-
    readable <code>content[0]</code> block. <code>structuredContent</code> is always JSON.</li>
 </ol>
+<p>A serializer that rejects while <em>rendering</em>, in step 8 or in a selector tool's
+render, joins step 7's <code>validation_error</code> arm only when the caller shaped the
+render with a read-shaping param (<a href="#query-param-per-item">Query params</a>).
+Anything a dispatch raises that no arm maps is a server fault, and the
+transport answers it as one: a JSON-RPC <code>-32603</code> whose message is
+<code>Internal error</code>, carrying the request's <code>id</code>, under HTTP <code>500</code> so proxies and
+error-rate monitoring still count it. The exception's own text never reaches
+the client; it is logged at <code>ERROR</code> with its traceback
+(<a href="../observability/#what-lands-where">Observability</a>). A progress-carrying
+stream has already committed its <code>200</code>, so there the same error arrives as the
+stream's last frame.</p>
 <p>RETRIEVE selector tools mirror the sister repo's read semantics: a
 QuerySet return is materialized via <code>.first()</code>, and a missing row is a
 <code>not_found</code> <code>isError</code> result — unless the spec sets <code>allow_none=True</code>

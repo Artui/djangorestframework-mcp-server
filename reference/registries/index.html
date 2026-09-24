@@ -4805,6 +4805,12 @@ parameter is the other ordering route, and likewise needs no knob);
 <code>paginate</code> is the one binding-level MCP mechanic. The shared
 <code>ToolRegistry</code> accepts either kind and is what <code>tools/list</code> and
 <code>tools/call</code> iterate.</p>
+<p><code>paginate</code> also decides what <code>query_params=</code> shapes. On a paged binding the
+serializer renders each row and the page envelope (<code>items</code>, <code>page</code>,
+<code>totalPages</code>, <code>hasNext</code>) is built around the result, so a query param applies
+to each item in <code>items</code>, never to the envelope — and its description in the
+<code>inputSchema</code> says so. See
+<a href="../../concepts/#query-param-per-item">Query params on a paged tool</a>.</p>
 
 
 <div class="doc doc-object doc-class">
@@ -9809,7 +9815,7 @@ top, so the shape is described the same way across transports.</p>
     <div class="doc doc-contents first">
 
         <p>Build the JSON Schema for a selector tool's <code>inputSchema</code>.</p>
-<p>Merges four sources, in order of precedence (later sources override earlier
+<p>Merges five sources, in order of precedence (later sources override earlier
 ones on key collision):</p>
 <ol>
 <li><strong>Reflected <code>spec</code> shape</strong> — the selector callable's own parameters (an
@@ -9836,6 +9842,15 @@ ones on key collision):</p>
       dataclass
   " href="#rest_framework_services.types.url_kwarg.UrlKwarg"><code>UrlKwarg</code></a>'s advertised
    schema, winning over a reflected key of the same name.</li>
+<li><strong><code>query_params</code></strong> — each registered
+   <a class="autorefs autorefs-internal" title="QueryParam
+
+
+  
+      dataclass
+  " href="#rest_framework_services.types.query_param.QueryParam"><code>QueryParam</code></a>'s
+   advertised schema. On a paged tool its description also says that the
+   param applies to each item, never to the envelope.</li>
 </ol>
 
 

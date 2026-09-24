@@ -1796,6 +1796,10 @@ other library:</p>
 </thead>
 <tbody>
 <tr>
+<td><code>ERROR</code></td>
+<td>An exception a dispatch raised instead of returning, with its traceback and the request id. The client gets a generic <code>-32603</code> <code>Internal error</code>, so this record is the only place the exception's text goes</td>
+</tr>
+<tr>
 <td><code>WARNING</code></td>
 <td>Session rejections, authentication failures, and every outbound bound that fires (result size, dispatch deadline, page clamp)</td>
 </tr>

@@ -761,6 +761,17 @@
   
 </li>
       
+        <li class="md-nav__item">
+  <a href="#a-tool-call-returns-a-drf-error-body-instead-of-json-rpc" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        A tool call returns a DRF error body instead of JSON-RPC
+      
+    </span>
+  </a>
+  
+</li>
+      
     </ul>
   
 </nav>
@@ -1938,6 +1949,17 @@
   
 </li>
       
+        <li class="md-nav__item">
+  <a href="#a-tool-call-returns-a-drf-error-body-instead-of-json-rpc" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        A tool call returns a DRF error body instead of JSON-RPC
+      
+    </span>
+  </a>
+  
+</li>
+      
     </ul>
   
 </nav>
@@ -2180,6 +2202,39 @@ undeliverable. The bound now logs at <code>WARNING</code> when it fires.</p>
 check how wide each row is. A nested serializer that expands related objects can
 make ten rows larger than a thousand lean ones, and <code>limit</code> cannot express a
 byte budget.</p>
+<h2 id="a-tool-call-returns-a-drf-error-body-instead-of-json-rpc">A tool call returns a DRF error body instead of JSON-RPC<a class="headerlink" href="#a-tool-call-returns-a-drf-error-body-instead-of-json-rpc" title="Permanent link">&para;</a></h2>
+<p>A <code>tools/call</code> answered with something like HTTP <code>400</code> and a body of
+<code>["`items` field is not found"]</code> — no <code>jsonrpc</code>, no <code>id</code> — or with Django's
+HTML <code>500</code> page, is an exception that escaped the dispatch. The transport had
+no answer for it, so DRF's exception handler rendered it: an <code>APIException</code>
+as DRF's own body, anything else as a server error. A client matching
+responses by <code>id</code> has nothing to match, and most report a parse failure rather
+than the error.</p>
+<p>The common cause is a field selection written against the page envelope, for
+example django-restql's <code>{items{id, number}}</code>, or <code>fields=items</code> for a
+hand-written one. On a <code>paginate=True</code> tool the serializer renders each item,
+so the selection names a field no item has and the serializer raises while
+rendering. Select per item, <code>{id, number}</code> or <code>fields=id,number</code>: see
+<a href="../concepts/#query-param-per-item">Query params</a>.</p>
+<p>Fixed in 0.49.0, which answers every such exception as JSON-RPC:</p>
+<ul>
+<li>A render-time rejection of a value the caller supplied is an <code>isError</code>
+  <code>validation_error</code> tool result naming the param, the same shape as any
+  other validation failure.</li>
+<li>Anything else is a <code>-32603</code> whose message is <code>Internal error</code>, carrying the
+  request's <code>id</code>, under HTTP <code>500</code>. The exception is logged at <code>ERROR</code> with its
+  traceback under <code>rest_framework_mcp.transport</code>; the text is not in the
+  response, so read the log.</li>
+<li>A <code>PermissionDenied</code> (DRF's or Django's) is the exception: a permission
+  class that refuses by raising, rather than returning <code>False</code>, is answered
+  exactly like one that returned <code>False</code>, as a <code>FORBIDDEN</code> under <code>403</code> with its
+  <code>WWW-Authenticate</code> challenge. It is a refusal, not a server fault, so nothing
+  is logged at <code>ERROR</code>.</li>
+</ul>
+<p>A progress-carrying call (one sent with a <code>progressToken</code>) has committed its
+<code>200</code> before the dispatch runs, so it never showed a DRF body; before 0.49.0
+its last frame was a <code>-32603</code> whose message was the exception's own text.
+Since 0.49.0 that frame reads <code>Internal error</code> too.</p>
 
 
 
