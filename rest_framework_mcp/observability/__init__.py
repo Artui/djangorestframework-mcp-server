@@ -12,8 +12,9 @@ library:
 dispatch raised instead of returning: the transport answers it with a generic
 ``-32603`` and this record is the only place its text goes. ``WARNING`` for
 every rejection a caller sees but an operator cannot otherwise explain —
-session, auth, origin, protocol version, and each outbound bound. ``INFO`` for ``initialize`` and the era a request selected.
-``DEBUG`` for per-call timing and result size.
+session, auth, origin, protocol version, and each outbound bound. ``INFO`` for
+``initialize`` and the era a request selected. ``DEBUG`` for per-call timing and
+result size.
 
 **The no-oracle rule applies to the response, not the log.** The session gate
 deliberately merges "unknown id" with "id owned by another principal" so a
