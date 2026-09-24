@@ -3,7 +3,9 @@ from __future__ import annotations
 import json
 from typing import Any
 
+from django.core.exceptions import PermissionDenied as DjangoPermissionDenied
 from django.http import HttpResponse, JsonResponse
+from rest_framework.exceptions import PermissionDenied
 from rest_framework.permissions import AllowAny
 from rest_framework.renderers import JSONRenderer
 from rest_framework.request import Request
@@ -14,6 +16,7 @@ from rest_framework_mcp.auth.principal_for_token import principal_for_token
 from rest_framework_mcp.auth.types.auth_backend import MCPAuthBackend
 from rest_framework_mcp.config.types.mcp_config import MCPConfig
 from rest_framework_mcp.constants import (
+    INTERNAL_ERROR_MESSAGE,
     MCP_ERROR_HEADER,
     MODERN_PROTOCOL_VERSIONS,
     SESSIONLESS_METHODS,
@@ -42,6 +45,7 @@ from rest_framework_mcp.transport.utils import (
     insufficient_scope_challenge,
     is_permission_denial,
     modern_error_status,
+    raised_denial_error,
     session_gate_failure,
 )
 from rest_framework_mcp.transport.validate_modern_request import validate_modern_request
@@ -70,6 +74,48 @@ def _error_response(
         # Summarises the body for clients that surface only the status line.
         response[MCP_ERROR_HEADER] = error_hint
     return response
+
+
+def _internal_error_response(message: JsonRpcRequest) -> JsonResponse:
+    """Answer a dispatch that raised with a JSON-RPC ``-32603``, and log why.
+
+    **The backstop, not a classifier.** Every failure a caller can act on is
+    already *returned* by the handlers, as an ``isError`` tool result or a
+    JSON-RPC error, and the permission denial, unknown method and rate limit
+    responses are all built from those return values. What reaches this is
+    what nothing mapped, which makes it a server fault whatever its type.
+
+    Without it the exception left the action and DRF's ``handle_exception``
+    rendered it: an ``APIException`` as a bare DRF body under the exception's
+    own status (a serializer's ``ValidationError`` arrived as a ``400`` reading
+    ``["..."]``, with no ``jsonrpc`` and no ``id``, so a spec-following client
+    could not even match it to the request it sent), and anything else as
+    Django's ``500`` page. Neither was a JSON-RPC reply at all.
+
+    **Nothing is meant to escape.** DRF's own mappings that do produce a
+    response (a throttle's ``429`` with ``Retry-After``, content negotiation's
+    ``406``) run in ``initial()``, before this action is called, so the
+    backstop cannot reach them. tests/transport/test_dispatch_backstop.py pins
+    those, and the denial, rate-limit and unknown-method answers the handlers
+    return rather than raise.
+
+    **The status stays a ``500``** so proxies, load balancers and error-rate
+    monitoring still count a server fault, which a ``200`` carrying the error
+    would hide from all three. **The message is generic** and the exception
+    goes to the log with its traceback: see ``INTERNAL_ERROR_MESSAGE``.
+
+    Must be called from inside the ``except`` block: ``logger.exception``
+    reads the exception being handled.
+    """
+    logger.exception(
+        "Unhandled exception dispatching %s (request id %r)", message.method, message.id
+    )
+    return _error_response(
+        code=JsonRpcErrorCode.INTERNAL_ERROR,
+        message=INTERNAL_ERROR_MESSAGE,
+        status=500,
+        request_id=message.id,
+    )
 
 
 def _reject_awaitable_token(result: Any, *, backend: Any) -> Any:
@@ -302,7 +348,13 @@ class StreamableHttpViewSet(ViewSet):
                 code=JsonRpcErrorCode.INVALID_REQUEST, message="Expected a JSON-RPC request"
             )
 
-        result: Any = dispatch(message.method, _params_dict(message.params), context)
+        try:
+            result: Any = dispatch(message.method, _params_dict(message.params), context)
+        except (PermissionDenied, DjangoPermissionDenied):
+            # A denial raised rather than returned; see ``raised_denial_error``.
+            result = raised_denial_error()
+        except Exception:  # noqa: BLE001 — the backstop; see ``_internal_error_response``
+            return _internal_error_response(message)
 
         if isinstance(result, JsonRpcError):
             response_body = JsonRpcResponse(id=message.id, error=result).to_dict()
@@ -396,7 +448,13 @@ class StreamableHttpViewSet(ViewSet):
         # Necessarily a request by now. The era test reads ``params``, which a
         # JSON-RPC *response* does not carry, so a response body is always
         # routed to the legacy path — and rejected there.
-        result: Any = dispatch(message.method, _params_dict(message.params), context)
+        try:
+            result: Any = dispatch(message.method, _params_dict(message.params), context)
+        except (PermissionDenied, DjangoPermissionDenied):
+            # A denial raised rather than returned; see ``raised_denial_error``.
+            result = raised_denial_error()
+        except Exception:  # noqa: BLE001 — the backstop; see ``_internal_error_response``
+            return _internal_error_response(message)
         if isinstance(result, JsonRpcError):
             body = JsonRpcResponse(id=message.id, error=result).to_dict()
             status: int = modern_error_status(result)

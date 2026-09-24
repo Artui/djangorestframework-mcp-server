@@ -19,9 +19,10 @@ from invoices.serializers import (
     InvoiceInputSerializer,
     InvoiceOutputSerializer,
     MarkSentInputSerializer,
+    SelectableInvoiceSerializer,
 )
 from invoices.services import create_invoice, mark_invoice_sent
-from rest_framework_mcp import MCPServer, PromptArgument, PromptMessage
+from rest_framework_mcp import MCPServer, PromptArgument, PromptMessage, QueryParam
 from rest_framework_mcp.auth.backends.allow_any_backend import AllowAnyBackend
 from rest_framework_mcp.auth.permissions.drf_permission_adapter import DRFPermissionAdapter
 from rest_framework_mcp.transport.in_memory_session_store import InMemorySessionStore
@@ -78,7 +79,7 @@ def build_server() -> MCPServer:
         description="Flip an invoice's ``sent`` flag.",
     )
 
-    # ----- Selector tool (read with filter / order / paginate) -----
+    # ----- Selector tool (read with filter / order / paginate / select) -----
 
     server.register_selector_tool(
         name="invoices.list",
@@ -86,13 +87,24 @@ def build_server() -> MCPServer:
             permission_classes=[AllowAny],
             kind=SelectorKind.LIST,
             selector=list_invoices,
-            output_serializer=InvoiceOutputSerializer,
+            output_serializer=SelectableInvoiceSerializer,
             filter_set=InvoiceFilterSet,
         ),
         description="List invoices, optionally filtered / ordered / paginated.",
         # Ordering is not a registration knob: ``InvoiceFilterSet`` declares an
         # ``OrderingFilter``, and that declaration is what the tool advertises.
         paginate=True,
+        # Field selection, read by the serializer off ``request.query_params``.
+        # Because the tool pages, the advertised description gains a sentence
+        # saying the selection applies to each item, never to the envelope;
+        # a selection that names the envelope anyway comes back as a
+        # ``validation_error`` rather than as a page of empty rows.
+        query_params=(
+            QueryParam(
+                "fields",
+                description="Comma-separated invoice fields to return, e.g. id,number",
+            ),
+        ),
     )
 
     # ----- Resource (single invoice by PK via URI template) -----

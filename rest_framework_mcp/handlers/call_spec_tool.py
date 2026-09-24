@@ -24,6 +24,7 @@ from __future__ import annotations
 
 from typing import Any
 
+from rest_framework import serializers as drf_serializers
 from rest_framework_services import (
     build_offline_context,
     dispatch_spec,
@@ -35,6 +36,7 @@ from rest_framework_services.exceptions.service_validation_error import ServiceV
 
 from rest_framework_mcp.config.types.mcp_config import MCPConfig
 from rest_framework_mcp.handlers.utils import (
+    read_shaping_error_result,
     service_error_result,
     services_dispatch_policies,
     split_query_params,
@@ -65,9 +67,11 @@ def call_spec_tool(
     ``render_for_audience``.
 
     ``ServiceValidationError`` / ``ServiceError`` and a missing required instance
-    come back as ``isError`` tool results the model can self-correct from; a
-    denied permission raises ``PermissionDenied`` and a malformed payload raises
-    DRF's ``ValidationError`` — protocol faults the caller maps to its own wire.
+    come back as ``isError`` tool results the model can self-correct from, as
+    does a validation error raised while rendering when the caller supplied a
+    read-shaping ``QueryParam``; a denied permission raises ``PermissionDenied``
+    and a malformed payload raises DRF's ``ValidationError`` — protocol faults the
+    caller maps to its own wire.
     A chain tool orchestrates several specs, has no single dispatch target, and
     is rejected with ``TypeError``.
     """
@@ -145,15 +149,31 @@ def call_spec_tool(
     extras: dict[str, Any] = (
         {"page": result.value} if many else {"instance": result.value, "result": result.value}
     )
-    payload: Any = render_for_audience(
-        spec,
-        result.value,
-        projection=binding.audience_projection,
-        many=many,
-        view=context.view,
-        request=context.request,
-        extras=extras,
-    )
+    # The render is where a read-shaping ``QueryParam`` is read, so a value the
+    # serializer refuses fails here rather than in the ``dispatch_spec`` try
+    # above. The same classification as the wire handlers: the caller's
+    # ``isError`` when they supplied one, re-raised when they did not.
+    try:
+        payload: Any = render_for_audience(
+            spec,
+            result.value,
+            projection=binding.audience_projection,
+            many=many,
+            view=context.view,
+            request=context.request,
+            extras=extras,
+        )
+    except (drf_serializers.ValidationError, ServiceValidationError) as exc:
+        return read_shaping_error_result(
+            exc,
+            query_params=binding.query_params,
+            arguments=arguments,
+            # Never a page here, even for a ``paginate=True`` selector binding:
+            # pagination is one of the transport extras this entry point leaves
+            # to the wire handlers, so the result has no envelope to explain.
+            paginated=False,
+            config=config,
+        )
     _emit_output_schema, emit_structured_content = resolve_structured_output(
         include_output_schema_override=binding.include_output_schema,
         include_structured_content_override=binding.include_structured_content,

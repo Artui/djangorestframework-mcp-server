@@ -4,8 +4,11 @@ from typing import Any
 
 from rest_framework_services import spec_to_json_schema
 
+from rest_framework_mcp.registry.types.query_param import QueryParam
 from rest_framework_mcp.registry.types.selector_tool_binding import SelectorToolBinding
+from rest_framework_mcp.schema.agent_conventions import PAGED_QUERY_PARAM_SCOPE
 from rest_framework_mcp.schema.input_schema import build_input_schema
+from rest_framework_mcp.schema.utils import end_sentence
 
 
 def build_selector_tool_input_schema(
@@ -13,7 +16,7 @@ def build_selector_tool_input_schema(
 ) -> dict[str, Any]:
     """Build the JSON Schema for a selector tool's ``inputSchema``.
 
-    Merges four sources, in order of precedence (later sources override earlier
+    Merges five sources, in order of precedence (later sources override earlier
     ones on key collision):
 
     1. **Reflected ``spec`` shape** — the selector callable's own parameters (an
@@ -35,6 +38,10 @@ def build_selector_tool_input_schema(
     4. **``url_kwargs``** — each registered
        [`UrlKwarg`][rest_framework_services.types.url_kwarg.UrlKwarg]'s advertised
        schema, winning over a reflected key of the same name.
+    5. **``query_params``** — each registered
+       [`QueryParam`][rest_framework_services.types.query_param.QueryParam]'s
+       advertised schema. On a paged tool its description also says that the
+       param applies to each item, never to the envelope.
 
     Args:
         binding: The selector tool binding to describe.
@@ -76,12 +83,38 @@ def build_selector_tool_input_schema(
     # Routed to ``request.query_params`` at dispatch, and never required — see
     # ``build_service_tool_input_schema``.
     for query_param in binding.query_params:
-        properties[query_param.name] = query_param.json_schema()
+        properties[query_param.name] = _query_param_schema(query_param, paged=binding.paginate)
 
     out: dict[str, Any] = {"type": "object", "properties": properties}
     if required:
         out["required"] = required
     return out
+
+
+def _query_param_schema(query_param: QueryParam, *, paged: bool) -> dict[str, Any]:
+    """A ``QueryParam``'s advertised property, told what it applies to on a page.
+
+    On a paged tool the ``outputSchema`` describes the envelope, and a
+    field-selection param written against that schema selects ``items`` — which
+    the serializer, rendering one row at a time, does not have. The scope
+    sentence is appended to the consumer's own description rather than replacing
+    it (their text says what the param *is*; this says where it lands), and
+    stands alone when they wrote none.
+
+    The ``outputSchema`` is left alone on purpose: the envelope is what the
+    result is, and the sentence explains how the param relates to it rather than
+    pretending the result has another shape. An unpaginated tool has no envelope,
+    so its param is advertised exactly as declared.
+    """
+    schema: dict[str, Any] = query_param.json_schema()
+    if paged:
+        declared: str | None = schema.get("description")
+        schema["description"] = (
+            f"{end_sentence(declared)} {PAGED_QUERY_PARAM_SCOPE}"
+            if declared
+            else PAGED_QUERY_PARAM_SCOPE
+        )
+    return schema
 
 
 __all__ = ["build_selector_tool_input_schema"]

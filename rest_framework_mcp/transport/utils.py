@@ -24,6 +24,28 @@ def is_permission_denial(result: Any) -> bool:
     return isinstance(result, JsonRpcError) and result.code == JsonRpcErrorCode.FORBIDDEN
 
 
+def raised_denial_error() -> JsonRpcError:
+    """The ``FORBIDDEN`` a handler returns for a denial, for one that was raised.
+
+    Both viewsets' backstop catches DRF's and Django's ``PermissionDenied`` ahead
+    of its catch-all and answers with this. Every handler already maps a
+    ``PermissionDenied`` it catches to ``FORBIDDEN``; what reaches the backstop
+    is one raised where no handler is looking, above all by a permission class
+    that raises instead of returning ``False`` (a common DRF idiom, and the only
+    way a class wrapped in ``DRFPermissionAdapter`` can attach a message). DRF's
+    ``handle_exception`` used to answer it with a ``403``, a bare DRF body but a
+    denial; the catch-all would turn it into a ``500`` and an ``ERROR`` log,
+    reporting a refusal as a server fault.
+
+    Handed back into the viewset's normal result path rather than answered on the
+    spot, so a raised denial gets exactly what a returned one gets: the era's
+    status and the ``WWW-Authenticate`` challenge. The exception's own message is
+    not echoed, matching the handlers, whose ``except PermissionDenied`` arms
+    answer "Insufficient permission" whatever it said.
+    """
+    return JsonRpcError(JsonRpcErrorCode.FORBIDDEN, "Insufficient permission")
+
+
 def insufficient_scope_challenge(result: JsonRpcError, backend: MCPAuthBackend) -> str:
     """Build the ``WWW-Authenticate`` challenge for a permission denial.
 
@@ -110,5 +132,6 @@ __all__ = [
     "insufficient_scope_challenge",
     "is_permission_denial",
     "modern_error_status",
+    "raised_denial_error",
     "session_gate_failure",
 ]

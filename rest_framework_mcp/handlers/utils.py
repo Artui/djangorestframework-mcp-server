@@ -28,6 +28,7 @@ from rest_framework_services.types.service_spec import ServiceSpec
 from rest_framework_mcp._compat.reject_awaitable import reject_awaitable
 from rest_framework_mcp.auth.rate_limits.types.mcp_rate_limit import MCPRateLimit
 from rest_framework_mcp.auth.types.token_info import TokenInfo
+from rest_framework_mcp.config.types.mcp_config import MCPConfig
 from rest_framework_mcp.constants import (
     MODERN_PROTOCOL_VERSIONS,
     RESERVED_POOL_SEEDS,
@@ -47,6 +48,8 @@ from rest_framework_mcp.registry.types.chain_tool_binding import ChainToolBindin
 from rest_framework_mcp.registry.types.query_param import QueryParam
 from rest_framework_mcp.registry.types.selector_tool_binding import SelectorToolBinding
 from rest_framework_mcp.registry.types.url_kwarg import UrlKwarg
+from rest_framework_mcp.schema.agent_conventions import PAGED_QUERY_PARAM_SCOPE
+from rest_framework_mcp.schema.utils import end_sentence
 
 _SPREAD_BINDINGS = frozenset(
     {ArgumentBinding.SPREAD_AUTHOR_WINS, ArgumentBinding.SPREAD_CALLER_WINS}
@@ -89,9 +92,8 @@ def split_url_kwargs(
     to its ``default`` and then to the ``required`` check, exactly as an omitted
     key does. Routing the ``None`` on instead would satisfy ``required=True``
     with nothing, and would reach the ORM as ``IS NULL`` — an unscoped read that
-    answers successfully with the wrong rows. ``split_query_params`` deliberately
-    does *not* mirror this: a query param carries no ``required`` flag and never
-    scopes a lookup, so there is nothing there for a null to defeat.
+    answers successfully with the wrong rows. ``split_query_params`` applies the
+    same rule for a different reason, which its own docstring gives.
     """
     if not url_kwargs:
         return arguments, {}
@@ -128,14 +130,26 @@ def split_query_params(
     the tool schema and flow through as ordinary ``params``, which is where
     ``dispatch_spec`` reads them (as ``filter_data``); declaring one here pops it
     out of the args and it silently stops filtering.
+
+    **An explicit ``null`` is not a supplied value**, which is the contract
+    ``QueryParam`` itself states for every transport: over HTTP a query param is
+    always a string, so nothing a caller sends there means null, and off-HTTP
+    ``{"fields": null}`` is how a model says it chose not to fill an optional
+    param. So a null falls through to the ``default`` and otherwise produces no
+    value, exactly as an omitted key does. Routing it on is not harmless:
+    ``build_offline_context`` stringifies every value as HTTP would, so the
+    serializer read the four characters ``None`` — which a selection parser
+    refuses as malformed (django-restql does), failing the render of a call whose
+    caller asked for nothing. The name is still popped from ``params`` either way.
     """
     if not query_params:
         return arguments, {}
     names = {qp.name for qp in query_params}
     values: dict[str, Any] = {}
     for query_param in query_params:
-        if query_param.name in arguments:
-            values[query_param.name] = arguments[query_param.name]
+        supplied: Any = arguments.get(query_param.name)
+        if supplied is not None:
+            values[query_param.name] = supplied
         elif declares_default(query_param.default):
             values[query_param.name] = query_param.default
     params = {key: value for key, value in arguments.items() if key not in names}
@@ -541,6 +555,115 @@ def service_error_result(
     return build_error_tool_result(exc.message, error_type="service_error", detail=error_detail)
 
 
+def read_shaping_error_result(
+    exc: drf_serializers.ValidationError | ServiceValidationError,
+    *,
+    query_params: tuple[QueryParam, ...],
+    arguments: Mapping[str, Any],
+    paginated: bool,
+    config: MCPConfig,
+) -> ToolResult:
+    """The ``isError`` result for a validation error raised while *rendering*.
+
+    A read-shaping ``QueryParam`` is the one caller input used while the output is
+    rendered rather than while the spec is dispatched: a field selection, whichever
+    library parses it, is applied by the output serializer one row at a time, long
+    after ``dispatch_spec`` has returned. So a bad selection fails outside every
+    ``except`` that decides whether a failure is the caller's to fix, and it escaped
+    as whatever the transport made of an unhandled exception — a bare DRF body in
+    JSON mode, a ``-32603`` in a stream, a raised ``ValidationError`` from
+    ``acall_tool``. This turns it into the channel the dispatch path already uses
+    for "your argument was wrong": ``validation_error``, built exactly as the
+    ``ServiceValidationError`` arms build it, which an in-process toolset maps to a
+    retry the model can act on.
+
+    **Only when the caller shaped the render.** With no read-shaping value
+    supplied on this call nothing the model sends can change the outcome, so the
+    error is a server bug and is re-raised unchanged: a retry would spend the
+    model's budget on it and hide it from the operator. "Supplied" is read off
+    the raw ``arguments`` rather than the values ``split_query_params`` routed,
+    because that split seeds a ``QueryParam.default`` for an omitted name — a
+    value nobody sent, whose failure is a configuration bug and must stay loud.
+    An explicit ``null`` is not supplied either, as ``QueryParam``'s own contract
+    says a transport treats it. The split does not mutate its input, so every
+    call site still holds the unpopped mapping to pass here.
+
+    Validation errors only, never ``Exception``: an ``AttributeError`` in a
+    serializer is a server bug whatever the caller sent, so call sites catch
+    exactly DRF's ``ValidationError`` and ``ServiceValidationError``.
+
+    The detail is keyed under the supplied name when there is one. With several
+    it goes under ``non_field_errors`` and the message names them all, because
+    nothing in the error says which one the serializer refused, and keying it
+    under one would be a guess presented as a fact. On a paged tool the message
+    also says what the param applies to, since selecting the page envelope —
+    the shape the tool's ``outputSchema`` shows — is the likeliest way to get
+    here.
+    """
+    # ``is not None`` rather than ``in``: the null rule is its own condition, held
+    # by ``test_an_explicit_null_is_not_supplied``, which fails with ``in``.
+    supplied: list[str] = [
+        query_param.name
+        for query_param in query_params
+        if arguments.get(query_param.name) is not None
+    ]
+    # One branch arc to coverage, so the gate cannot see it removed. Held by the
+    # five tests in tests/handlers/test_render_time_query_params.py that assert
+    # the original error still escapes -- the three
+    # ``test_render_error_with_nothing_supplied_still_raises*`` (sync selector,
+    # async service, ``call_tool``), ``test_a_seeded_default_is_not_supplied`` and
+    # ``test_an_explicit_null_is_not_supplied`` -- each of which fails when this
+    # guard is deleted.
+    if not supplied:
+        raise exc
+    detail: Any = exc.detail
+    key: str = supplied[0] if len(supplied) == 1 else "non_field_errors"
+    message: str = (
+        f"{_name_list(supplied)} was rejected while rendering the result: "
+        f"{_readable_detail(detail)}"
+    )
+    if paginated:
+        message = f"{message} {PAGED_QUERY_PARAM_SCOPE}"
+    return build_error_tool_result(
+        message,
+        error_type="validation_error",
+        detail=validation_error_data(
+            # Normalised to DRF's per-field shape: a ``ServiceValidationError``
+            # may carry a bare string, and a field's errors are always a list.
+            {key: detail if isinstance(detail, (list, dict)) else [detail]},
+            arguments,
+            include_value=config.include_validation_value,
+        ),
+    )
+
+
+def _name_list(names: list[str]) -> str:
+    """``names`` as prose: "`a`", or "`a`, `b` or `c`" when there are several.
+
+    "Or" rather than "and", because the error came from one render that read all
+    of them, and which one it refused is not something the error says.
+    """
+    quoted: list[str] = [f"`{name}`" for name in names]
+    if len(quoted) == 1:
+        return quoted[0]
+    return f"{', '.join(quoted[:-1])} or {quoted[-1]}"
+
+
+def _readable_detail(detail: Any) -> str:
+    """A validation ``detail`` as sentences a model reads, not as a ``repr``.
+
+    DRF's detail is an ``ErrorDetail`` string, a list of them, or a mapping of
+    field name to either; the ``repr`` of any of those is what an unhandled
+    render error used to put in front of the model, ``ErrorDetail(string=...,
+    code=...)`` included.
+    """
+    if isinstance(detail, dict):
+        return " ".join(f"`{key}`: {_readable_detail(value)}" for key, value in detail.items())
+    if isinstance(detail, list):
+        return " ".join(_readable_detail(item) for item in detail)
+    return end_sentence(str(detail))
+
+
 def resolve_bound(override: Any, default: Any) -> Any:
     """Resolve a per-binding outbound bound against the server's default.
 
@@ -634,6 +757,7 @@ __all__ = [
     "effective_rate_limits",
     "enforce_result_ceiling",
     "permission_verdict",
+    "read_shaping_error_result",
     "resolve_bound",
     "run_with_deadline",
     "services_dispatch_policies",

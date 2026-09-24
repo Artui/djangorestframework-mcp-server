@@ -19,6 +19,28 @@ Per field, beside the field it describes, which is where a model reads it. The
 sentence below is the one that has nowhere else to go and rides the tool
 description instead."""
 
+PAGED_QUERY_PARAM_SCOPE = (
+    "On a paged result it applies to each item in `items`, never to the page "
+    "envelope (`items`, `page`, `totalPages`, `hasNext`)."
+)
+"""What a read-shaping ``QueryParam`` applies to on a tool that returns a page.
+
+The ``outputSchema`` of a paged tool describes the envelope, because that is what
+the result is, and a field-selection param names fields. So the one shape a model
+has been shown is exactly the wrong one to select against: ``{items{id, name}}``
+reads naturally off the schema, and a serializer rendering one row at a time has
+no ``items`` field. This sentence says which of the two shapes the param
+addresses, beside the param (``selector_tool_schema``) and again in the
+``isError`` text when a selection is refused while rendering
+(``handlers.utils.read_shaping_error_result``), which is where a model that got
+it wrong reads next.
+
+Only a paged tool gets it. A service tool's result and an unpaginated list have
+no envelope, so on those the sentence would describe a shape the model never
+sees. Written here rather than supplied by drf-services for the reason the module
+docstring gives: it is a prompt, and the wording belongs to the transport that
+knows a model is reading."""
+
 _HANDLE_LINE = (
     "Fields described as opaque identifiers are for other tool calls, not for the "
     "reader: pass them on where a tool asks for one, and never read them out."

@@ -32,6 +32,7 @@ from rest_framework_mcp.handlers.utils import (
     consume_rate_limits,
     effective_rate_limits,
     enforce_result_ceiling,
+    read_shaping_error_result,
     resolve_bound,
     service_error_result,
     services_dispatch_policies,
@@ -250,7 +251,25 @@ def _dispatch_tool_call(
                 f"{binding.name}: no matching instance found", error_type="not_found"
             ).to_dict()
 
-        payload = _render(binding, result, offline)
+        # Outside the ``try`` above on purpose: its ``ValidationError`` arm
+        # answers a malformed input *shape* with ``-32602``, and a render-time
+        # refusal is not one. A read-shaping ``QueryParam`` is read here, by the
+        # output serializer, so a bad value fails after dispatch succeeded;
+        # ``read_shaping_error_result`` makes that the caller's ``isError`` when
+        # they supplied one and re-raises it otherwise. The async handler shares
+        # ``_render`` and wraps it the same way, and a task worker reaches this
+        # line through ``handle_tools_call``, so a task stores the result.
+        try:
+            payload = _render(binding, result, offline)
+        except (drf_serializers.ValidationError, ServiceValidationError) as exc:
+            # A service tool's result is never a page, so no envelope to explain.
+            return read_shaping_error_result(
+                exc,
+                query_params=binding.query_params,
+                arguments=arguments_raw,
+                paginated=False,
+                config=context.config,
+            ).to_dict()
         output_format: OutputFormat = OutputFormat.coerce(
             params.get("outputFormat") or binding.output_format
         )

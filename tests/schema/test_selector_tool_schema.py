@@ -11,16 +11,21 @@ reflected key of the same name.
 
 from __future__ import annotations
 
+import json
 from typing import Any
 
 from rest_framework import serializers
 from rest_framework_services.types.selector_kind import SelectorKind
 from rest_framework_services.types.selector_spec import SelectorSpec
+from rest_framework_services.types.service_spec import ServiceSpec
 from typing_extensions import NotRequired, TypedDict, Unpack
 
-from rest_framework_mcp import UrlKwarg
+from rest_framework_mcp import QueryParam, UrlKwarg
 from rest_framework_mcp.registry.types.selector_tool_binding import SelectorToolBinding
+from rest_framework_mcp.registry.types.tool_binding import ToolBinding
+from rest_framework_mcp.schema.agent_conventions import PAGED_QUERY_PARAM_SCOPE
 from rest_framework_mcp.schema.selector_tool_schema import build_selector_tool_input_schema
+from rest_framework_mcp.schema.service_tool_schema import build_service_tool_input_schema
 
 
 def _binding(selector: Any, **kwargs: Any) -> SelectorToolBinding:
@@ -94,3 +99,61 @@ def test_no_reflected_shape_is_bare_object() -> None:
     def _sel(user: Any) -> Any: ...
 
     assert build_selector_tool_input_schema(_binding(_sel)) == {"type": "object", "properties": {}}
+
+
+# ---------- what a read-shaping param applies to on a page ----------
+
+_QUERY = QueryParam("query", description="django-restql fieldset, e.g. {id, name}")
+
+
+def _list_binding(**kwargs: Any) -> SelectorToolBinding:
+    spec = SelectorSpec(kind=SelectorKind.LIST, selector=lambda: [])
+    return SelectorToolBinding(name="t", description=None, spec=spec, **kwargs)
+
+
+def test_a_paged_tool_says_its_query_param_applies_to_each_item() -> None:
+    """The ``outputSchema`` shows the envelope, so the param has to say it is not it."""
+    schema = build_selector_tool_input_schema(_list_binding(paginate=True, query_params=(_QUERY,)))
+
+    assert schema["properties"]["query"] == {
+        "type": "string",
+        "description": f"django-restql fieldset, e.g. {{id, name}}. {PAGED_QUERY_PARAM_SCOPE}",
+    }
+
+
+def test_the_sentence_stands_alone_when_nothing_was_declared() -> None:
+    bare = QueryParam("fields")
+
+    schema = build_selector_tool_input_schema(_list_binding(paginate=True, query_params=(bare,)))
+
+    assert schema["properties"]["fields"]["description"] == PAGED_QUERY_PARAM_SCOPE
+
+
+def test_an_unpaginated_list_advertises_the_param_as_declared() -> None:
+    schema = build_selector_tool_input_schema(_list_binding(query_params=(_QUERY,)))
+
+    assert schema["properties"]["query"] == _QUERY.json_schema()
+
+
+def test_a_retrieve_advertises_the_param_as_declared() -> None:
+    def _get(pk: int) -> Any: ...
+
+    schema = build_selector_tool_input_schema(_binding(_get, query_params=(_QUERY,)))
+
+    assert schema["properties"]["query"] == _QUERY.json_schema()
+
+
+def test_a_service_tool_advertises_the_param_as_declared() -> None:
+    def _touch() -> None: ...
+
+    binding = ToolBinding(
+        name="s",
+        description=None,
+        spec=ServiceSpec(service=_touch, atomic=False),
+        query_params=(_QUERY,),
+    )
+
+    schema = build_service_tool_input_schema(binding)
+
+    assert schema["properties"]["query"] == _QUERY.json_schema()
+    assert PAGED_QUERY_PARAM_SCOPE not in json.dumps(schema)
