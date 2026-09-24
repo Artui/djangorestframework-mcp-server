@@ -5,8 +5,10 @@ import dataclasses
 import json
 from typing import Any, cast
 
+from django.core.exceptions import PermissionDenied as DjangoPermissionDenied
 from django.http import HttpResponse, HttpResponseBase, JsonResponse
 from django.utils.decorators import classonlymethod
+from rest_framework.exceptions import PermissionDenied
 from rest_framework.permissions import AllowAny
 from rest_framework.renderers import JSONRenderer
 from rest_framework.request import Request
@@ -67,6 +69,7 @@ from rest_framework_mcp.transport.utils import (
     insufficient_scope_challenge,
     is_permission_denial,
     modern_error_status,
+    raised_denial_error,
     session_gate_failure,
 )
 from rest_framework_mcp.transport.validate_modern_request import validate_modern_request
@@ -353,6 +356,9 @@ class AsyncStreamableHttpViewSet(ViewSet):
             if streamed is not None:
                 return streamed
             result: Any = await adispatch(message.method, _params_dict(message.params), context)
+        except (PermissionDenied, DjangoPermissionDenied):
+            # A denial raised rather than returned; see ``raised_denial_error``.
+            result = raised_denial_error()
         except Exception:  # noqa: BLE001 — the backstop; see ``_internal_error_response``
             return _internal_error_response(message)
 
@@ -450,6 +456,9 @@ class AsyncStreamableHttpViewSet(ViewSet):
             if streamed is not None:
                 return streamed
             result: Any = await adispatch(message.method, _params_dict(message.params), context)
+        except (PermissionDenied, DjangoPermissionDenied):
+            # A denial raised rather than returned; see ``raised_denial_error``.
+            result = raised_denial_error()
         except Exception:  # noqa: BLE001 — the backstop; see ``_internal_error_response``
             return _internal_error_response(message)
         if isinstance(result, JsonRpcError):

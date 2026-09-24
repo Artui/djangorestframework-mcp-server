@@ -26,10 +26,11 @@ from typing import Any
 
 import pytest
 from asgiref.sync import sync_to_async
+from django.core.exceptions import PermissionDenied as DjangoPermissionDenied
 from django.http import HttpRequest
 from django.test import AsyncClient, Client, override_settings
 from rest_framework import serializers
-from rest_framework.exceptions import ValidationError
+from rest_framework.exceptions import PermissionDenied, ValidationError
 from rest_framework.throttling import BaseThrottle
 from rest_framework_services.types.selector_kind import SelectorKind
 from rest_framework_services.types.selector_spec import SelectorSpec
@@ -92,6 +93,19 @@ class _ExplodingPermission:
         return []
 
 
+class _RaisingDenial:
+    """A permission class that refuses by raising, the DRF idiom for a message."""
+
+    def __init__(self, exc_type: type[Exception]) -> None:
+        self.exc_type = exc_type
+
+    def has_permission(self, request: HttpRequest, token: TokenInfo) -> bool:
+        raise self.exc_type(SECRET)
+
+    def required_scopes(self) -> list[str]:
+        return []
+
+
 class _AlwaysDeny:
     """A per-binding rate limit that is always exhausted."""
 
@@ -133,6 +147,18 @@ def _server() -> MCPServer:
         description="Denied to a caller without the scope.",
         spec=SelectorSpec(kind=SelectorKind.LIST, selector=_rows),
         permissions=[ScopeRequired(["mcp:admin"])],
+    )
+    server.register_selector_tool(
+        name="deny.drf",
+        description="Refused by a permission class raising DRF's PermissionDenied.",
+        spec=SelectorSpec(kind=SelectorKind.LIST, selector=_rows),
+        permissions=[_RaisingDenial(PermissionDenied)],
+    )
+    server.register_selector_tool(
+        name="deny.django",
+        description="Refused by a permission class raising Django's PermissionDenied.",
+        spec=SelectorSpec(kind=SelectorKind.LIST, selector=_rows),
+        permissions=[_RaisingDenial(DjangoPermissionDenied)],
     )
     server.register_selector_tool(
         name="ok.limited",
@@ -446,6 +472,59 @@ async def test_a_permission_denial_keeps_its_403_and_challenge(
     assert response.status_code == 403, response.content
     assert response.json()["error"]["code"] == -32006
     assert "mcp:admin" in response["WWW-Authenticate"]
+
+
+# Both flavours by name: the backstop catches them as one tuple, which is one
+# branch arc to coverage, so dropping either would still read as 100%.
+_RAISED_DENIALS = pytest.mark.parametrize("tool", ["deny.drf", "deny.django"])
+
+
+def _assert_raised_denial(response: Any, caplog: pytest.LogCaptureFixture) -> None:
+    """The answer a *returned* denial gets, and nothing of the exception's text."""
+    assert response.status_code == 403, response.content
+    assert response["Content-Type"].startswith("application/json")
+    body = response.json()
+    assert body["id"] == REQUEST_ID
+    assert body["error"] == {"code": -32006, "message": "Insufficient permission"}
+    assert "WWW-Authenticate" in response
+    assert SECRET not in response.content.decode()
+    # A refusal, so nothing lands at ERROR: that level is for server faults.
+    assert not [r for r in caplog.records if r.levelno >= logging.ERROR]
+
+
+@_PATHS
+@_RAISED_DENIALS
+async def test_a_raised_permission_denial_is_a_denial_not_a_fault(
+    is_async: bool, modern: bool, tool: str, caplog: pytest.LogCaptureFixture
+) -> None:
+    """A permission class that raises instead of returning ``False``.
+
+    DRF answered that with a ``403`` before the backstop existed; a catch-all
+    ``-32603`` would report a refusal as a ``500``.
+    """
+    caplog.set_level(logging.ERROR, logger="rest_framework_mcp")
+    response = await _post(
+        is_async, _server(), "tools/call", {"name": tool, "arguments": {}}, modern=modern
+    )
+    _assert_raised_denial(response, caplog)
+
+
+@pytest.mark.parametrize("modern", [False, True], ids=["legacy", "modern"])
+@_RAISED_DENIALS
+async def test_a_raised_denial_in_the_stream_preflight_is_a_403(
+    modern: bool, tool: str, caplog: pytest.LogCaptureFixture
+) -> None:
+    """The pre-flight runs the permission class before any stream opens."""
+    caplog.set_level(logging.ERROR, logger="rest_framework_mcp")
+    response = await _post_async(
+        _server(),
+        "tools/call",
+        {"name": tool, "arguments": {}},
+        modern=modern,
+        progress=True,
+    )
+    assert not response.streaming
+    _assert_raised_denial(response, caplog)
 
 
 @_PATHS
