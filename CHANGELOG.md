@@ -7,6 +7,75 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- **A read-shaping value the output serializer refuses while rendering is a
+  `validation_error` tool result, not a broken reply.** A `QueryParam` is the one
+  argument used while the result is rendered rather than while the spec runs,
+  and the render sat outside every `except` that decides whether a failure is the
+  caller's to fix. So strict django-restql refusing a selection, most often
+  `{items{id, number}}` written against a paged tool's envelope, escaped as
+  whatever the transport made of an unhandled exception:
+  - in JSON response mode, on both transports: HTTP `400` with DRF's own body,
+    ``["`items` field is not found"]``, with no `jsonrpc` and no `id`;
+  - on a progress-carrying call: an in-stream `-32603`;
+  - from `call_tool` / `acall_tool`: the raw `ValidationError`.
+
+  It is now an `isError` result with `error_type` `validation_error`, built like
+  every other validation failure, whose message names the argument:
+
+  ```text
+  `query` was rejected while rendering the result: `items` field is not found. On a
+  paged result it applies to each item in `items`, never to the page envelope
+  (`items`, `page`, `totalPages`, `hasNext`).
+  ```
+
+  The detail is keyed under that argument, or under `non_field_errors` when
+  several were sent, since the serializer does not say which one it refused. The
+  last sentence appears on a paged tool only. This covers selector and service
+  tools, both delivery modes, task-augmented calls and in-process calls.
+  django-pydantic-agent's `DRFMCPToolset` already turns this result into a retry
+  the model acts on.
+
+  **It stays a server error when nothing the caller sent shaped the render**: no
+  read-shaping value, an explicit `null`, or a value seeded from a declared
+  `default`. A retry cannot fix a serializer that fails on its own or a default
+  that is wrong. Only validation errors are classified; any other exception out
+  of a serializer is a server bug whatever the caller sent.
+- **An explicit `null` for a `QueryParam` is treated as omitted,** as the
+  `QueryParam` contract states. The declared `default` applies, and with none
+  nothing reaches `request.query_params`. It used to be forwarded and
+  stringified, so the serializer received the four characters `None`, which
+  strict django-restql refuses to parse.
+- **An exception that escapes a dispatch is answered as JSON-RPC.** In JSON
+  response mode it left the view and DRF's exception handler rendered it: an
+  `APIException` as DRF's bare body under its own status, anything else as
+  Django's `500` page. Neither was a JSON-RPC reply, so a client had no `id` to
+  match. Both viewsets, in both protocol eras, now answer it with `-32603`
+  `Internal error`, carrying the request's `id`, under HTTP `500` so proxies and
+  error-rate monitoring still count a server fault. The exception goes to the log
+  at `ERROR` with its traceback; its text is not in the response.
+
+  A `PermissionDenied`, DRF's or Django's, is answered as a denial rather than a
+  fault: a permission class that refuses by raising instead of returning `False`
+  gets the same `403`, `FORBIDDEN` and `WWW-Authenticate` challenge as one that
+  returned `False`. DRF answered it with a `403` before, and it still is one.
+
+### Changed
+
+- **A paged tool says what a read-shaping param applies to.** On a
+  `paginate=True` selector tool, each `QueryParam`'s description in the
+  `inputSchema` ends with "On a paged result it applies to each item in `items`,
+  never to the page envelope (`items`, `page`, `totalPages`, `hasNext`).", or is
+  that sentence when it declares none. Service tools and unpaginated lists have
+  no envelope and are unchanged, as is every `outputSchema`. The same sentence is
+  exported as `rest_framework_mcp.schema.PAGED_QUERY_PARAM_SCOPE`.
+- **The in-stream error of a progress-carrying call reads `Internal error`.** Its
+  message was the exception's own text, `f"{type(exc).__name__}: {exc}"`, which
+  is written for an operator and can carry a serializer's detail, a SQL fragment
+  or a path. The detail is logged at `ERROR` instead, under the request id the
+  frame carries. A client that parsed that message has nothing to parse now.
+
 ## [0.48.0] — 2026-09-21
 
 ### Added
