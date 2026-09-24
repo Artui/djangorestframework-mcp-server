@@ -289,6 +289,11 @@ Fixed in 0.49.0, which answers every such exception as JSON-RPC:
   request's `id`, under HTTP `500`. The exception is logged at `ERROR` with its
   traceback under `rest_framework_mcp.transport`; the text is not in the
   response, so read the log.
+- A `PermissionDenied` (DRF's or Django's) is the exception: a permission
+  class that refuses by raising, rather than returning `False`, is answered
+  exactly like one that returned `False`, as a `FORBIDDEN` under `403` with its
+  `WWW-Authenticate` challenge. It is a refusal, not a server fault, so nothing
+  is logged at `ERROR`.
 
 A progress-carrying call (one sent with a `progressToken`) has committed its
 `200` before the dispatch runs, so it never showed a DRF body; before 0.49.0
