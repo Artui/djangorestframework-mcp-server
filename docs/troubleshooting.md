@@ -263,3 +263,34 @@ If a paginated tool still returns too much, the row count is not the problem:
 check how wide each row is. A nested serializer that expands related objects can
 make ten rows larger than a thousand lean ones, and `limit` cannot express a
 byte budget.
+
+## A tool call returns a DRF error body instead of JSON-RPC
+
+A `tools/call` answered with something like HTTP `400` and a body of
+``["`items` field is not found"]`` — no `jsonrpc`, no `id` — or with Django's
+HTML `500` page, is an exception that escaped the dispatch. The transport had
+no answer for it, so DRF's exception handler rendered it: an `APIException`
+as DRF's own body, anything else as a server error. A client matching
+responses by `id` has nothing to match, and most report a parse failure rather
+than the error.
+
+The common cause is a restql selection written against the page envelope. On
+a `paginate=True` tool the serializer renders each item, so
+`{items{id, number}}` names a field no item has and the serializer raises
+while rendering. Select per item — `{id, number}` — see
+[Query params](concepts.md#query-param-per-item).
+
+Fixed in 0.49.0, which answers every such exception as JSON-RPC:
+
+- A render-time rejection of a value the caller supplied is an `isError`
+  `validation_error` tool result naming the param, the same shape as any
+  other validation failure.
+- Anything else is a `-32603` whose message is `Internal error`, carrying the
+  request's `id`, under HTTP `500`. The exception is logged at `ERROR` with its
+  traceback under `rest_framework_mcp.transport`; the text is not in the
+  response, so read the log.
+
+A progress-carrying call (one sent with a `progressToken`) has committed its
+`200` before the dispatch runs, so it never showed a DRF body; before 0.49.0
+its last frame was a `-32603` whose message was the exception's own text.
+Since 0.49.0 that frame reads `Internal error` too.

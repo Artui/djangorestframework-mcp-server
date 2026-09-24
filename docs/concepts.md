@@ -270,6 +270,56 @@ Three rules worth knowing:
 re-exported here for the same reason as `UrlKwarg` — one declaration, whichever
 transport carries it.
 
+#### On a paged tool it shapes each item, never the page { #query-param-per-item }
+
+With `paginate=True` the tool serves the `{items, page, totalPages, hasNext}`
+envelope, and the serializer never sees it: the envelope is built *around* the
+rows the serializer rendered, so the param reaches only a row. A restql
+selection therefore names the fields of one item — `{id, number}` — never the
+envelope's (`{items{id, number}}`). That is the easy mistake to make, because
+the `outputSchema` a model reads describes the envelope. So on a paged tool,
+each query param's description in the `inputSchema` ends with:
+
+> On a paged result it applies to each item in `items`, never to the page
+> envelope (`items`, `page`, `totalPages`, `hasNext`).
+
+A service tool and an unpaginated list have no envelope, and get no sentence.
+
+The package does not rewrite a selection written the other way. `QueryParam` is
+opaque on purpose — `query`, `fields=id,name` and `expand=true` are the same
+declaration to it — so correcting one would mean knowing every grammar a
+serializer might parse. What it controls is what the caller hears when the
+serializer refuses a value, and that depends on how the serializer selects:
+
+- **Strict selection**, django-restql's default, raises a `ValidationError`
+  for a field the serializer does not have. That comes back as an
+  `isError: true` tool result of type `validation_error`, the same shape a
+  service's `ServiceValidationError` produces ([Dispatch flow](#dispatch-flow)),
+  and its message names the argument: "`query` was rejected while rendering
+  the result: `items` field is not found." On a paged tool the per-item
+  sentence follows it. The detail is keyed under the argument's name; when a
+  call supplied several read-shaping values it sits under `non_field_errors`
+  and the message names them all, because nothing says which one the
+  serializer refused. A model reads the result and retries with a corrected
+  selection.
+- **Tolerant selection**, a serializer that drops the names it does not know,
+  answers `{items{id, number}}` with a page of `{}`: one empty object per row,
+  a well-formed result no transport can tell from a real one. It opts out of
+  the error signal entirely, so **tools an agent calls should select
+  strictly** — that is the setting in which the model can correct itself.
+
+The tool result is reserved for the failures the caller caused. A render-time
+`ValidationError` (or drf-services' `ServiceValidationError`) becomes one only
+when the call **supplied** a non-null value for at least one declared
+`QueryParam`. A value seeded from `QueryParam.default` because the caller
+omitted the argument does not count: a bad default is a configuration bug. With
+nothing supplied the serializer refused on its own, no retry could change the
+outcome, and it stays a server error — over HTTP a JSON-RPC `-32603` reading
+`Internal error` under a `500`, with the exception in the log; from
+`acall_tool`, the exception itself. Any other exception raised while rendering
+is a server error whatever the caller sent: an `AttributeError` in a serializer
+is a bug, not a bad argument.
+
 ### A list payload: `many=True` service tools { #list-payload }
 
 A `ServiceSpec` with `many=True` validates its input as a list and hands the
@@ -1827,6 +1877,18 @@ The MCP package owns its own dispatch flow. It does **not** import
    list is rendered as a list and advertised as an array.
 9. Wrap as a `ToolResult` with `OutputFormat`-driven encoding for the human-
    readable `content[0]` block. `structuredContent` is always JSON.
+
+A serializer that rejects while *rendering*, in step 8 or in a selector tool's
+render, joins step 7's `validation_error` arm only when the caller shaped the
+render with a read-shaping param ([Query params](#query-param-per-item)).
+Anything a dispatch raises that no arm maps is a server fault, and the
+transport answers it as one: a JSON-RPC `-32603` whose message is
+`Internal error`, carrying the request's `id`, under HTTP `500` so proxies and
+error-rate monitoring still count it. The exception's own text never reaches
+the client; it is logged at `ERROR` with its traceback
+([Observability](observability.md#what-lands-where)). A progress-carrying
+stream has already committed its `200`, so there the same error arrives as the
+stream's last frame.
 
 RETRIEVE selector tools mirror the sister repo's read semantics: a
 QuerySet return is materialized via `.first()`, and a missing row is a

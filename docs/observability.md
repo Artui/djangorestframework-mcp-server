@@ -30,6 +30,7 @@ LOGGING = {
 
 | Level | Events |
 |---|---|
+| `ERROR` | An exception a dispatch raised instead of returning, with its traceback and the request id. The client gets a generic `-32603` `Internal error`, so this record is the only place the exception's text goes |
 | `WARNING` | Session rejections, authentication failures, and every outbound bound that fires (result size, dispatch deadline, page clamp) |
 | `INFO` | `initialize`, and the protocol era each request selected |
 | `DEBUG` | Per-call dispatch timing and result size |
