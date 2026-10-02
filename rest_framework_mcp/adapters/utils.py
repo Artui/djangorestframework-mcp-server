@@ -381,8 +381,11 @@ def merge_tool_annotations(explicit: dict[str, Any] | None, *, read_only: bool) 
       them as meaningful only when ``readOnlyHint`` is false.
     - ``read_only=False`` (service tools, and chains with any service step) →
       ``{"readOnlyHint": False, "destructiveHint": True}``. A mutation is
-      destructive by default, and ``idempotentHint`` stays unset because
-      ``ServiceSpec`` carries no idempotency signal.
+      destructive by default. ``idempotentHint`` is never derived: this
+      function is given the tool's kind and not its spec, so a declared
+      ``ServiceSpec.idempotent`` is not read here and the hint reaches the
+      wire only when ``annotations=`` sets it. A client reads its absence as
+      ``false``, the MCP default.
 
     Any hint supplied at registration via ``annotations=`` overrides the derived
     default: a non-destructive mutation passes
