@@ -128,9 +128,15 @@ registry `dispatch_spec(pool_seeds=)` takes:
 ```python
 from rest_framework_services import DEFAULT_POOL_SEEDS
 
+
+def tenant_of(*, user):
+    # An anonymous caller has no tenant, and resolves to none rather than raising.
+    return getattr(user, "tenant", None)
+
+
 server = MCPServer(
     name="billing",
-    pool_seeds=DEFAULT_POOL_SEEDS.extend(tenant=lambda *, user: user.tenant),
+    pool_seeds=DEFAULT_POOL_SEEDS.extend(tenant=tenant_of),
 )
 
 
@@ -142,6 +148,14 @@ A resolver is called through the keyword pool like every other provider, so it
 declares the entries it needs (`user`, `request`) and is resolved per call
 against the caller. The default is drf-services' own `DEFAULT_POOL_SEEDS`, which
 registers nothing, so a server that passes none behaves exactly as before.
+
+**A resolver must answer for every caller the mount admits**, an anonymous one
+included whenever the auth backend lets one through, because the listing reads
+it too. Once any tool declares an operation condition, `tools/list` resolves
+the seeds for its caller (see the second bullet below), so a resolver that
+raises for a caller fails that caller's whole listing, not only its calls.
+`lambda *, user: user.tenant` is the form that does: an `AnonymousUser` has no
+`tenant`.
 
 - **Every spec the server runs receives them.** A service or selector tool over
   either transport and either era, `call_tool` / `acall_tool`, a task the worker

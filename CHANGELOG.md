@@ -38,7 +38,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   completion call bare callables rather than specs, and do not receive them.
   `MCPCallContext` carries the server's set as `pool_seeds`. A chain step's
   pool and a resource read's pool are now built through drf-services'
-  `base_pool`, so both also carry `progress`, a no-op reporter.
+  `base_pool`, so both also carry `progress`, a no-op reporter. A resolver
+  must answer for every caller the mount admits, an anonymous one included:
+  once any tool declares an operation condition, `tools/list` resolves the
+  seeds for its caller, so a resolver that raises fails that caller's listing
+  as well as its calls.
 
 ### Changed
 

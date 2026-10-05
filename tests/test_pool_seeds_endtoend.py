@@ -23,6 +23,7 @@ from typing import Any
 
 import pytest
 from asgiref.sync import async_to_sync
+from django.contrib.auth.models import AnonymousUser
 from django.core.exceptions import ImproperlyConfigured
 from django.http import HttpRequest
 from django.test import AsyncClient, Client, override_settings
@@ -328,6 +329,56 @@ def test_list_tools_and_unavailable_tools_ask_conditions_with_the_seeds() -> Non
     assert "tenant.globex_only" not in names
     assert set(server.unavailable_tools(user=None)) == {"tenant.globex_only"}
     assert set(async_to_sync(server.aunavailable_tools)(user=None)) == {"tenant.globex_only"}
+
+
+def _tenant_of(*, user: Any) -> Any:
+    # The resolver the docs show: an anonymous caller resolves to no tenant.
+    return getattr(user, "tenant", None)
+
+
+def _anonymous_listing_server(resolver: Any) -> MCPServer:
+    server = MCPServer(
+        name="t",
+        auth_backend=AllowAnyBackend(),
+        session_store=InMemorySessionStore(),
+        pool_seeds=DEFAULT_POOL_SEEDS.extend(tenant=resolver),
+    )
+    server.register_service_tool(name="tenant.plain", spec=_service())
+    server.register_service_tool(
+        name="tenant.members_only",
+        spec=_service(
+            affordances=[
+                Affordance(
+                    code="no_tenant",
+                    reason="Sign in to a tenant first.",
+                    when=lambda *, tenant: tenant is not None,
+                )
+            ]
+        ),
+    )
+    return server
+
+
+@_TRANSPORTS
+@_ERAS
+@pytest.mark.django_db(transaction=True)
+def test_the_listing_resolves_the_seeds_for_an_anonymous_caller(era: str, is_async: bool) -> None:
+    # ``AllowAnyBackend`` admits an ``AnonymousUser``, and one declared
+    # condition is enough for ``tools/list`` to resolve the seeds for it: the
+    # gated tool is hidden because the resolver answered ``None``.
+    server = _anonymous_listing_server(_tenant_of)
+    with override_settings(ROOT_URLCONF=urlconf_for(server, is_async=is_async)):
+        result = _post(era, is_async, "tools/list", {})
+
+    assert [tool["name"] for tool in result["tools"]] == ["tenant.plain"]
+
+
+@pytest.mark.django_db
+def test_a_resolver_that_raises_for_a_caller_fails_that_callers_listing() -> None:
+    server = _anonymous_listing_server(lambda *, user: user.tenant)
+
+    with pytest.raises(AttributeError, match="tenant"):
+        server.list_tools(user=AnonymousUser())
 
 
 # ----- registration -----
