@@ -2,17 +2,20 @@ from __future__ import annotations
 
 from typing import Any
 
-from rest_framework_services import spec_to_json_schema
+from rest_framework_services.types.pool_seeds import DEFAULT_POOL_SEEDS, PoolSeeds
 
 from rest_framework_mcp.registry.types.query_param import QueryParam
 from rest_framework_mcp.registry.types.selector_tool_binding import SelectorToolBinding
 from rest_framework_mcp.schema.agent_conventions import PAGED_QUERY_PARAM_SCOPE
 from rest_framework_mcp.schema.input_schema import build_input_schema
-from rest_framework_mcp.schema.utils import end_sentence
+from rest_framework_mcp.schema.utils import end_sentence, selector_tool_inputs
 
 
 def build_selector_tool_input_schema(
-    binding: SelectorToolBinding, *, max_page_size: int | None = None
+    binding: SelectorToolBinding,
+    *,
+    max_page_size: int | None = None,
+    pool_seeds: PoolSeeds = DEFAULT_POOL_SEEDS,
 ) -> dict[str, Any]:
     """Build the JSON Schema for a selector tool's ``inputSchema``.
 
@@ -20,14 +23,19 @@ def build_selector_tool_input_schema(
     ones on key collision):
 
     1. **Reflected ``spec`` shape** — the selector callable's own parameters (an
-       ``**extras: Unpack[TypedDict]`` expanded into one property per key, its
-       required keys populating ``required``, the ``request`` / ``user`` /
-       ``view`` transport seeds skipped) plus the ``filter_set`` fields, via
-       drf-services' ``spec_to_json_schema``. This is the *same* reflection
-       the Pydantic-AI ``SpecToolset`` consumes, so both transports advertise
-       the same shape: a nested route's ``parent_pk`` read from ``extras`` is
-       discoverable without an explicit ``UrlKwarg``, and a ``FilterSet``'s
-       ``OrderingFilter`` advertises ``ordering`` with nothing else declared.
+       ``**extras: Unpack[TypedDict]`` expanded into one property per key, the
+       ``request`` / ``user`` / ``view`` transport seeds skipped) plus the
+       ``filter_set`` fields, via drf-services' ``spec_to_json_schema``, told
+       which names this server fills (``schema.utils.selector_inputs``). A
+       filled name -- a registered seed, a ``UrlKwarg`` with a default, a key a
+       ``TypedDict``-annotated ``kwargs=`` provider returns, a
+       ``spec_kwargs_provides=`` name -- is not advertised, and every other
+       parameter without a default is required. This is the *same* reflection
+       the Pydantic-AI ``SpecToolset`` consumes, under the same rule, so both
+       transports advertise the same shape: a nested route's ``parent_pk`` read
+       from ``extras`` is discoverable without an explicit ``UrlKwarg``, and a
+       ``FilterSet``'s ``OrderingFilter`` advertises ``ordering`` with nothing
+       else declared.
     2. **``spec.input_serializer``** — tool-specific args that aren't reflected
        selector params. A ``SelectorSpec`` carries no input serializer, so this
        is MCP-only; its curated fields win over a reflected param of the same
@@ -47,15 +55,14 @@ def build_selector_tool_input_schema(
         binding: The selector tool binding to describe.
         max_page_size: The effective page ceiling — the binding's override, else
             the server's. ``None`` advertises no ``maximum``.
+        pool_seeds: The server's registered seeds, which fill a selector
+            parameter of the same name, so it is not asked of the client.
 
     Returns:
         An object schema carrying ``properties``, and ``required`` only when at
         least one required field exists.
     """
-    # ``spec_to_json_schema(phase="input")`` always returns a dict (only the
-    # output phase is nullable), so ``or {}`` only narrows the type — it never
-    # substitutes at runtime.
-    reflected: dict[str, Any] = spec_to_json_schema(binding.spec, phase="input") or {}
+    reflected, _required = selector_tool_inputs(binding, pool_seeds=pool_seeds)
     properties: dict[str, Any] = dict(reflected.get("properties", {}))
     required: list[str] = list(reflected.get("required", []))
 

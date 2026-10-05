@@ -33,13 +33,14 @@ from rest_framework_mcp.handlers.utils import (
     effective_rate_limits,
     enforce_result_ceiling,
     read_shaping_error_result,
+    refuse_missing_arguments,
     resolve_bound,
     service_error_result,
     services_dispatch_policies,
     split_query_params,
     split_url_kwargs,
     validate_output_format,
-    validation_error_data,
+    validation_error_result,
 )
 from rest_framework_mcp.output.error_tool_result import build_error_tool_result
 from rest_framework_mcp.output.resolve_structured_output import resolve_structured_output
@@ -176,10 +177,11 @@ def _dispatch_tool_call(
         # ``enforce_permissions`` is the object-permission hook: it runs
         # ``spec.permission_classes`` against the resolved target.
         argument_binding, unknown_arguments = services_dispatch_policies(binding)
-        # The split stays inside the ``try``: ``split_url_kwargs`` raises
-        # ``ServiceValidationError`` for an omitted ``required=True`` kwarg, and
-        # that must reach the same ``isError`` mapping as any other
-        # dispatch-time validation failure rather than escaping as a 500.
+        # The split stays inside the ``try``: ``split_url_kwargs`` raises DRF's
+        # ``ValidationError`` for an omitted ``required=True`` kwarg, and that
+        # must reach the same ``isError`` mapping as any other dispatch-time
+        # validation failure rather than escaping as a 500. Still after the
+        # permission and rate-limit answers above, as the check below is.
         try:
             spec_params, url_kwarg_values = split_url_kwargs(arguments_raw, binding.url_kwargs)
             # ``query_params`` is always passed — an empty mapping still
@@ -187,6 +189,12 @@ def _dispatch_tool_call(
             # endpoint URL, so ``request.query_params`` is this package's value
             # rather than the caller's.
             spec_params, query_param_values = split_query_params(spec_params, binding.query_params)
+            # After the permission and rate-limit answers above, so a caller the
+            # listing hides the tool from never learns it exists from this one;
+            # inside the ``try``, so it maps to the same ``isError`` result.
+            refuse_missing_arguments(
+                binding, (*spec_params, *url_kwarg_values), pool_seeds=context.pool_seeds
+            )
             offline = build_offline_context(
                 context.token.user,
                 spec_params,
@@ -208,31 +216,22 @@ def _dispatch_tool_call(
                 # task worker runs *this* function and its reporter writes to
                 # the task record. ``None`` for an ordinary sync request.
                 progress=context.progress,
+                # The server's ``pool_seeds=``, resolved into the pool and
+                # reserved against client input, as ``dispatch_spec`` defines.
+                pool_seeds=context.pool_seeds,
                 # ``arguments`` is always an object, so a ``many=True`` spec's list
                 # travels under ``spec.many_argument``; a no-op for any other spec.
                 many_as_argument=True,
             )
-        except drf_serializers.ValidationError as exc:
-            # A malformed input *shape* is a protocol fault (-32602).
-            return JsonRpcError(
-                JsonRpcErrorCode.INVALID_PARAMS,
-                "Invalid arguments",
-                data=validation_error_data(
-                    exc.detail, arguments_raw, include_value=context.config.include_validation_value
-                ),
-            )
         except PermissionDenied:
             return JsonRpcError(JsonRpcErrorCode.FORBIDDEN, "Insufficient permission")
-        except ServiceValidationError as exc:
-            # Business validation on well-shaped input is a *tool-level* failure
-            # per the MCP spec: an ``isError`` result, not a protocol error.
-            return build_error_tool_result(
-                exc.message,
-                error_type="validation_error",
-                detail=validation_error_data(
-                    exc.detail, arguments_raw, include_value=context.config.include_validation_value
-                ),
-            ).to_dict()
+        except (drf_serializers.ValidationError, ServiceValidationError) as exc:
+            # Refused input -- an unexpected argument, a serializer rejection, a
+            # service's own validation -- is a *tool-level* failure per the MCP
+            # spec: an ``isError`` result the model can correct from, not a
+            # protocol error. Before the ``ServiceError`` arm, which would
+            # otherwise take ``ServiceValidationError`` as a plain failure.
+            return validation_error_result(exc, arguments_raw, config=context.config).to_dict()
         except AdditionalInputRequired as exc:
             # **Must precede the ``ServiceError`` arm below** — this is a
             # subclass of it, so the generic handler would otherwise swallow the
@@ -252,8 +251,9 @@ def _dispatch_tool_call(
             ).to_dict()
 
         # Outside the ``try`` above on purpose: its ``ValidationError`` arm
-        # answers a malformed input *shape* with ``-32602``, and a render-time
-        # refusal is not one. A read-shaping ``QueryParam`` is read here, by the
+        # treats every refusal as the caller's to fix, and a render-time
+        # refusal is the caller's only when they supplied a value that shaped
+        # the render. A read-shaping ``QueryParam`` is read here, by the
         # output serializer, so a bad value fails after dispatch succeeded;
         # ``read_shaping_error_result`` makes that the caller's ``isError`` when
         # they supplied one and re-raises it otherwise. The async handler shares
@@ -302,7 +302,9 @@ def _render(binding: Any, result: Any, offline: Any) -> Any:
     extras: dict[str, Any] = (
         {"page": result.value} if many else {"instance": result.value, "result": result.value}
     )
-    payload = render_for_audience(
+    # ``render_for_audience`` passes a ``None`` result through; MCP's object
+    # requirement is met where every tool kind meets it, in ``build_tool_result``.
+    return render_for_audience(
         binding.spec,
         result.value,
         projection=binding.audience_projection,
@@ -311,9 +313,6 @@ def _render(binding: Any, result: Any, offline: Any) -> Any:
         request=offline.request,
         extras=extras,
     )
-    # MCP contract: a tool returning ``None`` must still emit a JSON object as
-    # ``structuredContent``, and ``render_spec_output`` passes ``None`` through.
-    return {} if payload is None else payload
 
 
 def _span_attrs(binding_name: str, context: MCPCallContext) -> dict[str, Any]:

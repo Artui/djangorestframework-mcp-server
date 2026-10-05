@@ -25,7 +25,11 @@ from rest_framework_mcp.constants import (
 )
 from rest_framework_mcp.protocol.types.icon import Icon
 from rest_framework_mcp.registry.types.chain_step import ChainStep
-from rest_framework_mcp.registry.types.utils import rendered_kind, validate_content_kind
+from rest_framework_mcp.registry.types.utils import (
+    can_present_nothing,
+    rendered_kind,
+    validate_content_kind,
+)
 
 
 @dataclass(frozen=True)
@@ -299,6 +303,18 @@ class ChainToolBinding:
         if self.output_all:
             return None
         return rendered_kind(self.output_step.spec)
+
+    @property
+    def can_present_nothing(self) -> bool:
+        """Whether a successful call can present nothing, judged on the output step.
+
+        ``False`` under ``output_all``, whose ``{alias: rendered}`` object is
+        never ``None``. Otherwise the output step's spec answers, exactly as it
+        would registered as a tool of its own. See
+        ``registry.types.utils.can_present_nothing``."""
+        if self.output_all:
+            return False
+        return can_present_nothing(self.output_step.spec)
 
 
 def _refuse_unanswered_affordances(chain_name: str, step: ChainStep) -> None:

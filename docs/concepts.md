@@ -117,6 +117,195 @@ needs (`def with_tenant(request): ...` is as valid as the two-parameter form,
 and `**kwargs` takes the whole pool). Declaring a parameter the pool doesn't
 carry is the error — not declaring one it does.
 
+### Project-wide seeds: `pool_seeds=` { #pool-seeds }
+
+A spec's `kwargs` provider is per spec. What every spec on a mount may read —
+a tenant, a locale, a clock — is a seed, registered once on the server as a
+drf-services
+[`PoolSeeds`][rest_framework_services.types.pool_seeds.PoolSeeds], the same
+registry `dispatch_spec(pool_seeds=)` takes:
+
+```python
+from rest_framework_services import DEFAULT_POOL_SEEDS
+
+
+def tenant_of(*, user):
+    # An anonymous caller has no tenant, and resolves to none rather than raising.
+    return getattr(user, "tenant", None)
+
+
+server = MCPServer(
+    name="billing",
+    pool_seeds=DEFAULT_POOL_SEEDS.extend(tenant=tenant_of),
+)
+
+
+def list_invoices(*, tenant):  # receives the resolved tenant on every call
+    return Invoice.objects.filter(tenant=tenant)
+```
+
+A resolver is called through the keyword pool like every other provider, so it
+declares the entries it needs (`user`, `request`) and is resolved per call
+against the caller. The default is drf-services' own `DEFAULT_POOL_SEEDS`, which
+registers nothing, so a server that passes none behaves exactly as before.
+
+**A resolver must answer for every caller the mount admits**, an anonymous one
+included whenever the auth backend lets one through, because the listing reads
+it too. Once any tool declares an operation condition, `tools/list` resolves
+the seeds for its caller (see the second bullet below), so a resolver that
+raises for a caller fails that caller's whole listing, not only its calls.
+`lambda *, user: user.tenant` is the form that does: an `AnonymousUser` has no
+`tenant`.
+
+- **Every spec the server runs receives them.** A service or selector tool over
+  either transport and either era, `call_tool` / `acall_tool`, a task the worker
+  runs, each step of a chain, and a resource's selector on `resources/read`.
+- **The availability check asks with them too.** `tools/list`, `list_tools` and
+  `unavailable_tools` resolve the seeds into the pool they ask an operation
+  condition against, so `when=lambda *, tenant: tenant.can_close_books` is asked
+  the same question at the listing as at the call
+  ([A tool that cannot run now is not listed](#a-tool-that-cannot-run-now-is-not-listed)).
+- **A registered name is reserved.** A client argument of the same name is
+  stripped rather than spread, so a caller cannot outrank the project's value —
+  on a selector, where no validator stands in front of the spread, that is the
+  difference between a seed and a client-controlled input. A chain step's seeds
+  are laid over whatever its `inputs` returned, for the same reason.
+- **A registered name is not asked for.** A selector parameter named after a
+  seed, on a selector tool or a service tool's target lookup, is left out of the
+  tool's `inputSchema` and never required
+  ([Which selector parameters a client is asked for](#selector-requiredness)).
+- **Registration agrees with dispatch.** A callable declaring a seed with no
+  default registers, since the seed is always supplied; a `UrlKwarg`,
+  `QueryParam` or URI-template variable named after one is refused, since
+  dispatch would strip it on every call.
+- **One set per mount, with no per-call or per-tool override.** What varies per
+  call belongs in the resolver; a mount needing different seeds is a second
+  `MCPServer`.
+
+Prompt rendering and argument completion call bare callables rather than specs,
+and do not receive the seeds.
+
+### Which selector parameters a client is asked for { #selector-requiredness }
+
+A selector tool advertises its selector's parameters, and a service tool its
+target lookup's ([Dispatch flow](#dispatch-flow), step 3). A signature read on
+its own cannot say which of them the client sends and which the server fills:
+`get_invoice(*, pk)` and `outstanding(*, tenant)` look alike, yet a client must
+send `pk` while `tenant` is a seed. So drf-services' reflection (0.55+) is told
+which names this server fills, from the sources the selector's pool is built
+from:
+
+- the server's [`pool_seeds`](#pool-seeds) and drf-services' own seeds
+  (`request`, `user`, `progress`, ...);
+- a [`UrlKwarg`](#url-kwargs-route-values-a-provider-reads-off-viewkwargs) that
+  declares a `default`, which fills the parameter whenever the client leaves it
+  out (one without a default is still the client's to send);
+- the keys a `kwargs=` provider returns, when its return annotation is a
+  `TypedDict` (`NotRequired` keys included, since the provider owns them). A
+  target lookup is read with its own provider, the one that resolves the target;
+- on a selector tool, the names `spec_kwargs_provides=` declares, and the fields
+  its `input_serializer` fills when the client sends nothing (a writable field
+  with a `default`, a `HiddenField` included), because the validated values are
+  laid over the selector's params. `call_tool` does not run a selector tool's
+  `input_serializer`, so there such a name is the caller's to send.
+
+A filled name is not advertised. **Every other parameter without a default is
+required**, so `get_invoice(*, pk)` asks for `pk` with no marker; a default keeps
+a parameter optional, and an `InputRequired` marker still makes one required.
+
+**A key the provider may decline is not counted as filled.** A `TypedDict` key
+whose value admits `UnsetType` (`tenant: str | UnsetType`) is one the provider
+may return as `UNSET`, which drf-services drops from the pool, so the caller's
+value is the one the selector reads. It stays advertised and is not required
+for lacking a default; an `InputRequired` marker on the parameter still makes it
+required. A call that leaves it out is never refused before the selector runs,
+because only the assembled pool can say whether it arrived.
+
+**On a selector tool registered with
+`argument_binding=ArgumentBinding.SPREAD_CALLER_WINS` the client's value
+outranks the provider's**, so a provider key and a `spec_kwargs_provides=` name
+stay advertised there, as optional properties, and an `InputRequired` marker
+does not make them required: the server fills them when the client sends
+nothing. A seed is hidden under every binding, because drf-services strips a
+seed from the client's arguments whatever the binding. **A service tool's
+target lookup is read author-wins under every binding**, because drf-services
+lays the lookup's provider over the arguments last whatever `argument_binding`
+says, so its keys stay hidden.
+
+**A service tool runs one target lookup**: its `collection_selector_spec` when
+it declares one, and its `instance_selector_spec` otherwise, and only that
+lookup's parameters are advertised. drf-services never runs the instance lookup
+beside a collection lookup, and its unknown-argument check admits only the keys
+of the lookup it runs, so under `UnknownArguments.REJECT` a `pk` sent beside
+`ids` is refused as an unexpected argument. A `many=True` service runs no
+lookup, so an item of its list offers only the input serializer's fields.
+
+The Pydantic-AI `SpecToolset` reads seeds, `UrlKwarg` defaults, provider keys
+and target lookups by the same rules, so one spec is asked for the same
+arguments on both routes. `spec_kwargs_provides=`, a selector tool's
+`input_serializer` and `argument_binding=` are registration options here with
+no counterpart in the toolset.
+
+```python
+from typing_extensions import TypedDict
+
+
+class Scope(TypedDict):
+    tenant: str
+
+
+def scope(*, request) -> Scope:  # annotated, so `tenant` is known to be filled
+    return {"tenant": request.user.tenant}
+
+
+def get_invoice(*, pk: int, tenant: str):  # inputSchema: {"pk"}, required ["pk"]
+    return Invoice.objects.filter(pk=pk, tenant=tenant)
+```
+
+**A provider whose return is not a `TypedDict` may fill any parameter**, a plain
+`-> dict` or a lambda included, so beside one nothing is required for lacking a
+default: every parameter stays advertised and optional, and an `InputRequired`
+marker still makes one required. Annotate the provider to have the rest
+inferred.
+
+**A provider whose annotations do not resolve counts as untyped**, whichever
+annotation it is: the return, a parameter's, or a field of the returned
+`TypedDict`. A type imported only under `TYPE_CHECKING` is the usual cause: the
+hints are resolved at runtime, where that name does not exist. Import such a
+type at runtime, or the provider is read as though it returned a plain `dict`.
+
+**A call that leaves out a required parameter is refused before the selector
+runs**, with the `validation_error` result a serializer gives a missing field,
+on every route (both transports and eras, `call_tool` and `acall_tool`):
+
+```json
+{"error": {"type": "validation_error", "message": "Invalid arguments",
+           "detail": {"pk": ["This field is required."]}}}
+```
+
+It used to reach the selector as a `TypeError`, which answered HTTP 500 with
+JSON-RPC `-32603` "Internal error" on the wire and raised from `call_tool`. The
+names checked are the ones the `inputSchema` requires of the selectors, read
+from the same reflection, so what a call is refused for is what the client was
+told. A service tool's own input serializer still answers for its fields, and a
+`many=True` service resolves no target, so its lookup asks nothing.
+
+The check runs **after the permission and rate-limit answers** (and, on a
+selector tool, after its `input_serializer`), as every other argument check
+does. So does the one a missing `UrlKwarg(required=True)` takes, which on a
+selector tool comes before its `input_serializer` runs: a call missing both is
+told about the URL kwarg. A caller `tools/list` hides a tool from is refused
+for the permission first, and never learns from a missing-argument answer that
+the tool exists.
+
+A seed or a provider key the client sends anyway is still accepted by the
+unknown-argument check, even under `UnknownArguments.REJECT`. A seed's value
+outranks the client's under every binding, as the [seeds](#pool-seeds) section
+describes. On a selector tool a provider key's value outranks it under
+`SPREAD_AUTHOR_WINS`, the selector tool default, and the client's value wins
+under `SPREAD_CALLER_WINS`. A service tool's target lookup reads its provider's
+value under every binding.
+
 ### URL kwargs — route values a provider reads off `view.kwargs`
 
 On a **tool** call, `view.kwargs` is empty by default (a tool has no URL). So a
@@ -163,7 +352,10 @@ UrlKwarg("project_pk", type="integer", required=True)
 The name joins the tool's `inputSchema` `required` list, so the model is told up
 front — and, because a schema hint is only a hint, a call that omits it comes back
 as an `isError` validation result naming the missing argument rather than failing
-somewhere less legible. `required` can't be combined with a `default` (a default
+somewhere less legible: `"Invalid arguments"` with
+`{"project_pk": ["This field is required."]}` under `detail`, the answer a
+missing selector parameter gets, after the permission answer on every route.
+`required` can't be combined with a `default` (a default
 always satisfies the argument, so requiring it would be a no-op); that raises at
 registration.
 
@@ -376,10 +568,10 @@ What a caller should know:
   single-item tool's arguments are, and each item's own `additionalProperties`
   says whether an undeclared key in it is refused.
 - **Errors are keyed under the argument, and item errors by index.** An invalid
-  second item is a `-32602` whose `data.detail` is
+  second item is a `validation_error` result whose `error.detail` is
   `{"invoices": {"1": {"amount_cents": ["Ensure this value is greater than or equal to 0."]}}}`.
   JSON object keys are strings, so the index arrives as `"1"`; with
-  `INCLUDE_VALIDATION_VALUE` on, `data.value["invoices"][1]` is the item it names.
+  `INCLUDE_VALIDATION_VALUE` on, `error.value["invoices"][1]` is the item it names.
   drf-services gives item errors this shape on every Django REST framework
   version, and an undeclared key refused inside an item is keyed by its index the
   same way. A call with no list is refused as `{"invoices": ["This field is required."]}`.
@@ -520,7 +712,8 @@ forms) accept three behavior knobs:
 - **`unknown_arguments=`** — how `arguments` keys outside the binding's
   declared field set are handled.
   - `UnknownArguments.REJECT` (default) — the validator rejects unknown
-    keys with `-32602`, and the outer `inputSchema` advertises
+    keys with an `isError` `validation_error` result naming them under
+    `detail.non_field_errors`, and the outer `inputSchema` advertises
     `"additionalProperties": false`.
 
     **The closed schema is advertised only where the runtime actually closes
@@ -529,10 +722,12 @@ forms) accept three behavior knobs:
     1. `REJECT` itself;
     2. an `input_serializer` to validate against — a serializer-less binding
        has no declared field set, so `REJECT` cannot fire;
-    3. for a **service** tool, a key set the spec can enumerate. A nested
-       selector taking a bare `**kwargs`, or one carrying a `filter_set`,
-       leaves it open, and an open set is answered by accepting and silently
-       dropping every undeclared key.
+    3. for a **service** tool, a key set the spec can enumerate. The lookup
+       dispatch calls (the `collection_selector_spec` when declared, else the
+       `instance_selector_spec`, and neither on `many=True`) leaves it open
+       when it takes a bare `**kwargs` or carries a `filter_set`, and an open
+       set is answered by accepting and silently dropping every undeclared
+       key. A lookup dispatch never calls cannot open it.
 
     Any of the three missing leaves the schema open
     (`"additionalProperties": true`), on purpose: where nothing is enforced,
@@ -562,8 +757,9 @@ forms) accept three behavior knobs:
 ### A tool that cannot run now is not listed
 
 A service's `affordances` say when the operation is possible. A condition written
-as a callable is answered against the pool's seeds — `user`, `request`, `progress`
-— and never against the call's arguments, so when it is unmet **every** call of
+as a callable is answered against the pool's seeds — `user`, `request`, `progress`,
+and any the server registers with [`pool_seeds=`](#pool-seeds) — and never
+against the call's arguments, so when it is unmet **every** call of
 the tool is refused, whatever the client sends. `tools/list` therefore asks each
 such condition, through drf-services' `unmet_operation_affordance`, and leaves the
 tool out while any is unmet:
@@ -663,16 +859,25 @@ without a hand-set flag:
   any service step makes the whole chain a mutation.
 
 `destructiveHint` / `idempotentHint` are spec-meaningful only when
-`readOnlyHint` is false, so a read-only tool emits neither. Pass
-`annotations=` at registration to override or extend the derived hints —
+`readOnlyHint` is false, so a read-only tool emits neither.
+
+A service tool also reads its spec's declared `ServiceSpec.idempotent`:
+`idempotent=True` advertises `"idempotentHint": true`, a declared `False`
+advertises `false`, and the default `None` (nothing declared) leaves the hint
+off, which a client reads as the MCP default of `false`. A chain derives no
+`idempotentHint`, because two idempotent steps in sequence need not make an
+idempotent operation.
+
+Pass `annotations=` at registration to override or extend the derived hints —
 the explicit values win:
 
 ```python
 server.register_service_tool(
     name="invoices.mark_paid",
     spec=mark_paid_spec,
-    # An idempotent, non-destructive mutation:
-    annotations={"destructiveHint": False, "idempotentHint": True},
+    # A non-destructive mutation. Its idempotency is declared on the spec
+    # (ServiceSpec(idempotent=True)), so it needs no hint here:
+    annotations={"destructiveHint": False},
 )
 ```
 
@@ -781,9 +986,11 @@ It does **not** layer on the read-shaped transport extras (pagination,
 ordering, a selector binding's MCP-only `input_serializer`); those stay with
 the wire handlers, as do the transport-level MCP permissions / rate limits.
 Chain tools are unsupported — they orchestrate several specs and raise
-`TypeError`. A service raising `ServiceValidationError` / `ServiceError` and a
-missing required instance come back as `isError` results; a denied permission
-or malformed input raises, for the caller to map.
+`TypeError`. Refused input (an unexpected argument, an `input_serializer`
+rejection, a filter value the spec's `FilterSet` refuses), a service raising
+`ServiceValidationError` / `ServiceError`, and a missing required instance come
+back as `isError` results, the ones the wire serves; a denied permission raises,
+for the caller to map.
 
 ### Full in-process transport: `acall_tool` / `list_tools`
 
@@ -1833,6 +2040,19 @@ The MCP package owns its own dispatch flow. It does **not** import
    + the nested spec's own `kwargs` provider; queryset shaping applies
    and a QuerySet return is materialized via `.first()`. A missing row
    short-circuits to an `isError: true` tool result (`type: "not_found"`).
+   Because the lookup arrives as an argument, the tool's `inputSchema`
+   advertises it: the target selector's parameters (and a `filter_set`'s
+   fields) are reflected the same way a selector tool's own are, so
+   `task_by_pk(*, pk)` puts `pk` beside the input serializer's fields. A
+   `collection_selector_spec` is advertised the same way, and in place of the
+   instance lookup when both are declared, because it is the one dispatch
+   runs and the one whose keys the unknown-argument check admits. An input
+   field or `UrlKwarg` of the same name keeps its property, and a lookup parameter is
+   `required` when it has no default and the server does not fill it
+   ([Which selector parameters a client is asked for](#selector-requiredness)),
+   whatever the serializer says about the name: the lookup reads the raw
+   arguments, not the validated ones. A call leaving one out is refused here,
+   before the lookup runs, with a `validation_error` result.
 4. Validate `arguments` via `spec.input_serializer` (DRF `Serializer`,
    bare `@dataclass` auto-wrapped in `DataclassSerializer`, or `None`).
    `spec.partial=True` validates partially (and drops `required` from the
@@ -1841,20 +2061,27 @@ The MCP package owns its own dispatch flow. It does **not** import
    `self.instance`. A `many=True` spec validates the list under its
    `many_argument` instead, item by item, with no target to resolve
    ([A list payload](#list-payload)).
-5. Build a kwarg pool: `{request, user, data}` plus — when present — the
+5. Build a kwarg pool: `{request, user, data}` and the server's
+   [`pool_seeds`](#pool-seeds), plus — when present — the
    resolved `instance` and the bound, validated `serializer` (both
    reserved seeds clients cannot poison; services opt in by declaring
    the parameter, e.g. to call `serializer.save()`).
 6. `resolve_callable_kwargs(spec.service, pool)` →
    `run_service(spec.service, kwargs, atomic=spec.atomic)`.
-7. Map failures along the MCP protocol-vs-tool boundary. The serializer
-   rejecting the arguments *shape* stays a JSON-RPC `-32602`. A service
-   raising on well-shaped input — `ServiceValidationError` or
-   `ServiceError` — returns an **`isError: true` tool result** the model
-   can read and self-correct from, with a JSON `{"error": {"type":
-   "validation_error" | "service_error", "message": ..., "detail": ...}}`
-   payload in `content[0]` (and no `structuredContent`, which is tied to
-   the success schema). Chain steps add `failedStep`. A call refused by one
+7. Map failures along the MCP protocol-vs-tool boundary. Refused input —
+   the serializer rejecting the arguments, an unexpected argument under
+   `UnknownArguments.REJECT`, a missing argument a target lookup requires
+   (step 3), or a service raising `ServiceValidationError`
+   — and a service raising `ServiceError` return an **`isError: true` tool
+   result** the model can read and self-correct from, with a JSON
+   `{"error": {"type": "validation_error" | "service_error", "message": ...,
+   "detail": ...}}` payload in `content[0]` (and no `structuredContent`,
+   which is tied to the success schema). A serializer's refusal carries the
+   message `"Invalid arguments"` and its field-keyed errors under `detail`.
+   The MCP spec files input validation under tool execution errors in every
+   protocol version this server serves, and keeps JSON-RPC `-32602` for an
+   unknown tool and a request that fails the `CallToolRequest` schema (a
+   non-object `arguments`, say), which is all `tools/call` answers with it. Chain steps add `failedStep`. A call refused by one
    of the spec's declared `affordances` raises drf-services'
    `ActionUnavailable`, and its error object also carries that affordance's
    `code` — `{"type": "service_error", "message": "The books are closed.",
@@ -1895,8 +2122,8 @@ stream's last frame.
 RETRIEVE selector tools mirror the sister repo's read semantics: a
 QuerySet return is materialized via `.first()`, and a missing row is a
 `not_found` `isError` result — unless the spec sets `allow_none=True`
-(the nullable-resource contract), which renders a successful `null`
-result instead. LIST tools advertise a kind-aware `outputSchema`: a bare
+(the nullable-resource contract), which makes the miss a successful result
+with nothing to present (see below). LIST tools advertise a kind-aware `outputSchema`: a bare
 array schema unpaginated, the `{items, page, totalPages, hasNext}`
 envelope with `paginate=True` (enable pagination for a fully
 spec-compliant *object*-shaped `structuredContent`). The array schema is not
@@ -1904,6 +2131,50 @@ special to selector tools: wherever a result renders as an unpaginated list —
 a service tool whose `output_selector_spec` re-fetches a `LIST`, or a chain
 whose output step is either kind of `LIST` — the tool advertises the same bare
 array, because that is what it serves.
+
+**A result with nothing to present is `{}`, and the schema admits it.** Two
+successful calls render to nothing: an `allow_none` RETRIEVE that finds no row,
+and a single-row service tool whose output re-read selector finds none
+(drf-services materializes the re-read with `.first()`, so a re-read that
+filters out the row the service just archived yields nothing, whatever the
+nested spec declares). MCP requires `structuredContent` to be an object, so
+both are served as `"structuredContent": {}` with a text block of `{}`, on
+every tool kind and every entry point (the wire, `call_tool` / `acall_tool`, a
+task). And because a server advertising an `outputSchema` must return
+structured content that conforms to it, the schema of a tool that can present
+nothing keeps its object root and its `properties` while its `required` list
+moves beside the empty object. Exactly three kinds of tool advertise this
+shape: an `allow_none` RETRIEVE selector tool, a single-row service tool whose
+`output_selector_spec` has a `selector`, and a chain whose output step is one
+of those two:
+
+```json
+{
+  "type": "object",
+  "properties": {"id": {"type": "integer"}, "title": {"type": "string"}},
+  "anyOf": [{"required": ["title"]}, {"maxProperties": 0}]
+}
+```
+
+A full row satisfies the first branch and `{}` the second, while a non-empty
+row missing a required field satisfies neither. Every other tool keeps a strict
+root `required`: a RETRIEVE without `allow_none`, a `LIST` result, a
+`many=True` service, and a service whose `output_selector_spec` names only an
+`output_serializer`, with no `selector`, so the service's own return renders.
+That last one is most service tools, and loosening their schemas would turn
+every row field optional for each client generating types from them. Leaving
+`structuredContent` off the result instead was ruled out: a client is entitled
+to reject a successful result that has an `outputSchema` and no structured
+content, and the TypeScript SDK does.
+
+!!! warning "Known limit: a service returning `None` with no re-read"
+    A service with no re-read selector whose function returns `None` is served
+    `"structuredContent": {}`, against a schema that still requires its
+    fields, so a client validating the result rejects it. Nothing the spec
+    declares says whether its service can return `None`, so the schema cannot
+    tell this service from one that always returns a row. Return the row the
+    service acted on, or declare a re-read selector (`lambda *, result:
+    result` is enough) so the schema admits `{}`.
 
 `resources/read`:
 

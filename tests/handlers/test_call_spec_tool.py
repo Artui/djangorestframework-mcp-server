@@ -69,7 +69,7 @@ def test_selector_retrieve_renders_single_instance() -> None:
     assert result.structured_content == {"a": 1}
 
 
-def test_allow_none_retrieve_returns_null_not_an_error() -> None:
+def test_allow_none_retrieve_returns_an_empty_result_not_an_error() -> None:
     server = _server()
     server.register_selector_tool(
         name="things.maybe",
@@ -77,7 +77,7 @@ def test_allow_none_retrieve_returns_null_not_an_error() -> None:
     )
     result = server.call_tool("things.maybe", {"pk": 9}, user=None)
     assert result.is_error is False
-    assert result.structured_content is None
+    assert result.structured_content == {}
 
 
 def test_include_structured_content_false_omits_the_structured_field() -> None:

@@ -18,6 +18,17 @@ class MarkSentInputSerializer(serializers.Serializer):
     pk = serializers.IntegerField(min_value=1)
 
 
+class SetAmountInputSerializer(serializers.Serializer):
+    """Input for ``invoices.set_amount``: the new amount only.
+
+    Which invoice is not a field here. It is the target selector's lookup
+    (``invoice_by_number``), and the tool's ``inputSchema`` advertises it
+    beside this field.
+    """
+
+    amount_cents = serializers.IntegerField(min_value=0)
+
+
 class InvoiceOutputSerializer(serializers.ModelSerializer):
     """Output shape for every read surface in this example."""
 

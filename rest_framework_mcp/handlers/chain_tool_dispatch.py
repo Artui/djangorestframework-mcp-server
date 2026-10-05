@@ -46,6 +46,8 @@ from rest_framework import serializers as drf_serializers
 from rest_framework.exceptions import PermissionDenied
 from rest_framework_services import (
     OfflineServiceView,
+    PoolSeeds,
+    base_pool,
     base_serializer_context,
     build_offline_context,
     enforce_affordances,
@@ -74,6 +76,7 @@ from rest_framework_mcp.handlers.utils import (
     service_error_result,
     validate_input_against_serializer,
     validation_error_data,
+    validation_error_result,
 )
 from rest_framework_mcp.output.error_tool_result import build_error_tool_result
 from rest_framework_mcp.output.resolve_structured_output import resolve_structured_output
@@ -155,13 +158,11 @@ def dispatch_chain_tool(
             ),
         )
     except drf_serializers.ValidationError as exc:
-        return JsonRpcError(
-            JsonRpcErrorCode.INVALID_PARAMS,
-            "Invalid arguments",
-            data=validation_error_data(
-                exc.detail, arguments_raw, include_value=context.config.include_validation_value
-            ),
-        )
+        # The chain's own arguments refused: input validation, so the
+        # ``validation_error`` result every tool kind answers with, carrying no
+        # ``failedStep`` because no step ran. Not ``-32602``: the MCP spec keeps
+        # that for an unknown tool and a malformed request.
+        return validation_error_result(exc, arguments_raw, config=context.config).to_dict()
 
     ctx = ChainContext(
         args=validated if serializer is not None else arguments_raw,
@@ -170,7 +171,7 @@ def dispatch_chain_tool(
     )
 
     try:
-        error = _run_chain(binding, ctx, otel_span, context.config)
+        error = _run_chain(binding, ctx, otel_span, context.config, context.pool_seeds)
     except PermissionDenied:
         # A step's object-level permission said no. The same envelope a service
         # tool answers with, and mapped here rather than upstream because
@@ -223,46 +224,63 @@ async def dispatch_chain_tool_async(
 
 
 def _run_chain(
-    binding: ChainToolBinding, ctx: ChainContext, otel_span: Any, config: MCPConfig
+    binding: ChainToolBinding,
+    ctx: ChainContext,
+    otel_span: Any,
+    config: MCPConfig,
+    seeds: PoolSeeds,
 ) -> dict[str, Any] | None:
     """Run every step in order, optionally inside one transaction."""
     if binding.atomic:
         try:
             with transaction.atomic():
-                error = _run_steps(binding, ctx, otel_span, config)
+                error = _run_steps(binding, ctx, otel_span, config, seeds)
                 if error is not None:
                     raise _ChainAbort(error)
         except _ChainAbort as abort:
             return abort.error
         return None
-    return _run_steps(binding, ctx, otel_span, config)
+    return _run_steps(binding, ctx, otel_span, config, seeds)
 
 
 def _run_steps(
-    binding: ChainToolBinding, ctx: ChainContext, otel_span: Any, config: MCPConfig
+    binding: ChainToolBinding,
+    ctx: ChainContext,
+    otel_span: Any,
+    config: MCPConfig,
+    seeds: PoolSeeds,
 ) -> dict[str, Any] | None:
     for step in binding.steps:
-        error = _run_step(step, ctx, otel_span, config)
+        error = _run_step(step, ctx, otel_span, config, seeds)
         if error is not None:
             return error
     return None
 
 
 def _run_step(
-    step: ChainStep, ctx: ChainContext, otel_span: Any, config: MCPConfig
+    step: ChainStep,
+    ctx: ChainContext,
+    otel_span: Any,
+    config: MCPConfig,
+    seeds: PoolSeeds,
 ) -> dict[str, Any] | None:
     """Run one step and store its result under ``step.alias``.
 
     The pool is the step's ``inputs(ctx)`` mapping (or ``{"data": ctx.args}``
-    when ``inputs`` is ``None``) with ``request`` / ``user`` seeded **over** it;
+    when ``inputs`` is ``None``) with drf-services' ``base_pool`` seeded **over**
+    it: ``request`` / ``user``, ``progress`` (the no-op reporter, as a chain
+    step reports nowhere) and every name the server's ``pool_seeds`` registers,
+    resolved per step as ``dispatch_spec`` resolves them per call.
     ``resolve_callable_kwargs`` then filters it to the callable's signature.
 
     Seeded last, deliberately. Forwarding the tool's own ``ctx.args`` is the
     natural way to write an ``inputs`` callable, and with the seeds merged
     first a client argument called ``user`` outranked the caller's identity and
-    scoped the step to whoever the caller named. The other reserved names are
-    left to ``inputs``, which owns ``data`` / ``instance`` by contract — that is
-    how one step feeds the next.
+    scoped the step to whoever the caller named; a client ``tenant`` would
+    outrank a registered seed the same way
+    (test_a_chain_step_reads_a_seed_over_what_its_inputs_provide). The other
+    reserved names are left to ``inputs``, which owns ``data`` / ``instance`` by
+    contract — that is how one step feeds the next.
 
     The step's own ``permission_classes`` and ``preconditions`` fire here, in
     drf-services' order (permissions on the resolved target, then
@@ -273,7 +291,11 @@ def _run_step(
     provided: Mapping[str, Any] = (
         step.inputs(ctx) if step.inputs is not None else {"data": ctx.args}
     )
-    pool: dict[str, Any] = {**provided, "request": ctx.request, "user": ctx.user}
+    # Built through ``base_pool`` rather than restated, as drf-services asks of
+    # every adapter assembling its own pool, so a step sees each seed a
+    # ``dispatch_spec`` call would hand the same callable.
+    seeded: dict[str, Any] = base_pool(user=ctx.user, request=ctx.request, seeds=seeds)
+    pool: dict[str, Any] = {**provided, **seeded}
     offline = OfflineContext(
         user=ctx.user,
         request=ctx.request,
@@ -284,7 +306,7 @@ def _run_step(
     )
     try:
         if isinstance(step.spec, ServiceSpec):
-            result: Any = _run_service_step(step.spec, pool, offline)
+            result: Any = _run_service_step(step.spec, pool, offline, seeds.reserved)
         else:
             result = _run_selector_step(step.spec, pool, offline)
     except ServiceValidationError as exc:
@@ -319,7 +341,10 @@ def _run_step(
 
 
 def _run_service_step(
-    spec: ServiceSpec[Any, Any, Any], pool: dict[str, Any], offline: OfflineContext
+    spec: ServiceSpec[Any, Any, Any],
+    pool: dict[str, Any],
+    offline: OfflineContext,
+    reserved: frozenset[str],
 ) -> Any:
     # Target first, as ``dispatch_spec`` does before a mutation: whatever
     # ``inputs`` put in the pool as ``instance`` is the row an object-level
@@ -330,7 +355,10 @@ def _run_service_step(
     # ``dispatch_spec`` runs them in, through the same drf-services function, so a
     # call refused as a tool of its own is refused as a chain step as well. They
     # were skipped here once -- the step ran, and the chain reported success.
-    enforce_affordances(spec, pool, instance=pool.get("instance"))
+    # ``reserved`` is the server's seed set, as ``dispatch_spec`` hands it: a
+    # callable condition sees only the reserved names of the pool, so without
+    # it a condition reading a registered seed would be asked without one.
+    enforce_affordances(spec, pool, instance=pool.get("instance"), reserved=reserved)
     _run_preconditions(spec, pool)
     # atomic=False: the chain owns the transaction (binding.atomic). The
     # service's own spec.atomic is subordinate under a chain.

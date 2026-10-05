@@ -13,6 +13,7 @@ from rest_framework.permissions import AllowAny
 from rest_framework.renderers import JSONRenderer
 from rest_framework.request import Request
 from rest_framework.viewsets import ViewSet
+from rest_framework_services.types.pool_seeds import DEFAULT_POOL_SEEDS, PoolSeeds
 from rest_framework_services.types.progress_reporter import ProgressReporter
 
 from rest_framework_mcp._compat.acall import acall
@@ -158,6 +159,10 @@ class AsyncStreamableHttpViewSet(ViewSet):
     server_info: Implementation | None = None
     instructions: str | None = None
     config: MCPConfig | None = None
+    # The owning server's ``pool_seeds=``, read into every context this view
+    # builds. drf-services' default for a hand-wired viewset, which is exactly
+    # the seeds dispatch would use with none passed.
+    pool_seeds: PoolSeeds = DEFAULT_POOL_SEEDS
 
     @classonlymethod
     def as_view(cls, actions: Any = None, **initkwargs: Any) -> Any:
@@ -337,6 +342,7 @@ class AsyncStreamableHttpViewSet(ViewSet):
             task_executor=self.task_executor,
             subscriptions=self.subscription_broker,
             config=self._require_config(),
+            pool_seeds=self.pool_seeds,
         )
 
         if isinstance(message, JsonRpcNotification):
@@ -433,6 +439,7 @@ class AsyncStreamableHttpViewSet(ViewSet):
             task_executor=self.task_executor,
             subscriptions=self.subscription_broker,
             config=config,
+            pool_seeds=self.pool_seeds,
         )
 
         if isinstance(message, JsonRpcNotification):

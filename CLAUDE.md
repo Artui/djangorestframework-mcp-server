@@ -125,7 +125,12 @@ Import these — do not parallel them:
   response. Every `ServiceError` arm builds its result through
   `handlers.utils.service_error_result`, which adds the `code` an
   `ActionUnavailable` carries and no key for any other member; a new arm calling
-  `build_error_tool_result` directly would drop the code again.
+  `build_error_tool_result` directly would drop the code again. DRF's
+  `ValidationError` (an unexpected argument, a serializer or filter rejection)
+  shares the `validation_error` arm: every argument-validation arm builds its
+  result through `handlers.utils.validation_error_result`, because the MCP spec
+  files input validation under tool execution errors. On `tools/call`, `-32602`
+  is left to an unknown tool and a request failing the `CallToolRequest` schema.
 
 The dispatch leaves are **top-level exports** of `rest_framework_services` (its
 documented "stable dispatch surface", 0.17+) — import them from the package root,

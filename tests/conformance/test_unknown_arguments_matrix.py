@@ -2,7 +2,7 @@
 
 Verifies the three policies' wire shape:
 
-- ``REJECT`` → ``-32602`` + ``non_field_errors`` detail.
+- ``REJECT`` → an ``isError`` ``validation_error`` result + ``non_field_errors`` detail.
 - ``PASSTHROUGH`` → unknown key reaches the selector via ``**rest``.
 """
 
@@ -10,11 +10,16 @@ from __future__ import annotations
 
 import pytest
 
+from tests.utils import tool_error
+
 pytestmark = pytest.mark.urls("tests.conformance.urls")
 
 
 @pytest.mark.django_db(transaction=True)
-def test_reject_unknown_key_returns_minus_32602(jsonrpc, initialized_session: str) -> None:
+def test_reject_unknown_key_returns_a_validation_error_result(
+    jsonrpc, initialized_session: str
+) -> None:
+    """Input validation, so a tool execution error the model can read, not ``-32602``."""
     response = jsonrpc(
         "tools/call",
         {
@@ -25,9 +30,10 @@ def test_reject_unknown_key_returns_minus_32602(jsonrpc, initialized_session: st
     )
     assert response.status_code == 200, response.content
     body = response.json()
-    assert "error" in body
-    assert body["error"]["code"] == -32602
-    detail = body["error"]["data"]["detail"]
+    assert "error" not in body, body
+    error = tool_error(body["result"])
+    assert error["type"] == "validation_error"
+    detail = error["detail"]
     assert "non_field_errors" in detail
     assert "rogue" in detail["non_field_errors"][0]
 

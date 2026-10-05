@@ -8,20 +8,28 @@ modules (one per app) and combine them into a single ``MCPServer``.
 from __future__ import annotations
 
 from rest_framework.permissions import AllowAny
+from rest_framework_services import DEFAULT_POOL_SEEDS
 from rest_framework_services.types.selector_kind import SelectorKind
 from rest_framework_services.types.selector_spec import SelectorSpec
 from rest_framework_services.types.service_spec import ServiceSpec
 
 from invoices.filters import InvoiceFilterSet
 from invoices.models import Invoice
-from invoices.selectors import get_invoice, list_invoices
+from invoices.selectors import (
+    find_invoice,
+    get_invoice,
+    invoice_by_number,
+    list_invoices,
+    outstanding_total,
+)
 from invoices.serializers import (
     InvoiceInputSerializer,
     InvoiceOutputSerializer,
     MarkSentInputSerializer,
     SelectableInvoiceSerializer,
+    SetAmountInputSerializer,
 )
-from invoices.services import create_invoice, mark_invoice_sent
+from invoices.services import create_invoice, mark_invoice_sent, set_invoice_amount
 from rest_framework_mcp import MCPServer, PromptArgument, PromptMessage, QueryParam
 from rest_framework_mcp.auth.backends.allow_any_backend import AllowAnyBackend
 from rest_framework_mcp.auth.permissions.drf_permission_adapter import DRFPermissionAdapter
@@ -40,6 +48,12 @@ def build_server() -> MCPServer:
         # Fine for single-process dev. The default DjangoCacheSessionStore
         # works across workers.
         session_store=InMemorySessionStore(),
+        # What every spec on this mount may read without it being a tool
+        # argument: here a fixed currency, which ``invoices.outstanding``
+        # reads. A real project resolves it per caller, e.g.
+        # ``currency=lambda *, user: user.organisation.currency``. A
+        # registered name is reserved, so a client cannot send its own.
+        pool_seeds=DEFAULT_POOL_SEEDS.extend(currency=lambda: "EUR"),
     )
 
     # Permissions are **required** since 0.25.0: registering a tool without
@@ -79,6 +93,30 @@ def build_server() -> MCPServer:
         description="Flip an invoice's ``sent`` flag.",
     )
 
+    server.register_service_tool(
+        name="invoices.set_amount",
+        spec=ServiceSpec(
+            permission_classes=[AllowAny],
+            service=set_invoice_amount,
+            input_serializer=SetAmountInputSerializer,
+            # The target is looked up by number. The tool's ``inputSchema``
+            # advertises ``number`` (required, as the selector marks it) beside
+            # ``amount_cents``, because dispatch hands the arguments to this
+            # selector too.
+            instance_selector_spec=SelectorSpec(
+                kind=SelectorKind.RETRIEVE, selector=invoice_by_number
+            ),
+            output_selector_spec=SelectorSpec(
+                kind=SelectorKind.RETRIEVE,
+                output_serializer=InvoiceOutputSerializer,
+            ),
+            # Setting an amount twice is setting it once, so the tool lists
+            # ``idempotentHint: true`` and a client may retry it freely.
+            idempotent=True,
+        ),
+        description="Set the amount of the invoice with the given number.",
+    )
+
     # ----- Selector tool (read with filter / order / paginate / select) -----
 
     server.register_selector_tool(
@@ -105,6 +143,31 @@ def build_server() -> MCPServer:
                 description="Comma-separated invoice fields to return, e.g. id,number",
             ),
         ),
+    )
+
+    server.register_selector_tool(
+        name="invoices.find",
+        spec=SelectorSpec(
+            permission_classes=[AllowAny],
+            kind=SelectorKind.RETRIEVE,
+            selector=find_invoice,
+            output_serializer=InvoiceOutputSerializer,
+            # A miss is an answer, not an error: the call succeeds with
+            # ``structuredContent: {}``, which the ``outputSchema`` admits.
+            allow_none=True,
+        ),
+        description="Find an invoice by number; an empty object when there is none.",
+    )
+
+    server.register_selector_tool(
+        name="invoices.outstanding",
+        spec=SelectorSpec(
+            permission_classes=[AllowAny],
+            kind=SelectorKind.RETRIEVE,
+            # Reads ``currency`` from the server's ``pool_seeds``.
+            selector=outstanding_total,
+        ),
+        description="The total of unsent invoices, in the account's currency.",
     )
 
     # ----- Resource (single invoice by PK via URI template) -----

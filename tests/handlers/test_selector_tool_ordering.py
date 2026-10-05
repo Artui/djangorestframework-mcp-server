@@ -33,7 +33,6 @@ from typing import Any
 import django_filters
 import pytest
 from django.http import HttpRequest
-from rest_framework import serializers as drf_serializers
 from rest_framework_services.types.selector_kind import SelectorKind
 from rest_framework_services.types.selector_spec import SelectorSpec
 
@@ -46,6 +45,7 @@ from rest_framework_mcp.handlers.types.context import MCPCallContext
 from rest_framework_mcp.transport.in_memory_session_store import InMemorySessionStore
 from tests.testapp.models import Invoice
 from tests.testapp.serializers import InvoiceOutputSerializer
+from tests.utils import tool_error
 
 
 class OrderedInvoiceFilterSet(django_filters.FilterSet):
@@ -254,27 +254,28 @@ def test_the_pagination_knobs_do_not_leak_into_the_selectors_kwargs() -> None:
 def test_an_unrecognised_ordering_value_is_rejected_by_the_filter() -> None:
     """A value outside the advertised choices is refused, not guessed at.
 
-    ``ordering`` is validated like every other filter field now, so a mistyped
-    value raises DRF's ``ValidationError`` out of queryset shaping — which the
-    ViewSet turns into DRF's own 400 rather than a JSON-RPC ``-32602``. That is
-    the shape *every* invalid filter value on a selector tool already had; the
-    retired knob was the one channel that quietly dropped a bad value and
+    ``ordering`` is validated like every other filter field, so a mistyped value
+    raises DRF's ``ValidationError`` out of queryset shaping. The selector tool's
+    dispatch answers it as input validation: a ``validation_error`` result keyed
+    by the filter field, the shape every refused argument has. It escaped every
+    arm before, and the endpoint served it as an HTTP 500 with JSON-RPC
+    ``-32603``, which is what every invalid filter value on a selector tool got;
+    the retired knob was the one channel that quietly dropped a bad value and
     answered with rows in an order nobody asked for.
-
-    Pinned rather than asserted-as-desirable: routing it through the
-    ``-32602`` envelope the service-tool path uses would be an improvement, and
-    a deliberate one, so it should have to edit this test.
     """
     Invoice.objects.create(number="mid", amount_cents=200)
     Invoice.objects.create(number="low", amount_cents=100)
     server = _server()
     _register_ordered(server)
 
-    with pytest.raises(drf_serializers.ValidationError, match="not one of the available choices"):
-        handle_tools_call(
-            {"name": "invoices.list", "arguments": {"ordering": "--amount"}},
-            _ctx(server),
-        )
+    out = handle_tools_call(
+        {"name": "invoices.list", "arguments": {"ordering": "--amount"}},
+        _ctx(server),
+    )
+
+    error = tool_error(out)
+    assert error["type"] == "validation_error"
+    assert "not one of the available choices" in error["detail"]["ordering"][0]
 
 
 # ---------- the removed second vocabulary ----------

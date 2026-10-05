@@ -26,6 +26,9 @@ from typing import Any
 
 from rest_framework import serializers as drf_serializers
 from rest_framework_services import (
+    DEFAULT_POOL_SEEDS,
+    OfflineContext,
+    PoolSeeds,
     build_offline_context,
     dispatch_spec,
     enforce_permissions,
@@ -37,11 +40,12 @@ from rest_framework_services.exceptions.service_validation_error import ServiceV
 from rest_framework_mcp.config.types.mcp_config import MCPConfig
 from rest_framework_mcp.handlers.utils import (
     read_shaping_error_result,
+    refuse_missing_arguments,
     service_error_result,
     services_dispatch_policies,
     split_query_params,
     split_url_kwargs,
-    validation_error_data,
+    validation_error_result,
 )
 from rest_framework_mcp.output.error_tool_result import build_error_tool_result
 from rest_framework_mcp.output.resolve_structured_output import resolve_structured_output
@@ -59,6 +63,7 @@ def call_spec_tool(
     user: Any,
     request: Any = None,
     config: MCPConfig,
+    pool_seeds: PoolSeeds = DEFAULT_POOL_SEEDS,
 ) -> ToolResult:
     """Invoke a spec-backed tool through the transport-neutral dispatch core.
 
@@ -66,14 +71,20 @@ def call_spec_tool(
     context, dispatches via ``dispatch_spec`` and renders via
     ``render_for_audience``.
 
-    ``ServiceValidationError`` / ``ServiceError`` and a missing required instance
-    come back as ``isError`` tool results the model can self-correct from, as
-    does a validation error raised while rendering when the caller supplied a
-    read-shaping ``QueryParam``; a denied permission raises ``PermissionDenied``
-    and a malformed payload raises DRF's ``ValidationError`` — protocol faults the
-    caller maps to its own wire.
+    Refused input — DRF's ``ValidationError`` (an unexpected argument, an
+    ``input_serializer`` rejection, a refused filter value) and
+    ``ServiceValidationError`` alike — comes back as the ``validation_error``
+    result the wire handlers serve, as do a ``ServiceError``, a missing required
+    instance, and a validation error raised while rendering when the caller
+    supplied a read-shaping ``QueryParam``: all ``isError`` tool results the model
+    can self-correct from. A denied permission raises ``PermissionDenied``, a
+    protocol fault the caller maps to its own wire.
     A chain tool orchestrates several specs, has no single dispatch target, and
     is rejected with ``TypeError``.
+
+    ``pool_seeds`` is the owning server's, handed to ``dispatch_spec`` as the
+    wire handlers hand it, so a spec reading a registered seed runs the same
+    in-process as over HTTP.
     """
     if isinstance(binding, ChainToolBinding):
         raise TypeError(
@@ -89,22 +100,24 @@ def call_spec_tool(
     # kwarg must surface as an ``isError`` result here as it does over the wire.
     try:
         spec_params, url_kwarg_values = split_url_kwargs(arguments, binding.url_kwargs)
-    except ServiceValidationError as exc:
-        return build_error_tool_result(
-            exc.message,
-            error_type="validation_error",
-            detail=validation_error_data(
-                exc.detail, arguments, include_value=config.include_validation_value
-            ),
+    except drf_serializers.ValidationError as exc:
+        # The permission answers first, as it does on the wire and through
+        # ``acall_tool``: a caller the listing hides the tool from must not
+        # learn which argument it left out. Checked against the context the
+        # call would have run with, built from what it did deliver
+        # (``test_call_tool_refuses_a_denied_caller_before_a_missing_url_kwarg``).
+        delivered, delivered_url_kwargs = split_url_kwargs(
+            arguments, binding.url_kwargs, refuse_missing=False
         )
-    spec_params, query_param_values = split_query_params(spec_params, binding.query_params)
-    context = build_offline_context(
-        user,
-        spec_params,
-        http_request=request,
-        action=binding.name,
-        kwargs=url_kwarg_values or None,
-        query_params=query_param_values,
+        enforce_permissions(
+            spec,
+            _offline_context(binding, delivered, delivered_url_kwargs, user=user, request=request)[
+                1
+            ],
+        )
+        return validation_error_result(exc, arguments, config=config)
+    spec_params, context = _offline_context(
+        binding, spec_params, url_kwarg_values, user=user, request=request
     )
     # Class-level ``permission_classes``, enforced upfront and unconditionally:
     # ``dispatch_spec`` never consults them (authz is the caller's job) and the
@@ -114,6 +127,17 @@ def call_spec_tool(
     enforce_permissions(spec, context)
     argument_binding, unknown_arguments = services_dispatch_policies(binding)
     try:
+        # After ``enforce_permissions``, as on the wire: a denied caller is told
+        # so before it is told which argument it left out. Without the
+        # ``input_serializer`` counted, because this route does not run a
+        # selector tool's, so its defaults fill nothing here
+        # (``test_call_tool_refuses_a_name_only_the_input_serializer_it_skips_would_fill``).
+        refuse_missing_arguments(
+            binding,
+            (*spec_params, *url_kwarg_values),
+            pool_seeds=pool_seeds,
+            input_serializer_runs=False,
+        )
         result = dispatch_spec(
             spec,
             user=user,
@@ -123,18 +147,17 @@ def call_spec_tool(
             argument_binding=argument_binding,
             unknown_arguments=unknown_arguments,
             on_target_resolved=enforce_permissions,
+            pool_seeds=pool_seeds,
             # A ``many=True`` spec's list arrives under ``spec.many_argument``, as
             # tool arguments are always an object; a no-op for any other spec.
             many_as_argument=True,
         )
-    except ServiceValidationError as exc:
-        return build_error_tool_result(
-            exc.message,
-            error_type="validation_error",
-            detail=validation_error_data(
-                exc.detail, arguments, include_value=config.include_validation_value
-            ),
-        )
+    except (drf_serializers.ValidationError, ServiceValidationError) as exc:
+        # DRF's error included, as on the wire: an unexpected argument, an
+        # ``input_serializer`` rejection or a refused filter value is input the
+        # model can correct, not a fault for the caller to catch. It was
+        # raised out of here until the wire stopped answering it ``-32602``.
+        return validation_error_result(exc, arguments, config=config)
     except ServiceError as exc:
         return service_error_result(exc)
 
@@ -189,6 +212,34 @@ def call_spec_tool(
         content_mime_type=binding.content_mime_type,
         binding_name=binding.name,
     )
+
+
+def _offline_context(
+    binding: ToolBinding | SelectorToolBinding,
+    spec_params: dict[str, Any],
+    url_kwarg_values: dict[str, Any],
+    *,
+    user: Any,
+    request: Any,
+) -> tuple[dict[str, Any], OfflineContext]:
+    """The params left for dispatch, and the off-HTTP context the call runs in.
+
+    One build for both of ``call_spec_tool``'s permission checks, so the one
+    answering a call refused for a missing URL kwarg reads the same request and
+    view the call would have: the URL kwargs it delivered in ``view.kwargs`` and
+    out of ``request.data``
+    (``test_call_tool_checks_a_missing_url_kwargs_permission_against_the_delivered_route``).
+    """
+    spec_params, query_param_values = split_query_params(spec_params, binding.query_params)
+    context = build_offline_context(
+        user,
+        spec_params,
+        http_request=request,
+        action=binding.name,
+        kwargs=url_kwarg_values or None,
+        query_params=query_param_values,
+    )
+    return spec_params, context
 
 
 __all__ = ["call_spec_tool"]

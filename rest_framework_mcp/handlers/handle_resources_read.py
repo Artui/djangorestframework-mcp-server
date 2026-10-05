@@ -5,6 +5,7 @@ from typing import Any
 from rest_framework.exceptions import PermissionDenied
 from rest_framework_services import (
     UNSET,
+    base_pool,
     build_offline_context,
     resolve_callable_kwargs,
     run_selector,
@@ -114,14 +115,16 @@ def handle_resources_read(
         view = offline.view
 
         # The transport's seeds land *after* the URI-template variables, so a
-        # template variable named ``user`` or ``request`` cannot stand in for
-        # the authenticated identity. ``register_resource`` already refuses
-        # such a template; this is the second lock, for a binding registered
-        # straight onto the registry.
+        # template variable named ``user`` or ``request`` -- or after a seed the
+        # server's ``pool_seeds=`` registers -- cannot stand in for the value
+        # the transport resolved. ``register_resource`` already refuses such a
+        # template; this is the second lock, for a binding registered straight
+        # onto the registry. Built through ``base_pool``, as drf-services asks
+        # of every adapter assembling its own pool, so a selector reading a
+        # registered seed receives it here as it does on a selector tool.
         pool: dict[str, Any] = {
             **vars_,
-            "request": drf_request,
-            "user": context.token.user,
+            **base_pool(user=context.token.user, request=drf_request, seeds=context.pool_seeds),
         }
         if binding.kwargs_provider is not None:
             # ``SelectorSpec.kwargs``, invoked through the keyword pool exactly

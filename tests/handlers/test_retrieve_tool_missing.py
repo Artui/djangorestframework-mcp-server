@@ -68,18 +68,19 @@ def test_missing_row_is_not_found_by_default() -> None:
 
 
 @pytest.mark.django_db
-def test_allow_none_returns_null_result() -> None:
+def test_allow_none_returns_an_empty_result() -> None:
     server = _server()
     _register(server, _get_invoice, allow_none=True)
     out = handle_tools_call({"name": "invoices.get", "arguments": {"pk": 99999}}, _ctx(server))
     assert isinstance(out, dict)
     assert "isError" not in out
-    # A null answer is a *value*, and the tool does emit structured content, so
-    # the key is present and null rather than absent. Absent means the tool has
-    # no structured channel at all.
+    # Nothing to present is a *value*, and the tool does emit structured
+    # content, so the key is present rather than absent (absent means the tool
+    # has no structured channel at all). It is ``{}`` rather than ``null``
+    # because MCP requires structured content to be an object.
     assert "structuredContent" in out
-    assert out["structuredContent"] is None
-    assert out["content"][0]["text"] == "null"
+    assert out["structuredContent"] == {}
+    assert out["content"][0]["text"] == "{}"
 
 
 @pytest.mark.django_db
@@ -113,12 +114,12 @@ def test_does_not_exist_is_not_found() -> None:
 
 
 @pytest.mark.django_db
-def test_does_not_exist_with_allow_none_returns_null() -> None:
+def test_does_not_exist_with_allow_none_returns_an_empty_result() -> None:
     server = _server()
     _register(server, _strict_get, allow_none=True)
     out = handle_tools_call({"name": "invoices.get", "arguments": {"pk": 99999}}, _ctx(server))
     assert "isError" not in out
-    assert out["content"][0]["text"] == "null"
+    assert out["content"][0]["text"] == "{}"
 
 
 @pytest.mark.django_db(transaction=True)
@@ -132,14 +133,14 @@ async def test_async_does_not_exist_is_not_found() -> None:
 
 
 @pytest.mark.django_db(transaction=True)
-async def test_async_missing_row_with_allow_none_returns_null() -> None:
+async def test_async_missing_row_with_allow_none_returns_an_empty_result() -> None:
     server = _server()
     _register(server, _get_invoice, allow_none=True)
     out = await handle_tools_call_async(
         {"name": "invoices.get", "arguments": {"pk": 99999}}, _ctx(server)
     )
     assert "isError" not in out
-    assert out["content"][0]["text"] == "null"
+    assert out["content"][0]["text"] == "{}"
 
 
 @pytest.mark.django_db

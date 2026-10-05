@@ -8,7 +8,7 @@ the bits you need into your own project.
 
 | Example                        | What it shows                                                     |
 |--------------------------------|-------------------------------------------------------------------|
-| [`invoicing/`](invoicing/)     | Service tools, selector tool with `FilterSet` + ordering + pagination, resource by PK, prompt. |
+| [`invoicing/`](invoicing/)     | Service tools (one targeted by lookup, declared idempotent), selector tools with `FilterSet` + ordering + pagination and with `allow_none`, a `pool_seeds=` seed, resource by PK, prompt. |
 | [`job_status/`](job_status/)   | A long-running job exposed as a templated resource, with SSE push notification on completion. |
 
 ## Running an example

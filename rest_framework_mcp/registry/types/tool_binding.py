@@ -26,7 +26,11 @@ from rest_framework_mcp.constants import (
 from rest_framework_mcp.protocol.types.icon import Icon
 from rest_framework_mcp.registry.types.query_param import QueryParam
 from rest_framework_mcp.registry.types.url_kwarg import UrlKwarg
-from rest_framework_mcp.registry.types.utils import rendered_kind, validate_content_kind
+from rest_framework_mcp.registry.types.utils import (
+    can_present_nothing,
+    rendered_kind,
+    validate_content_kind,
+)
 
 InputT = TypeVar("InputT")
 ResultT = TypeVar("ResultT")
@@ -110,11 +114,11 @@ class ToolBinding(Generic[InputT, ResultT, ExtraT]):
     """How unknown ``arguments`` keys are handled relative to the binding's
     ``inputSchema``.
 
-    - ``REJECT`` (default) answers ``-32602`` and advertises
-      ``additionalProperties: false`` — but **only** with an
-      ``input_serializer`` to validate against. A serializer-less binding has
-      no declared field set, so ``REJECT`` cannot fire and its schema stays
-      open.
+    - ``REJECT`` (default) answers an ``isError`` ``validation_error`` result
+      naming the unexpected keys, and advertises ``additionalProperties:
+      false`` — but **only** with an ``input_serializer`` to validate against.
+      A serializer-less binding has no declared field set, so ``REJECT`` cannot
+      fire and its schema stays open.
     - ``PASSTHROUGH`` advertises an open schema and merges unknown keys into
       the validated payload.
     - ``IGNORE`` advertises an open schema and drops them."""
@@ -222,6 +226,17 @@ class ToolBinding(Generic[InputT, ResultT, ExtraT]):
         schema has to say so; it once advertised the item alone. See
         ``registry.types.utils.rendered_kind``."""
         return rendered_kind(self.spec)
+
+    @property
+    def can_present_nothing(self) -> bool:
+        """Whether a successful call can present nothing: a single-row result
+        read back through an output re-read selector, which can find no row.
+
+        Read by ``tools/list`` so the ``outputSchema`` admits the ``{}`` such a
+        call is served as. A service with no re-read selector answers ``False``
+        and keeps a strict schema. See
+        ``registry.types.utils.can_present_nothing``."""
+        return can_present_nothing(self.spec)
 
     @cached_property
     def audience_projection(self) -> AudienceProjection:

@@ -16,6 +16,7 @@ from typing import Any
 
 from django.core.exceptions import ImproperlyConfigured
 from rest_framework import serializers as drf_serializers
+from rest_framework_services.types.pool_seeds import DEFAULT_POOL_SEEDS, PoolSeeds
 from rest_framework_services.types.validate_channel_names import validate_channel_names
 
 from rest_framework_mcp.constants import (
@@ -105,7 +106,12 @@ def _instance_hint(value: object) -> str:
     return ""
 
 
-def validate_url_kwargs(*, label: str, url_kwargs: tuple[UrlKwarg, ...]) -> None:
+def validate_url_kwargs(
+    *,
+    label: str,
+    url_kwargs: tuple[UrlKwarg, ...],
+    pool_seeds: PoolSeeds = DEFAULT_POOL_SEEDS,
+) -> None:
     """Fail-fast at registration time on a bad ``url_kwargs`` declaration.
 
     A URL kwarg is popped into the off-HTTP ``view.kwargs`` and stripped from the
@@ -117,7 +123,10 @@ def validate_url_kwargs(*, label: str, url_kwargs: tuple[UrlKwarg, ...]) -> None
     reads.
 
     The checks live in drf-services' ``validate_channel_names``, which folds in
-    the pool seeds it owns; only the pagination names are ours to contribute.
+    the pool seeds it owns; the pagination names and the server's own
+    ``pool_seeds`` are ours to contribute. A registered seed is reserved at
+    dispatch, which strips it from the URL kwargs, so a declaration named after
+    one would be accepted here and then silently dropped on every call.
     Sharing the check is what keeps this package's notion of a valid declaration
     from drifting away from the agent toolset's.
     """
@@ -125,7 +134,7 @@ def validate_url_kwargs(*, label: str, url_kwargs: tuple[UrlKwarg, ...]) -> None
         label=label,
         kind="url_kwargs",
         declarations=url_kwargs,
-        reserved=RESERVED_POST_FETCH_KEYS,
+        reserved=RESERVED_POST_FETCH_KEYS | pool_seeds.names,
     )
 
 
@@ -134,6 +143,7 @@ def validate_query_params(
     label: str,
     query_params: tuple[QueryParam, ...],
     url_kwargs: tuple[UrlKwarg, ...] = (),
+    pool_seeds: PoolSeeds = DEFAULT_POOL_SEEDS,
 ) -> None:
     """Fail-fast at registration time on a bad ``query_params`` declaration.
 
@@ -156,7 +166,7 @@ def validate_query_params(
         label=label,
         kind="query_params",
         declarations=query_params,
-        reserved=RESERVED_POST_FETCH_KEYS,
+        reserved=RESERVED_POST_FETCH_KEYS | pool_seeds.names,
     )
     overlap = sorted({qp.name for qp in query_params} & {uk.name for uk in url_kwargs})
     if overlap:
@@ -177,6 +187,7 @@ def validate_input_serializer_against_callable(
     spec_kwargs_provides: frozenset[str] = frozenset(),
     provides_instance: bool = False,
     provides_collection: bool = False,
+    pool_seeds: PoolSeeds = DEFAULT_POOL_SEEDS,
 ) -> None:
     """Fail-fast at registration time when input shape doesn't match the callable.
 
@@ -230,6 +241,7 @@ def validate_input_serializer_against_callable(
         spec_kwargs_provides=spec_kwargs_provides,
         provides_instance=provides_instance,
         provides_collection=provides_collection,
+        pool_seeds=pool_seeds,
     )
 
 
@@ -300,6 +312,7 @@ def _validate_required_params_have_sources(
     spec_kwargs_provides: frozenset[str],
     provides_instance: bool,
     provides_collection: bool,
+    pool_seeds: PoolSeeds,
 ) -> None:
     """Every required callable parameter must have a static source.
 
@@ -307,7 +320,9 @@ def _validate_required_params_have_sources(
 
     - **Pool seeds.** ``request`` / ``user`` / ``data`` / ``progress`` always;
       ``instance`` and ``collection`` only when the spec resolves one, and
-      ``serializer`` only when an ``input_serializer`` is declared.
+      ``serializer`` only when an ``input_serializer`` is declared. Every name
+      the server's ``pool_seeds=`` registers, always: dispatch resolves each
+      into every pool, so a callable declaring one is satisfiable on every call.
     - **``input_serializer`` fields**, in the spread modes only, where the
       validated dict is spread into the pool. Under ``BUNDLE`` the fields ride
       inside ``data`` and their names never reach the callable as kwargs.
@@ -345,6 +360,7 @@ def _validate_required_params_have_sources(
     if input_serializer is not None:
         sources.add("serializer")
     sources.update(spec_kwargs_provides)
+    sources.update(pool_seeds.names)
     if argument_binding is not ArgumentBinding.BUNDLE:
         if input_serializer is not None:
             sources.update(_serializer_field_names(input_serializer))
@@ -369,7 +385,9 @@ def _validate_required_params_have_sources(
         )
 
 
-def merge_tool_annotations(explicit: dict[str, Any] | None, *, read_only: bool) -> dict[str, Any]:
+def merge_tool_annotations(
+    explicit: dict[str, Any] | None, *, read_only: bool, idempotent: bool | None = None
+) -> dict[str, Any]:
     """Auto-derive a tool's MCP ``ToolAnnotations``, explicit hints winning.
 
     A tool's mutation profile is known from its kind, so the standard MCP hints
@@ -378,19 +396,32 @@ def merge_tool_annotations(explicit: dict[str, Any] | None, *, read_only: bool) 
     - ``read_only=True`` (selector tools, and chains whose every step is a
       selector) → ``{"readOnlyHint": True}``. ``destructiveHint`` /
       ``idempotentHint`` are deliberately *not* emitted — the MCP spec defines
-      them as meaningful only when ``readOnlyHint`` is false.
+      them as meaningful only when ``readOnlyHint`` is false — so ``idempotent``
+      is ignored here.
     - ``read_only=False`` (service tools, and chains with any service step) →
       ``{"readOnlyHint": False, "destructiveHint": True}``. A mutation is
-      destructive by default. ``idempotentHint`` is never derived: this
-      function is given the tool's kind and not its spec, so a declared
-      ``ServiceSpec.idempotent`` is not read here and the hint reaches the
-      wire only when ``annotations=`` sets it. A client reads its absence as
-      ``false``, the MCP default.
+      destructive by default.
+
+    ``idempotent`` is a service spec's declared ``ServiceSpec.idempotent``,
+    which a service tool passes through. A declared ``True`` or ``False``
+    becomes ``idempotentHint`` on a mutation; ``None`` (undeclared, the
+    default) leaves the hint absent, and a client reads its absence as
+    ``false``, the MCP default. drf-services keeps ``None`` apart from
+    ``False`` so that a transport publishing the fact never turns silence into
+    a claim, which is why a declared ``False`` is published rather than
+    dropped. A chain passes nothing: being idempotent is a property of a whole
+    operation, and two idempotent steps in sequence need not be one.
+
+    Both conjuncts of the derivation are held by a test, because a deleted
+    one leaves branch coverage at 100%:
+    ``test_a_read_only_tool_never_derives_the_idempotent_hint`` holds
+    ``not read_only``, and ``test_an_undeclared_service_spec_leaves_the_hint_absent``
+    holds ``idempotent is not None``.
 
     Any hint supplied at registration via ``annotations=`` overrides the derived
     default: a non-destructive mutation passes
-    ``annotations={"destructiveHint": False}``, an idempotent one adds
-    ``{"idempotentHint": True}``, and either kind can set ``title`` /
+    ``annotations={"destructiveHint": False}``, an undeclared spec can still
+    add ``{"idempotentHint": True}``, and either kind can set ``title`` /
     ``openWorldHint``. The result is stored on the binding, so it is the single
     source of truth for ``tools/list`` and for anything reading
     ``binding.annotations``.
@@ -398,6 +429,8 @@ def merge_tool_annotations(explicit: dict[str, Any] | None, *, read_only: bool) 
     derived: dict[str, Any] = (
         {"readOnlyHint": True} if read_only else {"readOnlyHint": False, "destructiveHint": True}
     )
+    if not read_only and idempotent is not None:
+        derived["idempotentHint"] = idempotent
     return {**derived, **(explicit or {})}
 
 

@@ -10,7 +10,6 @@ argument binding, and a collection target beside the list.
 
 from __future__ import annotations
 
-import json
 from typing import Any
 
 import pytest
@@ -31,6 +30,7 @@ from rest_framework_mcp.handlers.handle_tools_list import handle_tools_list
 from rest_framework_mcp.handlers.types.context import MCPCallContext
 from rest_framework_mcp.transport.in_memory_session_store import InMemorySessionStore
 from tests.testapp.serializers import InvoiceInputSerializer
+from tests.utils import tool_error
 
 
 def _server() -> MCPServer:
@@ -198,10 +198,11 @@ def test_the_list_as_a_named_serializer_field_works() -> None:
 
     assert schema["properties"]["items"]["type"] == "array"
     assert ok["structuredContent"] == {"count": 2}
-    # Read as encoded, which is what reaches the client. DRF 3.18 keys a nested
-    # list's errors by the invalid items' indexes, which encoding turns into string
-    # keys; below it they are a list holding an empty object for each valid item.
-    # The floor is below 3.18, so both shapes reach clients.
-    items = json.loads(json.dumps(bad.to_dict()))["data"]["detail"]["items"]
+    # Read as encoded, which is what reaches the client: ``tool_error`` decodes the
+    # result's text block. DRF 3.18 keys a nested list's errors by the invalid
+    # items' indexes, which encoding turns into string keys; below it they are a
+    # list holding an empty object for each valid item. The floor is below 3.18,
+    # so both shapes reach clients.
+    items = tool_error(bad)["detail"]["items"]
     by_index = items if isinstance(items, dict) else {str(i): e for i, e in enumerate(items) if e}
     assert by_index == {"1": {"amount_cents": ["Ensure this value is greater than or equal to 0."]}}

@@ -54,13 +54,14 @@ from rest_framework_mcp.handlers.utils import (
     consume_rate_limits,
     effective_rate_limits,
     read_shaping_error_result,
+    refuse_missing_arguments,
     resolve_bound,
     service_error_result,
     services_dispatch_policies,
     split_query_params,
     split_url_kwargs,
     validate_input_against_serializer,
-    validation_error_data,
+    validation_error_result,
 )
 from rest_framework_mcp.observability import get_logger
 from rest_framework_mcp.output.error_tool_result import build_error_tool_result
@@ -105,16 +106,13 @@ def dispatch_selector_tool(
         # ``isError`` result would tell the model to retry an authorization
         # decision that will not change.
         return JsonRpcError(JsonRpcErrorCode.FORBIDDEN, "Insufficient permission")
-    except ServiceValidationError as exc:
+    except (drf_serializers.ValidationError, ServiceValidationError) as exc:
         # Tool-level failure, so an ``isError`` result the model can read and
         # self-correct from. JSON-RPC errors stay reserved for protocol faults.
-        return build_error_tool_result(
-            exc.message,
-            error_type="validation_error",
-            detail=validation_error_data(
-                exc.detail, arguments_raw, include_value=context.config.include_validation_value
-            ),
-        ).to_dict()
+        # DRF's error arrives here from queryset shaping: a value the spec's
+        # ``FilterSet`` refuses (an ``ordering`` outside its choices, say),
+        # which escaped every arm and was served as an HTTP 500 / ``-32603``.
+        return validation_error_result(exc, arguments_raw, config=context.config).to_dict()
     except ServiceError as exc:
         if context.config.record_service_exceptions:
             otel_span.record_exception(exc)
@@ -190,15 +188,9 @@ async def dispatch_selector_tool_async(
     except PermissionDenied:
         # See the sync sibling: the object-permission guard's denial.
         return JsonRpcError(JsonRpcErrorCode.FORBIDDEN, "Insufficient permission")
-    except ServiceValidationError as exc:
+    except (drf_serializers.ValidationError, ServiceValidationError) as exc:
         # See the sync sibling for the protocol-vs-tool error boundary.
-        return build_error_tool_result(
-            exc.message,
-            error_type="validation_error",
-            detail=validation_error_data(
-                exc.detail, arguments_raw, include_value=context.config.include_validation_value
-            ),
-        ).to_dict()
+        return validation_error_result(exc, arguments_raw, config=context.config).to_dict()
     except ServiceError as exc:
         if context.config.record_service_exceptions:
             otel_span.record_exception(exc)
@@ -251,13 +243,13 @@ def _build_request_and_validate(
     binding: SelectorToolBinding,
     arguments_raw: dict[str, Any],
     context: MCPCallContext,
-) -> tuple[Any, Any, Any, dict[str, Any] | JsonRpcError | None]:
+) -> tuple[Any, Any, Any, dict[str, Any] | None]:
     """Build the synthesised request + view, and validate the ``input_serializer``.
 
     Returns ``(drf_request, view, validated, error)``; ``error`` is non-``None``
-    when the call is already answered — a JSON-RPC ``INVALID_PARAMS`` envelope
-    for a serializer rejection, an ``isError`` tool result for a missing required
-    URL kwarg.
+    when the call is already answered — a ``validation_error`` tool result, for a
+    serializer rejection, an unexpected argument under ``REJECT`` or a missing
+    required URL kwarg alike.
 
     The ``view`` is built **once**, here, and threaded through dispatch and
     rendering: on HTTP a single view instance serves the whole request, so the
@@ -285,18 +277,14 @@ def _build_request_and_validate(
         # URL kwargs route through ``view.kwargs`` (from where drf-services
         # spreads them, authoritative over params), never as selector params.
         _spec_params, url_kwarg_values = split_url_kwargs(arguments_raw, binding.url_kwargs)
-    except ServiceValidationError as exc:
+    except drf_serializers.ValidationError as exc:
+        # A missing ``required=True`` URL kwarg, refused in the shape a missing
+        # selector parameter is.
         return (
             drf_request,
             None,
             None,
-            build_error_tool_result(
-                exc.message,
-                error_type="validation_error",
-                detail=validation_error_data(
-                    exc.detail, arguments_raw, include_value=context.config.include_validation_value
-                ),
-            ).to_dict(),
+            validation_error_result(exc, arguments_raw, config=context.config).to_dict(),
         )
     view = OfflineServiceView(request=drf_request, action=binding.name, kwargs=url_kwarg_values)
     try:
@@ -308,17 +296,13 @@ def _build_request_and_validate(
             context=base_serializer_context(view=view, request=drf_request),
         )
     except drf_serializers.ValidationError as exc:
+        # An unexpected argument or a serializer rejection: input validation,
+        # which the MCP spec reports as an ``isError`` result, not ``-32602``.
         return (
             drf_request,
             view,
             None,
-            JsonRpcError(
-                JsonRpcErrorCode.INVALID_PARAMS,
-                "Invalid arguments",
-                data=validation_error_data(
-                    exc.detail, arguments_raw, include_value=context.config.include_validation_value
-                ),
-            ),
+            validation_error_result(exc, arguments_raw, config=context.config).to_dict(),
         )
     return drf_request, view, validated, None
 
@@ -330,9 +314,20 @@ def _selector_tool_additional_known_keys(binding: SelectorToolBinding) -> frozen
     straight from ``arguments`` rather than through ``input_serializer``, so the
     unknown-argument policy has to be told they are known — otherwise ``REJECT``
     flags a legitimate read-shaping argument. The reflected names come from the
-    *same* ``spec_to_json_schema`` call that drives
+    ``spec_to_json_schema`` reflection that drives
     ``build_selector_tool_input_schema``, so the validation-side known set and
     the wire-side advertised schema cannot drift.
+
+    Read *without* ``supplied``, so it is a superset of what is advertised: a
+    name the server fills is admitted when the client sends it anyway, rather
+    than refused as unknown. Which value the selector then reads depends on the
+    source. A seed's always, because dispatch strips a reserved name from the
+    client's spread under every binding. A provider key's under
+    ``SPREAD_AUTHOR_WINS``, the default, where the provider is applied last.
+    Under ``SPREAD_CALLER_WINS`` the client's spread is applied last, so its
+    value outranks the provider's, which is why the schema offers the
+    provider's keys there instead of hiding them
+    (``test_under_caller_wins_a_provider_filled_name_is_not_refused``).
     """
     known: set[str] = set()
     # ``phase="input"`` never returns ``None``; ``or {}`` only narrows the type.
@@ -551,11 +546,24 @@ def _dispatch_kwargs(
     # ``request.query_params``; strip both from the params so no value reaches
     # the selector through two channels. The split cannot fail here —
     # ``_build_request_and_validate`` ran it first.
-    spec_params, _url_kwarg_values = split_url_kwargs(arguments_raw, binding.url_kwargs)
+    spec_params, url_kwarg_values = split_url_kwargs(arguments_raw, binding.url_kwargs)
     spec_params, _query_param_values = split_query_params(spec_params, binding.query_params)
+    params = _selector_dispatch_params(spec_params, validated)
+    # Evaluated inside both siblings' dispatch ``try``, after the permission and
+    # rate-limit answers and the ``input_serializer``: a missing argument is the
+    # same ``validation_error`` result a refused one is. Checked against what
+    # reaches the selector -- the params with the validated values laid over
+    # them, plus the ``UrlKwarg`` values -- so a null ``UrlKwarg``, which the
+    # split drops, counts as missing (``test_a_null_url_kwarg_is_a_missing_argument``).
+    # The overlay agrees with the raw params on every binding registration
+    # admits, since a name the serializer defaults is never required in the
+    # first place (``schema.utils._serializer_fills``, which this route counts
+    # because it runs the serializer, unlike ``call_tool``); it is read anyway so the
+    # check describes the call the selector receives.
+    refuse_missing_arguments(binding, (*params, *url_kwarg_values), pool_seeds=context.pool_seeds)
     return {
         "user": context.token.user,
-        "params": _selector_dispatch_params(spec_params, validated),
+        "params": params,
         # Unstripped, which is what lets a spec's ``OrderingFilter`` work at
         # all: sharing one stripped mapping made the inputSchema advertise an
         # ordering that dispatch then silently discarded.
@@ -573,6 +581,12 @@ def _dispatch_kwargs(
         # resolved. The guard runs class-level only for a LIST, whose target is
         # a queryset rather than a model.
         "on_target_resolved": enforce_permissions,
+        # The server's registered seeds: resolved into the selector's pool, and
+        # reserved, so a client argument of the same name is stripped from the
+        # spread rather than outranking the project's value. A selector has no
+        # validator in front of that spread, so without them the name would be
+        # client-controlled.
+        "pool_seeds": context.pool_seeds,
     }
 
 

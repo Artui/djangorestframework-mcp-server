@@ -27,7 +27,7 @@ from rest_framework_mcp.constants import (
 from rest_framework_mcp.protocol.types.icon import Icon
 from rest_framework_mcp.registry.types.query_param import QueryParam
 from rest_framework_mcp.registry.types.url_kwarg import UrlKwarg
-from rest_framework_mcp.registry.types.utils import validate_content_kind
+from rest_framework_mcp.registry.types.utils import can_present_nothing, validate_content_kind
 
 ResultT = TypeVar("ResultT")
 ExtraT = TypeVar("ExtraT", bound=dict[str, Any])
@@ -155,8 +155,9 @@ class SelectorToolBinding(Generic[ResultT, ExtraT]):
     unknown_arguments: UnknownArguments = UnknownArguments.REJECT
     """How unknown ``arguments`` keys are handled relative to the merged
     ``inputSchema`` (``input_serializer`` fields, ``filter_set`` properties,
-    ordering, pagination). ``REJECT`` answers ``-32602``, ``PASSTHROUGH``
-    merges them into the validated payload, ``IGNORE`` drops them."""
+    ordering, pagination). ``REJECT`` answers an ``isError``
+    ``validation_error`` result naming them, ``PASSTHROUGH`` merges them into
+    the validated payload, ``IGNORE`` drops them."""
 
     always_listed: bool = False
     """Keep this binding in ``tools/list`` even when ``FILTER_LISTINGS_BY_PERMISSIONS``
@@ -177,6 +178,12 @@ class SelectorToolBinding(Generic[ResultT, ExtraT]):
     the ``inputSchema``, exempt from the unknown-argument check, and stripped from the
     dispatched params. See
     [`UrlKwarg`][rest_framework_services.types.url_kwarg.UrlKwarg]."""
+
+    spec_kwargs_provides: tuple[str, ...] = ()
+    """Selector parameters the spec's ``kwargs=`` provider fills, as declared at
+    registration. Registration counts each as the parameter's source, the
+    ``inputSchema`` does not advertise it, and a call is not refused for leaving it
+    out."""
 
     content_kind: ToolContentKind = ToolContentKind.TEXT
     """What this tool's payload becomes in the result's ``content`` array. ``TEXT``
@@ -232,6 +239,14 @@ class SelectorToolBinding(Generic[ResultT, ExtraT]):
         unpaginated and the pagination envelope otherwise, which only a selector
         tool can produce."""
         return self.kind
+
+    @property
+    def can_present_nothing(self) -> bool:
+        """Whether a successful call can present nothing: an ``allow_none`` RETRIEVE.
+
+        Read by ``tools/list`` so the ``outputSchema`` admits the ``{}`` such a
+        call is served as. See ``registry.types.utils.can_present_nothing``."""
+        return can_present_nothing(self.spec)
 
     @cached_property
     def audience_projection(self) -> AudienceProjection:

@@ -105,6 +105,16 @@ top, so the shape is described the same way across transports.
 
 ::: rest_framework_mcp.schema.selector_tool_schema.build_selector_tool_input_schema
 
+## Output schema
+
+Builds a tool's `outputSchema` from its output serializer, kind-aware like the
+input side. `may_be_empty=True` is what `tools/list` passes for a tool that can
+present nothing (each binding answers it as `can_present_nothing`): the root
+stays an object schema and admits the `{}` such a call is served as
+([Concepts](../concepts.md#dispatch-flow)).
+
+::: rest_framework_mcp.schema.output_schema.build_output_schema
+
 ## Session stores
 
 ::: rest_framework_mcp.transport.types.session_store.SessionStore

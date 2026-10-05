@@ -177,8 +177,10 @@ async def test_async_input_serializer_rejects_invalid() -> None:
     out = await handle_tools_call_async(
         {"name": "x", "arguments": {"flag": "not-a-bool"}}, _ctx(server)
     )
-    assert isinstance(out, JsonRpcError)
-    assert out.code == -32602
+    # Input validation: a ``validation_error`` result keyed by field, not ``-32602``.
+    error = tool_error(out)
+    assert error["type"] == "validation_error"
+    assert list(error["detail"]) == ["flag"]
 
 
 async def test_async_denies_on_permission() -> None:

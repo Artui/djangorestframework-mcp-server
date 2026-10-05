@@ -140,3 +140,129 @@ def test_invoicing_field_selection_is_per_item_and_refuses_the_envelope() -> Non
         "`fields` was rejected while rendering the result: Unknown field `items`."
     )
     assert "never to the page envelope" in error["message"]
+
+
+# Runs inside the invoicing project, like the script above: the tool listing and
+# five ``tools/call`` posts, printed as JSON for the assertions below. ``post``
+# reads ``result`` and nothing else, so a call answered with a JSON-RPC error
+# fails the script rather than reaching an assertion.
+_INVOICING_LOOKUP_EMPTY_IDEMPOTENT_SEEDS = textwrap.dedent(
+    """
+    import json
+    import django
+    from django.conf import settings
+
+    settings.DATABASES["default"]["NAME"] = ":memory:"
+    django.setup()
+
+    from django.core.management import call_command
+    from django.test import Client
+    from invoices.models import Invoice
+
+    call_command("migrate", verbosity=0)
+    Invoice.objects.create(number="INV-A", amount_cents=100)
+    Invoice.objects.create(number="INV-B", amount_cents=50, sent=True)
+    client = Client(HTTP_ORIGIN="http://localhost")
+
+    def post(method, params):
+        response = client.post(
+            "/mcp/",
+            data=json.dumps({"jsonrpc": "2.0", "id": 1, "method": method, "params": params}),
+            content_type="application/json",
+            HTTP_MCP_PROTOCOL_VERSION="2026-07-28",
+            HTTP_MCP_METHOD=method,
+            **({"HTTP_MCP_NAME": params["name"]} if "name" in params else {}),
+        )
+        return response.json()["result"]
+
+    def call(name, arguments):
+        return post("tools/call", {"name": name, "arguments": arguments, "_meta": {
+            "io.modelcontextprotocol/protocolVersion": "2026-07-28",
+            "io.modelcontextprotocol/clientInfo": {"name": "smoke", "version": "0"},
+            "io.modelcontextprotocol/clientCapabilities": {},
+        }})
+
+    listed = post("tools/list", {"_meta": {
+        "io.modelcontextprotocol/protocolVersion": "2026-07-28",
+        "io.modelcontextprotocol/clientInfo": {"name": "smoke", "version": "0"},
+        "io.modelcontextprotocol/clientCapabilities": {},
+    }})
+    print(json.dumps({
+        "tools": {tool["name"]: tool for tool in listed["tools"]},
+        "set_amount": call("invoices.set_amount", {"number": "INV-A", "amount_cents": 250}),
+        "no_number": call("invoices.set_amount", {"amount_cents": 250}),
+        "find_miss": call("invoices.find", {"number": "INV-404"}),
+        "outstanding": call("invoices.outstanding", {"currency": "USD"}),
+        "refused": call("invoices.create", {"number": "INV-C", "amount_cents": -5}),
+    }))
+    """
+)
+
+
+def test_invoicing_demonstrates_lookup_empty_result_idempotency_and_seeds() -> None:
+    """Five behaviours the example registers, asserted as a client sees them.
+
+    ``invoices.set_amount`` advertises its target lookup, requires it because
+    the lookup has no default, refuses a call without it, lists
+    ``idempotentHint``, and keeps a strict ``outputSchema`` because it has no
+    output re-read; ``invoices.find`` answers a miss with ``{}`` under a
+    schema that admits it; ``invoices.outstanding`` reads the mount's
+    ``currency`` seed, does not advertise it, and a client ``currency`` does
+    not replace it; and ``invoices.create`` answers refused arguments with a
+    ``validation_error`` result, not a JSON-RPC ``-32602``.
+    """
+    result = subprocess.run(
+        [sys.executable, "-c", _INVOICING_LOOKUP_EMPTY_IDEMPOTENT_SEEDS],
+        cwd=_EXAMPLES_DIR / "invoicing",
+        env={**os.environ, "DJANGO_SETTINGS_MODULE": "invoicing.settings"},
+        capture_output=True,
+        text=True,
+    )
+    assert result.returncode == 0, result.stderr
+    replies = json.loads(result.stdout)
+    tools = replies["tools"]
+
+    set_amount = tools["invoices.set_amount"]
+    assert set(set_amount["inputSchema"]["properties"]) == {"number", "amount_cents"}
+    assert set(set_amount["inputSchema"]["required"]) == {"number", "amount_cents"}
+    assert set_amount["annotations"]["idempotentHint"] is True
+    assert replies["set_amount"]["structuredContent"]["amount_cents"] == 250
+    # The lookup's ``number`` has no default, so a call leaving it out is
+    # refused the way the serializer refuses a missing field, before the lookup
+    # would have raised ``TypeError``.
+    no_number = replies["no_number"]
+    assert no_number["isError"] is True
+    assert json.loads(no_number["content"][0]["text"])["error"] == {
+        "type": "validation_error",
+        "message": "Invalid arguments",
+        "detail": {"number": ["This field is required."]},
+    }
+    assert tools["invoices.find"]["inputSchema"]["required"] == ["number"]
+
+    find_schema = tools["invoices.find"]["outputSchema"]
+    assert {"maxProperties": 0} in find_schema["anyOf"]
+    assert replies["find_miss"]["structuredContent"] == {}
+    assert not replies["find_miss"].get("isError")
+    # A service with no output re-read selector renders its own return, which
+    # cannot be filtered away, so its schema keeps a strict ``required``.
+    set_amount_output = set_amount["outputSchema"]
+    assert "anyOf" not in set_amount_output
+    assert "number" in set_amount_output["required"]
+
+    assert replies["outstanding"]["structuredContent"] == {
+        "amount_cents": 250,
+        "currency": "EUR",
+    }
+    # Filled by the server, so not asked of the client.
+    assert "currency" not in tools["invoices.outstanding"]["inputSchema"]["properties"]
+
+    # Refused input is a tool execution error the model reads, with the
+    # serializer's errors keyed by field under ``detail``.
+    refused = replies["refused"]
+    assert refused["isError"] is True
+    error = json.loads(refused["content"][0]["text"])["error"]
+    assert error == {
+        "type": "validation_error",
+        "message": "Invalid arguments",
+        "detail": {"amount_cents": ["Ensure this value is greater than or equal to 0."]},
+    }

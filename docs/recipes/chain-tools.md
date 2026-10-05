@@ -57,8 +57,17 @@ server.register_chain_tool(
 ```
 
 `inputs` is optional. When omitted, a step receives
-`{"data": ctx.args}` (plus `request` / `user`), which suits a first
-service step whose callable takes the validated input as `data`.
+`{"data": ctx.args}`, which suits a first service step whose callable
+takes the validated input as `data`.
+
+Whatever `inputs` returns, the transport's seeds are laid **over** it:
+`request`, `user`, `progress` (a no-op reporter, as a chain step reports
+nowhere) and every name the server's
+[`pool_seeds=`](../concepts.md#pool-seeds) registers. So an `inputs` that
+forwards `ctx.args` whole cannot let a client argument stand in for the
+caller's identity or a project's tenant, and a step's affordance condition
+reading a registered seed is asked with it, as the same spec would be as a
+tool of its own.
 
 ## Atomicity and errors
 
@@ -155,4 +164,6 @@ the step, and an atomic chain rolls back:
            "failedStep": "target"}}
 ```
 
-A spec with `allow_none=True` passes `None` on instead, and renders it as `null`.
+A spec with `allow_none=True` passes `None` on instead. As the output step it is
+a result with nothing to present, served as `{}` under a schema that admits it
+([Concepts](../concepts.md#dispatch-flow)).

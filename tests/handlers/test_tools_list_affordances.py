@@ -37,6 +37,21 @@ _ORDER_ITEM: dict[str, Any] = {
 }
 """The item schema ``OrderSerializer`` advertised before affordances existed."""
 
+_ORDER_SERVICE_RESULT: dict[str, Any] = {
+    "type": "object",
+    "properties": {"number": {"type": "string"}},
+    "anyOf": [{"required": ["number"]}, {"maxProperties": 0}],
+}
+"""The same item as a single-row service tool advertises it.
+
+Its output re-read can find nothing, which is served as ``{}``, so the item's
+``required`` moves into an ``anyOf`` beside the empty object."""
+
+
+def _required(schema: Any) -> Any:
+    """The item's ``required``, wherever ``may_be_empty`` put it."""
+    return schema["required"] if "required" in schema else schema["anyOf"][0]["required"]
+
 
 def _output_schema(server: MCPServer, name: str) -> Any:
     listing: Any = server.list_tools(user=None)
@@ -44,7 +59,7 @@ def _output_schema(server: MCPServer, name: str) -> Any:
 
 
 def _assert_advertises_cancel(item: Any) -> None:
-    assert "affordances" in item["required"]
+    assert "affordances" in _required(item)
     assert item["properties"]["number"] == {"type": "string"}
     cancel = item["properties"]["affordances"]["properties"]["cancel"]
     assert cancel["required"] == ["available"]
@@ -128,7 +143,7 @@ def test_a_service_s_own_affordances_are_not_advertised() -> None:
         always_listed=True,
     )
 
-    assert _output_schema(server, "cancel_order") == _ORDER_ITEM
+    assert _output_schema(server, "cancel_order") == _ORDER_SERVICE_RESULT
 
 
 _ARCHIVABLE: dict[str, Any] = {"affordances": {"archive": ARCHIVE_ORDER}}
@@ -232,4 +247,4 @@ def test_a_spec_without_affordances_advertises_exactly_what_it_did_before(
     )
 
     assert _output_schema(server, "orders") == expected
-    assert _output_schema(server, "place_order") == _ORDER_ITEM
+    assert _output_schema(server, "place_order") == _ORDER_SERVICE_RESULT
