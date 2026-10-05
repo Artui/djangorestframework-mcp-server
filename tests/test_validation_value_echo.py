@@ -1,9 +1,10 @@
 """Coverage for ``REST_FRAMEWORK_MCP['INCLUDE_VALIDATION_VALUE']``.
 
-The setting is opt-in: when True, ``data.value`` echoes the offending
-``arguments`` dict back to the client. We exercise both states across all
-four handler call sites — sync + async, tools/call DRF + ServiceValidationError,
-and prompts/get missing-required-args.
+The setting is opt-in: when True, ``value`` echoes the offending ``arguments``
+dict back to the client -- beside ``detail`` in a ``validation_error`` result's
+``error`` object on ``tools/call``, in the ``-32602`` ``data`` on ``prompts/get``.
+We exercise both states across all four handler call sites — sync + async,
+tools/call DRF + ServiceValidationError, and prompts/get missing-required-args.
 """
 
 from __future__ import annotations
@@ -84,8 +85,9 @@ def test_sync_tools_call_drf_validation_default_omits_value(settings) -> None:
     out = handle_tools_call(
         {"name": "t", "arguments": {"junk": True}}, _ctx(_tools_with_dataclass_input())
     )
-    assert isinstance(out, JsonRpcError)
-    assert "value" not in out.data
+    error = tool_error(out)
+    assert error["type"] == "validation_error"
+    assert "value" not in error
 
 
 def test_sync_tools_call_drf_validation_echo(settings) -> None:
@@ -93,8 +95,9 @@ def test_sync_tools_call_drf_validation_echo(settings) -> None:
     out = handle_tools_call(
         {"name": "t", "arguments": {"junk": True}}, _ctx(_tools_with_dataclass_input())
     )
-    assert isinstance(out, JsonRpcError)
-    assert out.data["value"] == {"junk": True}
+    error = tool_error(out)
+    assert error["type"] == "validation_error"
+    assert error["value"] == {"junk": True}
 
 
 async def test_async_tools_call_drf_validation_default_omits_value(settings) -> None:
@@ -102,8 +105,9 @@ async def test_async_tools_call_drf_validation_default_omits_value(settings) -> 
     out = await handle_tools_call_async(
         {"name": "t", "arguments": {"junk": True}}, _ctx(_tools_with_dataclass_input())
     )
-    assert isinstance(out, JsonRpcError)
-    assert "value" not in out.data
+    error = tool_error(out)
+    assert error["type"] == "validation_error"
+    assert "value" not in error
 
 
 async def test_async_tools_call_drf_validation_echo(settings) -> None:
@@ -111,8 +115,9 @@ async def test_async_tools_call_drf_validation_echo(settings) -> None:
     out = await handle_tools_call_async(
         {"name": "t", "arguments": {"junk": True}}, _ctx(_tools_with_dataclass_input())
     )
-    assert isinstance(out, JsonRpcError)
-    assert out.data["value"] == {"junk": True}
+    error = tool_error(out)
+    assert error["type"] == "validation_error"
+    assert error["value"] == {"junk": True}
 
 
 # ---------- tools/call ServiceValidationError ----------

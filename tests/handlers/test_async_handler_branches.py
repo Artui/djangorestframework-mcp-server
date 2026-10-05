@@ -129,8 +129,9 @@ async def test_async_tools_call_invalid_input() -> None:
         )
     )
     out = await handle_tools_call_async({"name": "t", "arguments": {}}, _ctx(tools))
-    assert isinstance(out, JsonRpcError) and out.code == -32602
-    assert "name" in out.data["detail"]
+    error = tool_error(out)
+    assert error["type"] == "validation_error"
+    assert "name" in error["detail"]
 
 
 async def test_async_tools_call_translates_service_validation_error() -> None:

@@ -34,7 +34,8 @@ from django.urls import path
 urlpatterns = [path("mcp/", server.urls)]
 ```
 
-Validation, error mapping (`ServiceValidationError` → `-32602`), and JSON-Schema
+Validation, error mapping (refused arguments and `ServiceValidationError` → an
+`isError` `validation_error` result the model can correct from), and JSON-Schema
 publication on `tools/list` come for free. The service callable still works as
 a plain Python function — call it directly from your tests or from elsewhere
 in the codebase, no MCP awareness required.

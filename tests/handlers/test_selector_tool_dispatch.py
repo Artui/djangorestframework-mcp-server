@@ -513,8 +513,10 @@ def test_selector_tool_input_serializer_rejects_invalid_args() -> None:
         {"name": "invoices.list", "arguments": {"expand": "not-a-bool"}},
         _ctx(server),
     )
-    assert isinstance(out, JsonRpcError)
-    assert out.code == -32602
+    # Input validation: a ``validation_error`` result keyed by field, not ``-32602``.
+    error = tool_error(out)
+    assert error["type"] == "validation_error"
+    assert list(error["detail"]) == ["expand"]
 
 
 # ---------- Selector returns non-queryset ----------

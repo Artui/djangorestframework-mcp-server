@@ -30,6 +30,7 @@ from rest_framework_mcp.handlers.handle_tools_list import handle_tools_list
 from rest_framework_mcp.handlers.types.context import MCPCallContext
 from rest_framework_mcp.protocol.types.json_rpc_error import JsonRpcError
 from rest_framework_mcp.transport.in_memory_session_store import InMemorySessionStore
+from tests.utils import tool_error
 
 
 def _server() -> MCPServer:
@@ -118,8 +119,8 @@ def test_serializerless_service_schema_is_open_under_reject() -> None:
 
 @pytest.mark.django_db
 def test_serializerless_service_accepts_unknown_key_under_reject() -> None:
-    # The runtime side of the same contract: an unknown key does not raise
-    # -32602 for a serializer-less service, matching the open schema above.
+    # The runtime side of the same contract: an unknown key is not refused for
+    # a serializer-less service, matching the open schema above.
     server = _server()
     server.register_service_tool(
         name="t",
@@ -134,7 +135,7 @@ def test_serializerless_service_accepts_unknown_key_under_reject() -> None:
 # ---------- Runtime behaviour ----------
 
 
-def test_reject_rejects_unknown_key_with_minus_32602() -> None:
+def test_reject_rejects_unknown_key_with_a_validation_error_result() -> None:
     server = _server()
     server.register_service_tool(
         name="t",
@@ -144,9 +145,9 @@ def test_reject_rejects_unknown_key_with_minus_32602() -> None:
     out = handle_tools_call(
         {"name": "t", "arguments": {"known": "ok", "unknown": "x"}}, _ctx(server)
     )
-    assert isinstance(out, JsonRpcError)
-    assert out.code == -32602
-    detail = out.data["detail"]
+    error = tool_error(out)
+    assert error["type"] == "validation_error"
+    detail = error["detail"]
     assert "non_field_errors" in detail
     assert "unknown" in detail["non_field_errors"][0]
 
@@ -248,8 +249,9 @@ def test_selector_tool_reject_rejects_truly_unknown_keys() -> None:
         input_serializer=_OneFieldInput,
     )
     out = handle_tools_call({"name": "x", "arguments": {"known": "ok", "rogue": "v"}}, _ctx(server))
-    assert isinstance(out, JsonRpcError)
-    assert out.code == -32602
+    error = tool_error(out)
+    assert error["type"] == "validation_error"
+    assert "rogue" in error["detail"]["non_field_errors"][0]
 
 
 # ---------- A service tool whose declared key set is not enumerable ----------

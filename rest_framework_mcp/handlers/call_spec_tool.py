@@ -43,7 +43,7 @@ from rest_framework_mcp.handlers.utils import (
     services_dispatch_policies,
     split_query_params,
     split_url_kwargs,
-    validation_error_data,
+    validation_error_result,
 )
 from rest_framework_mcp.output.error_tool_result import build_error_tool_result
 from rest_framework_mcp.output.resolve_structured_output import resolve_structured_output
@@ -69,12 +69,14 @@ def call_spec_tool(
     context, dispatches via ``dispatch_spec`` and renders via
     ``render_for_audience``.
 
-    ``ServiceValidationError`` / ``ServiceError`` and a missing required instance
-    come back as ``isError`` tool results the model can self-correct from, as
-    does a validation error raised while rendering when the caller supplied a
-    read-shaping ``QueryParam``; a denied permission raises ``PermissionDenied``
-    and a malformed payload raises DRF's ``ValidationError`` — protocol faults the
-    caller maps to its own wire.
+    Refused input — DRF's ``ValidationError`` (an unexpected argument, an
+    ``input_serializer`` rejection, a refused filter value) and
+    ``ServiceValidationError`` alike — comes back as the ``validation_error``
+    result the wire handlers serve, as do a ``ServiceError``, a missing required
+    instance, and a validation error raised while rendering when the caller
+    supplied a read-shaping ``QueryParam``: all ``isError`` tool results the model
+    can self-correct from. A denied permission raises ``PermissionDenied``, a
+    protocol fault the caller maps to its own wire.
     A chain tool orchestrates several specs, has no single dispatch target, and
     is rejected with ``TypeError``.
 
@@ -97,13 +99,7 @@ def call_spec_tool(
     try:
         spec_params, url_kwarg_values = split_url_kwargs(arguments, binding.url_kwargs)
     except ServiceValidationError as exc:
-        return build_error_tool_result(
-            exc.message,
-            error_type="validation_error",
-            detail=validation_error_data(
-                exc.detail, arguments, include_value=config.include_validation_value
-            ),
-        )
+        return validation_error_result(exc, arguments, config=config)
     spec_params, query_param_values = split_query_params(spec_params, binding.query_params)
     context = build_offline_context(
         user,
@@ -135,14 +131,12 @@ def call_spec_tool(
             # tool arguments are always an object; a no-op for any other spec.
             many_as_argument=True,
         )
-    except ServiceValidationError as exc:
-        return build_error_tool_result(
-            exc.message,
-            error_type="validation_error",
-            detail=validation_error_data(
-                exc.detail, arguments, include_value=config.include_validation_value
-            ),
-        )
+    except (drf_serializers.ValidationError, ServiceValidationError) as exc:
+        # DRF's error included, as on the wire: an unexpected argument, an
+        # ``input_serializer`` rejection or a refused filter value is input the
+        # model can correct, not a fault for the caller to catch. It was
+        # raised out of here until the wire stopped answering it ``-32602``.
+        return validation_error_result(exc, arguments, config=config)
     except ServiceError as exc:
         return service_error_result(exc)
 

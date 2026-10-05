@@ -76,6 +76,7 @@ from rest_framework_mcp.handlers.utils import (
     service_error_result,
     validate_input_against_serializer,
     validation_error_data,
+    validation_error_result,
 )
 from rest_framework_mcp.output.error_tool_result import build_error_tool_result
 from rest_framework_mcp.output.resolve_structured_output import resolve_structured_output
@@ -157,13 +158,11 @@ def dispatch_chain_tool(
             ),
         )
     except drf_serializers.ValidationError as exc:
-        return JsonRpcError(
-            JsonRpcErrorCode.INVALID_PARAMS,
-            "Invalid arguments",
-            data=validation_error_data(
-                exc.detail, arguments_raw, include_value=context.config.include_validation_value
-            ),
-        )
+        # The chain's own arguments refused: input validation, so the
+        # ``validation_error`` result every tool kind answers with, carrying no
+        # ``failedStep`` because no step ran. Not ``-32602``: the MCP spec keeps
+        # that for an unknown tool and a malformed request.
+        return validation_error_result(exc, arguments_raw, config=context.config).to_dict()
 
     ctx = ChainContext(
         args=validated if serializer is not None else arguments_raw,

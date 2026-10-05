@@ -114,11 +114,11 @@ class ToolBinding(Generic[InputT, ResultT, ExtraT]):
     """How unknown ``arguments`` keys are handled relative to the binding's
     ``inputSchema``.
 
-    - ``REJECT`` (default) answers ``-32602`` and advertises
-      ``additionalProperties: false`` — but **only** with an
-      ``input_serializer`` to validate against. A serializer-less binding has
-      no declared field set, so ``REJECT`` cannot fire and its schema stays
-      open.
+    - ``REJECT`` (default) answers an ``isError`` ``validation_error`` result
+      naming the unexpected keys, and advertises ``additionalProperties:
+      false`` — but **only** with an ``input_serializer`` to validate against.
+      A serializer-less binding has no declared field set, so ``REJECT`` cannot
+      fire and its schema stays open.
     - ``PASSTHROUGH`` advertises an open schema and merges unknown keys into
       the validated payload.
     - ``IGNORE`` advertises an open schema and drops them."""

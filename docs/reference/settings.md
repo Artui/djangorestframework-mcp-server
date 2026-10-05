@@ -104,7 +104,7 @@ it wrong is a cross-tenant disclosure with a cache in front of it.
 | `DEFAULT_OUTPUT_FORMAT` | `"json"` | Format of a tool result's human-readable `content[0]` text for tools that don't set one: `"json"`, `"toon"`, or `"auto"` (TOON for uniform lists, JSON otherwise). `structuredContent` is always JSON. Per-tool `output_format=` wins. See [Ship TOON for large lists](../recipes/toon-output.md). |
 | `INCLUDE_STRUCTURED_CONTENT` | `True` | Emit `structuredContent` on tool results. |
 | `INCLUDE_OUTPUT_SCHEMA` | `True` | Advertise `outputSchema` on tool definitions. |
-| `INCLUDE_VALIDATION_VALUE` | `False` | Include the offending `arguments` dict under `data.value` in validation errors. Off by default — that dict can carry PII or secrets, which would then flow back to the client and into its logs. |
+| `INCLUDE_VALIDATION_VALUE` | `False` | Include the offending `arguments` dict under `value` in validation errors: beside `detail` in a `tools/call` `validation_error` result's `error` object, and in the `-32602` `data` `prompts/get` answers. Off by default — that dict can carry PII or secrets, which would then flow back to the client and into its logs. |
 | `PAGE_SIZE` | `100` | Maximum items returned by one **listing** call (`tools/list`, `resources/list`, `resources/templates/list`, `prompts/list`). Clients page with the opaque `cursor` echoed in the response. |
 
 !!! warning "One combination is a spec violation"

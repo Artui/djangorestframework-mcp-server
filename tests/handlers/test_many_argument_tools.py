@@ -30,12 +30,11 @@ from rest_framework_mcp import MCPServer, QueryParam, UrlKwarg
 from rest_framework_mcp.auth.backends.allow_any_backend import AllowAnyBackend
 from rest_framework_mcp.auth.types.token_info import TokenInfo
 from rest_framework_mcp.config.build_mcp_config import build_mcp_config
-from rest_framework_mcp.constants import JsonRpcErrorCode, UnknownArguments
+from rest_framework_mcp.constants import UnknownArguments
 from rest_framework_mcp.handlers.handle_tools_call import handle_tools_call
 from rest_framework_mcp.handlers.handle_tools_call_async import handle_tools_call_async
 from rest_framework_mcp.handlers.handle_tools_list import handle_tools_list
 from rest_framework_mcp.handlers.types.context import MCPCallContext
-from rest_framework_mcp.protocol.types.json_rpc_error import JsonRpcError
 from rest_framework_mcp.registry.prompt_registry import PromptRegistry
 from rest_framework_mcp.registry.resource_registry import ResourceRegistry
 from rest_framework_mcp.registry.tool_registry import ToolRegistry
@@ -175,16 +174,15 @@ def test_an_argument_beside_the_list_is_refused_whatever_the_policy(
         _ctx(_binding(unknown_arguments=policy)),
     )
 
-    assert isinstance(out, JsonRpcError)
-    assert out.code == JsonRpcErrorCode.INVALID_PARAMS
-    assert out.data["detail"] == {"non_field_errors": ["Unexpected argument(s): 'note'."]}
+    error = tool_error(out)
+    assert error["type"] == "validation_error"
+    assert error["detail"] == {"non_field_errors": ["Unexpected argument(s): 'note'."]}
 
 
 def test_a_missing_list_is_refused_under_the_argument() -> None:
     out: Any = handle_tools_call({"name": "bulk", "arguments": {}}, _ctx(_binding()))
 
-    assert isinstance(out, JsonRpcError)
-    assert out.data["detail"] == {"items": ["This field is required."]}
+    assert tool_error(out)["detail"] == {"items": ["This field is required."]}
 
 
 def _post(server: MCPServer, method: str, params: dict[str, Any]) -> Any:
@@ -232,12 +230,10 @@ def test_an_invalid_item_is_served_at_its_index() -> None:
     arguments = {"items": [_ROW, {**_OTHER, "amount_cents": -1}]}
     body = _post_tools_call(_server(_binding(), include_validation_value=True), arguments)
 
-    error = body["error"]
-    assert error["code"] == JsonRpcErrorCode.INVALID_PARAMS
-    assert error["data"]["detail"] == {"items": {"1": {"amount_cents": [_BELOW_ZERO]}}}
-    assert _resolve(error["data"]["detail"], error["data"]["value"]) == {
-        "items[1].amount_cents": -1
-    }
+    error = tool_error(body["result"])
+    assert error["type"] == "validation_error"
+    assert error["detail"] == {"items": {"1": {"amount_cents": [_BELOW_ZERO]}}}
+    assert _resolve(error["detail"], error["value"]) == {"items[1].amount_cents": -1}
 
 
 def _refuse_second(*, data: list[dict[str, Any]]) -> None:
@@ -313,11 +309,12 @@ def test_each_item_is_closed_exactly_when_dispatch_refuses_an_unknown_key(
     )
 
     assert schema["properties"]["items"]["items"]["additionalProperties"] is (not items_closed)
-    refused = isinstance(out, JsonRpcError)
+    refused = bool(out.get("isError"))
     assert refused is items_closed
     if refused:
-        assert out.data["detail"] == {
-            "items": {1: {"non_field_errors": ["Unexpected argument(s): 'note'."]}}
+        # Read as served: the result's text is JSON, so the index is a string key.
+        assert tool_error(out)["detail"] == {
+            "items": {"1": {"non_field_errors": ["Unexpected argument(s): 'note'."]}}
         }
 
 

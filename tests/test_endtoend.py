@@ -9,6 +9,7 @@ from rest_framework_mcp.config.build_mcp_config import build_mcp_config
 from tests.conftest import post_jsonrpc
 from tests.testapp.mcp import build_server
 from tests.testapp.urlconf_for import urlconf_for
+from tests.utils import tool_error
 
 
 def test_initialize_returns_session_id_and_capabilities(jsonrpc) -> None:
@@ -72,9 +73,10 @@ def test_tools_call_creates_invoice(jsonrpc, initialized_session: str) -> None:
 
 
 @pytest.mark.django_db
-def test_tools_call_returns_invalid_params_on_missing_field(
+def test_tools_call_returns_a_validation_error_result_on_missing_field(
     jsonrpc, initialized_session: str
 ) -> None:
+    """Input validation is a tool execution error, so ``isError``, not ``-32602``."""
     response = jsonrpc(
         "tools/call",
         {"name": "invoices.create", "arguments": {"amount_cents": 5}},
@@ -82,9 +84,10 @@ def test_tools_call_returns_invalid_params_on_missing_field(
     )
     assert response.status_code == 200
     body = response.json()
-    assert "error" in body
-    assert body["error"]["code"] == -32602
-    assert "number" in body["error"]["data"]["detail"]
+    assert "error" not in body
+    error = tool_error(body["result"])
+    assert error["type"] == "validation_error"
+    assert "number" in error["detail"]
 
 
 def test_unknown_tool_returns_invalid_params(jsonrpc, initialized_session: str) -> None:

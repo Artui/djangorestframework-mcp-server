@@ -39,7 +39,7 @@ from rest_framework_mcp.handlers.utils import (
     split_query_params,
     split_url_kwargs,
     validate_output_format,
-    validation_error_data,
+    validation_error_result,
 )
 from rest_framework_mcp.output.error_tool_result import build_error_tool_result
 from rest_framework_mcp.output.resolve_structured_output import resolve_structured_output
@@ -215,27 +215,15 @@ def _dispatch_tool_call(
                 # travels under ``spec.many_argument``; a no-op for any other spec.
                 many_as_argument=True,
             )
-        except drf_serializers.ValidationError as exc:
-            # A malformed input *shape* is a protocol fault (-32602).
-            return JsonRpcError(
-                JsonRpcErrorCode.INVALID_PARAMS,
-                "Invalid arguments",
-                data=validation_error_data(
-                    exc.detail, arguments_raw, include_value=context.config.include_validation_value
-                ),
-            )
         except PermissionDenied:
             return JsonRpcError(JsonRpcErrorCode.FORBIDDEN, "Insufficient permission")
-        except ServiceValidationError as exc:
-            # Business validation on well-shaped input is a *tool-level* failure
-            # per the MCP spec: an ``isError`` result, not a protocol error.
-            return build_error_tool_result(
-                exc.message,
-                error_type="validation_error",
-                detail=validation_error_data(
-                    exc.detail, arguments_raw, include_value=context.config.include_validation_value
-                ),
-            ).to_dict()
+        except (drf_serializers.ValidationError, ServiceValidationError) as exc:
+            # Refused input -- an unexpected argument, a serializer rejection, a
+            # service's own validation -- is a *tool-level* failure per the MCP
+            # spec: an ``isError`` result the model can correct from, not a
+            # protocol error. Before the ``ServiceError`` arm, which would
+            # otherwise take ``ServiceValidationError`` as a plain failure.
+            return validation_error_result(exc, arguments_raw, config=context.config).to_dict()
         except AdditionalInputRequired as exc:
             # **Must precede the ``ServiceError`` arm below** — this is a
             # subclass of it, so the generic handler would otherwise swallow the
@@ -255,8 +243,9 @@ def _dispatch_tool_call(
             ).to_dict()
 
         # Outside the ``try`` above on purpose: its ``ValidationError`` arm
-        # answers a malformed input *shape* with ``-32602``, and a render-time
-        # refusal is not one. A read-shaping ``QueryParam`` is read here, by the
+        # treats every refusal as the caller's to fix, and a render-time
+        # refusal is the caller's only when they supplied a value that shaped
+        # the render. A read-shaping ``QueryParam`` is read here, by the
         # output serializer, so a bad value fails after dispatch succeeded;
         # ``read_shaping_error_result`` makes that the caller's ``isError`` when
         # they supplied one and re-raises it otherwise. The async handler shares

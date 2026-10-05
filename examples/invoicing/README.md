@@ -8,6 +8,7 @@ MCP using every public registration surface of
 |--------------------------------|--------------------------------------------------------------|
 | `register_service_tool`        | `invoices.create` — creates a new invoice (atomic mutation). |
 | `register_service_tool`        | `invoices.mark_sent` — flips the `sent` flag.                |
+| Argument validation            | `invoices.create` with a negative `amount_cents` — an `isError` result of type `validation_error` with the serializer's errors under `detail`, not a JSON-RPC error.|
 | `register_service_tool`        | `invoices.set_amount` — targets an invoice by number through `instance_selector_spec`, so `number` is in its `inputSchema`; `idempotent=True` lists `idempotentHint: true`; with no output re-read selector its `outputSchema` keeps a strict `required`.|
 | `register_selector_tool`       | `invoices.list` — list with `FilterSet`, ordering, pagination, and a `QueryParam` for field selection.|
 | `register_selector_tool`       | `invoices.find` — an `allow_none` RETRIEVE: a miss is `structuredContent: {}`, which its `outputSchema` admits.|
@@ -91,6 +92,15 @@ for n in A B C; do
          \"params\":{\"name\":\"invoices.create\",
                      \"arguments\":{\"number\":\"INV-$n\",\"amount_cents\":${RANDOM:0:4}00}}}"
 done
+
+# A refused argument is a tool result the model can correct from, not a
+# JSON-RPC error: `"isError": true`, and in the text block
+# {"error": {"type": "validation_error", "message": "Invalid arguments",
+#            "detail": {"amount_cents": ["Ensure this value is greater than or equal to 0."]}}}
+curl -s -X POST http://localhost:8000/mcp/ $H \
+  -d '{"jsonrpc":"2.0","id":2,"method":"tools/call",
+       "params":{"name":"invoices.create",
+                 "arguments":{"number":"INV-X","amount_cents":-5}}}'
 
 # List with the selector tool — filter, sort, paginate
 curl -s -X POST http://localhost:8000/mcp/ $H \

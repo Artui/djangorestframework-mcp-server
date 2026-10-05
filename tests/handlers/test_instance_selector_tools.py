@@ -379,8 +379,9 @@ def test_default_validation_stays_non_partial() -> None:
         permissions=[],
     )
     out = handle_tools_call({"name": "invoices.full", "arguments": {}}, _ctx(server))
-    from rest_framework_mcp.protocol.types.json_rpc_error import JsonRpcError
 
-    # Shape-level rejection stays a protocol error (-32602), not isError.
-    assert isinstance(out, JsonRpcError)
-    assert out.code == -32602
+    # Non-partial: the omitted required field is refused, as input validation --
+    # a ``validation_error`` result, which is how every refused argument answers.
+    error = tool_error(out)
+    assert error["type"] == "validation_error"
+    assert {"pk", "number"} <= set(error["detail"])

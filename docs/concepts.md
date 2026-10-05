@@ -440,10 +440,10 @@ What a caller should know:
   single-item tool's arguments are, and each item's own `additionalProperties`
   says whether an undeclared key in it is refused.
 - **Errors are keyed under the argument, and item errors by index.** An invalid
-  second item is a `-32602` whose `data.detail` is
+  second item is a `validation_error` result whose `error.detail` is
   `{"invoices": {"1": {"amount_cents": ["Ensure this value is greater than or equal to 0."]}}}`.
   JSON object keys are strings, so the index arrives as `"1"`; with
-  `INCLUDE_VALIDATION_VALUE` on, `data.value["invoices"][1]` is the item it names.
+  `INCLUDE_VALIDATION_VALUE` on, `error.value["invoices"][1]` is the item it names.
   drf-services gives item errors this shape on every Django REST framework
   version, and an undeclared key refused inside an item is keyed by its index the
   same way. A call with no list is refused as `{"invoices": ["This field is required."]}`.
@@ -584,7 +584,8 @@ forms) accept three behavior knobs:
 - **`unknown_arguments=`** — how `arguments` keys outside the binding's
   declared field set are handled.
   - `UnknownArguments.REJECT` (default) — the validator rejects unknown
-    keys with `-32602`, and the outer `inputSchema` advertises
+    keys with an `isError` `validation_error` result naming them under
+    `detail.non_field_errors`, and the outer `inputSchema` advertises
     `"additionalProperties": false`.
 
     **The closed schema is advertised only where the runtime actually closes
@@ -855,9 +856,11 @@ It does **not** layer on the read-shaped transport extras (pagination,
 ordering, a selector binding's MCP-only `input_serializer`); those stay with
 the wire handlers, as do the transport-level MCP permissions / rate limits.
 Chain tools are unsupported — they orchestrate several specs and raise
-`TypeError`. A service raising `ServiceValidationError` / `ServiceError` and a
-missing required instance come back as `isError` results; a denied permission
-or malformed input raises, for the caller to map.
+`TypeError`. Refused input (an unexpected argument, an `input_serializer`
+rejection, a filter value the spec's `FilterSet` refuses), a service raising
+`ServiceValidationError` / `ServiceError`, and a missing required instance come
+back as `isError` results, the ones the wire serves; a denied permission raises,
+for the caller to map.
 
 ### Full in-process transport: `acall_tool` / `list_tools`
 
@@ -1929,14 +1932,19 @@ The MCP package owns its own dispatch flow. It does **not** import
    the parameter, e.g. to call `serializer.save()`).
 6. `resolve_callable_kwargs(spec.service, pool)` →
    `run_service(spec.service, kwargs, atomic=spec.atomic)`.
-7. Map failures along the MCP protocol-vs-tool boundary. The serializer
-   rejecting the arguments *shape* stays a JSON-RPC `-32602`. A service
-   raising on well-shaped input — `ServiceValidationError` or
-   `ServiceError` — returns an **`isError: true` tool result** the model
-   can read and self-correct from, with a JSON `{"error": {"type":
-   "validation_error" | "service_error", "message": ..., "detail": ...}}`
-   payload in `content[0]` (and no `structuredContent`, which is tied to
-   the success schema). Chain steps add `failedStep`. A call refused by one
+7. Map failures along the MCP protocol-vs-tool boundary. Refused input —
+   the serializer rejecting the arguments, an unexpected argument under
+   `UnknownArguments.REJECT`, or a service raising `ServiceValidationError`
+   — and a service raising `ServiceError` return an **`isError: true` tool
+   result** the model can read and self-correct from, with a JSON
+   `{"error": {"type": "validation_error" | "service_error", "message": ...,
+   "detail": ...}}` payload in `content[0]` (and no `structuredContent`,
+   which is tied to the success schema). A serializer's refusal carries the
+   message `"Invalid arguments"` and its field-keyed errors under `detail`.
+   The MCP spec files input validation under tool execution errors in every
+   protocol version this server serves, and keeps JSON-RPC `-32602` for an
+   unknown tool and a request that fails the `CallToolRequest` schema (a
+   non-object `arguments`, say), which is all `tools/call` answers with it. Chain steps add `failedStep`. A call refused by one
    of the spec's declared `affordances` raises drf-services'
    `ActionUnavailable`, and its error object also carries that affordance's
    `code` — `{"type": "service_error", "message": "The books are closed.",

@@ -57,6 +57,29 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `outputSchema` is unchanged. That includes a service tool whose
   `output_selector_spec` names only an `output_serializer`, which keeps a
   strict `required`.
+- **A `tools/call` whose arguments are refused answers with an `isError`
+  result, not JSON-RPC `-32602`.** An unexpected argument under
+  `UnknownArguments.REJECT` and an `input_serializer` rejection, on service,
+  selector and chain tools in both protocol eras, and through `acall_tool`,
+  now come back as the result a `ServiceValidationError` already produced:
+  `"isError": true`, with `{"error": {"type": "validation_error", "message":
+  "Invalid arguments", "detail": {...}}}` in the text block. `detail` is the
+  field-keyed mapping the `-32602` carried as `data.detail`, and
+  `INCLUDE_VALIDATION_VALUE` adds `value` beside it as it added `data.value`.
+  A chain's refused arguments carry no `failedStep`, because no step ran. Two
+  refusals that never reached `-32602` take the same result: a filter value a
+  selector spec's `FilterSet` refuses, which escaped every handler and was served
+  as an HTTP 500 with JSON-RPC `-32603`, and `call_tool`'s refused arguments,
+  which raised DRF's `ValidationError` to the caller. `tools/call` keeps `-32602` for an unknown
+  tool and a request that fails the `CallToolRequest` schema (`params` or
+  `arguments` not an object, a missing `name`), and for an `outputFormat` the
+  server cannot render, which is a request parameter rather than a tool
+  argument. The MCP spec's tools "Error Handling" section lists input
+  validation errors among tool execution errors, reported with `isError` so a
+  model can correct its call, in 2025-11-25 and 2026-07-28, and 2025-06-18
+  lists invalid input data there too, so the rule is the same for every
+  served version. A client branching on `-32602` to retry malformed arguments
+  reads the result's `error.type` instead.
 
 ### Fixed
 

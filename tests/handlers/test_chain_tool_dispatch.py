@@ -547,8 +547,12 @@ def test_chain_input_validation_error() -> None:
         steps=[ChainStep("made", ServiceSpec(service=_create, atomic=False))],
     )
     out = _call(server, {"number": "X"})  # missing amount_cents
-    assert isinstance(out, JsonRpcError)
-    assert out.code == JsonRpcErrorCode.INVALID_PARAMS
+    # Input validation is a tool execution error, so a result rather than
+    # ``-32602``; no step ran, so no ``failedStep``.
+    error = tool_error(out)
+    assert error["type"] == "validation_error"
+    assert "amount_cents" in error["detail"]
+    assert "failedStep" not in error
 
 
 # ---------- auth / rate limit ----------

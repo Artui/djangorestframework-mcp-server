@@ -60,7 +60,7 @@ from rest_framework_mcp.handlers.utils import (
     split_query_params,
     split_url_kwargs,
     validate_input_against_serializer,
-    validation_error_data,
+    validation_error_result,
 )
 from rest_framework_mcp.observability import get_logger
 from rest_framework_mcp.output.error_tool_result import build_error_tool_result
@@ -105,16 +105,13 @@ def dispatch_selector_tool(
         # ``isError`` result would tell the model to retry an authorization
         # decision that will not change.
         return JsonRpcError(JsonRpcErrorCode.FORBIDDEN, "Insufficient permission")
-    except ServiceValidationError as exc:
+    except (drf_serializers.ValidationError, ServiceValidationError) as exc:
         # Tool-level failure, so an ``isError`` result the model can read and
         # self-correct from. JSON-RPC errors stay reserved for protocol faults.
-        return build_error_tool_result(
-            exc.message,
-            error_type="validation_error",
-            detail=validation_error_data(
-                exc.detail, arguments_raw, include_value=context.config.include_validation_value
-            ),
-        ).to_dict()
+        # DRF's error arrives here from queryset shaping: a value the spec's
+        # ``FilterSet`` refuses (an ``ordering`` outside its choices, say),
+        # which escaped every arm and was served as an HTTP 500 / ``-32603``.
+        return validation_error_result(exc, arguments_raw, config=context.config).to_dict()
     except ServiceError as exc:
         if context.config.record_service_exceptions:
             otel_span.record_exception(exc)
@@ -190,15 +187,9 @@ async def dispatch_selector_tool_async(
     except PermissionDenied:
         # See the sync sibling: the object-permission guard's denial.
         return JsonRpcError(JsonRpcErrorCode.FORBIDDEN, "Insufficient permission")
-    except ServiceValidationError as exc:
+    except (drf_serializers.ValidationError, ServiceValidationError) as exc:
         # See the sync sibling for the protocol-vs-tool error boundary.
-        return build_error_tool_result(
-            exc.message,
-            error_type="validation_error",
-            detail=validation_error_data(
-                exc.detail, arguments_raw, include_value=context.config.include_validation_value
-            ),
-        ).to_dict()
+        return validation_error_result(exc, arguments_raw, config=context.config).to_dict()
     except ServiceError as exc:
         if context.config.record_service_exceptions:
             otel_span.record_exception(exc)
@@ -251,13 +242,13 @@ def _build_request_and_validate(
     binding: SelectorToolBinding,
     arguments_raw: dict[str, Any],
     context: MCPCallContext,
-) -> tuple[Any, Any, Any, dict[str, Any] | JsonRpcError | None]:
+) -> tuple[Any, Any, Any, dict[str, Any] | None]:
     """Build the synthesised request + view, and validate the ``input_serializer``.
 
     Returns ``(drf_request, view, validated, error)``; ``error`` is non-``None``
-    when the call is already answered — a JSON-RPC ``INVALID_PARAMS`` envelope
-    for a serializer rejection, an ``isError`` tool result for a missing required
-    URL kwarg.
+    when the call is already answered — a ``validation_error`` tool result, for a
+    serializer rejection, an unexpected argument under ``REJECT`` or a missing
+    required URL kwarg alike.
 
     The ``view`` is built **once**, here, and threaded through dispatch and
     rendering: on HTTP a single view instance serves the whole request, so the
@@ -290,13 +281,7 @@ def _build_request_and_validate(
             drf_request,
             None,
             None,
-            build_error_tool_result(
-                exc.message,
-                error_type="validation_error",
-                detail=validation_error_data(
-                    exc.detail, arguments_raw, include_value=context.config.include_validation_value
-                ),
-            ).to_dict(),
+            validation_error_result(exc, arguments_raw, config=context.config).to_dict(),
         )
     view = OfflineServiceView(request=drf_request, action=binding.name, kwargs=url_kwarg_values)
     try:
@@ -308,17 +293,13 @@ def _build_request_and_validate(
             context=base_serializer_context(view=view, request=drf_request),
         )
     except drf_serializers.ValidationError as exc:
+        # An unexpected argument or a serializer rejection: input validation,
+        # which the MCP spec reports as an ``isError`` result, not ``-32602``.
         return (
             drf_request,
             view,
             None,
-            JsonRpcError(
-                JsonRpcErrorCode.INVALID_PARAMS,
-                "Invalid arguments",
-                data=validation_error_data(
-                    exc.detail, arguments_raw, include_value=context.config.include_validation_value
-                ),
-            ),
+            validation_error_result(exc, arguments_raw, config=context.config).to_dict(),
         )
     return drf_request, view, validated, None
 

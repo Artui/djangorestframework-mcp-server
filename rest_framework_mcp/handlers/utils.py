@@ -510,17 +510,64 @@ def validate_input_against_serializer(
 
 
 def validation_error_data(detail: Any, value: Any, *, include_value: bool) -> dict[str, Any]:
-    """Build the ``data`` payload for a JSON-RPC validation error.
+    """Build the ``detail`` / ``value`` pair a validation failure reports.
 
-    Always carries the per-field ``detail`` shape DRF produces.
-    ``include_value`` (the server's ``MCPConfig.include_validation_value``) also
-    echoes ``value`` back; off by default because it may carry PII or secrets
-    that must not flow back to the client or into client-side logs.
+    Merged into the ``error`` object of a ``validation_error`` tool result (see
+    ``validation_error_result``). Always carries the per-field ``detail`` shape
+    DRF produces. ``include_value`` (the server's
+    ``MCPConfig.include_validation_value``) also echoes ``value`` back; off by
+    default because it may carry PII or secrets that must not flow back to the
+    client or into client-side logs.
     """
     payload: dict[str, Any] = {"detail": detail}
     if include_value:
         payload["value"] = value
     return payload
+
+
+def validation_error_result(
+    exc: drf_serializers.ValidationError | ServiceValidationError,
+    arguments: Any,
+    *,
+    config: MCPConfig,
+) -> ToolResult:
+    """The ``isError`` result for a tool call whose arguments were refused.
+
+    One answer for every way a call's input can be refused before or while it
+    is dispatched: DRF's ``ValidationError`` (an unexpected argument under
+    ``UnknownArguments.REJECT``, an ``input_serializer`` rejection, a value a
+    spec's ``FilterSet`` refuses) and drf-services' ``ServiceValidationError``
+    (a service's own validation, a missing ``InputRequired`` argument, an omitted
+    ``required=True`` URL kwarg). The MCP spec's tools "Error Handling" section
+    files "input validation errors (e.g., date in wrong format, value out of
+    range)" under tool execution errors, reported with ``isError: true`` so the
+    model can read them and correct its call; a JSON-RPC protocol error is for
+    an unknown tool or a request that fails the ``CallToolRequest`` schema. The
+    same rule holds in every served protocol version: 2025-06-18 lists "invalid
+    input data" under tool execution errors too.
+
+    The ``error`` object carries ``type: "validation_error"``, the message, and
+    what ``validation_error_data`` builds: ``detail`` keyed by field as DRF
+    produces it, and ``value`` only under ``INCLUDE_VALIDATION_VALUE``. Those are
+    the names the ``-32602`` envelope's ``data`` carried, so a client reading
+    the detail finds it under the same key one level down. A DRF error has no
+    message of its own, so it keeps the one that envelope had.
+
+    Every argument-validation arm on the ``tools/call`` paths builds its result
+    here -- the service tool handlers sync and async, the in-process
+    ``call_tool``, both selector tool siblings, and a chain's input -- so a
+    refused argument answers the same way whichever path served it. A failing
+    chain *step* adds ``failedStep`` and builds its own, and a refusal while
+    rendering goes through ``read_shaping_error_result``.
+    """
+    message: str = exc.message if isinstance(exc, ServiceValidationError) else "Invalid arguments"
+    return build_error_tool_result(
+        message,
+        error_type="validation_error",
+        detail=validation_error_data(
+            exc.detail, arguments, include_value=config.include_validation_value
+        ),
+    )
 
 
 def service_error_result(
@@ -767,4 +814,5 @@ __all__ = [
     "validate_input_against_serializer",
     "validate_output_format",
     "validation_error_data",
+    "validation_error_result",
 ]

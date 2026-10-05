@@ -185,7 +185,7 @@ def test_a_selector_query_param_is_not_an_unknown_argument() -> None:
     server = _server()
     _register_selector(server, query_params=(QueryParam("fields"),))
     out = _call(server, "echo.list", {"fields": "id"}, _ctx(server))
-    # A rejection would have come back as a JSON-RPC -32602 instead.
+    # A rejection would have come back as a ``validation_error`` result instead.
     assert out["structuredContent"] == {"seen": {"fields": "id"}}
 
 

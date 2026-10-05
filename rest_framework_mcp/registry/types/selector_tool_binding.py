@@ -155,8 +155,9 @@ class SelectorToolBinding(Generic[ResultT, ExtraT]):
     unknown_arguments: UnknownArguments = UnknownArguments.REJECT
     """How unknown ``arguments`` keys are handled relative to the merged
     ``inputSchema`` (``input_serializer`` fields, ``filter_set`` properties,
-    ordering, pagination). ``REJECT`` answers ``-32602``, ``PASSTHROUGH``
-    merges them into the validated payload, ``IGNORE`` drops them."""
+    ordering, pagination). ``REJECT`` answers an ``isError``
+    ``validation_error`` result naming them, ``PASSTHROUGH`` merges them into
+    the validated payload, ``IGNORE`` drops them."""
 
     always_listed: bool = False
     """Keep this binding in ``tools/list`` even when ``FILTER_LISTINGS_BY_PERMISSIONS``

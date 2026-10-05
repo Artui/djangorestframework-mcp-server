@@ -143,7 +143,9 @@ def test_invoicing_field_selection_is_per_item_and_refuses_the_envelope() -> Non
 
 
 # Runs inside the invoicing project, like the script above: the tool listing and
-# three ``tools/call`` posts, printed as JSON for the assertions below.
+# four ``tools/call`` posts, printed as JSON for the assertions below. ``post``
+# reads ``result`` and nothing else, so a call answered with a JSON-RPC error
+# fails the script rather than reaching an assertion.
 _INVOICING_LOOKUP_EMPTY_IDEMPOTENT_SEEDS = textwrap.dedent(
     """
     import json
@@ -190,19 +192,22 @@ _INVOICING_LOOKUP_EMPTY_IDEMPOTENT_SEEDS = textwrap.dedent(
         "set_amount": call("invoices.set_amount", {"number": "INV-A", "amount_cents": 250}),
         "find_miss": call("invoices.find", {"number": "INV-404"}),
         "outstanding": call("invoices.outstanding", {"currency": "USD"}),
+        "refused": call("invoices.create", {"number": "INV-C", "amount_cents": -5}),
     }))
     """
 )
 
 
 def test_invoicing_demonstrates_lookup_empty_result_idempotency_and_seeds() -> None:
-    """Four behaviours the example registers, asserted as a client sees them.
+    """Five behaviours the example registers, asserted as a client sees them.
 
     ``invoices.set_amount`` advertises its target lookup and lists
     ``idempotentHint``, and keeps a strict ``outputSchema`` because it has no
     output re-read; ``invoices.find`` answers a miss with ``{}`` under a
     schema that admits it; ``invoices.outstanding`` reads the mount's
-    ``currency`` seed, and a client ``currency`` does not replace it.
+    ``currency`` seed, and a client ``currency`` does not replace it; and
+    ``invoices.create`` answers refused arguments with a ``validation_error``
+    result, not a JSON-RPC ``-32602``.
     """
     result = subprocess.run(
         [sys.executable, "-c", _INVOICING_LOOKUP_EMPTY_IDEMPOTENT_SEEDS],
@@ -234,4 +239,15 @@ def test_invoicing_demonstrates_lookup_empty_result_idempotency_and_seeds() -> N
     assert replies["outstanding"]["structuredContent"] == {
         "amount_cents": 250,
         "currency": "EUR",
+    }
+
+    # Refused input is a tool execution error the model reads, with the
+    # serializer's errors keyed by field under ``detail``.
+    refused = replies["refused"]
+    assert refused["isError"] is True
+    error = json.loads(refused["content"][0]["text"])["error"]
+    assert error == {
+        "type": "validation_error",
+        "message": "Invalid arguments",
+        "detail": {"amount_cents": ["Ensure this value is greater than or equal to 0."]},
     }
