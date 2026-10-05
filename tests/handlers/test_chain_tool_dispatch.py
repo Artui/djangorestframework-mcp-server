@@ -383,15 +383,18 @@ def test_a_retrieve_step_that_finds_no_row_fails_as_not_found(selector: Any) -> 
 
 
 @pytest.mark.django_db
-def test_an_allow_none_retrieve_step_that_finds_no_row_renders_null() -> None:
-    """Not the serializer's blank object, which read as a row with empty fields."""
+def test_an_allow_none_retrieve_step_that_finds_no_row_renders_empty() -> None:
+    """Not the serializer's blank object, which read as a row with empty fields.
+
+    ``{}`` has no keys at all, so it cannot be read as a row; it is not ``null``
+    because MCP requires structured content to be an object."""
     server = _server()
     _read_chain(server, _invoice_qs, allow_none=True)
 
     out = _call(server, {"pk": "9999"})
 
-    assert out["structuredContent"] is None
-    assert out["content"][0]["text"] == "null"
+    assert out["structuredContent"] == {}
+    assert out["content"][0]["text"] == "{}"
 
 
 @pytest.mark.django_db

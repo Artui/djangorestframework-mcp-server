@@ -18,6 +18,7 @@ def build_output_schema(
     paginate: bool = False,
     projection: AudienceProjection | None = None,
     affordances: Mapping[str, ServiceSpec[Any, Any, Any]] | None = None,
+    may_be_empty: bool = False,
 ) -> dict[str, Any] | None:
     """Build a JSON Schema for a tool's output, or ``None`` if not declared.
 
@@ -53,8 +54,30 @@ def build_output_schema(
     The wording for an unlabelled handle is supplied here rather than upstream:
     it is a sentence written for a model, and drf-services does not know that a
     model is what is reading.
+
+    ``may_be_empty`` says a successful call can present nothing, which is served
+    as ``structuredContent: {}`` (each binding answers it as
+    ``can_present_nothing``). MCP needs the schema's root to stay an object
+    and the served ``{}`` to conform, so a ``null`` cannot be added the way
+    drf-services' ``allow_none=`` adds one, and this never passes that keyword.
+    Instead the root keeps its ``type`` and ``properties``, and its
+    ``required`` list moves into
+    ``"anyOf": [{"required": [...]}, {"maxProperties": 0}]``. A full row
+    satisfies the first branch, ``{}`` the second, and a non-empty row missing
+    a required field neither. An item schema with nothing required already
+    admits ``{}`` and is returned as derived, as is a ``LIST`` schema, which
+    never presents nothing.
+
+    The guard is one ``or``-chain, so branch coverage cannot see a deleted
+    condition. Each one is held by a test that fails without it:
+    ``test_a_retrieve_that_cannot_present_nothing_keeps_its_schema_strict``
+    (``not may_be_empty``),
+    ``test_may_be_empty_with_no_output_serializer_is_still_no_schema``
+    (``schema is None``) and
+    ``test_may_be_empty_leaves_a_schema_with_nothing_required_as_derived``
+    (``not schema.get("required")``).
     """
-    return output_to_json_schema(
+    schema: dict[str, Any] | None = output_to_json_schema(
         output_serializer,
         kind=kind,
         paginate=paginate,
@@ -62,6 +85,11 @@ def build_output_schema(
         handle_description=HANDLE_DESCRIPTION,
         affordances=affordances,
     )
+    if not may_be_empty or schema is None or not schema.get("required"):
+        return schema
+    admitting: dict[str, Any] = {k: v for k, v in schema.items() if k != "required"}
+    admitting["anyOf"] = [{"required": schema["required"]}, {"maxProperties": 0}]
+    return admitting
 
 
 __all__ = ["build_output_schema"]

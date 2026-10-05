@@ -555,10 +555,10 @@ def test_selector_returning_none_renders_as_empty() -> None:
     out = handle_tools_call({"name": "x", "arguments": {}}, _ctx(server))
     assert isinstance(out, dict)
     # ``list(None)`` would crash; the path uses ``hasattr(__iter__)`` guard.
-    # The tool does emit structured content, and its answer is null, so the key
-    # is present and null — omitting it would be indistinguishable from a tool
-    # that offers no structured channel at all.
-    assert out["structuredContent"] is None
+    # The tool does emit structured content, and it has nothing to present, so
+    # the key is present and an empty object — omitting it would be
+    # indistinguishable from a tool that offers no structured channel at all.
+    assert out["structuredContent"] == {}
 
 
 # ---------- Auth / rate limit / errors ----------

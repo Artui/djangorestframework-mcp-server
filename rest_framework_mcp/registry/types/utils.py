@@ -92,4 +92,31 @@ def rendered_kind(spec: ServiceSpec[Any, Any, Any] | SelectorSpec[Any, Any]) -> 
     return SelectorKind.RETRIEVE
 
 
-__all__ = ["rendered_kind", "validate_content_kind"]
+def can_present_nothing(spec: ServiceSpec[Any, Any, Any] | SelectorSpec[Any, Any]) -> bool:
+    """Whether a successful dispatch of ``spec`` can render to nothing (``None``).
+
+    The question the advertised ``outputSchema`` has to answer, because a
+    result with nothing to present is served as ``{}`` and the schema must
+    admit it:
+
+    - A ``LIST`` result is a list, empty at worst, and never ``None``.
+    - A ``SelectorSpec`` RETRIEVE presents nothing only under ``allow_none``.
+      Without it, ``dispatch_spec`` answers a miss as ``not_found``, which every
+      entry point serves as an ``isError`` result.
+    - A single-row ``ServiceSpec`` always can. ``dispatch_spec`` materializes
+      the output re-read with ``.first()`` whatever the nested spec declares,
+      so a re-read that filters the row out yields ``None``, and with no
+      re-read selector the service's own return renders, which may be
+      ``None`` too.
+
+    One answer for every binding kind, through ``rendered_kind``, so a chain's
+    output step is judged exactly as the same spec registered as a tool.
+    """
+    if rendered_kind(spec) is SelectorKind.LIST:
+        return False
+    if isinstance(spec, SelectorSpec):
+        return spec.allow_none
+    return True
+
+
+__all__ = ["can_present_nothing", "rendered_kind", "validate_content_kind"]

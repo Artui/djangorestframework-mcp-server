@@ -302,7 +302,9 @@ def _render(binding: Any, result: Any, offline: Any) -> Any:
     extras: dict[str, Any] = (
         {"page": result.value} if many else {"instance": result.value, "result": result.value}
     )
-    payload = render_for_audience(
+    # ``render_for_audience`` passes a ``None`` result through; MCP's object
+    # requirement is met where every tool kind meets it, in ``build_tool_result``.
+    return render_for_audience(
         binding.spec,
         result.value,
         projection=binding.audience_projection,
@@ -311,9 +313,6 @@ def _render(binding: Any, result: Any, offline: Any) -> Any:
         request=offline.request,
         extras=extras,
     )
-    # MCP contract: a tool returning ``None`` must still emit a JSON object as
-    # ``structuredContent``, and ``render_spec_output`` passes ``None`` through.
-    return {} if payload is None else payload
 
 
 def _span_attrs(binding_name: str, context: MCPCallContext) -> dict[str, Any]:

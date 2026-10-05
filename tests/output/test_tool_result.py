@@ -127,17 +127,21 @@ def test_the_auto_format_also_leaves_the_marker_off_when_toon_is_absent(monkeypa
 # ---------- a null payload is a value, not an absent structured channel ----------
 
 
-def test_a_null_payload_is_emitted_as_an_explicit_null() -> None:
+def test_a_null_payload_is_emitted_as_an_empty_object() -> None:
     """``include_structured_content=True`` must be distinguishable from ``False``.
 
-    Omitting the key for a genuine ``None`` collapsed "this tool's answer is
-    null" into "this tool has no structured channel", so a client branching on
-    the key's presence was told the wrong thing about the server's capability.
+    Omitting the key for a genuine ``None`` collapsed "this tool has nothing to
+    present" into "this tool has no structured channel", so a client branching
+    on the key's presence was told the wrong thing about the server's
+    capability. The value is ``{}`` rather than ``null``, because MCP requires
+    structured content to be an object, and the text block carries the same
+    JSON.
     """
     res = build_tool_result(None, include_structured_content=True)
     wire = res.to_dict()
     assert "structuredContent" in wire
-    assert wire["structuredContent"] is None
+    assert wire["structuredContent"] == {}
+    assert wire["content"][0]["text"] == "{}"
 
 
 def test_opting_out_still_omits_the_key_entirely() -> None:

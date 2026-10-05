@@ -1911,8 +1911,8 @@ stream's last frame.
 RETRIEVE selector tools mirror the sister repo's read semantics: a
 QuerySet return is materialized via `.first()`, and a missing row is a
 `not_found` `isError` result — unless the spec sets `allow_none=True`
-(the nullable-resource contract), which renders a successful `null`
-result instead. LIST tools advertise a kind-aware `outputSchema`: a bare
+(the nullable-resource contract), which makes the miss a successful result
+with nothing to present (see below). LIST tools advertise a kind-aware `outputSchema`: a bare
 array schema unpaginated, the `{items, page, totalPages, hasNext}`
 envelope with `paginate=True` (enable pagination for a fully
 spec-compliant *object*-shaped `structuredContent`). The array schema is not
@@ -1920,6 +1920,34 @@ special to selector tools: wherever a result renders as an unpaginated list —
 a service tool whose `output_selector_spec` re-fetches a `LIST`, or a chain
 whose output step is either kind of `LIST` — the tool advertises the same bare
 array, because that is what it serves.
+
+**A result with nothing to present is `{}`, and the schema admits it.** Two
+successful calls render to nothing: an `allow_none` RETRIEVE that finds no row,
+and a single-row service tool whose output re-read finds none (drf-services
+materializes the re-read with `.first()`, so a re-read that filters out the row
+the service just archived yields nothing, whatever the nested spec declares).
+MCP requires `structuredContent` to be an object, so both are served as
+`"structuredContent": {}` with a text block of `{}`, on every tool kind and
+every entry point (the wire, `call_tool` / `acall_tool`, a task). And because a
+server advertising an `outputSchema` must return structured content that
+conforms to it, the schema of a tool that can present nothing keeps its object
+root and its `properties` while its `required` list moves beside the empty
+object:
+
+```json
+{
+  "type": "object",
+  "properties": {"id": {"type": "integer"}, "title": {"type": "string"}},
+  "anyOf": [{"required": ["title"]}, {"maxProperties": 0}]
+}
+```
+
+A full row satisfies the first branch and `{}` the second, while a non-empty
+row missing a required field satisfies neither. A RETRIEVE without
+`allow_none`, a `LIST` result and a `many=True` service never present nothing,
+so their schemas are unchanged. Leaving `structuredContent` off the result
+instead was ruled out: a client is entitled to reject a successful result that
+has an `outputSchema` and no structured content, and the TypeScript SDK does.
 
 `resources/read`:
 

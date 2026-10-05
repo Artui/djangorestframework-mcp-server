@@ -155,4 +155,6 @@ the step, and an atomic chain rolls back:
            "failedStep": "target"}}
 ```
 
-A spec with `allow_none=True` passes `None` on instead, and renders it as `null`.
+A spec with `allow_none=True` passes `None` on instead. As the output step it is
+a result with nothing to present, served as `{}` under a schema that admits it
+([Concepts](../concepts.md#dispatch-flow)).

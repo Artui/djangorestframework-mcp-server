@@ -26,7 +26,11 @@ from rest_framework_mcp.constants import (
 from rest_framework_mcp.protocol.types.icon import Icon
 from rest_framework_mcp.registry.types.query_param import QueryParam
 from rest_framework_mcp.registry.types.url_kwarg import UrlKwarg
-from rest_framework_mcp.registry.types.utils import rendered_kind, validate_content_kind
+from rest_framework_mcp.registry.types.utils import (
+    can_present_nothing,
+    rendered_kind,
+    validate_content_kind,
+)
 
 InputT = TypeVar("InputT")
 ResultT = TypeVar("ResultT")
@@ -222,6 +226,14 @@ class ToolBinding(Generic[InputT, ResultT, ExtraT]):
         schema has to say so; it once advertised the item alone. See
         ``registry.types.utils.rendered_kind``."""
         return rendered_kind(self.spec)
+
+    @property
+    def can_present_nothing(self) -> bool:
+        """Whether a successful call can present nothing: any single-row result.
+
+        Read by ``tools/list`` so the ``outputSchema`` admits the ``{}`` such a
+        call is served as. See ``registry.types.utils.can_present_nothing``."""
+        return can_present_nothing(self.spec)
 
     @cached_property
     def audience_projection(self) -> AudienceProjection:

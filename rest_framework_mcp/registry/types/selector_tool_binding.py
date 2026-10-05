@@ -27,7 +27,7 @@ from rest_framework_mcp.constants import (
 from rest_framework_mcp.protocol.types.icon import Icon
 from rest_framework_mcp.registry.types.query_param import QueryParam
 from rest_framework_mcp.registry.types.url_kwarg import UrlKwarg
-from rest_framework_mcp.registry.types.utils import validate_content_kind
+from rest_framework_mcp.registry.types.utils import can_present_nothing, validate_content_kind
 
 ResultT = TypeVar("ResultT")
 ExtraT = TypeVar("ExtraT", bound=dict[str, Any])
@@ -232,6 +232,14 @@ class SelectorToolBinding(Generic[ResultT, ExtraT]):
         unpaginated and the pagination envelope otherwise, which only a selector
         tool can produce."""
         return self.kind
+
+    @property
+    def can_present_nothing(self) -> bool:
+        """Whether a successful call can present nothing: an ``allow_none`` RETRIEVE.
+
+        Read by ``tools/list`` so the ``outputSchema`` admits the ``{}`` such a
+        call is served as. See ``registry.types.utils.can_present_nothing``."""
+        return can_present_nothing(self.spec)
 
     @cached_property
     def audience_projection(self) -> AudienceProjection:

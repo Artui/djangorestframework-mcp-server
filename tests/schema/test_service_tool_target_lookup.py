@@ -15,13 +15,13 @@ tests drive the whole path, from registration through ``tools/list`` to
 
 from __future__ import annotations
 
-from typing import Any
+from typing import Annotated, Any
 
 import jsonschema
 import pytest
 from rest_framework import serializers
 from rest_framework.permissions import AllowAny
-from rest_framework_services import UnknownArguments
+from rest_framework_services import InputRequired, UnknownArguments
 from rest_framework_services.dispatch.utils import declared_input_keys
 from rest_framework_services.types.reserved_pool_seeds import RESERVED_POOL_SEEDS
 from rest_framework_services.types.selector_kind import SelectorKind
@@ -125,6 +125,32 @@ def test_a_url_kwarg_of_the_same_name_wins_over_the_reflected_lookup() -> None:
 
     assert schema["properties"]["pk"] == url_kwarg.json_schema()
     assert "pk" in schema["required"]
+
+
+def _invoice_by_marked_pk(*, pk: Annotated[int, InputRequired]) -> Any:
+    return Invoice.objects.filter(pk=pk)
+
+
+def test_a_lookup_its_selector_marks_input_required_is_required() -> None:
+    # Requiredness is the reflection's rule: inferred from the marker, never from
+    # a missing default, which is why the plain ``pk`` above is not required.
+    spec = _rename_spec(
+        instance_selector_spec=SelectorSpec(
+            kind=SelectorKind.RETRIEVE, selector=_invoice_by_marked_pk
+        )
+    )
+
+    schema = build_service_tool_input_schema(_binding(spec))
+
+    assert schema["required"] == ["pk", "number"]
+
+
+def test_a_lookup_with_nothing_required_adds_no_required_list() -> None:
+    # No input serializer, and ``pk`` carries no ``InputRequired`` marker.
+    schema = build_service_tool_input_schema(_binding(_rename_spec(input_serializer=None)))
+
+    assert schema["properties"] == {"pk": {"type": "integer"}}
+    assert "required" not in schema
 
 
 def test_a_spec_without_a_target_selector_advertises_only_its_input() -> None:

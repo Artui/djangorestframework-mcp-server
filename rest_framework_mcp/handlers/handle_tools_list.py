@@ -125,6 +125,7 @@ def handle_tools_list(
             paginate=isinstance(binding, SelectorToolBinding) and binding.paginate,
             projection=binding.audience_projection,
             affordances=binding.rendered_affordances,
+            may_be_empty=binding.can_present_nothing,
         )
         # A media tool has no JSON result to describe, so the schema is dropped
         # rather than advertised over a payload arriving as an image block.

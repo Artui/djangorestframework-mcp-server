@@ -58,11 +58,8 @@ def build_tool_result(
             names the format the bytes are actually in.
         is_error: Stamped onto the result as ``isError``.
         include_structured_content: ``False`` omits ``structuredContent``
-            entirely — the key is absent, distinct from a ``True`` call whose
-            payload happens to be ``null``, which is emitted as
-            ``"structuredContent": null``. The text block still carries the full
-            payload, so a client that doesn't consume the structured field
-            loses nothing.
+            entirely. The text block still carries the full payload, so a
+            client that doesn't consume the structured field loses nothing.
         meta: The base protocol's ``_meta`` bundle on the *result envelope* —
             per-call, unlike the static ``_meta`` already advertised on the
             ``tools/list`` entry. Omitted from the payload when empty.
@@ -72,6 +69,15 @@ def build_tool_result(
             kind comes back as an ``isError`` result naming the binding.
         content_mime_type: Media type for a non-``TEXT`` block.
         binding_name: Names the binding in that mismatch message.
+
+    A ``None`` payload is a result with **nothing to present**: an
+    ``allow_none`` RETRIEVE that found no row, or a service whose output
+    re-read found none. It is served as ``{}``, both as ``structuredContent``
+    and as the text block, because MCP requires structured content to be an
+    object and asks the text block to carry the same JSON. This is the one
+    place the rule lives, so a selector, a service and a chain answer it the
+    same way on every entry point. The advertised ``outputSchema`` admits the
+    ``{}`` (``build_output_schema(may_be_empty=...)``).
     """
     if content_kind is not ToolContentKind.TEXT:
         blocks = build_content_blocks(
@@ -91,6 +97,10 @@ def build_tool_result(
             meta=meta,
         )
 
+    # Only the text kind: a media or resource-link block has its own payload
+    # contract, which ``build_content_blocks`` answers above.
+    if payload is None:
+        payload = {}
     resolved: OutputFormat = _resolve_format(payload, output_format)
     if resolved is OutputFormat.TOON:
         encoded: str = encode_toon(payload)
