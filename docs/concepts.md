@@ -663,16 +663,25 @@ without a hand-set flag:
   any service step makes the whole chain a mutation.
 
 `destructiveHint` / `idempotentHint` are spec-meaningful only when
-`readOnlyHint` is false, so a read-only tool emits neither. Pass
-`annotations=` at registration to override or extend the derived hints —
+`readOnlyHint` is false, so a read-only tool emits neither.
+
+A service tool also reads its spec's declared `ServiceSpec.idempotent`:
+`idempotent=True` advertises `"idempotentHint": true`, a declared `False`
+advertises `false`, and the default `None` (nothing declared) leaves the hint
+off, which a client reads as the MCP default of `false`. A chain derives no
+`idempotentHint`, because two idempotent steps in sequence need not make an
+idempotent operation.
+
+Pass `annotations=` at registration to override or extend the derived hints —
 the explicit values win:
 
 ```python
 server.register_service_tool(
     name="invoices.mark_paid",
     spec=mark_paid_spec,
-    # An idempotent, non-destructive mutation:
-    annotations={"destructiveHint": False, "idempotentHint": True},
+    # A non-destructive mutation. Its idempotency is declared on the spec
+    # (ServiceSpec(idempotent=True)), so it needs no hint here:
+    annotations={"destructiveHint": False},
 )
 ```
 
@@ -1833,6 +1842,13 @@ The MCP package owns its own dispatch flow. It does **not** import
    + the nested spec's own `kwargs` provider; queryset shaping applies
    and a QuerySet return is materialized via `.first()`. A missing row
    short-circuits to an `isError: true` tool result (`type: "not_found"`).
+   Because the lookup arrives as an argument, the tool's `inputSchema`
+   advertises it: the target selector's parameters (and a `filter_set`'s
+   fields) are reflected the same way a selector tool's own are, so
+   `task_by_pk(*, pk)` puts `pk` beside the input serializer's fields. A
+   `collection_selector_spec` is advertised the same way. An input field or
+   `UrlKwarg` of the same name wins, and a lookup is `required` only when its
+   selector marks it `InputRequired`, because the pool may supply it.
 4. Validate `arguments` via `spec.input_serializer` (DRF `Serializer`,
    bare `@dataclass` auto-wrapped in `DataclassSerializer`, or `None`).
    `spec.partial=True` validates partially (and drops `required` from the

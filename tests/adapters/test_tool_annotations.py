@@ -146,3 +146,59 @@ def test_chain_with_any_service_step_is_destructive() -> None:
         "readOnlyHint": False,
         "destructiveHint": True,
     }
+
+
+# ---------- idempotentHint derived from a declared ServiceSpec.idempotent ----------
+
+
+def test_a_service_spec_declared_idempotent_advertises_the_hint() -> None:
+    server = _server()
+    binding = server.register_service_tool(
+        name="things.put",
+        spec=ServiceSpec(service=lambda **_: {}, atomic=False, idempotent=True),
+    )
+    expected = {"readOnlyHint": False, "destructiveHint": True, "idempotentHint": True}
+    assert binding.annotations == expected
+    assert _annotations_for(server, "things.put") == expected
+
+
+def test_a_service_spec_declared_not_idempotent_advertises_the_hint_false() -> None:
+    # A declared ``False`` is a statement, unlike ``None``: drf-services keeps the
+    # two apart so a transport publishing the fact can tell them apart too.
+    server = _server()
+    server.register_service_tool(
+        name="things.append",
+        spec=ServiceSpec(service=lambda **_: {}, atomic=False, idempotent=False),
+    )
+    assert _annotations_for(server, "things.append") == {
+        "readOnlyHint": False,
+        "destructiveHint": True,
+        "idempotentHint": False,
+    }
+
+
+def test_an_undeclared_service_spec_leaves_the_hint_absent() -> None:
+    # ``idempotent=None`` is the default and means nothing was said, so the
+    # hint stays off the wire and a client falls back to the MCP default.
+    server = _server()
+    server.register_service_tool(
+        name="things.touch",
+        spec=ServiceSpec(service=lambda **_: {}, atomic=False, idempotent=None),
+    )
+    assert "idempotentHint" not in _annotations_for(server, "things.touch")
+
+
+def test_explicit_annotations_win_over_a_declared_idempotent() -> None:
+    server = _server()
+    server.register_service_tool(
+        name="things.reset",
+        spec=ServiceSpec(service=lambda **_: {}, atomic=False, idempotent=True),
+        annotations={"idempotentHint": False},
+    )
+    assert _annotations_for(server, "things.reset")["idempotentHint"] is False
+
+
+def test_a_read_only_tool_never_derives_the_idempotent_hint() -> None:
+    # Holds the ``not read_only`` conjunct in ``merge_tool_annotations``: MCP
+    # defines ``idempotentHint`` only when ``readOnlyHint`` is false.
+    assert merge_tool_annotations(None, read_only=True, idempotent=True) == {"readOnlyHint": True}

@@ -7,6 +7,35 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- **A service tool advertises `idempotentHint` from its spec's declared
+  `ServiceSpec.idempotent`.** `idempotent=True` lists `"idempotentHint": true`,
+  a declared `False` lists `false`, and the default `None` (nothing declared)
+  leaves the hint off as before, which a client reads as the MCP default of
+  `false`. An explicit `annotations=` still wins. Selector tools are unchanged,
+  because MCP defines the hint only when `readOnlyHint` is false. Chains derive
+  no hint: two idempotent steps in sequence need not make an idempotent
+  operation. `merge_tool_annotations` takes the declaration as
+  `idempotent=`.
+
+### Fixed
+
+- **A service tool's `inputSchema` advertises the lookup its target selector
+  reads.** A spec with
+  `instance_selector_spec=SelectorSpec(kind=RETRIEVE, selector=task_by_pk)`
+  was served `{"pk": 1, "title": "Renamed"}`, because drf-services hands the
+  arguments to the target selector and admits what it declares. But the schema
+  listed only the input serializer's fields, and under
+  `unknown_arguments=REJECT` it also said `additionalProperties: false`. So a
+  client validating against the schema could not send the only call that
+  works. The target selector, and a `collection_selector_spec` the same way,
+  is now reflected into the schema the way a selector tool's own parameters
+  are: its signature without the transport seeds, plus a `filter_set`'s fields.
+  An input field or `UrlKwarg` of the same name wins. A lookup is `required`
+  only when its selector marks it `InputRequired`, which is the reflection's
+  rule, because the kwargs pool may supply the value instead.
+
 ## [0.49.0] — 2026-09-24
 
 ### Fixed

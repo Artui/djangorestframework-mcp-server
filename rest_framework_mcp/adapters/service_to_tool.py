@@ -130,7 +130,9 @@ def service_spec_to_tool(
         output_format=output_format,
         permissions=effective_perms,
         rate_limits=rate_limits,
-        annotations=merge_tool_annotations(annotations, read_only=False),
+        annotations=merge_tool_annotations(
+            annotations, read_only=False, idempotent=spec.idempotent
+        ),
         meta=merge_meta(meta),
         include_structured_content=include_structured_content,
         include_output_schema=include_output_schema,

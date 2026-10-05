@@ -369,7 +369,9 @@ def _validate_required_params_have_sources(
         )
 
 
-def merge_tool_annotations(explicit: dict[str, Any] | None, *, read_only: bool) -> dict[str, Any]:
+def merge_tool_annotations(
+    explicit: dict[str, Any] | None, *, read_only: bool, idempotent: bool | None = None
+) -> dict[str, Any]:
     """Auto-derive a tool's MCP ``ToolAnnotations``, explicit hints winning.
 
     A tool's mutation profile is known from its kind, so the standard MCP hints
@@ -378,19 +380,32 @@ def merge_tool_annotations(explicit: dict[str, Any] | None, *, read_only: bool) 
     - ``read_only=True`` (selector tools, and chains whose every step is a
       selector) → ``{"readOnlyHint": True}``. ``destructiveHint`` /
       ``idempotentHint`` are deliberately *not* emitted — the MCP spec defines
-      them as meaningful only when ``readOnlyHint`` is false.
+      them as meaningful only when ``readOnlyHint`` is false — so ``idempotent``
+      is ignored here.
     - ``read_only=False`` (service tools, and chains with any service step) →
       ``{"readOnlyHint": False, "destructiveHint": True}``. A mutation is
-      destructive by default. ``idempotentHint`` is never derived: this
-      function is given the tool's kind and not its spec, so a declared
-      ``ServiceSpec.idempotent`` is not read here and the hint reaches the
-      wire only when ``annotations=`` sets it. A client reads its absence as
-      ``false``, the MCP default.
+      destructive by default.
+
+    ``idempotent`` is a service spec's declared ``ServiceSpec.idempotent``,
+    which a service tool passes through. A declared ``True`` or ``False``
+    becomes ``idempotentHint`` on a mutation; ``None`` (undeclared, the
+    default) leaves the hint absent, and a client reads its absence as
+    ``false``, the MCP default. drf-services keeps ``None`` apart from
+    ``False`` so that a transport publishing the fact never turns silence into
+    a claim, which is why a declared ``False`` is published rather than
+    dropped. A chain passes nothing: being idempotent is a property of a whole
+    operation, and two idempotent steps in sequence need not be one.
+
+    Both conjuncts of the derivation are held by a test, because a deleted
+    one leaves branch coverage at 100%:
+    ``test_a_read_only_tool_never_derives_the_idempotent_hint`` holds
+    ``not read_only``, and ``test_an_undeclared_service_spec_leaves_the_hint_absent``
+    holds ``idempotent is not None``.
 
     Any hint supplied at registration via ``annotations=`` overrides the derived
     default: a non-destructive mutation passes
-    ``annotations={"destructiveHint": False}``, an idempotent one adds
-    ``{"idempotentHint": True}``, and either kind can set ``title`` /
+    ``annotations={"destructiveHint": False}``, an undeclared spec can still
+    add ``{"idempotentHint": True}``, and either kind can set ``title`` /
     ``openWorldHint``. The result is stored on the binding, so it is the single
     source of truth for ``tools/list`` and for anything reading
     ``binding.annotations``.
@@ -398,6 +413,8 @@ def merge_tool_annotations(explicit: dict[str, Any] | None, *, read_only: bool) 
     derived: dict[str, Any] = (
         {"readOnlyHint": True} if read_only else {"readOnlyHint": False, "destructiveHint": True}
     )
+    if not read_only and idempotent is not None:
+        derived["idempotentHint"] = idempotent
     return {**derived, **(explicit or {})}
 
 
