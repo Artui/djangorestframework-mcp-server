@@ -104,10 +104,20 @@ Per-session, so total memory scales with `(active sessions) × max_events
 × avg_payload_size`. The Redis variant is also bounded, but trims
 approximately: Redis shortens a stream only by dropping whole internal
 nodes, so each session keeps at least its newest `max_events` events and
-up to one node's worth more. A node holds `stream-node-max-entries`
-events, 100 by default, so budget Redis memory for `max_events + 100`
-per session. On `max_events=4096` that margin is noise; on
-`max_events=60` it is larger than the cap itself.
+less than one node more. A node closes at whichever limit it reaches
+first, `stream-node-max-entries` (100 by default) or
+`stream-node-max-bytes` (4096 by default), so the margin is under 100
+events and under about 4 KB per session. Budget Redis memory for
+`max_events × avg_payload_size + ~4 KB` per session.
+
+The byte limit is usually the one that closes a node. Only events of a
+few bytes each fill one by count, leaving up to 99 extra; from about a
+hundred bytes up a node fills by size well before that, and once events
+are over about 2 KB each node holds one and trimming is effectively
+exact. One approximate trim also removes at most 100 nodes' worth of
+entries (10,000 by default), so after a deploy lowers `max_events` on a
+long stream the first few writes leave it above the new bound before it
+catches up.
 
 ## Custom buffers
 

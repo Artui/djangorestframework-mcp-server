@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import json
+
 import pytest
 from fakeredis import FakeAsyncRedis, FakeServer
 
@@ -70,38 +72,53 @@ async def test_every_write_asks_redis_to_trim_approximately_at_max_events(
     """The bound is Redis's to keep, so what the buffer owns is the request:
     ``MAXLEN ~ max_events`` on every ``XADD``.
 
-    The test below cannot hold the ``~``, because exact trimming satisfies both
-    of its bounds. This one does: dropping ``approximate=True`` would make the
-    retained length tidier and make Redis cut inside a node on every write,
-    which is the cost ``~`` exists to avoid.
+    Read off the command redis-py sends rather than the arguments ``xadd`` was
+    called with, because the two differ: ``xadd`` defaults to
+    ``approximate=True``, so leaving the keyword out sends the same ``~``.
+    Passing ``approximate=False`` is what drops it, and Redis then trims
+    exactly on every write, editing the oldest node each time to mark entries
+    deleted where ``~`` waits and drops whole nodes. The test below cannot
+    hold the ``~``, because exact trimming satisfies both of its bounds; this
+    one does.
     """
     client = _client()
-    xadd = client.xadd
-    requested: list[tuple[object, object]] = []
+    execute_command = client.execute_command
+    sent: list[list[str]] = []
 
-    async def spy(*args: object, **kwargs: object) -> object:
-        requested.append((kwargs.get("maxlen"), kwargs.get("approximate")))
-        return await xadd(*args, **kwargs)
+    async def spy(*args: object, **options: object) -> object:
+        # Every redis-py command funnels through ``execute_command``, the
+        # ``EXPIRE`` that follows each write included.
+        if args[0] == "XADD":
+            # redis-py spells keywords as bytes and numbers as strings; Redis
+            # reads both the same way, so compare text.
+            sent.append([a.decode() if isinstance(a, bytes) else str(a) for a in args])
+        return await execute_command(*args, **options)
 
-    monkeypatch.setattr(client, "xadd", spy)
+    monkeypatch.setattr(client, "execute_command", spy)
     buf = RedisSSEReplayBuffer(client, max_events=7)
     await buf.record("s", {"n": 1})
     await buf.record("s", {"n": 2})
-    assert requested == [(7, True), (7, True)]
+    key = "drf-mcp:sse-replay:s"
+    assert sent == [
+        ["XADD", key, "MAXLEN", "~", "7", "*", "data", '{"n": 1}'],
+        ["XADD", key, "MAXLEN", "~", "7", "*", "data", '{"n": 2}'],
+    ]
     await client.aclose()
 
 
 async def test_trimming_keeps_the_newest_max_events_and_bounds_the_rest() -> None:
     """``MAXLEN ~ N`` trims only whole internal nodes of the stream, so Redis
-    keeps at least the newest N events and up to one node's worth more
-    (``stream-node-max-entries``, 100 by default).
+    keeps at least the newest N events and less than one node more. A node
+    closes at ``stream-node-max-entries`` (100 by default) or
+    ``stream-node-max-bytes`` (4096 by default), whichever comes first.
 
     Both bounds are asserted without assuming a node size, by writing until
     Redis first trims. That matters because the fake's answer moved under
-    this test: fakeredis before 2.39 trimmed ``~`` exactly, which Redis never
-    does, and from 2.39 it drops whole nodes as Redis does. A fixed write
-    count either never crosses a node boundary, and so asserts nothing about
-    trimming, or bakes in the node size.
+    this test: fakeredis before 2.39 trimmed ``~`` exactly whatever the event
+    size, which Redis does only once events are large enough (over about
+    2 KB) that each fills a node alone, and from 2.39 it drops whole nodes as
+    Redis does. A fixed write count either never crosses a node boundary, and
+    so asserts nothing about trimming, or bakes in the node size.
     """
     client = _client()
     buf = RedisSSEReplayBuffer(client, max_events=2)
@@ -124,10 +141,40 @@ async def test_trimming_keeps_the_newest_max_events_and_bounds_the_rest() -> Non
     assert out == recorded[-len(out) :]
 
     # The upper bound: the stream never grows back to the length that made
-    # Redis trim it, so the margin over max_events is one node and no more.
+    # Redis trim it, so the margin over max_events stays under one node.
     for n in range(trimmed_at):
         await buf.record("s", {"n": n})
         assert await client.xlen(key) < trimmed_at
+    await client.aclose()
+
+
+@pytest.mark.parametrize("pad", [1000, 2100], ids=["1kb-events", "2kb-events"])
+async def test_the_margin_over_max_events_stays_under_a_node_of_bytes(pad: int) -> None:
+    """A node also closes at ``stream-node-max-bytes``, 4096 by default, so
+    what Redis keeps beyond ``max_events`` is under about 4 KB however few
+    events that is, and nothing at all once two events overfill a node. That
+    is why the margin is small for real MCP events, which run to tens or
+    hundreds of bytes, where the entry limit alone would allow 99 of them.
+
+    Sized so the entry limit alone fails it: kilobyte events, written well
+    past one 100-entry node, would leave tens of kilobytes over the window.
+    On a fake that trims exactly (fakeredis before 2.39) the margin is zero
+    and this holds without exercising nodes at all.
+    """
+    client = _client()
+    buf = RedisSSEReplayBuffer(client, max_events=2)
+    key = "drf-mcp:sse-replay:s"
+    event = {"pad": "x" * pad}
+    event_bytes = len(json.dumps(event))
+    for _ in range(300):
+        await buf.record("s", event)
+        margin = await client.xlen(key) - 2
+        # The oldest node holds the whole margin and at least one event
+        # inside the window, or dropping it would have kept ``max_events``
+        # and trimming would have. The payloads alone, before the node's own
+        # framing, therefore sit under the byte limit: at most three
+        # kilobyte events, and no margin once one event is over 2 KB.
+        assert (margin + 1) * event_bytes < 4096
     await client.aclose()
 
 
