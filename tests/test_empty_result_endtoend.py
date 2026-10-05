@@ -3,22 +3,30 @@
 MCP requires ``structuredContent`` to be an object, and a server advertising an
 ``outputSchema`` MUST return structured content that conforms to it. Two
 situations present nothing: a selector tool's ``allow_none`` RETRIEVE that finds
-no row, and a single-row service tool whose output re-read finds none (dispatch
-materializes the re-read with ``.first()``, whatever the nested spec declares).
-One rule covers both: the result is served as ``{}``, and the ``outputSchema`` of
-a tool that can present nothing admits ``{}`` beside a full row.
+no row, and a single-row service tool whose output re-read selector finds none
+(dispatch materializes the re-read with ``.first()``, whatever the nested spec
+declares). One rule covers both: the result is served as ``{}``, and the
+``outputSchema`` of a tool that can present nothing admits ``{}`` beside a full
+row. Every other tool keeps a strict ``required``, because loosening it turns
+every row field optional for a client generating types from the schema.
 
 Each entry point is driven, because each once had its own answer: the sync wire
-handler, the async one, and the in-process ``call_tool``.
+handler, the async one, and the in-process ``call_tool``. The HTTP viewsets are
+driven as well, sync and async in both eras, because what a client validates is
+the schema and the result read off the wire.
 """
 
 from __future__ import annotations
 
+import json
+from dataclasses import dataclass
 from typing import Any
 
 import pytest
 from asgiref.sync import async_to_sync
 from django.http import HttpRequest
+from django.test import AsyncClient, Client, override_settings
+from jsonschema import Draft202012Validator
 from rest_framework import serializers
 from rest_framework.permissions import AllowAny
 from rest_framework_services.types.selector_kind import SelectorKind
@@ -32,8 +40,13 @@ from rest_framework_mcp.handlers.handle_tools_call import handle_tools_call
 from rest_framework_mcp.handlers.handle_tools_list import handle_tools_list
 from rest_framework_mcp.handlers.types.context import MCPCallContext
 from rest_framework_mcp.testing import assert_tool_result_conforms
+from rest_framework_mcp.transport.in_memory_session_store import InMemorySessionStore
 from tests.testapp.models import Invoice
 from tests.testapp.serializers import InvoiceOutputSerializer
+from tests.testapp.urlconf_for import urlconf_for
+
+MODERN = "2026-07-28"
+LEGACY = "2025-11-25"
 
 
 class _ArchiveInput(serializers.Serializer):
@@ -56,8 +69,32 @@ def _unsent_only(*, instance: Invoice) -> Any:
     return Invoice.objects.filter(pk=instance.pk, sent=False)
 
 
-def _server() -> MCPServer:
-    server = MCPServer(name="t", auth_backend=AllowAnyBackend(), session_store=None)
+def _void(*, data: dict[str, Any]) -> None:
+    return None
+
+
+@dataclass
+class _AddInput:
+    a: int
+    b: int
+
+
+class _SumOutput(serializers.Serializer):
+    result = serializers.IntegerField()
+
+
+def _add(*, data: _AddInput) -> dict[str, int]:
+    return {"result": data.a + data.b}
+
+
+def _no_reread() -> SelectorSpec:
+    # An output spec naming only the serializer: the service's own return
+    # renders, with no selector to filter it away.
+    return SelectorSpec(kind=SelectorKind.RETRIEVE, output_serializer=InvoiceOutputSerializer)
+
+
+def _server(session_store: Any = None) -> MCPServer:
+    server = MCPServer(name="t", auth_backend=AllowAnyBackend(), session_store=session_store)
     server.register_selector_tool(
         name="invoices.find",
         spec=SelectorSpec(
@@ -93,6 +130,60 @@ def _server() -> MCPServer:
         name="invoices.archive_chain",
         steps=[ChainStep("archive", archive, inputs=lambda ctx: {"data": ctx.args})],
         permissions=[],
+    )
+    # The same service with no re-read selector: it returns the row it changed.
+    send = ServiceSpec(
+        service=_archive,
+        atomic=False,
+        input_serializer=_ArchiveInput,
+        permission_classes=[AllowAny],
+        output_selector_spec=_no_reread(),
+    )
+    server.register_service_tool(name="invoices.send", spec=send)
+    server.register_chain_tool(
+        name="invoices.send_chain",
+        steps=[ChainStep("send", send, inputs=lambda ctx: {"data": ctx.args})],
+        permissions=[],
+    )
+    server.register_service_tool(
+        name="invoices.void",
+        spec=ServiceSpec(
+            service=_void,
+            atomic=False,
+            input_serializer=_ArchiveInput,
+            permission_classes=[AllowAny],
+            output_selector_spec=_no_reread(),
+        ),
+    )
+    # The remedy the docs give for the limit above: a re-read selector handing
+    # the service's return straight back, which makes the schema admit ``{}``.
+    server.register_service_tool(
+        name="invoices.void_reread",
+        spec=ServiceSpec(
+            service=_void,
+            atomic=False,
+            input_serializer=_ArchiveInput,
+            permission_classes=[AllowAny],
+            output_selector_spec=SelectorSpec(
+                kind=SelectorKind.RETRIEVE,
+                selector=lambda *, result: result,
+                output_serializer=InvoiceOutputSerializer,
+            ),
+        ),
+    )
+    # django-ag-ui's typed bridge fixture, reproduced: its code-mode stub reads
+    # this schema as the tool's return type.
+    server.register_service_tool(
+        name="sums.add",
+        spec=ServiceSpec(
+            service=_add,
+            atomic=False,
+            input_serializer=_AddInput,
+            permission_classes=[AllowAny],
+            output_selector_spec=SelectorSpec(
+                kind=SelectorKind.RETRIEVE, output_serializer=_SumOutput
+            ),
+        ),
     )
     return server
 
@@ -166,6 +257,16 @@ def test_a_service_reread_that_finds_nothing_is_an_empty_object_its_schema_admit
     _assert_empty_and_conforming(_tool(server, "invoices.archive"), result)
 
 
+@_ENTRY_POINTS
+@pytest.mark.django_db(transaction=True)
+def test_a_service_returning_none_through_a_pass_through_reread_conforms(call: Any) -> None:
+    server = _server()
+
+    result = call(server, "invoices.void_reread", {"number": "x"})
+
+    _assert_empty_and_conforming(_tool(server, "invoices.void_reread"), result)
+
+
 @pytest.mark.django_db
 def test_a_chain_whose_output_step_presents_nothing_is_an_empty_object() -> None:
     server = _server()
@@ -198,3 +299,123 @@ def test_a_retrieve_that_cannot_present_nothing_keeps_its_schema_strict() -> Non
 
     with pytest.raises(AssertionError):
         assert_tool_result_conforms(tool, {"structuredContent": {}})
+
+
+# ---------- tools that cannot present nothing keep a strict schema ----------
+
+
+@pytest.mark.parametrize(
+    "name", ["invoices.send", "invoices.send_chain", "invoices.void", "sums.add"]
+)
+def test_a_service_with_no_output_reread_keeps_its_schema_strict(name: str) -> None:
+    # With no re-read selector the service's own return renders, so nothing
+    # filters a row away. ``invoices.void`` returns ``None`` regardless, and is
+    # served ``{}`` against this schema: the documented limit, not admitted
+    # here, because admitting it would loosen every typed service's schema.
+    schema = _tool(_server(), name)["outputSchema"]
+
+    assert "anyOf" not in schema
+    assert schema["required"]
+    assert not Draft202012Validator(schema).is_valid({})
+
+
+def test_a_typed_service_with_no_reread_lists_the_exact_strict_schema() -> None:
+    assert _tool(_server(), "sums.add")["outputSchema"] == {
+        "type": "object",
+        "properties": {"result": {"type": "integer"}},
+        "required": ["result"],
+    }
+
+
+@pytest.mark.parametrize("name", ["invoices.find", "invoices.archive", "invoices.archive_chain"])
+def test_a_tool_that_can_present_nothing_moves_required_into_the_any_of(name: str) -> None:
+    schema = _tool(_server(), name)["outputSchema"]
+
+    assert "required" not in schema
+    assert schema["anyOf"][1] == {"maxProperties": 0}
+    assert Draft202012Validator(schema).is_valid({})
+
+
+# ---------- what the HTTP viewsets serve ----------
+
+
+async def _awaited(response: Any) -> Any:
+    return await response
+
+
+def _send(
+    client: Any, is_async: bool, method: str, params: dict[str, Any], headers: dict[str, str]
+) -> Any:
+    response = client.post(
+        "/mcp/",
+        data=json.dumps({"jsonrpc": "2.0", "id": 1, "method": method, "params": params}),
+        content_type="application/json",
+        headers=headers,
+    )
+    return async_to_sync(_awaited)(response) if is_async else response
+
+
+def _post(era: str, is_async: bool, method: str, params: dict[str, Any]) -> Any:
+    """One request to the mounted endpoint, in ``era``, on the chosen viewset."""
+    client: Any = AsyncClient() if is_async else Client()
+    headers: dict[str, str] = {"Mcp-Protocol-Version": era}
+    body: dict[str, Any] = dict(params)
+    if era == MODERN:
+        headers["Mcp-Method"] = method
+        if method == "tools/call":
+            headers["Mcp-Name"] = params["name"]
+        body["_meta"] = {
+            "io.modelcontextprotocol/protocolVersion": MODERN,
+            "io.modelcontextprotocol/clientInfo": {"name": "pytest", "version": "0"},
+            "io.modelcontextprotocol/clientCapabilities": {},
+        }
+    else:
+        opened = _send(
+            client,
+            is_async,
+            "initialize",
+            {
+                "protocolVersion": LEGACY,
+                "capabilities": {},
+                "clientInfo": {"name": "pytest", "version": "0"},
+            },
+            {},
+        )
+        assert opened.status_code == 200, opened.content
+        headers["Mcp-Session-Id"] = opened["Mcp-Session-Id"]
+    response = _send(client, is_async, method, body, headers)
+    assert response.status_code == 200, response.content
+    return json.loads(response.content)["result"]
+
+
+@pytest.mark.parametrize("is_async", [False, True], ids=["sync", "async"])
+@pytest.mark.parametrize("era", [LEGACY, MODERN], ids=["legacy", "modern"])
+@pytest.mark.django_db(transaction=True)
+def test_every_served_result_conforms_to_its_served_schema(era: str, is_async: bool) -> None:
+    server = _server(session_store=InMemorySessionStore())
+    Invoice.objects.create(number="INV-1")
+    Invoice.objects.create(number="INV-2")
+    calls: list[tuple[str, dict[str, Any], Any]] = [
+        # An ``allow_none`` miss, and a re-read that filters out the row the
+        # service just archived: both nothing, both served ``{}``.
+        ("invoices.find", {"number": "nope"}, {}),
+        ("invoices.archive", {"number": "INV-1"}, {}),
+        # A service with no re-read returns the row it changed, against a
+        # schema that still requires the row's fields.
+        ("invoices.send", {"number": "INV-2"}, "INV-2"),
+    ]
+    with override_settings(ROOT_URLCONF=urlconf_for(server, is_async=is_async)):
+        listed = _post(era, is_async, "tools/list", {})["tools"]
+        schemas = {tool["name"]: tool["outputSchema"] for tool in listed}
+        for name, arguments, expected in calls:
+            result = _post(era, is_async, "tools/call", {"name": name, "arguments": arguments})
+
+            assert not result.get("isError"), result
+            served = result["structuredContent"]
+            if expected == {}:
+                assert served == {}
+            else:
+                assert served["number"] == expected
+                assert "required" in schemas[name]
+            # Draft 2020-12, the dialect MCP names for a schema with no ``$schema``.
+            Draft202012Validator(schemas[name]).validate(served)

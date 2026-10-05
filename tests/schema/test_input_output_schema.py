@@ -145,3 +145,21 @@ def test_may_be_empty_leaves_a_schema_with_nothing_required_as_derived() -> None
 
 def test_may_be_empty_with_no_output_serializer_is_still_no_schema() -> None:
     assert build_output_schema(None, may_be_empty=True) is None
+
+
+@pytest.mark.parametrize("paginate", [False, True], ids=["array", "envelope"])
+def test_may_be_empty_returns_a_list_schema_as_derived(paginate: bool) -> None:
+    # A list result is a list, empty at worst, and never nothing. The paged
+    # envelope requires all four of its keys, so the rewrite would otherwise
+    # move them into the ``anyOf`` and let ``{}`` pass for a page.
+    derived = build_output_schema(
+        InvoiceOutputSerializer, kind=SelectorKind.LIST, paginate=paginate
+    )
+
+    admitting = build_output_schema(
+        InvoiceOutputSerializer, kind=SelectorKind.LIST, paginate=paginate, may_be_empty=True
+    )
+
+    assert admitting == derived
+    assert derived is not None
+    assert "anyOf" not in derived

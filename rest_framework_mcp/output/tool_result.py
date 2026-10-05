@@ -72,12 +72,16 @@ def build_tool_result(
 
     A ``None`` payload is a result with **nothing to present**: an
     ``allow_none`` RETRIEVE that found no row, or a service whose output
-    re-read found none. It is served as ``{}``, both as ``structuredContent``
-    and as the text block, because MCP requires structured content to be an
-    object and asks the text block to carry the same JSON. This is the one
-    place the rule lives, so a selector, a service and a chain answer it the
-    same way on every entry point. The advertised ``outputSchema`` admits the
-    ``{}`` (``build_output_schema(may_be_empty=...)``).
+    re-read selector found none. It is served as ``{}``, both as
+    ``structuredContent`` and as the text block, because MCP requires
+    structured content to be an object and asks the text block to carry the
+    same JSON. This is the one place the rule lives, so a selector, a service
+    and a chain answer it the same way on every entry point. The advertised
+    ``outputSchema`` of those tools admits the ``{}``
+    (``build_output_schema(may_be_empty=...)``). A service with no re-read
+    selector that returns ``None`` is served ``{}`` too, against a schema that
+    still requires its fields: the documented limit, since nothing it declares
+    says whether it can return ``None``.
     """
     if content_kind is not ToolContentKind.TEXT:
         blocks = build_content_blocks(

@@ -103,20 +103,38 @@ def can_present_nothing(spec: ServiceSpec[Any, Any, Any] | SelectorSpec[Any, Any
     - A ``SelectorSpec`` RETRIEVE presents nothing only under ``allow_none``.
       Without it, ``dispatch_spec`` answers a miss as ``not_found``, which every
       entry point serves as an ``isError`` result.
-    - A single-row ``ServiceSpec`` always can. ``dispatch_spec`` materializes
-      the output re-read with ``.first()`` whatever the nested spec declares,
-      so a re-read that filters the row out yields ``None``, and with no
-      re-read selector the service's own return renders, which may be
-      ``None`` too.
+    - A single-row ``ServiceSpec`` presents nothing when its
+      ``output_selector_spec`` has a re-read selector. ``dispatch_spec``
+      materializes the re-read with ``.first()`` whatever the nested spec
+      declares, so a re-read that filters the row out yields ``None``. A chain's
+      service step re-reads the same way.
+
+    A service with no re-read selector renders its own return, and answers
+    ``False`` even though that return may be ``None``: the declaration says
+    nothing about whether it can be, and admitting ``{}`` for every such
+    service would turn every row field optional for each client generating
+    types from the schema. One returning ``None`` is served ``{}`` against a
+    strict schema, the documented limit.
 
     One answer for every binding kind, through ``rendered_kind``, so a chain's
     output step is judged exactly as the same spec registered as a tool.
+
+    The last line is one ``and``-chain, so branch coverage cannot see a deleted
+    condition. Each is held by a test in
+    ``tests/registry/types/test_can_present_nothing.py`` that fails without it:
+    ``test_a_service_with_no_output_spec_at_all_cannot_present_nothing``
+    (``nested is not None``, without which ``None.selector`` raises) and
+    ``test_a_service_rendering_its_own_return_keeps_its_schema_strict``
+    (``nested.selector is not None``). The ``LIST`` check is held by
+    ``test_a_list_result_never_presents_nothing``, because the schema builder
+    refuses to rewrite a ``LIST`` schema too, so nothing outside can see it.
     """
     if rendered_kind(spec) is SelectorKind.LIST:
         return False
     if isinstance(spec, SelectorSpec):
         return spec.allow_none
-    return True
+    nested = spec.output_selector_spec
+    return nested is not None and nested.selector is not None
 
 
 __all__ = ["can_present_nothing", "rendered_kind", "validate_content_kind"]

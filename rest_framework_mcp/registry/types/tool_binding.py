@@ -229,10 +229,13 @@ class ToolBinding(Generic[InputT, ResultT, ExtraT]):
 
     @property
     def can_present_nothing(self) -> bool:
-        """Whether a successful call can present nothing: any single-row result.
+        """Whether a successful call can present nothing: a single-row result
+        read back through an output re-read selector, which can find no row.
 
         Read by ``tools/list`` so the ``outputSchema`` admits the ``{}`` such a
-        call is served as. See ``registry.types.utils.can_present_nothing``."""
+        call is served as. A service with no re-read selector answers ``False``
+        and keeps a strict schema. See
+        ``registry.types.utils.can_present_nothing``."""
         return can_present_nothing(self.spec)
 
     @cached_property

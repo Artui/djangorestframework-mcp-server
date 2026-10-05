@@ -40,6 +40,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   pool and a resource read's pool are now built through drf-services'
   `base_pool`, so both also carry `progress`, a no-op reporter.
 
+### Changed
+
+- **The `outputSchema` of a tool that can present nothing moves its root
+  `required` into an `anyOf`.** Exactly three kinds of tool are affected: an
+  `allow_none` RETRIEVE selector tool, a single-row service tool whose
+  `output_selector_spec` has a `selector` (an output re-read), and a chain
+  whose output step is one of those two. The schema keeps `"type": "object"`
+  and its `properties`, and `"required": [...]` becomes
+  `"anyOf": [{"required": [...]}, {"maxProperties": 0}]`, so a client
+  generating types from it sees every field as optional. Every other tool's
+  `outputSchema` is unchanged. That includes a service tool whose
+  `output_selector_spec` names only an `output_serializer`, which keeps a
+  strict `required`.
+
 ### Fixed
 
 - **A service tool's `inputSchema` advertises the lookup its target selector
@@ -55,26 +69,27 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   are: its signature without the transport seeds, plus a `filter_set`'s fields.
   An input field or `UrlKwarg` of the same name wins. A lookup is `required`
   only when its selector marks it `InputRequired`, which is the reflection's
-  rule, because the kwargs pool may supply the value instead.
+  rule, because the kwargs pool may supply the value instead. A name that both
+  the selector and the input serializer require is listed once.
 - **A result with nothing to present is `{}`, and the tool's `outputSchema`
   admits it.** Two successful calls render to nothing: an `allow_none` RETRIEVE
-  that finds no row, and a single-row service tool whose output re-read finds
-  none, for example because it filters out the row the service just archived.
-  Each failed its own advertised schema in a different way. A selector tool
-  served `"structuredContent": null`, which MCP forbids because structured
-  content is an object. A service tool served `{}` against a schema that
-  required its fields. Chains served `null` too, and so did `call_tool` for a
-  service. Now every tool kind, on every entry point, serves
-  `"structuredContent": {}` with a text block of `{}`. The `outputSchema` of a
-  tool that can present nothing keeps its object root and its `properties`,
-  and its `required` list moves into
-  `"anyOf": [{"required": [...]}, {"maxProperties": 0}]`, so a full row and
-  `{}` both conform and a partial row still does not. Such a tool is an
-  `allow_none` RETRIEVE selector, any single-row service tool, or a chain whose
-  output step is either. Other RETRIEVE tools, `LIST` results and `many=True`
-  services keep the schema they had. `build_tool_result` now turns a `None`
-  payload into `{}` for every caller, and `build_output_schema` takes
-  `may_be_empty=`.
+  that finds no row, and a single-row service tool whose output re-read
+  selector finds none, for example because it filters out the row the service
+  just archived. Each failed its own advertised schema in a different way. A
+  selector tool served `"structuredContent": null`, which MCP forbids because
+  structured content is an object. A service tool served `{}` against a schema
+  that required its fields. Chains served `null` too, and so did `call_tool`
+  for a service. Now every tool kind, on every entry point, serves
+  `"structuredContent": {}` with a text block of `{}`, and the schema of each
+  tool that can present nothing admits it (the `anyOf` under Changed names
+  exactly which tools those are). A full row and `{}` both conform, and a
+  partial row still does not. `build_tool_result` now turns a `None` payload
+  into `{}` for every caller, and `build_output_schema` takes `may_be_empty=`,
+  which leaves a `LIST` schema as derived. One case stays open: a service with
+  no re-read selector whose function returns `None` is served `{}` against a
+  strict schema, because nothing it declares says it can return `None`.
+  Declaring a re-read selector, even `lambda *, result: result`, makes its
+  schema admit `{}`.
 
 ## [0.49.0] — 2026-09-24
 

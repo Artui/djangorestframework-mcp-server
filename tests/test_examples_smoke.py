@@ -199,7 +199,8 @@ def test_invoicing_demonstrates_lookup_empty_result_idempotency_and_seeds() -> N
     """Four behaviours the example registers, asserted as a client sees them.
 
     ``invoices.set_amount`` advertises its target lookup and lists
-    ``idempotentHint``; ``invoices.find`` answers a miss with ``{}`` under a
+    ``idempotentHint``, and keeps a strict ``outputSchema`` because it has no
+    output re-read; ``invoices.find`` answers a miss with ``{}`` under a
     schema that admits it; ``invoices.outstanding`` reads the mount's
     ``currency`` seed, and a client ``currency`` does not replace it.
     """
@@ -224,6 +225,11 @@ def test_invoicing_demonstrates_lookup_empty_result_idempotency_and_seeds() -> N
     assert {"maxProperties": 0} in find_schema["anyOf"]
     assert replies["find_miss"]["structuredContent"] == {}
     assert not replies["find_miss"].get("isError")
+    # A service with no output re-read selector renders its own return, which
+    # cannot be filtered away, so its schema keeps a strict ``required``.
+    set_amount_output = set_amount["outputSchema"]
+    assert "anyOf" not in set_amount_output
+    assert "number" in set_amount_output["required"]
 
     assert replies["outstanding"]["structuredContent"] == {
         "amount_cents": 250,

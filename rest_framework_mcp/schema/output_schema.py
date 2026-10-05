@@ -65,13 +65,16 @@ def build_output_schema(
     ``"anyOf": [{"required": [...]}, {"maxProperties": 0}]``. A full row
     satisfies the first branch, ``{}`` the second, and a non-empty row missing
     a required field neither. An item schema with nothing required already
-    admits ``{}`` and is returned as derived, as is a ``LIST`` schema, which
-    never presents nothing.
+    admits ``{}`` and is returned as derived. So is a ``LIST`` schema, whatever
+    ``may_be_empty`` says: a list result is a list, empty at worst, and the
+    paginated envelope's four keys stay required.
 
     The guard is one ``or``-chain, so branch coverage cannot see a deleted
     condition. Each one is held by a test that fails without it:
     ``test_a_retrieve_that_cannot_present_nothing_keeps_its_schema_strict``
     (``not may_be_empty``),
+    ``test_may_be_empty_returns_a_list_schema_as_derived`` (``kind is LIST``,
+    its ``envelope`` case),
     ``test_may_be_empty_with_no_output_serializer_is_still_no_schema``
     (``schema is None``) and
     ``test_may_be_empty_leaves_a_schema_with_nothing_required_as_derived``
@@ -85,7 +88,12 @@ def build_output_schema(
         handle_description=HANDLE_DESCRIPTION,
         affordances=affordances,
     )
-    if not may_be_empty or schema is None or not schema.get("required"):
+    if (
+        not may_be_empty
+        or kind is SelectorKind.LIST
+        or schema is None
+        or not schema.get("required")
+    ):
         return schema
     admitting: dict[str, Any] = {k: v for k, v in schema.items() if k != "required"}
     admitting["anyOf"] = [{"required": schema["required"]}, {"maxProperties": 0}]

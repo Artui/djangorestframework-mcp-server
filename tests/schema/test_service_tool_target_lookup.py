@@ -145,6 +145,26 @@ def test_a_lookup_its_selector_marks_input_required_is_required() -> None:
     assert schema["required"] == ["pk", "number"]
 
 
+def test_a_lookup_required_by_both_the_selector_and_the_serializer_is_required_once() -> None:
+    # Both sides contribute ``pk`` to ``required``. JSON Schema requires the
+    # entries of ``required`` to be unique, so a duplicate makes the whole
+    # ``inputSchema`` invalid as a schema, not merely untidy.
+    class _WithPk(_RenameInput):
+        pk = serializers.IntegerField()
+
+    spec = _rename_spec(
+        input_serializer=_WithPk,
+        instance_selector_spec=SelectorSpec(
+            kind=SelectorKind.RETRIEVE, selector=_invoice_by_marked_pk
+        ),
+    )
+
+    schema = build_service_tool_input_schema(_binding(spec))
+
+    assert sorted(schema["required"]) == ["number", "pk"]
+    jsonschema.Draft202012Validator.check_schema(schema)
+
+
 def test_a_lookup_with_nothing_required_adds_no_required_list() -> None:
     # No input serializer, and ``pk`` carries no ``InputRequired`` marker.
     schema = build_service_tool_input_schema(_binding(_rename_spec(input_serializer=None)))
