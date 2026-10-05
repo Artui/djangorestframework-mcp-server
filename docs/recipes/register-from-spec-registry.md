@@ -78,7 +78,7 @@ server.register_specs(
             "description": "List orders, newest first by default.",
         },
         "refund_order": {
-            "annotations": {"destructiveHint": True, "idempotentHint": False},
+            "annotations": {"title": "Refund an order"},
             "permissions": [ScopeRequired("orders:write")],
         },
     },
@@ -88,6 +88,25 @@ server.register_specs(
 Each value is the keyword arguments for that entry's registration method, so
 anything those methods accept works — `title`, `output_format`,
 `include_output_schema`, `rate_limits`, `url_kwargs`, and the rest.
+
+A fact about the **operation** is not an MCP knob, though, even when MCP has a
+hint for it. Whether repeating a refund is safe is true of the refund on every
+transport, so it is declared once on the spec, where each transport reads it:
+
+```python
+# orders/specs.py
+refund_order = ServiceSpec(
+    service=refund_order_service,
+    input_serializer=RefundInput,
+    # Declared, not left unsaid: a second call refunds again.
+    idempotent=False,
+)
+```
+
+The server turns that declaration into `"idempotentHint": false` on the tool. A
+spec that declares nothing (`idempotent=None`, the default) gets no hint, and an
+`annotations=` override still wins over the derived value. See
+[Tool annotations](../concepts.md#tool-annotations).
 
 ## What the entry already says
 

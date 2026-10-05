@@ -202,3 +202,20 @@ def test_a_read_only_tool_never_derives_the_idempotent_hint() -> None:
     # Holds the ``not read_only`` conjunct in ``merge_tool_annotations``: MCP
     # defines ``idempotentHint`` only when ``readOnlyHint`` is false.
     assert merge_tool_annotations(None, read_only=True, idempotent=True) == {"readOnlyHint": True}
+
+
+def test_a_chain_of_idempotent_service_steps_derives_no_idempotent_hint() -> None:
+    # Chaining idempotent steps does not make an idempotent chain: a
+    # ``get_or_create`` step reports "created" only on the first call, so on a
+    # repeat the next step receives different input. Fails if
+    # ``chain_to_tool`` starts passing ``idempotent=``.
+    server = _server()
+    binding = server.register_chain_tool(
+        name="idempotent.chain",
+        steps=[
+            ChainStep("a", ServiceSpec(service=lambda **_: {}, atomic=False, idempotent=True)),
+            ChainStep("b", ServiceSpec(service=lambda **_: {}, atomic=False, idempotent=True)),
+        ],
+    )
+    assert binding.annotations == {"readOnlyHint": False, "destructiveHint": True}
+    assert "idempotentHint" not in _annotations_for(server, "idempotent.chain")
