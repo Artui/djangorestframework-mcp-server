@@ -1529,6 +1529,17 @@
 </li>
         
           <li class="md-nav__item">
+  <a href="#rest_framework_mcp.registry.types.tool_binding.ToolBinding.can_present_nothing" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        can_present_nothing
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
   <a href="#rest_framework_mcp.registry.types.tool_binding.ToolBinding.audience_projection" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -1711,6 +1722,17 @@
 </li>
         
           <li class="md-nav__item">
+  <a href="#rest_framework_mcp.registry.types.selector_tool_binding.SelectorToolBinding.spec_kwargs_provides" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        spec_kwargs_provides
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
   <a href="#rest_framework_mcp.registry.types.selector_tool_binding.SelectorToolBinding.content_kind" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -1781,6 +1803,17 @@
     <span class="md-ellipsis">
       
         rendered_kind
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#rest_framework_mcp.registry.types.selector_tool_binding.SelectorToolBinding.can_present_nothing" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        can_present_nothing
       
     </span>
   </a>
@@ -2629,6 +2662,17 @@
   
 </li>
         
+          <li class="md-nav__item">
+  <a href="#rest_framework_mcp.registry.types.chain_tool_binding.ChainToolBinding.can_present_nothing" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        can_present_nothing
+      
+    </span>
+  </a>
+  
+</li>
+        
       </ul>
     </nav>
   
@@ -2650,6 +2694,28 @@
     <span class="md-ellipsis">
       
         build_selector_tool_input_schema
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#output-schema" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Output schema
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#rest_framework_mcp.schema.output_schema.build_output_schema" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        build_output_schema
       
     </span>
   </a>
@@ -3343,6 +3409,17 @@
 </li>
         
           <li class="md-nav__item">
+  <a href="#rest_framework_mcp.registry.types.tool_binding.ToolBinding.can_present_nothing" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        can_present_nothing
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
   <a href="#rest_framework_mcp.registry.types.tool_binding.ToolBinding.audience_projection" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -3525,6 +3602,17 @@
 </li>
         
           <li class="md-nav__item">
+  <a href="#rest_framework_mcp.registry.types.selector_tool_binding.SelectorToolBinding.spec_kwargs_provides" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        spec_kwargs_provides
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
   <a href="#rest_framework_mcp.registry.types.selector_tool_binding.SelectorToolBinding.content_kind" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -3595,6 +3683,17 @@
     <span class="md-ellipsis">
       
         rendered_kind
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#rest_framework_mcp.registry.types.selector_tool_binding.SelectorToolBinding.can_present_nothing" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        can_present_nothing
       
     </span>
   </a>
@@ -4443,6 +4542,17 @@
   
 </li>
         
+          <li class="md-nav__item">
+  <a href="#rest_framework_mcp.registry.types.chain_tool_binding.ChainToolBinding.can_present_nothing" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        can_present_nothing
+      
+    </span>
+  </a>
+  
+</li>
+        
       </ul>
     </nav>
   
@@ -4464,6 +4574,28 @@
     <span class="md-ellipsis">
       
         build_selector_tool_input_schema
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#output-schema" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Output schema
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#rest_framework_mcp.schema.output_schema.build_output_schema" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        build_output_schema
       
     </span>
   </a>
@@ -5101,11 +5233,11 @@ top-level kwargs would conflict with that shape.</p>
         <p>How unknown <code>arguments</code> keys are handled relative to the binding's
 <code>inputSchema</code>.</p>
 <ul>
-<li><code>REJECT</code> (default) answers <code>-32602</code> and advertises
-  <code>additionalProperties: false</code> — but <strong>only</strong> with an
-  <code>input_serializer</code> to validate against. A serializer-less binding has
-  no declared field set, so <code>REJECT</code> cannot fire and its schema stays
-  open.</li>
+<li><code>REJECT</code> (default) answers an <code>isError</code> <code>validation_error</code> result
+  naming the unexpected keys, and advertises <code>additionalProperties:
+  false</code> — but <strong>only</strong> with an <code>input_serializer</code> to validate against.
+  A serializer-less binding has no declared field set, so <code>REJECT</code> cannot
+  fire and its schema stays open.</li>
 <li><code>PASSTHROUGH</code> advertises an open schema and merges unknown keys into
   the validated payload.</li>
 <li><code>IGNORE</code> advertises an open schema and drops them.</li>
@@ -5442,6 +5574,35 @@ dispatches to a list result the handler renders <code>many=True</code>, and for 
 tool never paginates, so a <code>LIST</code> is served as a bare array and the
 schema has to say so; it once advertised the item alone. See
 <code>registry.types.utils.rendered_kind</code>.</p>
+
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-attribute">
+
+
+
+<h3 id="rest_framework_mcp.registry.types.tool_binding.ToolBinding.can_present_nothing" class="doc doc-heading">
+            <span class="doc doc-object-name doc-attribute-name">can_present_nothing</span>
+
+
+  <span class="doc doc-labels">
+      <small class="doc doc-label doc-label-property"><code>property</code></small>
+  </span>
+
+<a href="#rest_framework_mcp.registry.types.tool_binding.ToolBinding.can_present_nothing" class="headerlink" title="Permanent link">&para;</a></h3>
+<div class="language-python doc-signature highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="n">can_present_nothing</span><span class="p">:</span> <span class="nb">bool</span>
+</span></code></pre></div>
+
+    <div class="doc doc-contents ">
+
+        <p>Whether a successful call can present nothing: a single-row result
+read back through an output re-read selector, which can find no row.</p>
+<p>Read by <code>tools/list</code> so the <code>outputSchema</code> admits the <code>{}</code> such a
+call is served as. A service with no re-read selector answers <code>False</code>
+and keeps a strict schema. See
+<code>registry.types.utils.can_present_nothing</code>.</p>
 
     </div>
 
@@ -5861,8 +6022,9 @@ parameters as individual function arguments
 
         <p>How unknown <code>arguments</code> keys are handled relative to the merged
 <code>inputSchema</code> (<code>input_serializer</code> fields, <code>filter_set</code> properties,
-ordering, pagination). <code>REJECT</code> answers <code>-32602</code>, <code>PASSTHROUGH</code>
-merges them into the validated payload, <code>IGNORE</code> drops them.</p>
+ordering, pagination). <code>REJECT</code> answers an <code>isError</code>
+<code>validation_error</code> result naming them, <code>PASSTHROUGH</code> merges them into
+the validated payload, <code>IGNORE</code> drops them.</p>
 
     </div>
 
@@ -5959,6 +6121,34 @@ dispatched params. See
   
       dataclass
   " href="#rest_framework_services.types.url_kwarg.UrlKwarg"><code>UrlKwarg</code></a>.</p>
+
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-attribute">
+
+
+
+<h3 id="rest_framework_mcp.registry.types.selector_tool_binding.SelectorToolBinding.spec_kwargs_provides" class="doc doc-heading">
+            <span class="doc doc-object-name doc-attribute-name">spec_kwargs_provides</span>
+
+
+  <span class="doc doc-labels">
+      <small class="doc doc-label doc-label-class-attribute"><code>class-attribute</code></small>
+      <small class="doc doc-label doc-label-instance-attribute"><code>instance-attribute</code></small>
+  </span>
+
+<a href="#rest_framework_mcp.registry.types.selector_tool_binding.SelectorToolBinding.spec_kwargs_provides" class="headerlink" title="Permanent link">&para;</a></h3>
+<div class="language-python doc-signature highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="n">spec_kwargs_provides</span><span class="p">:</span> <span class="nb">tuple</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="o">...</span><span class="p">]</span> <span class="o">=</span> <span class="p">()</span>
+</span></code></pre></div>
+
+    <div class="doc doc-contents ">
+
+        <p>Selector parameters the spec's <code>kwargs=</code> provider fills, as declared at
+registration. Registration counts each as the parameter's source, the
+<code>inputSchema</code> does not advertise it, and a call is not refused for leaving it
+out.</p>
 
     </div>
 
@@ -6155,6 +6345,32 @@ each entry in the pagination envelope's <code>items</code>. Feeds the advertised
 <p>Paired with <code>paginate</code> when the schema is built: a <code>LIST</code> is an array
 unpaginated and the pagination envelope otherwise, which only a selector
 tool can produce.</p>
+
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-attribute">
+
+
+
+<h3 id="rest_framework_mcp.registry.types.selector_tool_binding.SelectorToolBinding.can_present_nothing" class="doc doc-heading">
+            <span class="doc doc-object-name doc-attribute-name">can_present_nothing</span>
+
+
+  <span class="doc doc-labels">
+      <small class="doc doc-label doc-label-property"><code>property</code></small>
+  </span>
+
+<a href="#rest_framework_mcp.registry.types.selector_tool_binding.SelectorToolBinding.can_present_nothing" class="headerlink" title="Permanent link">&para;</a></h3>
+<div class="language-python doc-signature highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="n">can_present_nothing</span><span class="p">:</span> <span class="nb">bool</span>
+</span></code></pre></div>
+
+    <div class="doc doc-contents ">
+
+        <p>Whether a successful call can present nothing: an <code>allow_none</code> RETRIEVE.</p>
+<p>Read by <code>tools/list</code> so the <code>outputSchema</code> admits the <code>{}</code> such a
+call is served as. See <code>registry.types.utils.can_present_nothing</code>.</p>
 
     </div>
 
@@ -8767,7 +8983,9 @@ these dispatch policies); import them from <code>rest_framework_mcp.constants</c
         <p>How <code>dispatch_spec</code> treats <code>params</code> keys outside a spec's declared set.</p>
 <p>The <em>declared set</em> is derived from the spec without any transport knowledge: a
 <a class="autorefs autorefs-external" href="https://artui.github.io/djangorestframework-services/reference/types/#rest_framework_services.types.service_spec.ServiceSpec"><code>ServiceSpec</code></a>'s
-<code>input_serializer</code> fields plus the keys its nested target selectors consume; a
+<code>input_serializer</code> fields plus the keys of the one target lookup dispatch calls
+(its <code>collection_selector_spec</code> when declared, else its
+<code>instance_selector_spec</code>, and neither for <code>many=True</code>); a
 <a class="autorefs autorefs-external" href="https://artui.github.io/djangorestframework-services/reference/types/#rest_framework_services.types.selector_spec.SelectorSpec"><code>SelectorSpec</code></a>'s
 <code>selector</code> parameters. When the set cannot be enumerated — a callable that
 declares <code>**kwargs</code>, or a duck-typed <code>filter_set</code> whose fields are opaque to the
@@ -9778,6 +9996,34 @@ paginates, so a <code>LIST</code> is served as a bare array. <code>None</code> u
 
 </div>
 
+<div class="doc doc-object doc-attribute">
+
+
+
+<h3 id="rest_framework_mcp.registry.types.chain_tool_binding.ChainToolBinding.can_present_nothing" class="doc doc-heading">
+            <span class="doc doc-object-name doc-attribute-name">can_present_nothing</span>
+
+
+  <span class="doc doc-labels">
+      <small class="doc doc-label doc-label-property"><code>property</code></small>
+  </span>
+
+<a href="#rest_framework_mcp.registry.types.chain_tool_binding.ChainToolBinding.can_present_nothing" class="headerlink" title="Permanent link">&para;</a></h3>
+<div class="language-python doc-signature highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="n">can_present_nothing</span><span class="p">:</span> <span class="nb">bool</span>
+</span></code></pre></div>
+
+    <div class="doc doc-contents ">
+
+        <p>Whether a successful call can present nothing, judged on the output step.</p>
+<p><code>False</code> under <code>output_all</code>, whose <code>{alias: rendered}</code> object is
+never <code>None</code>. Otherwise the output step's spec answers, exactly as it
+would registered as a tool of its own. See
+<code>registry.types.utils.can_present_nothing</code>.</p>
+
+    </div>
+
+</div>
+
 
 
 
@@ -9808,8 +10054,11 @@ top, so the shape is described the same way across transports.</p>
 
 <a href="#rest_framework_mcp.schema.selector_tool_schema.build_selector_tool_input_schema" class="headerlink" title="Permanent link">&para;</a></h2>
 <div class="language-python doc-signature highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="nf">build_selector_tool_input_schema</span><span class="p">(</span>
-</span><span id="__span-0-2"><a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a>    <span class="n">binding</span><span class="p">:</span> <span class="n">SelectorToolBinding</span><span class="p">,</span> <span class="o">*</span><span class="p">,</span> <span class="n">max_page_size</span><span class="p">:</span> <span class="nb">int</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span>
-</span><span id="__span-0-3"><a id="__codelineno-0-3" name="__codelineno-0-3" href="#__codelineno-0-3"></a><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]</span>
+</span><span id="__span-0-2"><a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a>    <span class="n">binding</span><span class="p">:</span> <span class="n">SelectorToolBinding</span><span class="p">,</span>
+</span><span id="__span-0-3"><a id="__codelineno-0-3" name="__codelineno-0-3" href="#__codelineno-0-3"></a>    <span class="o">*</span><span class="p">,</span>
+</span><span id="__span-0-4"><a id="__codelineno-0-4" name="__codelineno-0-4" href="#__codelineno-0-4"></a>    <span class="n">max_page_size</span><span class="p">:</span> <span class="nb">int</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+</span><span id="__span-0-5"><a id="__codelineno-0-5" name="__codelineno-0-5" href="#__codelineno-0-5"></a>    <span class="n">pool_seeds</span><span class="p">:</span> <span class="n">PoolSeeds</span> <span class="o">=</span> <span class="n">DEFAULT_POOL_SEEDS</span><span class="p">,</span>
+</span><span id="__span-0-6"><a id="__codelineno-0-6" name="__codelineno-0-6" href="#__codelineno-0-6"></a><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]</span>
 </span></code></pre></div>
 
     <div class="doc doc-contents first">
@@ -9819,14 +10068,19 @@ top, so the shape is described the same way across transports.</p>
 ones on key collision):</p>
 <ol>
 <li><strong>Reflected <code>spec</code> shape</strong> — the selector callable's own parameters (an
-   <code>**extras: Unpack[TypedDict]</code> expanded into one property per key, its
-   required keys populating <code>required</code>, the <code>request</code> / <code>user</code> /
-   <code>view</code> transport seeds skipped) plus the <code>filter_set</code> fields, via
-   drf-services' <code>spec_to_json_schema</code>. This is the <em>same</em> reflection
-   the Pydantic-AI <code>SpecToolset</code> consumes, so both transports advertise
-   the same shape: a nested route's <code>parent_pk</code> read from <code>extras</code> is
-   discoverable without an explicit <code>UrlKwarg</code>, and a <code>FilterSet</code>'s
-   <code>OrderingFilter</code> advertises <code>ordering</code> with nothing else declared.</li>
+   <code>**extras: Unpack[TypedDict]</code> expanded into one property per key, the
+   <code>request</code> / <code>user</code> / <code>view</code> transport seeds skipped) plus the
+   <code>filter_set</code> fields, via drf-services' <code>spec_to_json_schema</code>, told
+   which names this server fills (<code>schema.utils.selector_inputs</code>). A
+   filled name -- a registered seed, a <code>UrlKwarg</code> with a default, a key a
+   <code>TypedDict</code>-annotated <code>kwargs=</code> provider returns, a
+   <code>spec_kwargs_provides=</code> name -- is not advertised, and every other
+   parameter without a default is required. This is the <em>same</em> reflection
+   the Pydantic-AI <code>SpecToolset</code> consumes, under the same rule, so both
+   transports advertise the same shape: a nested route's <code>parent_pk</code> read
+   from <code>extras</code> is discoverable without an explicit <code>UrlKwarg</code>, and a
+   <code>FilterSet</code>'s <code>OrderingFilter</code> advertises <code>ordering</code> with nothing
+   else declared.</li>
 <li><strong><code>spec.input_serializer</code></strong> — tool-specific args that aren't reflected
    selector params. A <code>SelectorSpec</code> carries no input serializer, so this
    is MCP-only; its curated fields win over a reflected param of the same
@@ -9903,6 +10157,23 @@ the server's. <code>None</code> advertises no <code>maximum</code>.</p>
                   <code>None</code>
             </td>
           </tr>
+          <tr class="doc-section-item">
+            <td>
+                <code>pool_seeds</code>
+            </td>
+            <td>
+                  <code><a class="autorefs autorefs-external" title="rest_framework_services.types.pool_seeds.PoolSeeds" href="https://artui.github.io/djangorestframework-services/reference/types/#rest_framework_services.types.pool_seeds.PoolSeeds">PoolSeeds</a></code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>The server's registered seeds, which fill a selector
+parameter of the same name, so it is not asked of the client.</p>
+              </div>
+            </td>
+            <td>
+                  <code><a class="autorefs autorefs-external" title="rest_framework_services.types.pool_seeds.DEFAULT_POOL_SEEDS" href="https://artui.github.io/djangorestframework-services/reference/types/#rest_framework_services.types.pool_seeds.DEFAULT_POOL_SEEDS">DEFAULT_POOL_SEEDS</a></code>
+            </td>
+          </tr>
       </tbody>
     </table>
 
@@ -9938,6 +10209,92 @@ the server's. <code>None</code> advertises no <code>maximum</code>.</p>
           </tr>
       </tbody>
     </table>
+
+
+    </div>
+
+</div><h2 id="output-schema">Output schema<a class="headerlink" href="#output-schema" title="Permanent link">&para;</a></h2>
+<p>Builds a tool's <code>outputSchema</code> from its output serializer, kind-aware like the
+input side. <code>may_be_empty=True</code> is what <code>tools/list</code> passes for a tool that can
+present nothing (each binding answers it as <code>can_present_nothing</code>): the root
+stays an object schema and admits the <code>{}</code> such a call is served as
+(<a href="../../concepts/#dispatch-flow">Concepts</a>).</p>
+
+
+<div class="doc doc-object doc-function">
+
+
+<h2 id="rest_framework_mcp.schema.output_schema.build_output_schema" class="doc doc-heading">
+            <span class="doc doc-object-name doc-function-name">build_output_schema</span>
+
+
+<a href="#rest_framework_mcp.schema.output_schema.build_output_schema" class="headerlink" title="Permanent link">&para;</a></h2>
+<div class="language-python doc-signature highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="nf">build_output_schema</span><span class="p">(</span>
+</span><span id="__span-0-2"><a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a>    <span class="n">output_serializer</span><span class="p">:</span> <span class="nb">type</span> <span class="o">|</span> <span class="kc">None</span><span class="p">,</span>
+</span><span id="__span-0-3"><a id="__codelineno-0-3" name="__codelineno-0-3" href="#__codelineno-0-3"></a>    <span class="o">*</span><span class="p">,</span>
+</span><span id="__span-0-4"><a id="__codelineno-0-4" name="__codelineno-0-4" href="#__codelineno-0-4"></a>    <span class="n">kind</span><span class="p">:</span> <span class="n">SelectorKind</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+</span><span id="__span-0-5"><a id="__codelineno-0-5" name="__codelineno-0-5" href="#__codelineno-0-5"></a>    <span class="n">paginate</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">,</span>
+</span><span id="__span-0-6"><a id="__codelineno-0-6" name="__codelineno-0-6" href="#__codelineno-0-6"></a>    <span class="n">projection</span><span class="p">:</span> <span class="n">AudienceProjection</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+</span><span id="__span-0-7"><a id="__codelineno-0-7" name="__codelineno-0-7" href="#__codelineno-0-7"></a>    <span class="n">affordances</span><span class="p">:</span> <span class="n">Mapping</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">ServiceSpec</span><span class="p">[</span><span class="n">Any</span><span class="p">,</span> <span class="n">Any</span><span class="p">,</span> <span class="n">Any</span><span class="p">]]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+</span><span id="__span-0-8"><a id="__codelineno-0-8" name="__codelineno-0-8" href="#__codelineno-0-8"></a>    <span class="n">may_be_empty</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">,</span>
+</span><span id="__span-0-9"><a id="__codelineno-0-9" name="__codelineno-0-9" href="#__codelineno-0-9"></a><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span>
+</span></code></pre></div>
+
+    <div class="doc doc-contents first">
+
+        <p>Build a JSON Schema for a tool's output, or <code>None</code> if not declared.</p>
+<p>MCP-named wrapper over drf-services' <code>output_to_json_schema</code>. <code>None</code>
+when there is no <code>output_serializer</code>; otherwise the shape matches what the
+dispatch pipeline returns:</p>
+<ul>
+<li><code>kind=None</code> / <code>RETRIEVE</code> — the bare item schema.</li>
+<li><code>kind=LIST, paginate=False</code> — <code>{type: array, items: &lt;item&gt;}</code>.</li>
+<li><code>kind=LIST, paginate=True</code> — <code>{items, page, totalPages, hasNext}</code>.</li>
+</ul>
+<p>A read-only <code>BaseSerializer</code> subclass has no fields to describe and also
+answers <code>None</code>. Anything that is neither a <code>BaseSerializer</code> subclass nor a
+dataclass type raises <code>TypeError</code>, as it would fail to render; registration
+refuses those shapes first (<code>adapters.utils.validate_serializer_shapes</code>), so
+one never reaches the per-request <code>tools/list</code> build.</p>
+<p><code>projection</code> applies the output serializer's agent markings, so the
+advertised schema describes what a caller actually receives rather than what
+the serializer renders in full. It is generated from the same declaration the
+dispatch path projects the payload through, which is what stops a tool
+advertising a field its results no longer carry.</p>
+<p><code>affordances</code> is the <code>affordances</code> mapping on the selector spec the
+payload renders through, and declares the <code>affordances</code> object drf-services
+adds to every rendered item, with each name's refusal <code>code</code> enumerated. It
+is the other key the schema would otherwise miss: no serializer declares it,
+so the serializer-derived item says nothing about it, and a schema that does
+not forbid extra keys lets every result conform anyway. Pass the same mapping
+the render path reads, which each binding exposes as <code>rendered_affordances</code>,
+so the schema and the payload come from one declaration.</p>
+<p>The wording for an unlabelled handle is supplied here rather than upstream:
+it is a sentence written for a model, and drf-services does not know that a
+model is what is reading.</p>
+<p><code>may_be_empty</code> says a successful call can present nothing, which is served
+as <code>structuredContent: {}</code> (each binding answers it as
+<code>can_present_nothing</code>). MCP needs the schema's root to stay an object
+and the served <code>{}</code> to conform, so a <code>null</code> cannot be added the way
+drf-services' <code>allow_none=</code> adds one, and this never passes that keyword.
+Instead the root keeps its <code>type</code> and <code>properties</code>, and its
+<code>required</code> list moves into
+<code>"anyOf": [{"required": [...]}, {"maxProperties": 0}]</code>. A full row
+satisfies the first branch, <code>{}</code> the second, and a non-empty row missing
+a required field neither. An item schema with nothing required already
+admits <code>{}</code> and is returned as derived. So is a <code>LIST</code> schema, whatever
+<code>may_be_empty</code> says: a list result is a list, empty at worst, and the
+paginated envelope's four keys stay required.</p>
+<p>The guard is one <code>or</code>-chain, so branch coverage cannot see a deleted
+condition. Each one is held by a test that fails without it:
+<code>test_a_retrieve_that_cannot_present_nothing_keeps_its_schema_strict</code>
+(<code>not may_be_empty</code>),
+<code>test_may_be_empty_returns_a_list_schema_as_derived</code> (<code>kind is LIST</code>,
+its <code>envelope</code> case),
+<code>test_may_be_empty_with_no_output_serializer_is_still_no_schema</code>
+(<code>schema is None</code>) and
+<code>test_may_be_empty_leaves_a_schema_with_nothing_required_as_derived</code>
+(<code>not schema.get("required")</code>).</p>
 
 
     </div>

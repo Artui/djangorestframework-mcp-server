@@ -1669,8 +1669,16 @@ validated arguments (<code>ctx.args</code>) and any prior output (<code>ctx[alia
 </span><span id="__span-1-26"><a id="__codelineno-1-26" name="__codelineno-1-26" href="#__codelineno-1-26"></a><span class="p">)</span>
 </span></code></pre></div>
 <p><code>inputs</code> is optional. When omitted, a step receives
-<code>{"data": ctx.args}</code> (plus <code>request</code> / <code>user</code>), which suits a first
-service step whose callable takes the validated input as <code>data</code>.</p>
+<code>{"data": ctx.args}</code>, which suits a first service step whose callable
+takes the validated input as <code>data</code>.</p>
+<p>Whatever <code>inputs</code> returns, the transport's seeds are laid <strong>over</strong> it:
+<code>request</code>, <code>user</code>, <code>progress</code> (a no-op reporter, as a chain step reports
+nowhere) and every name the server's
+<a href="../../concepts/#pool-seeds"><code>pool_seeds=</code></a> registers. So an <code>inputs</code> that
+forwards <code>ctx.args</code> whole cannot let a client argument stand in for the
+caller's identity or a project's tenant, and a step's affordance condition
+reading a registered seed is asked with it, as the same spec would be as a
+tool of its own.</p>
 <h2 id="atomicity-and-errors">Atomicity and errors<a class="headerlink" href="#atomicity-and-errors" title="Permanent link">&para;</a></h2>
 <p><code>atomic=True</code> (the default) wraps every step in a single
 <code>transaction.atomic()</code>. If any step raises <code>ServiceError</code> or
@@ -1743,7 +1751,9 @@ the step, and an atomic chain rolls back:</p>
 <div class="language-json highlight"><pre><span></span><code><span id="__span-5-1"><a id="__codelineno-5-1" name="__codelineno-5-1" href="#__codelineno-5-1"></a><span class="p">{</span><span class="nt">&quot;error&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">{</span><span class="nt">&quot;type&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;not_found&quot;</span><span class="p">,</span><span class="w"> </span><span class="nt">&quot;message&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;target: no matching instance found&quot;</span><span class="p">,</span>
 </span><span id="__span-5-2"><a id="__codelineno-5-2" name="__codelineno-5-2" href="#__codelineno-5-2"></a><span class="w">           </span><span class="nt">&quot;failedStep&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;target&quot;</span><span class="p">}}</span>
 </span></code></pre></div>
-<p>A spec with <code>allow_none=True</code> passes <code>None</code> on instead, and renders it as <code>null</code>.</p>
+<p>A spec with <code>allow_none=True</code> passes <code>None</code> on instead. As the output step it is
+a result with nothing to present, served as <code>{}</code> under a schema that admits it
+(<a href="../../concepts/#dispatch-flow">Concepts</a>).</p>
 
 
 

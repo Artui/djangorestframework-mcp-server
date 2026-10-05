@@ -1843,7 +1843,7 @@ derivation follows it to <code>private</code>.</p>
 <tr>
 <td><code>INCLUDE_VALIDATION_VALUE</code></td>
 <td><code>False</code></td>
-<td>Include the offending <code>arguments</code> dict under <code>data.value</code> in validation errors. Off by default — that dict can carry PII or secrets, which would then flow back to the client and into its logs.</td>
+<td>Include the offending <code>arguments</code> dict under <code>value</code> in validation errors: beside <code>detail</code> in a <code>tools/call</code> <code>validation_error</code> result's <code>error</code> object, and in the <code>-32602</code> <code>data</code> <code>prompts/get</code> answers. Off by default — that dict can carry PII or secrets, which would then flow back to the client and into its logs.</td>
 </tr>
 <tr>
 <td><code>PAGE_SIZE</code></td>

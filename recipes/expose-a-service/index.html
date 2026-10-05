@@ -1459,7 +1459,8 @@ producing input serializer is all the MCP server needs.</p>
 </span><span id="__span-1-2"><a id="__codelineno-1-2" name="__codelineno-1-2" href="#__codelineno-1-2"></a>
 </span><span id="__span-1-3"><a id="__codelineno-1-3" name="__codelineno-1-3" href="#__codelineno-1-3"></a><span class="n">urlpatterns</span> <span class="o">=</span> <span class="p">[</span><span class="n">path</span><span class="p">(</span><span class="s2">&quot;mcp/&quot;</span><span class="p">,</span> <span class="n">server</span><span class="o">.</span><span class="n">urls</span><span class="p">)]</span>
 </span></code></pre></div>
-<p>Validation, error mapping (<code>ServiceValidationError</code> → <code>-32602</code>), and JSON-Schema
+<p>Validation, error mapping (refused arguments and <code>ServiceValidationError</code> → an
+<code>isError</code> <code>validation_error</code> result the model can correct from), and JSON-Schema
 publication on <code>tools/list</code> come for free. The service callable still works as
 a plain Python function — call it directly from your tests or from elsewhere
 in the codebase, no MCP awareness required.</p>

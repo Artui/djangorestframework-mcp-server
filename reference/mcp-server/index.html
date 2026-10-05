@@ -1264,6 +1264,17 @@
 </li>
         
           <li class="md-nav__item">
+  <a href="#rest_framework_mcp.server.mcp_server.MCPServer.pool_seeds" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        pool_seeds
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
   <a href="#rest_framework_mcp.server.mcp_server.MCPServer.urls" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -1755,6 +1766,17 @@
 </li>
         
           <li class="md-nav__item">
+  <a href="#rest_framework_mcp.server.mcp_server.MCPServer.pool_seeds" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        pool_seeds
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
   <a href="#rest_framework_mcp.server.mcp_server.MCPServer.urls" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -2084,6 +2106,19 @@ directly (no <code>include()</code>):</p>
 <div class="language-text highlight"><pre><span></span><code>urlpatterns = [path(&quot;mcp/&quot;, server.urls)]
 # reverse(&quot;mcp:endpoint&quot;) · reverse(&quot;mcp:protected-resource-metadata&quot;)
 </code></pre></div>
+<p>What every spec on the mount may read -- a tenant, a locale, a clock -- is
+registered once as <code>pool_seeds=</code>, a drf-services
+<a class="autorefs autorefs-external" href="https://artui.github.io/djangorestframework-services/reference/types/#rest_framework_services.types.pool_seeds.PoolSeeds"><code>PoolSeeds</code></a>:</p>
+<div class="language-text highlight"><pre><span></span><code>server = MCPServer(
+    pool_seeds=DEFAULT_POOL_SEEDS.extend(tenant=lambda *, user: user.tenant),
+)
+</code></pre></div>
+<p>Every spec the server runs receives the seeds (tools over either
+transport, <code>call_tool</code> / <code>acall_tool</code>, task workers, chain steps and
+resource reads), every operation condition it asks is asked with them,
+<code>tools/list</code> availability included, and a registered name is reserved: a
+client argument cannot occupy it, and a <code>UrlKwarg</code>, <code>QueryParam</code> or
+URI-template variable naming it is refused at registration.</p>
 
 
 
@@ -2122,6 +2157,30 @@ directly (no <code>include()</code>):</p>
     <div class="doc doc-contents ">
 
         <p>This server's resolved scalars — a frozen snapshot taken at construction.</p>
+
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-attribute">
+
+
+
+<h3 id="rest_framework_mcp.server.mcp_server.MCPServer.pool_seeds" class="doc doc-heading">
+            <span class="doc doc-object-name doc-attribute-name">pool_seeds</span>
+
+
+  <span class="doc doc-labels">
+      <small class="doc doc-label doc-label-property"><code>property</code></small>
+  </span>
+
+<a href="#rest_framework_mcp.server.mcp_server.MCPServer.pool_seeds" class="headerlink" title="Permanent link">&para;</a></h3>
+<div class="language-python doc-signature highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="n">pool_seeds</span><span class="p">:</span> <span class="n">PoolSeeds</span>
+</span></code></pre></div>
+
+    <div class="doc doc-contents ">
+
+        <p>The <code>pool_seeds=</code> every dispatch and condition on this server receives.</p>
 
     </div>
 
