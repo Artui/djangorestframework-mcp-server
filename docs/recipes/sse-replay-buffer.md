@@ -101,9 +101,13 @@ peak event rate per session. Examples:
   (round up for headroom).
 
 Per-session, so total memory scales with `(active sessions) × max_events
-× avg_payload_size`. The Redis variant is also bounded but uses
-approximate trimming — actual retention may be slightly above the cap
-between trim events.
+× avg_payload_size`. The Redis variant is also bounded, but trims
+approximately: Redis shortens a stream only by dropping whole internal
+nodes, so each session keeps at least its newest `max_events` events and
+up to one node's worth more. A node holds `stream-node-max-entries`
+events, 100 by default, so budget Redis memory for `max_events + 100`
+per session. On `max_events=4096` that margin is noise; on
+`max_events=60` it is larger than the cap itself.
 
 ## Custom buffers
 

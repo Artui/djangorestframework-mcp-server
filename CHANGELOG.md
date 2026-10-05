@@ -7,6 +7,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Documentation
+
+- **`RedisSSEReplayBuffer` keeps up to a whole stream node more than
+  `max_events`, not "slightly" more.** The SSE replay buffer recipe said
+  retention "may be slightly above the cap between trim events". `MAXLEN ~ N`
+  trims only by dropping whole internal nodes of the stream, so a session keeps
+  at least its newest `max_events` events and up to `stream-node-max-entries`
+  (100 by default) beyond them, all the time rather than between trims. On a
+  cap in the thousands that is noise; on a cap of tens it is most of the
+  stream. The recipe and the class docstring now say so, and the recipe sizes
+  Redis memory for `max_events + 100` per session. The buffer itself is
+  unchanged: approximate trimming is still what it asks Redis for.
+
 ## [0.50.0] — 2026-10-05
 
 ### Added
