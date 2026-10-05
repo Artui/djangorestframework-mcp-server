@@ -170,6 +170,10 @@ raises for a caller fails that caller's whole listing, not only its calls.
   on a selector, where no validator stands in front of the spread, that is the
   difference between a seed and a client-controlled input. A chain step's seeds
   are laid over whatever its `inputs` returned, for the same reason.
+- **A registered name is not asked for.** A selector parameter named after a
+  seed, on a selector tool or a service tool's target lookup, is left out of the
+  tool's `inputSchema` and never required
+  ([Which selector parameters a client is asked for](#selector-requiredness)).
 - **Registration agrees with dispatch.** A callable declaring a seed with no
   default registers, since the seed is always supplied; a `UrlKwarg`,
   `QueryParam` or URI-template variable named after one is refused, since
@@ -180,6 +184,127 @@ raises for a caller fails that caller's whole listing, not only its calls.
 
 Prompt rendering and argument completion call bare callables rather than specs,
 and do not receive the seeds.
+
+### Which selector parameters a client is asked for { #selector-requiredness }
+
+A selector tool advertises its selector's parameters, and a service tool its
+target lookup's ([Dispatch flow](#dispatch-flow), step 3). A signature read on
+its own cannot say which of them the client sends and which the server fills:
+`get_invoice(*, pk)` and `outstanding(*, tenant)` look alike, yet a client must
+send `pk` while `tenant` is a seed. So drf-services' reflection (0.55+) is told
+which names this server fills, from the sources the selector's pool is built
+from:
+
+- the server's [`pool_seeds`](#pool-seeds) and drf-services' own seeds
+  (`request`, `user`, `progress`, ...);
+- a [`UrlKwarg`](#url-kwargs-route-values-a-provider-reads-off-viewkwargs) that
+  declares a `default`, which fills the parameter whenever the client leaves it
+  out (one without a default is still the client's to send);
+- the keys a `kwargs=` provider returns, when its return annotation is a
+  `TypedDict` (`NotRequired` keys included, since the provider owns them). A
+  target lookup is read with its own provider, the one that resolves the target;
+- on a selector tool, the names `spec_kwargs_provides=` declares, and the fields
+  its `input_serializer` fills when the client sends nothing (a writable field
+  with a `default`, a `HiddenField` included), because the validated values are
+  laid over the selector's params. `call_tool` does not run a selector tool's
+  `input_serializer`, so there such a name is the caller's to send.
+
+A filled name is not advertised. **Every other parameter without a default is
+required**, so `get_invoice(*, pk)` asks for `pk` with no marker; a default keeps
+a parameter optional, and an `InputRequired` marker still makes one required.
+
+**A key the provider may decline is not counted as filled.** A `TypedDict` key
+whose value admits `UnsetType` (`tenant: str | UnsetType`) is one the provider
+may return as `UNSET`, which drf-services drops from the pool, so the caller's
+value is the one the selector reads. It stays advertised and is not required
+for lacking a default; an `InputRequired` marker on the parameter still makes it
+required. A call that leaves it out is never refused before the selector runs,
+because only the assembled pool can say whether it arrived.
+
+**On a selector tool registered with
+`argument_binding=ArgumentBinding.SPREAD_CALLER_WINS` the client's value
+outranks the provider's**, so a provider key and a `spec_kwargs_provides=` name
+stay advertised there, as optional properties, and an `InputRequired` marker
+does not make them required: the server fills them when the client sends
+nothing. A seed is hidden under every binding, because drf-services strips a
+seed from the client's arguments whatever the binding. **A service tool's
+target lookup is read author-wins under every binding**, because drf-services
+lays the lookup's provider over the arguments last whatever `argument_binding`
+says, so its keys stay hidden.
+
+**A service tool runs one target lookup**: its `collection_selector_spec` when
+it declares one, and its `instance_selector_spec` otherwise, and only that
+lookup's parameters are advertised. drf-services never runs the instance lookup
+beside a collection lookup, and its unknown-argument check admits only the keys
+of the lookup it runs, so under `UnknownArguments.REJECT` a `pk` sent beside
+`ids` is refused as an unexpected argument. A `many=True` service runs no
+lookup, so an item of its list offers only the input serializer's fields.
+
+The Pydantic-AI `SpecToolset` reads seeds, `UrlKwarg` defaults, provider keys
+and target lookups by the same rules, so one spec is asked for the same
+arguments on both routes. `spec_kwargs_provides=`, a selector tool's
+`input_serializer` and `argument_binding=` are registration options here with
+no counterpart in the toolset.
+
+```python
+from typing_extensions import TypedDict
+
+
+class Scope(TypedDict):
+    tenant: str
+
+
+def scope(*, request) -> Scope:  # annotated, so `tenant` is known to be filled
+    return {"tenant": request.user.tenant}
+
+
+def get_invoice(*, pk: int, tenant: str):  # inputSchema: {"pk"}, required ["pk"]
+    return Invoice.objects.filter(pk=pk, tenant=tenant)
+```
+
+**A provider whose return is not a `TypedDict` may fill any parameter**, a plain
+`-> dict` or a lambda included, so beside one nothing is required for lacking a
+default: every parameter stays advertised and optional, and an `InputRequired`
+marker still makes one required. Annotate the provider to have the rest
+inferred.
+
+**A provider whose annotations do not resolve counts as untyped**, whichever
+annotation it is: the return, a parameter's, or a field of the returned
+`TypedDict`. A type imported only under `TYPE_CHECKING` is the usual cause: the
+hints are resolved at runtime, where that name does not exist. Import such a
+type at runtime, or the provider is read as though it returned a plain `dict`.
+
+**A call that leaves out a required parameter is refused before the selector
+runs**, with the `validation_error` result a serializer gives a missing field,
+on every route (both transports and eras, `call_tool` and `acall_tool`):
+
+```json
+{"error": {"type": "validation_error", "message": "Invalid arguments",
+           "detail": {"pk": ["This field is required."]}}}
+```
+
+It used to reach the selector as a `TypeError`, which answered HTTP 500 with
+JSON-RPC `-32603` "Internal error" on the wire and raised from `call_tool`. The
+names checked are the ones the `inputSchema` requires of the selectors, read
+from the same reflection, so what a call is refused for is what the client was
+told. A service tool's own input serializer still answers for its fields, and a
+`many=True` service resolves no target, so its lookup asks nothing.
+
+The check runs **after the permission and rate-limit answers** (and, on a
+selector tool, after its `input_serializer`), as every other argument check
+does. So does the one a missing `UrlKwarg(required=True)` takes, which on a
+selector tool comes before its `input_serializer` runs: a call missing both is
+told about the URL kwarg. A caller `tools/list` hides a tool from is refused
+for the permission first, and never learns from a missing-argument answer that
+the tool exists.
+
+A seed or a provider key the client sends anyway is still accepted by the
+unknown-argument check, even under `UnknownArguments.REJECT`. A seed's value
+outranks the client's under every binding, as the [seeds](#pool-seeds) section
+describes. On a selector tool a provider key's value outranks it under
+`SPREAD_AUTHOR_WINS`, the selector tool default, and the client's value wins
+under `SPREAD_CALLER_WINS`. A service tool's target lookup reads its provider's
+value under every binding.
 
 ### URL kwargs — route values a provider reads off `view.kwargs`
 
@@ -227,7 +352,10 @@ UrlKwarg("project_pk", type="integer", required=True)
 The name joins the tool's `inputSchema` `required` list, so the model is told up
 front — and, because a schema hint is only a hint, a call that omits it comes back
 as an `isError` validation result naming the missing argument rather than failing
-somewhere less legible. `required` can't be combined with a `default` (a default
+somewhere less legible: `"Invalid arguments"` with
+`{"project_pk": ["This field is required."]}` under `detail`, the answer a
+missing selector parameter gets, after the permission answer on every route.
+`required` can't be combined with a `default` (a default
 always satisfies the argument, so requiring it would be a no-op); that raises at
 registration.
 
@@ -594,10 +722,12 @@ forms) accept three behavior knobs:
     1. `REJECT` itself;
     2. an `input_serializer` to validate against — a serializer-less binding
        has no declared field set, so `REJECT` cannot fire;
-    3. for a **service** tool, a key set the spec can enumerate. A nested
-       selector taking a bare `**kwargs`, or one carrying a `filter_set`,
-       leaves it open, and an open set is answered by accepting and silently
-       dropping every undeclared key.
+    3. for a **service** tool, a key set the spec can enumerate. The lookup
+       dispatch calls (the `collection_selector_spec` when declared, else the
+       `instance_selector_spec`, and neither on `many=True`) leaves it open
+       when it takes a bare `**kwargs` or carries a `filter_set`, and an open
+       set is answered by accepting and silently dropping every undeclared
+       key. A lookup dispatch never calls cannot open it.
 
     Any of the three missing leaves the schema open
     (`"additionalProperties": true`), on purpose: where nothing is enforced,
@@ -1914,9 +2044,15 @@ The MCP package owns its own dispatch flow. It does **not** import
    advertises it: the target selector's parameters (and a `filter_set`'s
    fields) are reflected the same way a selector tool's own are, so
    `task_by_pk(*, pk)` puts `pk` beside the input serializer's fields. A
-   `collection_selector_spec` is advertised the same way. An input field or
-   `UrlKwarg` of the same name wins, and a lookup is `required` only when its
-   selector marks it `InputRequired`, because the pool may supply it.
+   `collection_selector_spec` is advertised the same way, and in place of the
+   instance lookup when both are declared, because it is the one dispatch
+   runs and the one whose keys the unknown-argument check admits. An input
+   field or `UrlKwarg` of the same name keeps its property, and a lookup parameter is
+   `required` when it has no default and the server does not fill it
+   ([Which selector parameters a client is asked for](#selector-requiredness)),
+   whatever the serializer says about the name: the lookup reads the raw
+   arguments, not the validated ones. A call leaving one out is refused here,
+   before the lookup runs, with a `validation_error` result.
 4. Validate `arguments` via `spec.input_serializer` (DRF `Serializer`,
    bare `@dataclass` auto-wrapped in `DataclassSerializer`, or `None`).
    `spec.partial=True` validates partially (and drops `required` from the
@@ -1934,7 +2070,8 @@ The MCP package owns its own dispatch flow. It does **not** import
    `run_service(spec.service, kwargs, atomic=spec.atomic)`.
 7. Map failures along the MCP protocol-vs-tool boundary. Refused input —
    the serializer rejecting the arguments, an unexpected argument under
-   `UnknownArguments.REJECT`, or a service raising `ServiceValidationError`
+   `UnknownArguments.REJECT`, a missing argument a target lookup requires
+   (step 3), or a service raising `ServiceValidationError`
    — and a service raising `ServiceError` return an **`isError: true` tool
    result** the model can read and self-correct from, with a JSON
    `{"error": {"type": "validation_error" | "service_error", "message": ...,

@@ -179,6 +179,12 @@ class SelectorToolBinding(Generic[ResultT, ExtraT]):
     dispatched params. See
     [`UrlKwarg`][rest_framework_services.types.url_kwarg.UrlKwarg]."""
 
+    spec_kwargs_provides: tuple[str, ...] = ()
+    """Selector parameters the spec's ``kwargs=`` provider fills, as declared at
+    registration. Registration counts each as the parameter's source, the
+    ``inputSchema`` does not advertise it, and a call is not refused for leaving it
+    out."""
+
     content_kind: ToolContentKind = ToolContentKind.TEXT
     """What this tool's payload becomes in the result's ``content`` array. ``TEXT``
     renders JSON per ``output_format``; the other kinds project it into an image / audio

@@ -33,6 +33,7 @@ from rest_framework_mcp.protocol.types.icon import Icon
 from rest_framework_mcp.registry.types.query_param import QueryParam
 from rest_framework_mcp.registry.types.tool_binding import ToolBinding
 from rest_framework_mcp.registry.types.url_kwarg import UrlKwarg
+from rest_framework_mcp.schema.utils import target_lookup
 
 
 def service_spec_to_tool(
@@ -100,6 +101,18 @@ def service_spec_to_tool(
             spec.output_selector_spec.output_serializer if spec.output_selector_spec else None
         ),
     )
+    # Only the lookup dispatch calls seeds ``instance`` or ``collection``. An
+    # instance lookup beside a collection lookup, or on ``many=True``, is never
+    # called, so a service requiring ``instance`` there is refused here rather
+    # than raising on every call, except in trust mode (no ``input_serializer``,
+    # a spreading binding), where every required name counts as the caller's.
+    # Held by
+    # ``test_an_instance_lookup_beside_a_collection_lookup_seeds_no_instance``,
+    # ``test_an_instance_lookup_on_a_list_payload_seeds_no_instance``,
+    # ``test_an_instance_lookup_seeds_no_collection`` and
+    # ``test_a_lookup_without_a_selector_seeds_nothing``.
+    target = target_lookup(spec)
+    resolves: bool = target is not None and target.selector is not None
     validate_input_serializer_against_callable(
         label=f"service tool {name!r}",
         input_serializer=spec.input_serializer,
@@ -107,14 +120,8 @@ def service_spec_to_tool(
         argument_binding=argument_binding,
         spec_kwargs_provides=frozenset(spec_kwargs_provides),
         pool_seeds=pool_seeds,
-        provides_instance=(
-            spec.instance_selector_spec is not None
-            and spec.instance_selector_spec.selector is not None
-        ),
-        provides_collection=(
-            spec.collection_selector_spec is not None
-            and spec.collection_selector_spec.selector is not None
-        ),
+        provides_instance=resolves and spec.collection_selector_spec is None,
+        provides_collection=resolves and spec.collection_selector_spec is not None,
     )
     validate_url_kwargs(
         label=f"service tool {name!r}", url_kwargs=url_kwargs, pool_seeds=pool_seeds

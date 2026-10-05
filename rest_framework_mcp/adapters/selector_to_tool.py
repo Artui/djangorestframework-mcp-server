@@ -142,6 +142,7 @@ def selector_spec_to_tool(
         unknown_arguments=unknown_arguments,
         always_listed=always_listed,
         url_kwargs=url_kwargs,
+        spec_kwargs_provides=tuple(spec_kwargs_provides),
         query_params=query_params,
         max_result_bytes=max_result_bytes,
         dispatch_timeout=dispatch_timeout,

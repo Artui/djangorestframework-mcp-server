@@ -17,7 +17,6 @@ from typing import Any
 import pytest
 from rest_framework import serializers as drf_serializers
 from rest_framework_services import UNSET
-from rest_framework_services.exceptions.service_validation_error import ServiceValidationError
 
 from rest_framework_mcp import QueryParam, UrlKwarg
 from rest_framework_mcp.handlers.utils import (
@@ -97,6 +96,14 @@ def test_a_declared_default_is_still_seeded() -> None:
 
 @pytest.mark.parametrize("no_default", [None, UNSET])
 def test_no_default_still_reaches_the_required_check(no_default: Any) -> None:
-    """Neither spelling may be mistaken for a value that satisfies ``required``."""
-    with pytest.raises(ServiceValidationError):
+    """Neither spelling may be mistaken for a value that satisfies ``required``.
+
+    The refusal is DRF's own ``required`` answer keyed by the argument, the
+    shape a missing selector parameter and a serializer's missing field take,
+    so a client reads one shape whichever way the parameter was declared.
+    """
+    with pytest.raises(drf_serializers.ValidationError) as refused:
         split_url_kwargs({}, (UrlKwarg("project_pk", required=True, default=no_default),))
+
+    assert refused.value.detail == {"project_pk": ["This field is required."]}
+    assert refused.value.get_codes() == {"project_pk": ["required"]}

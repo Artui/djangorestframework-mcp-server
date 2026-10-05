@@ -46,6 +46,75 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- **A selector's parameter is required in the `inputSchema` when it has no
+  default, and left out when the server fills it.** This covers a selector
+  tool's own selector and a service tool's target lookup. Read on its own, a
+  signature cannot say which parameters the client sends and which the server
+  fills, so the reflection inferred nothing from a missing default, and
+  `get_invoice(*, pk)` advertised `pk` as optional. A call without it then
+  failed (see Fixed). The reflection is now told which names this server fills,
+  through drf-services' `spec_to_json_schema(supplied=)`. Those names are the
+  server's `pool_seeds=` and drf-services' own seeds, a `UrlKwarg` that declares
+  a `default`, and the keys a `kwargs=` provider returns when its return is
+  annotated with a `TypedDict`. On a selector tool they also include the names
+  `spec_kwargs_provides=` declares (now carried on
+  `SelectorToolBinding.spec_kwargs_provides`), and the fields its
+  `input_serializer` fills with a `default`. A filled name is no longer
+  advertised, so a seed such as `currency` stops appearing as an argument. A
+  seed outranks the client under every `argument_binding`. On a selector tool
+  a provider key outranks it under `SPREAD_AUTHOR_WINS`, the selector tool
+  default, and under `SPREAD_CALLER_WINS` the client's value outranks the
+  provider's, so a provider key and a `spec_kwargs_provides=` name stay
+  advertised there, as optional properties rather than hidden ones, even when
+  an `InputRequired` marker names them. A service tool's target lookup is read
+  author-wins under every binding, because drf-services lays the lookup's
+  provider over the arguments last whatever the binding says. A `TypedDict`
+  key whose value admits `UnsetType` is one the provider may decline, so under either binding
+  it is advertised, required only by an `InputRequired` marker, and never
+  refused before the selector runs. A provider whose return is not a `TypedDict`
+  may fill any parameter, and so may one whose annotations do not resolve (a
+  name imported only under `TYPE_CHECKING`, in its signature or in the
+  `TypedDict`), which counts as untyped: beside one nothing is required for
+  lacking a default, and an `InputRequired` marker still requires a name. A
+  client that sends a seed or a provider key anyway is still admitted under
+  `UnknownArguments.REJECT`. A service tool whose spec declares both target
+  lookups advertises and requires only the `collection_selector_spec` one's
+  parameters, because drf-services runs only that lookup and admits only its
+  keys: under `UnknownArguments.REJECT` an instance lookup's key sent beside
+  it is now refused as an unexpected argument, and so is a lookup key inside
+  an item of a `many=True` list, whose items offer only the input
+  serializer's fields. A lookup drf-services never calls no longer opens the
+  set it enforces, so under `REJECT` an instance lookup taking a bare
+  `**kwargs` or a `filter_set` beside a collection lookup now leaves the
+  `inputSchema` at `additionalProperties: false`, and so does an instance
+  lookup on a `many=True` spec for each item of its list.
+  `build_selector_tool_input_schema` and `build_service_tool_input_schema` take
+  `pool_seeds=`, which `tools/list` passes from the server. The rule matches
+  the Pydantic-AI `SpecToolset`, apart from the two sources only a selector
+  tool registered here has and `SPREAD_CALLER_WINS`, which the toolset does
+  not offer.
+- **Floored at `djangorestframework-services>=0.55.0` (was `>=0.54.0`), and it is
+  a hard floor.** `spec_to_json_schema` takes `supplied=` from 0.55.0, and both
+  schema builders and the missing-argument check call it with that keyword.
+  Below it, a `tools/list` raises `TypeError` on any mount with a selector tool
+  or a service tool's target lookup, and so does every call to one. 0.55.0 is
+  also where drf-services admits only the target lookup's keys, the one lookup
+  a service tool advertises.
+- **A missing argument is answered in one shape, field-keyed, on every route.**
+  A call that left out a `UrlKwarg(required=True)`, or a selector parameter
+  marked `InputRequired`, was answered `"message": "Service validation error."`
+  with `{"non_field_errors": ["Missing required argument(s): 'pk'."]}` under
+  `detail`. Both are now answered the way a serializer answers a missing field,
+  `"message": "Invalid arguments"` with `{"pk": ["This field is required."]}`,
+  the shape the new missing-argument check (see Fixed) answers in, so one
+  client branch reads all three. A client matching `non_field_errors` or the
+  `"Service validation error."` message for a missing argument reads the field
+  key instead. One case keeps the old shape: an `InputRequired` parameter a
+  `kwargs=` provider might fill, because the provider is untyped or the key is
+  one it may decline, so only drf-services can tell it is missing, after the
+  provider runs. The invoicing
+  example dropped its `InputRequired` markers, which a missing default now
+  states.
 - **The `outputSchema` of a tool that can present nothing moves its root
   `required` into an `anyOf`.** Exactly three kinds of tool are affected: an
   `allow_none` RETRIEVE selector tool, a single-row service tool whose
@@ -83,6 +152,38 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **A service tool whose service requires `instance` from a lookup dispatch
+  never calls is refused at registration.** Registration counted any declared
+  `instance_selector_spec` as the source of `instance`, but drf-services never
+  calls one beside a `collection_selector_spec`, or on a `many=True` spec, so
+  the tool registered and every call raised `TypeError` for the missing
+  `instance`. Registration now raises `ImproperlyConfigured` naming the
+  parameter, as it does for any required parameter without a source. The
+  exception is a binding that spreads raw arguments with no `input_serializer`,
+  where registration counts every required parameter as one the caller
+  supplies, as before. A service that declares only an instance lookup is
+  unchanged.
+- **A call that leaves out an argument a selector requires is a
+  `validation_error` result, not an internal error.** A selector tool's
+  selector, or a service tool's target lookup, called without a parameter that
+  has no default raised `TypeError`. Nothing caught it, so the wire answered
+  HTTP 500 with JSON-RPC `-32603` "Internal error", and `call_tool` /
+  `acall_tool` raised `TypeError: get_invoice() missing 1 required
+  keyword-only argument: 'pk'` to the caller. The names the tool's
+  `inputSchema` requires of its selectors are now checked before dispatch, on
+  every route: both transports and protocol eras, sync and async,
+  `call_tool` and `acall_tool`. A missing name is answered the way a serializer
+  answers a missing field, `"Invalid arguments"` with
+  `{"pk": ["This field is required."]}` under `detail`. The check runs after
+  the permission and rate-limit answers, and on a selector tool after its
+  `input_serializer`, so a caller the listing hides the tool from is refused
+  for the permission first; that includes a missing `UrlKwarg(required=True)`
+  on `call_tool`, which answered the missing argument to a caller the
+  permission refuses. A value that arrives through a `UrlKwarg` counts as
+  sent, and so does one a selector tool's `input_serializer` fills with a
+  default, on the routes that run that serializer: `call_tool` does not, so
+  there the name is checked like any other. A null `UrlKwarg` does not count,
+  because it reaches nothing.
 - **A service tool's `inputSchema` advertises the lookup its target selector
   reads.** A spec with
   `instance_selector_spec=SelectorSpec(kind=RETRIEVE, selector=task_by_pk)`
@@ -94,10 +195,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   works. The target selector, and a `collection_selector_spec` the same way,
   is now reflected into the schema the way a selector tool's own parameters
   are: its signature without the transport seeds, plus a `filter_set`'s fields.
-  An input field or `UrlKwarg` of the same name wins. A lookup is `required`
-  only when its selector marks it `InputRequired`, which is the reflection's
-  rule, because the kwargs pool may supply the value instead. A name that both
-  the selector and the input serializer require is listed once.
+  An input field or `UrlKwarg` of the same name keeps its property. A lookup
+  parameter is `required` when it has no default and the server does not fill
+  it (the requiredness entry under Changed), whatever the input serializer says
+  about the name, because the lookup reads the raw arguments rather than the
+  validated ones. A name that both the selector and the input serializer
+  require is listed once. A `many=True` spec resolves no target and advertises
+  no lookup.
 - **A result with nothing to present is `{}`, and the tool's `outputSchema`
   admits it.** Two successful calls render to nothing: an `allow_none` RETRIEVE
   that finds no row, and a single-row service tool whose output re-read

@@ -33,6 +33,7 @@ from rest_framework_mcp.handlers.utils import (
     effective_rate_limits,
     enforce_result_ceiling,
     read_shaping_error_result,
+    refuse_missing_arguments,
     resolve_bound,
     service_error_result,
     services_dispatch_policies,
@@ -176,10 +177,11 @@ def _dispatch_tool_call(
         # ``enforce_permissions`` is the object-permission hook: it runs
         # ``spec.permission_classes`` against the resolved target.
         argument_binding, unknown_arguments = services_dispatch_policies(binding)
-        # The split stays inside the ``try``: ``split_url_kwargs`` raises
-        # ``ServiceValidationError`` for an omitted ``required=True`` kwarg, and
-        # that must reach the same ``isError`` mapping as any other
-        # dispatch-time validation failure rather than escaping as a 500.
+        # The split stays inside the ``try``: ``split_url_kwargs`` raises DRF's
+        # ``ValidationError`` for an omitted ``required=True`` kwarg, and that
+        # must reach the same ``isError`` mapping as any other dispatch-time
+        # validation failure rather than escaping as a 500. Still after the
+        # permission and rate-limit answers above, as the check below is.
         try:
             spec_params, url_kwarg_values = split_url_kwargs(arguments_raw, binding.url_kwargs)
             # ``query_params`` is always passed — an empty mapping still
@@ -187,6 +189,12 @@ def _dispatch_tool_call(
             # endpoint URL, so ``request.query_params`` is this package's value
             # rather than the caller's.
             spec_params, query_param_values = split_query_params(spec_params, binding.query_params)
+            # After the permission and rate-limit answers above, so a caller the
+            # listing hides the tool from never learns it exists from this one;
+            # inside the ``try``, so it maps to the same ``isError`` result.
+            refuse_missing_arguments(
+                binding, (*spec_params, *url_kwarg_values), pool_seeds=context.pool_seeds
+            )
             offline = build_offline_context(
                 context.token.user,
                 spec_params,

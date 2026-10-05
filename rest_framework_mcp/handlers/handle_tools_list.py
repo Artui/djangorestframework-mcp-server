@@ -78,16 +78,19 @@ def handle_tools_list(
     for binding in page:
         # Chain tools advertise their resolved input serializer; selector tools
         # merge filter / ordering / pagination args in; service tools expose the
-        # input serializer's schema verbatim.
+        # input serializer's schema plus their target lookup. Both selector
+        # reflections are given the server's seeds, which fill a parameter of
+        # the same name, so it is never asked of the client.
         if isinstance(binding, ChainToolBinding):
             input_schema = build_chain_tool_input_schema(binding)
         elif isinstance(binding, SelectorToolBinding):
             input_schema = build_selector_tool_input_schema(
                 binding,
                 max_page_size=resolve_bound(binding.max_page_size, context.config.max_page_size),
+                pool_seeds=context.pool_seeds,
             )
         else:
-            input_schema = build_service_tool_input_schema(binding)
+            input_schema = build_service_tool_input_schema(binding, pool_seeds=context.pool_seeds)
         # Stamped to match what the runtime actually enforces; every builder
         # returns a ``"type": "object"`` shape, so this reaches every schema.
         input_schema = dict(input_schema)

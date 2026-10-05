@@ -54,6 +54,7 @@ from rest_framework_mcp.handlers.utils import (
     consume_rate_limits,
     effective_rate_limits,
     read_shaping_error_result,
+    refuse_missing_arguments,
     resolve_bound,
     service_error_result,
     services_dispatch_policies,
@@ -276,7 +277,9 @@ def _build_request_and_validate(
         # URL kwargs route through ``view.kwargs`` (from where drf-services
         # spreads them, authoritative over params), never as selector params.
         _spec_params, url_kwarg_values = split_url_kwargs(arguments_raw, binding.url_kwargs)
-    except ServiceValidationError as exc:
+    except drf_serializers.ValidationError as exc:
+        # A missing ``required=True`` URL kwarg, refused in the shape a missing
+        # selector parameter is.
         return (
             drf_request,
             None,
@@ -311,9 +314,20 @@ def _selector_tool_additional_known_keys(binding: SelectorToolBinding) -> frozen
     straight from ``arguments`` rather than through ``input_serializer``, so the
     unknown-argument policy has to be told they are known — otherwise ``REJECT``
     flags a legitimate read-shaping argument. The reflected names come from the
-    *same* ``spec_to_json_schema`` call that drives
+    ``spec_to_json_schema`` reflection that drives
     ``build_selector_tool_input_schema``, so the validation-side known set and
     the wire-side advertised schema cannot drift.
+
+    Read *without* ``supplied``, so it is a superset of what is advertised: a
+    name the server fills is admitted when the client sends it anyway, rather
+    than refused as unknown. Which value the selector then reads depends on the
+    source. A seed's always, because dispatch strips a reserved name from the
+    client's spread under every binding. A provider key's under
+    ``SPREAD_AUTHOR_WINS``, the default, where the provider is applied last.
+    Under ``SPREAD_CALLER_WINS`` the client's spread is applied last, so its
+    value outranks the provider's, which is why the schema offers the
+    provider's keys there instead of hiding them
+    (``test_under_caller_wins_a_provider_filled_name_is_not_refused``).
     """
     known: set[str] = set()
     # ``phase="input"`` never returns ``None``; ``or {}`` only narrows the type.
@@ -532,11 +546,24 @@ def _dispatch_kwargs(
     # ``request.query_params``; strip both from the params so no value reaches
     # the selector through two channels. The split cannot fail here —
     # ``_build_request_and_validate`` ran it first.
-    spec_params, _url_kwarg_values = split_url_kwargs(arguments_raw, binding.url_kwargs)
+    spec_params, url_kwarg_values = split_url_kwargs(arguments_raw, binding.url_kwargs)
     spec_params, _query_param_values = split_query_params(spec_params, binding.query_params)
+    params = _selector_dispatch_params(spec_params, validated)
+    # Evaluated inside both siblings' dispatch ``try``, after the permission and
+    # rate-limit answers and the ``input_serializer``: a missing argument is the
+    # same ``validation_error`` result a refused one is. Checked against what
+    # reaches the selector -- the params with the validated values laid over
+    # them, plus the ``UrlKwarg`` values -- so a null ``UrlKwarg``, which the
+    # split drops, counts as missing (``test_a_null_url_kwarg_is_a_missing_argument``).
+    # The overlay agrees with the raw params on every binding registration
+    # admits, since a name the serializer defaults is never required in the
+    # first place (``schema.utils._serializer_fills``, which this route counts
+    # because it runs the serializer, unlike ``call_tool``); it is read anyway so the
+    # check describes the call the selector receives.
+    refuse_missing_arguments(binding, (*params, *url_kwarg_values), pool_seeds=context.pool_seeds)
     return {
         "user": context.token.user,
-        "params": _selector_dispatch_params(spec_params, validated),
+        "params": params,
         # Unstripped, which is what lets a spec's ``OrderingFilter`` work at
         # all: sharing one stripped mapping made the inputSchema advertise an
         # ordering that dispatch then silently discarded.

@@ -34,11 +34,16 @@ def _binding(selector: Any, **kwargs: Any) -> SelectorToolBinding:
 
 
 def test_reflects_plain_callable_params() -> None:
-    # A retrieve selector's own parameters are advertised (``user`` seed skipped).
+    # A retrieve selector's own parameters are advertised (``user`` seed skipped),
+    # and one without a default is required.
     def _get_widget(user: Any, pk: int) -> Any: ...
 
     schema = build_selector_tool_input_schema(_binding(_get_widget))
-    assert schema == {"type": "object", "properties": {"pk": {"type": "integer"}}}
+    assert schema == {
+        "type": "object",
+        "properties": {"pk": {"type": "integer"}},
+        "required": ["pk"],
+    }
 
 
 def test_skips_transport_seeds() -> None:

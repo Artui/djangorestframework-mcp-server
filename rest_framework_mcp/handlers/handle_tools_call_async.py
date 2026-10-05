@@ -32,6 +32,7 @@ from rest_framework_mcp.handlers.utils import (
     effective_rate_limits,
     enforce_result_ceiling,
     read_shaping_error_result,
+    refuse_missing_arguments,
     resolve_bound,
     run_with_deadline,
     service_error_result,
@@ -193,6 +194,12 @@ async def _dispatch_tool_call_async(
             # *replaces* whatever query string the client hung off the MCP
             # endpoint URL.
             spec_params, query_param_values = split_query_params(spec_params, binding.query_params)
+            # After the permission and rate-limit answers above, so a caller the
+            # listing hides the tool from never learns it exists from this one;
+            # inside the ``try``, so it maps to the same ``isError`` result.
+            refuse_missing_arguments(
+                binding, (*spec_params, *url_kwarg_values), pool_seeds=context.pool_seeds
+            )
             offline = build_offline_context(
                 context.token.user,
                 spec_params,

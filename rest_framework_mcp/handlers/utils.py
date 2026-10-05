@@ -2,13 +2,13 @@ from __future__ import annotations
 
 import asyncio
 import dataclasses
-from collections.abc import Awaitable, Mapping
+from collections.abc import Awaitable, Iterable, Mapping
 from typing import Any
 
 from django.http import HttpRequest
 from rest_framework import serializers as drf_serializers
 from rest_framework_dataclasses.serializers import DataclassSerializer
-from rest_framework_services import UNSET, UnsetType
+from rest_framework_services import UnsetType
 
 # Not a top-level export of the sister package, so this reaches past its stable
 # dispatch surface on purpose. It is the single implementation of "can this
@@ -23,6 +23,7 @@ from rest_framework_services.exceptions.service_error import ServiceError
 from rest_framework_services.exceptions.service_validation_error import (
     ServiceValidationError,
 )
+from rest_framework_services.types.pool_seeds import PoolSeeds
 from rest_framework_services.types.service_spec import ServiceSpec
 
 from rest_framework_mcp._compat.reject_awaitable import reject_awaitable
@@ -47,31 +48,21 @@ from rest_framework_mcp.protocol.types.tool_result import ToolResult
 from rest_framework_mcp.registry.types.chain_tool_binding import ChainToolBinding
 from rest_framework_mcp.registry.types.query_param import QueryParam
 from rest_framework_mcp.registry.types.selector_tool_binding import SelectorToolBinding
+from rest_framework_mcp.registry.types.tool_binding import ToolBinding
 from rest_framework_mcp.registry.types.url_kwarg import UrlKwarg
 from rest_framework_mcp.schema.agent_conventions import PAGED_QUERY_PARAM_SCOPE
-from rest_framework_mcp.schema.utils import end_sentence
+from rest_framework_mcp.schema.utils import declares_default, end_sentence, required_arguments
 
 _SPREAD_BINDINGS = frozenset(
     {ArgumentBinding.SPREAD_AUTHOR_WINS, ArgumentBinding.SPREAD_CALLER_WINS}
 )
 
 
-def declares_default(default: Any) -> bool:
-    """Whether a channel declaration carries a value to seed when the caller omits one.
-
-    ``UrlKwarg`` / ``QueryParam`` are declared in the sister package, and the
-    sentinel standing for "no default" there is version-dependent: older
-    releases spell it ``None``, newer ones spell it with the package's ``UNSET``
-    sentinel so that a deliberate ``default=None`` becomes expressible. Both are
-    treated as *no default* here, which is correct against either release —
-    testing only for ``None`` would seed the literal ``UNSET`` object as a real
-    value for every declaration that names no default at all.
-    """
-    return default is not None and default is not UNSET
-
-
 def split_url_kwargs(
-    arguments: dict[str, Any], url_kwargs: tuple[UrlKwarg, ...]
+    arguments: dict[str, Any],
+    url_kwargs: tuple[UrlKwarg, ...],
+    *,
+    refuse_missing: bool = True,
 ) -> tuple[dict[str, Any], dict[str, Any]]:
     """Split ``arguments`` into ``(params, url_kwarg_values)``.
 
@@ -80,10 +71,16 @@ def split_url_kwargs(
     ``view.kwargs`` (authoritative over params) and never also reaches the spec
     as an ordinary input. Non-mutating.
 
-    A ``required=True`` kwarg the model omitted raises
-    ``ServiceValidationError`` here rather than failing further down:
-    ``required`` in the schema is only a hint, and registration forbids pairing
-    it with a ``default``.
+    A ``required=True`` kwarg the model omitted is refused here rather than
+    failing further down: ``required`` in the schema is only a hint, and
+    registration forbids pairing it with a ``default``. The refusal is the one
+    ``refuse_missing_arguments`` raises for a selector parameter, DRF's
+    ``ValidationError`` keyed by the argument, so a client reads one shape for
+    a missing argument whichever way it was declared
+    (``test_a_missed_required_url_kwarg_is_answered_in_the_same_shape``).
+    ``refuse_missing=False`` returns what the call delivered instead, for a
+    caller that has to answer something else first (``call_spec_tool``, whose
+    permission check reads the context built from it).
 
     **An explicit ``null`` is not a supplied value.** A URL kwarg stands in for
     a route capture, and a route capture can never be null: over HTTP the
@@ -108,11 +105,8 @@ def split_url_kwargs(
             values[url_kwarg.name] = url_kwarg.default
         elif url_kwarg.required:
             missing.append(url_kwarg.name)
-    if missing:
-        names_repr = ", ".join(repr(name) for name in sorted(missing))
-        raise ServiceValidationError(
-            {"non_field_errors": [f"Missing required argument(s): {names_repr}."]}
-        )
+    if missing and refuse_missing:
+        raise _missing_arguments_error(sorted(missing))
     params = {key: value for key, value in arguments.items() if key not in names}
     return params, values
 
@@ -187,10 +181,14 @@ def advertises_closed_schema(binding: Any) -> bool:
 
     A **service** tool needs one further condition. Its unknown-argument check
     is not run here but by the sister package, against the key set the spec
-    declares; that set is not always enumerable — a nested selector taking a
-    bare ``**kwargs``, or carrying a ``filter_set``, leaves it open — and an
+    declares; that set is not always enumerable — the one lookup dispatch
+    calls (``collection_selector_spec`` when declared, else
+    ``instance_selector_spec``, and neither on ``many=True``) leaves it open
+    when it takes a bare ``**kwargs`` or carries a ``filter_set`` — and an
     open set is answered by accepting and silently dropping every undeclared
-    key. Where nothing is enforced, nothing closed may be advertised.
+    key. Where nothing is enforced, nothing closed may be advertised. A lookup
+    dispatch never calls cannot open it
+    (``test_an_open_lookup_dispatch_never_calls_leaves_the_schema_closed``).
     """
     if takes_list_payload(binding):
         return True
@@ -525,6 +523,60 @@ def validation_error_data(detail: Any, value: Any, *, include_value: bool) -> di
     return payload
 
 
+def refuse_missing_arguments(
+    binding: SelectorToolBinding | ToolBinding,
+    present: Iterable[str],
+    *,
+    pool_seeds: PoolSeeds,
+    input_serializer_runs: bool = True,
+) -> None:
+    """Refuse a call that leaves out an argument its selectors cannot run without.
+
+    A selector -- a selector tool's own, or the lookup a service tool resolves
+    its target through -- called without a parameter it has no default for
+    raises ``TypeError``, which no handler maps, so the call used to answer
+    HTTP 500 and JSON-RPC ``-32603`` on the wire and raise from ``call_tool``.
+    The names checked are the ones the tool's ``inputSchema`` requires of its
+    selectors (``schema.utils.required_arguments``), read from the same
+    reflection, so the rule enforced is the rule the client was told, and a name
+    the server fills is never among them.
+
+    Raised as DRF's ``ValidationError`` keyed by field with DRF's own
+    ``required`` message and code, the answer an input serializer gives a
+    missing field, so every caller's ``validation_error_result`` arm turns it
+    into the same ``"Invalid arguments"`` result. ``present`` is every name the
+    call delivers to the selector: the arguments left after the channel splits
+    plus the ``UrlKwarg`` values, which reach the pool through ``view.kwargs``.
+    ``input_serializer_runs=False`` is for ``call_tool``, which does not run a
+    selector tool's ``input_serializer``, so its defaults deliver nothing there
+    (``schema.utils.required_arguments``).
+
+    Called after the transport-level permissions on every route, so a caller
+    ``tools/list`` hides the tool from is refused for the permission before it
+    could learn from this answer that the tool exists
+    (``test_a_denied_caller_is_refused_before_the_argument_is_checked``).
+    """
+    delivered = frozenset(present)
+    required = required_arguments(
+        binding, pool_seeds=pool_seeds, input_serializer_runs=input_serializer_runs
+    )
+    missing = [name for name in required if name not in delivered]
+    if missing:
+        raise _missing_arguments_error(missing)
+
+
+def _missing_arguments_error(names: list[str]) -> drf_serializers.ValidationError:
+    """The refusal of a call that left ``names`` out.
+
+    DRF's own ``required`` message and code, keyed by each name: the answer an
+    input serializer gives a missing field, which every caller's
+    ``validation_error_result`` arm turns into the same ``"Invalid arguments"``
+    result.
+    """
+    message = drf_serializers.Field.default_error_messages["required"]
+    return drf_serializers.ValidationError({name: [message] for name in names}, code="required")
+
+
 def validation_error_result(
     exc: drf_serializers.ValidationError | ServiceValidationError,
     arguments: Any,
@@ -800,11 +852,11 @@ __all__ = [
     "build_validated_input_serializer",
     "check_permissions",
     "consume_rate_limits",
-    "declares_default",
     "effective_rate_limits",
     "enforce_result_ceiling",
     "permission_verdict",
     "read_shaping_error_result",
+    "refuse_missing_arguments",
     "resolve_bound",
     "run_with_deadline",
     "services_dispatch_policies",

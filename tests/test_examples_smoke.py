@@ -143,7 +143,7 @@ def test_invoicing_field_selection_is_per_item_and_refuses_the_envelope() -> Non
 
 
 # Runs inside the invoicing project, like the script above: the tool listing and
-# four ``tools/call`` posts, printed as JSON for the assertions below. ``post``
+# five ``tools/call`` posts, printed as JSON for the assertions below. ``post``
 # reads ``result`` and nothing else, so a call answered with a JSON-RPC error
 # fails the script rather than reaching an assertion.
 _INVOICING_LOOKUP_EMPTY_IDEMPOTENT_SEEDS = textwrap.dedent(
@@ -190,6 +190,7 @@ _INVOICING_LOOKUP_EMPTY_IDEMPOTENT_SEEDS = textwrap.dedent(
     print(json.dumps({
         "tools": {tool["name"]: tool for tool in listed["tools"]},
         "set_amount": call("invoices.set_amount", {"number": "INV-A", "amount_cents": 250}),
+        "no_number": call("invoices.set_amount", {"amount_cents": 250}),
         "find_miss": call("invoices.find", {"number": "INV-404"}),
         "outstanding": call("invoices.outstanding", {"currency": "USD"}),
         "refused": call("invoices.create", {"number": "INV-C", "amount_cents": -5}),
@@ -201,13 +202,14 @@ _INVOICING_LOOKUP_EMPTY_IDEMPOTENT_SEEDS = textwrap.dedent(
 def test_invoicing_demonstrates_lookup_empty_result_idempotency_and_seeds() -> None:
     """Five behaviours the example registers, asserted as a client sees them.
 
-    ``invoices.set_amount`` advertises its target lookup and lists
+    ``invoices.set_amount`` advertises its target lookup, requires it because
+    the lookup has no default, refuses a call without it, lists
     ``idempotentHint``, and keeps a strict ``outputSchema`` because it has no
     output re-read; ``invoices.find`` answers a miss with ``{}`` under a
     schema that admits it; ``invoices.outstanding`` reads the mount's
-    ``currency`` seed, and a client ``currency`` does not replace it; and
-    ``invoices.create`` answers refused arguments with a ``validation_error``
-    result, not a JSON-RPC ``-32602``.
+    ``currency`` seed, does not advertise it, and a client ``currency`` does
+    not replace it; and ``invoices.create`` answers refused arguments with a
+    ``validation_error`` result, not a JSON-RPC ``-32602``.
     """
     result = subprocess.run(
         [sys.executable, "-c", _INVOICING_LOOKUP_EMPTY_IDEMPOTENT_SEEDS],
@@ -225,6 +227,17 @@ def test_invoicing_demonstrates_lookup_empty_result_idempotency_and_seeds() -> N
     assert set(set_amount["inputSchema"]["required"]) == {"number", "amount_cents"}
     assert set_amount["annotations"]["idempotentHint"] is True
     assert replies["set_amount"]["structuredContent"]["amount_cents"] == 250
+    # The lookup's ``number`` has no default, so a call leaving it out is
+    # refused the way the serializer refuses a missing field, before the lookup
+    # would have raised ``TypeError``.
+    no_number = replies["no_number"]
+    assert no_number["isError"] is True
+    assert json.loads(no_number["content"][0]["text"])["error"] == {
+        "type": "validation_error",
+        "message": "Invalid arguments",
+        "detail": {"number": ["This field is required."]},
+    }
+    assert tools["invoices.find"]["inputSchema"]["required"] == ["number"]
 
     find_schema = tools["invoices.find"]["outputSchema"]
     assert {"maxProperties": 0} in find_schema["anyOf"]
@@ -240,6 +253,8 @@ def test_invoicing_demonstrates_lookup_empty_result_idempotency_and_seeds() -> N
         "amount_cents": 250,
         "currency": "EUR",
     }
+    # Filled by the server, so not asked of the client.
+    assert "currency" not in tools["invoices.outstanding"]["inputSchema"]["properties"]
 
     # Refused input is a tool execution error the model reads, with the
     # serializer's errors keyed by field under ``detail``.
