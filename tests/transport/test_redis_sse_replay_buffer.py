@@ -64,21 +64,70 @@ async def test_replay_unknown_session_yields_nothing() -> None:
     await client.aclose()
 
 
-async def test_eviction_at_max_events() -> None:
-    """``MAXLEN ~ N`` keeps roughly the last N events. ``approximate=True``
-    means Redis trims at internal node boundaries, so we just assert that
-    very-old events drop and the most recent remain.
+async def test_every_write_asks_redis_to_trim_approximately_at_max_events(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The bound is Redis's to keep, so what the buffer owns is the request:
+    ``MAXLEN ~ max_events`` on every ``XADD``.
+
+    The test below cannot hold the ``~``, because exact trimming satisfies both
+    of its bounds. This one does: dropping ``approximate=True`` would make the
+    retained length tidier and make Redis cut inside a node on every write,
+    which is the cost ``~`` exists to avoid.
+    """
+    client = _client()
+    xadd = client.xadd
+    requested: list[tuple[object, object]] = []
+
+    async def spy(*args: object, **kwargs: object) -> object:
+        requested.append((kwargs.get("maxlen"), kwargs.get("approximate")))
+        return await xadd(*args, **kwargs)
+
+    monkeypatch.setattr(client, "xadd", spy)
+    buf = RedisSSEReplayBuffer(client, max_events=7)
+    await buf.record("s", {"n": 1})
+    await buf.record("s", {"n": 2})
+    assert requested == [(7, True), (7, True)]
+    await client.aclose()
+
+
+async def test_trimming_keeps_the_newest_max_events_and_bounds_the_rest() -> None:
+    """``MAXLEN ~ N`` trims only whole internal nodes of the stream, so Redis
+    keeps at least the newest N events and up to one node's worth more
+    (``stream-node-max-entries``, 100 by default).
+
+    Both bounds are asserted without assuming a node size, by writing until
+    Redis first trims. That matters because the fake's answer moved under
+    this test: fakeredis before 2.39 trimmed ``~`` exactly, which Redis never
+    does, and from 2.39 it drops whole nodes as Redis does. A fixed write
+    count either never crosses a node boundary, and so asserts nothing about
+    trimming, or bakes in the node size.
     """
     client = _client()
     buf = RedisSSEReplayBuffer(client, max_events=2)
-    for n in range(20):
-        await buf.record("s", {"n": n})
+    key = "drf-mcp:sse-replay:s"
+    recorded: list[tuple[str, object]] = []
+    # The cap turns a stream that is never trimmed into a failure rather than
+    # a hang; Redis's default node is a tenth of it.
+    for n in range(1000):
+        recorded.append((await buf.record("s", {"n": n}), {"n": n}))
+        if await client.xlen(key) < len(recorded):
+            break
+    else:
+        pytest.fail("1000 writes against max_events=2 and the stream was never trimmed")
+    trimmed_at = len(recorded)
+
+    # The lower bound is the one a reconnecting client relies on: every event
+    # inside the window is still there, and what went, went oldest first.
     out = await _drain(buf.replay("s", "0-0"))
-    # At most a handful retained; the last 2 are guaranteed-present.
-    assert len(out) <= 5
-    payloads = [pair[1] for pair in out]
-    assert {"n": 18} in payloads
-    assert {"n": 19} in payloads
+    assert len(out) >= 2
+    assert out == recorded[-len(out) :]
+
+    # The upper bound: the stream never grows back to the length that made
+    # Redis trim it, so the margin over max_events is one node and no more.
+    for n in range(trimmed_at):
+        await buf.record("s", {"n": n})
+        assert await client.xlen(key) < trimmed_at
     await client.aclose()
 
 

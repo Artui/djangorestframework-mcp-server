@@ -36,7 +36,12 @@ class RedisSSEReplayBuffer:
     Stream IDs are auto-assigned by Redis and monotonic within a session, so
     they double as the SSE event IDs the client echoes back via
     ``Last-Event-ID``. ``MAXLEN ~ N`` caps the retained history per session,
-    approximately — Redis trims when convenient, which is fine here.
+    approximately: Redis trims a stream only by dropping whole internal nodes,
+    so each session keeps at least its newest ``max_events`` events and up to
+    one node's worth more (``stream-node-max-entries``, 100 by default). The
+    lower bound is the one replay needs. The margin above it is set by the
+    node size rather than by ``max_events``, so on a small cap it is most of
+    the stream.
 
     Wire it into [`MCPServer`][rest_framework_mcp.server.mcp_server.MCPServer]:
 
