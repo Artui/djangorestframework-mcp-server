@@ -18,6 +18,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   no hint: two idempotent steps in sequence need not make an idempotent
   operation. `merge_tool_annotations` takes the declaration as
   `idempotent=`.
+- **`MCPServer(pool_seeds=)` registers the project's own pool seeds**: a
+  tenant, a locale, a clock, which over HTTP hang off `request` and off it had
+  no channel. It takes a drf-services `PoolSeeds` and defaults to its
+  `DEFAULT_POOL_SEEDS`, the same registry `dispatch_spec(pool_seeds=)` takes,
+  so a server passing none behaves as before. The seeds reach every spec the
+  server runs: service and selector tools on both transports and both eras,
+  `call_tool` / `acall_tool`, the task worker, each chain step and a
+  resource's selector. They also reach every operation condition it asks:
+  `tools/list`, `list_tools` and `unavailable_tools` ask with them, as does a
+  chain step's affordance check. A registered name is reserved. A client
+  argument of that name is stripped rather than spread. A chain step's seeds
+  are laid over what its `inputs` returned. A `UrlKwarg`, `QueryParam` or
+  URI-template variable naming a seed is refused at registration, and a
+  callable declaring one with no default is accepted. There is one set per
+  server, with no per-call or per-tool override. Prompt rendering and argument
+  completion call bare callables rather than specs, and do not receive them.
+  `MCPCallContext` carries the server's set as `pool_seeds`. A chain step's
+  pool and a resource read's pool are now built through drf-services'
+  `base_pool`, so both also carry `progress`, a no-op reporter.
 
 ### Fixed
 

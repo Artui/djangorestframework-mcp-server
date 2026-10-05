@@ -208,6 +208,9 @@ def _dispatch_tool_call(
                 # task worker runs *this* function and its reporter writes to
                 # the task record. ``None`` for an ordinary sync request.
                 progress=context.progress,
+                # The server's ``pool_seeds=``, resolved into the pool and
+                # reserved against client input, as ``dispatch_spec`` defines.
+                pool_seeds=context.pool_seeds,
                 # ``arguments`` is always an object, so a ``many=True`` spec's list
                 # travels under ``spec.many_argument``; a no-op for any other spec.
                 many_as_argument=True,

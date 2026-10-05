@@ -4,6 +4,7 @@ from dataclasses import dataclass, field
 from typing import Any
 
 from django.http import HttpRequest
+from rest_framework_services.types.pool_seeds import DEFAULT_POOL_SEEDS, PoolSeeds
 from rest_framework_services.types.progress_reporter import ProgressReporter
 
 from rest_framework_mcp.auth.types.token_info import TokenInfo
@@ -104,6 +105,16 @@ class MCPCallContext:
     *default* a settings read at construction time; a context built by
     [`MCPServer`][rest_framework_mcp.server.mcp_server.MCPServer] never takes that
     path."""
+
+    pool_seeds: PoolSeeds = DEFAULT_POOL_SEEDS
+    """The owning server's ``pool_seeds=``: the project's own always-available
+    names (a tenant, a locale, a clock) that hang off ``request`` over HTTP.
+
+    Read wherever this context reaches a spec -- every ``dispatch_spec`` /
+    ``adispatch_spec``, each chain step's pool and its affordance check, and the
+    availability check ``tools/list`` runs -- so a condition is asked with the
+    same seeds the call that enforces it resolves. drf-services' own default, so
+    a context built without a server behaves exactly as before."""
 
 
 __all__ = ["MCPCallContext"]

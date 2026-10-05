@@ -3,7 +3,13 @@ from __future__ import annotations
 from collections.abc import Mapping
 from typing import Any
 
-from rest_framework_services import UNSET, FieldMarking, UnsetType
+from rest_framework_services import (
+    DEFAULT_POOL_SEEDS,
+    UNSET,
+    FieldMarking,
+    PoolSeeds,
+    UnsetType,
+)
 from rest_framework_services.types.selector_spec import SelectorSpec
 
 from rest_framework_mcp.adapters.utils import (
@@ -59,6 +65,7 @@ def selector_spec_to_tool(
     max_result_bytes: int | None | UnsetType = UNSET,
     dispatch_timeout: float | None | UnsetType = UNSET,
     max_page_size: int | None | UnsetType = UNSET,
+    pool_seeds: PoolSeeds = DEFAULT_POOL_SEEDS,
 ) -> SelectorToolBinding:
     """Lift a ``SelectorSpec`` into a
     [`SelectorToolBinding`][rest_framework_mcp.registry.types.selector_tool_binding.SelectorToolBinding].
@@ -97,10 +104,16 @@ def selector_spec_to_tool(
         callable_=spec.selector,
         argument_binding=argument_binding,
         spec_kwargs_provides=frozenset(spec_kwargs_provides),
+        pool_seeds=pool_seeds,
     )
-    validate_url_kwargs(label=f"selector tool {name!r}", url_kwargs=url_kwargs)
+    validate_url_kwargs(
+        label=f"selector tool {name!r}", url_kwargs=url_kwargs, pool_seeds=pool_seeds
+    )
     validate_query_params(
-        label=f"selector tool {name!r}", query_params=query_params, url_kwargs=url_kwargs
+        label=f"selector tool {name!r}",
+        query_params=query_params,
+        url_kwargs=url_kwargs,
+        pool_seeds=pool_seeds,
     )
     spec_perms: tuple[Any, ...] = wrap_spec_permissions(spec.permission_classes, label=name)
     effective_perms: tuple[Any, ...] = spec_perms + tuple(permissions)

@@ -26,6 +26,8 @@ from typing import Any
 
 from rest_framework import serializers as drf_serializers
 from rest_framework_services import (
+    DEFAULT_POOL_SEEDS,
+    PoolSeeds,
     build_offline_context,
     dispatch_spec,
     enforce_permissions,
@@ -59,6 +61,7 @@ def call_spec_tool(
     user: Any,
     request: Any = None,
     config: MCPConfig,
+    pool_seeds: PoolSeeds = DEFAULT_POOL_SEEDS,
 ) -> ToolResult:
     """Invoke a spec-backed tool through the transport-neutral dispatch core.
 
@@ -74,6 +77,10 @@ def call_spec_tool(
     caller maps to its own wire.
     A chain tool orchestrates several specs, has no single dispatch target, and
     is rejected with ``TypeError``.
+
+    ``pool_seeds`` is the owning server's, handed to ``dispatch_spec`` as the
+    wire handlers hand it, so a spec reading a registered seed runs the same
+    in-process as over HTTP.
     """
     if isinstance(binding, ChainToolBinding):
         raise TypeError(
@@ -123,6 +130,7 @@ def call_spec_tool(
             argument_binding=argument_binding,
             unknown_arguments=unknown_arguments,
             on_target_resolved=enforce_permissions,
+            pool_seeds=pool_seeds,
             # A ``many=True`` spec's list arrives under ``spec.many_argument``, as
             # tool arguments are always an object; a no-op for any other spec.
             many_as_argument=True,

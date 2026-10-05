@@ -7,7 +7,10 @@ the tool layer's job.
 
 from __future__ import annotations
 
-from django.db.models import QuerySet
+from typing import Annotated, Any
+
+from django.db.models import QuerySet, Sum
+from rest_framework_services import InputRequired
 from rest_framework_services.exceptions.service_error import ServiceError
 
 from invoices.models import Invoice
@@ -29,3 +32,36 @@ def get_invoice(*, pk: int) -> Invoice:
         return Invoice.objects.get(pk=int(pk))
     except Invoice.DoesNotExist as exc:
         raise ServiceError(f"Invoice {pk} not found") from exc
+
+
+def invoice_by_number(*, number: Annotated[str, InputRequired]) -> QuerySet[Invoice]:
+    """The invoice ``invoices.set_amount`` acts on, looked up by its number.
+
+    A service tool's target selector. Its parameters are the tool's lookup, so
+    ``number`` is advertised in the tool's ``inputSchema`` beside the input
+    serializer's ``amount_cents``, and ``InputRequired`` makes it required
+    there. Without the marker it would be advertised as optional, since the
+    kwargs pool could supply it.
+    """
+    return Invoice.objects.filter(number=number)
+
+
+def find_invoice(*, number: Annotated[str, InputRequired]) -> QuerySet[Invoice]:
+    """Backs ``invoices.find``, a RETRIEVE that may find nothing.
+
+    Registered with ``allow_none=True``, so a number with no invoice is a
+    successful call whose ``structuredContent`` is ``{}``, and the tool's
+    ``outputSchema`` admits that beside a full row.
+    """
+    return Invoice.objects.filter(number=number)
+
+
+def outstanding_total(*, currency: str) -> dict[str, Any]:
+    """Backs ``invoices.outstanding``: the unsent total, in the mount's currency.
+
+    ``currency`` is not a tool argument. It is a pool seed the server registers
+    with ``pool_seeds=``, so every spec on the mount can read it, and a client
+    argument of the same name is stripped rather than spread.
+    """
+    total = Invoice.objects.filter(sent=False).aggregate(total=Sum("amount_cents"))["total"]
+    return {"amount_cents": total or 0, "currency": currency}

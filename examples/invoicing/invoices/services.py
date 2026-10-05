@@ -39,3 +39,15 @@ def mark_invoice_sent(*, data: dict[str, Any]) -> Invoice:
     invoice.sent = True
     invoice.save(update_fields=["sent"])
     return invoice
+
+
+def set_invoice_amount(*, instance: Invoice, data: dict[str, Any]) -> Invoice:
+    """Set an invoice's amount. ``instance`` is the row ``invoice_by_number`` found.
+
+    Idempotent: the same call twice leaves the invoice as one call did, which
+    the spec declares with ``idempotent=True`` and the tool lists as
+    ``idempotentHint``.
+    """
+    instance.amount_cents = data["amount_cents"]
+    instance.save(update_fields=["amount_cents"])
+    return instance

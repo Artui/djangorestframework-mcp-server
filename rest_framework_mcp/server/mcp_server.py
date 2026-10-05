@@ -9,7 +9,13 @@ from django.core.exceptions import ImproperlyConfigured
 from django.http import HttpRequest
 from django.urls import URLPattern, path
 from rest_framework.serializers import Serializer
-from rest_framework_services import UNSET, OfflineContract, UnsetType
+from rest_framework_services import (
+    DEFAULT_POOL_SEEDS,
+    UNSET,
+    OfflineContract,
+    PoolSeeds,
+    UnsetType,
+)
 from rest_framework_services.registry.spec_registry import SpecRegistry
 from rest_framework_services.types.affordance import Affordance
 from rest_framework_services.types.selector_kind import SelectorKind
@@ -142,6 +148,21 @@ class MCPServer:
 
         urlpatterns = [path("mcp/", server.urls)]
         # reverse("mcp:endpoint") · reverse("mcp:protected-resource-metadata")
+
+    What every spec on the mount may read -- a tenant, a locale, a clock -- is
+    registered once as ``pool_seeds=``, a drf-services
+    [`PoolSeeds`][rest_framework_services.types.pool_seeds.PoolSeeds]:
+
+        server = MCPServer(
+            pool_seeds=DEFAULT_POOL_SEEDS.extend(tenant=lambda *, user: user.tenant),
+        )
+
+    Every spec the server runs receives the seeds (tools over either
+    transport, ``call_tool`` / ``acall_tool``, task workers, chain steps and
+    resource reads), every operation condition it asks is asked with them,
+    ``tools/list`` availability included, and a registered name is reserved: a
+    client argument cannot occupy it, and a ``UrlKwarg``, ``QueryParam`` or
+    URI-template variable naming it is refused at registration.
     """
 
     def __init__(
@@ -162,6 +183,7 @@ class MCPServer:
         task_store: TaskStore | None | UnsetType = UNSET,
         task_executor: TaskExecutor | None = None,
         subscription_broker: SubscriptionBroker | None = None,
+        pool_seeds: PoolSeeds = DEFAULT_POOL_SEEDS,
         url_namespace: str = "mcp",
     ) -> None:
         check_removed_settings()
@@ -226,6 +248,14 @@ class MCPServer:
         # nothing as soon as a second worker existed, and the failure looks
         # exactly like "nothing ever changed".
         self._subscription_broker: SubscriptionBroker | None = subscription_broker
+        # The project's own always-available names -- a tenant, a locale, a
+        # clock -- which over HTTP hang off ``request`` and off it have no
+        # channel. Mount-wide, with no per-call or per-tool override: what
+        # varies per call belongs in the resolver, which receives ``user`` and
+        # ``request`` from the pool, and a mount needing different seeds is a
+        # second server. Read by every dispatch and every condition this server
+        # asks, and by registration, which reserves the names.
+        self._pool_seeds: PoolSeeds = pool_seeds
         # The executor is the switch: supply one and a cache-backed store
         # appears (namespaced like the session store, for the same reason),
         # supply neither and this server runs no tasks. A store with nowhere to
@@ -346,6 +376,7 @@ class MCPServer:
             query_params=tuple(query_params) or contract.query_params,
             max_result_bytes=max_result_bytes,
             dispatch_timeout=dispatch_timeout,
+            pool_seeds=self._pool_seeds,
         )
         check_tool_permissions_declared(
             binding.name, binding.permissions, require=self._config.require_tool_permissions
@@ -486,6 +517,7 @@ class MCPServer:
             max_result_bytes=max_result_bytes,
             dispatch_timeout=dispatch_timeout,
             max_page_size=max_page_size,
+            pool_seeds=self._pool_seeds,
         )
         check_tool_permissions_declared(
             binding.name, binding.permissions, require=self._config.require_tool_permissions
@@ -756,7 +788,12 @@ class MCPServer:
         if binding is None:
             raise KeyError(f"No tool registered under {name!r}.")
         return call_spec_tool(
-            binding, arguments or {}, user=user, request=request, config=self._config
+            binding,
+            arguments or {},
+            user=user,
+            request=request,
+            config=self._config,
+            pool_seeds=self._pool_seeds,
         )
 
     # ----- in-process transport invocation -----
@@ -944,6 +981,7 @@ class MCPServer:
             tasks=self._task_store,
             task_executor=self._task_executor,
             subscriptions=self._subscription_broker,
+            pool_seeds=self._pool_seeds,
         )
 
     def run_task(self, task_id: str) -> None:
@@ -1007,6 +1045,7 @@ class MCPServer:
             tasks=self._task_store,
             task_executor=self._task_executor,
             subscriptions=self._subscription_broker,
+            pool_seeds=self._pool_seeds,
             enforce_rate_limits=False,
         )
 
@@ -1166,11 +1205,14 @@ class MCPServer:
         # catches a name declared twice. The transport's own post-fetch names
         # (``page`` / ``limit`` / ``ordering``) are deliberately *not* reserved
         # here: a resource has no post-fetch pipeline, so ``docs://{page}`` is a
-        # legitimate locator.
+        # legitimate locator. The server's own ``pool_seeds`` are: the read
+        # lays them over the template variables, so a variable named after one
+        # would never reach the selector.
         validate_channel_names(
             label=f"Resource {name!r}",
             kind="uri_template variable",
             declarations=tuple(UrlKwarg(name=variable) for variable in template_variables),
+            reserved=self._pool_seeds.names,
         )
         # Template variables are the only completable arguments a resource has.
         check_completions_declared(f"Resource {name!r}", binding.completions, template_variables)
@@ -1660,6 +1702,11 @@ class MCPServer:
         return self._config
 
     @property
+    def pool_seeds(self) -> PoolSeeds:
+        """The ``pool_seeds=`` every dispatch and condition on this server receives."""
+        return self._pool_seeds
+
+    @property
     def auth_backend(self) -> MCPAuthBackend:
         return self._auth_backend
 
@@ -1733,6 +1780,7 @@ class MCPServer:
             # dropped announcement looks exactly like a tool that changed nothing.
             # ``async_urls`` has always passed it.
             subscription_broker=self._subscription_broker,
+            pool_seeds=self._pool_seeds,
             server_info=self._server_info,
             instructions=self.description,
             config=self._config,
@@ -1760,6 +1808,7 @@ class MCPServer:
             task_store=self._task_store,
             task_executor=self._task_executor,
             subscription_broker=self._subscription_broker,
+            pool_seeds=self._pool_seeds,
             sse_broker=self._sse_broker,
             sse_replay_buffer=self._sse_replay_buffer,
             server_info=self._server_info,

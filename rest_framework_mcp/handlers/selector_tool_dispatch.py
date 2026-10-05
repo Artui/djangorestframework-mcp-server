@@ -573,6 +573,12 @@ def _dispatch_kwargs(
         # resolved. The guard runs class-level only for a LIST, whose target is
         # a queryset rather than a model.
         "on_target_resolved": enforce_permissions,
+        # The server's registered seeds: resolved into the selector's pool, and
+        # reserved, so a client argument of the same name is stripped from the
+        # spread rather than outranking the project's value. A selector has no
+        # validator in front of that spread, so without them the name would be
+        # client-controlled.
+        "pool_seeds": context.pool_seeds,
     }
 
 

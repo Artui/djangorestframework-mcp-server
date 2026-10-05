@@ -8,7 +8,10 @@ MCP using every public registration surface of
 |--------------------------------|--------------------------------------------------------------|
 | `register_service_tool`        | `invoices.create` — creates a new invoice (atomic mutation). |
 | `register_service_tool`        | `invoices.mark_sent` — flips the `sent` flag.                |
+| `register_service_tool`        | `invoices.set_amount` — targets an invoice by number through `instance_selector_spec`, so `number` is in its `inputSchema`; `idempotent=True` lists `idempotentHint: true`.|
 | `register_selector_tool`       | `invoices.list` — list with `FilterSet`, ordering, pagination, and a `QueryParam` for field selection.|
+| `register_selector_tool`       | `invoices.find` — an `allow_none` RETRIEVE: a miss is `structuredContent: {}`, which its `outputSchema` admits.|
+| `MCPServer(pool_seeds=)`       | `invoices.outstanding` — reads the mount's `currency` seed; a client `currency` argument cannot replace it.|
 | `register_resource`            | `invoice` — single invoice by PK via `invoices://{pk}` URI.  |
 | `register_prompt`              | `compose_invoice_email` — render an email body for an invoice.|
 

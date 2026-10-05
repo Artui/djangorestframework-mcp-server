@@ -117,6 +117,56 @@ needs (`def with_tenant(request): ...` is as valid as the two-parameter form,
 and `**kwargs` takes the whole pool). Declaring a parameter the pool doesn't
 carry is the error — not declaring one it does.
 
+### Project-wide seeds: `pool_seeds=` { #pool-seeds }
+
+A spec's `kwargs` provider is per spec. What every spec on a mount may read —
+a tenant, a locale, a clock — is a seed, registered once on the server as a
+drf-services
+[`PoolSeeds`][rest_framework_services.types.pool_seeds.PoolSeeds], the same
+registry `dispatch_spec(pool_seeds=)` takes:
+
+```python
+from rest_framework_services import DEFAULT_POOL_SEEDS
+
+server = MCPServer(
+    name="billing",
+    pool_seeds=DEFAULT_POOL_SEEDS.extend(tenant=lambda *, user: user.tenant),
+)
+
+
+def list_invoices(*, tenant):  # receives the resolved tenant on every call
+    return Invoice.objects.filter(tenant=tenant)
+```
+
+A resolver is called through the keyword pool like every other provider, so it
+declares the entries it needs (`user`, `request`) and is resolved per call
+against the caller. The default is drf-services' own `DEFAULT_POOL_SEEDS`, which
+registers nothing, so a server that passes none behaves exactly as before.
+
+- **Every spec the server runs receives them.** A service or selector tool over
+  either transport and either era, `call_tool` / `acall_tool`, a task the worker
+  runs, each step of a chain, and a resource's selector on `resources/read`.
+- **The availability check asks with them too.** `tools/list`, `list_tools` and
+  `unavailable_tools` resolve the seeds into the pool they ask an operation
+  condition against, so `when=lambda *, tenant: tenant.can_close_books` is asked
+  the same question at the listing as at the call
+  ([A tool that cannot run now is not listed](#a-tool-that-cannot-run-now-is-not-listed)).
+- **A registered name is reserved.** A client argument of the same name is
+  stripped rather than spread, so a caller cannot outrank the project's value —
+  on a selector, where no validator stands in front of the spread, that is the
+  difference between a seed and a client-controlled input. A chain step's seeds
+  are laid over whatever its `inputs` returned, for the same reason.
+- **Registration agrees with dispatch.** A callable declaring a seed with no
+  default registers, since the seed is always supplied; a `UrlKwarg`,
+  `QueryParam` or URI-template variable named after one is refused, since
+  dispatch would strip it on every call.
+- **One set per mount, with no per-call or per-tool override.** What varies per
+  call belongs in the resolver; a mount needing different seeds is a second
+  `MCPServer`.
+
+Prompt rendering and argument completion call bare callables rather than specs,
+and do not receive the seeds.
+
 ### URL kwargs — route values a provider reads off `view.kwargs`
 
 On a **tool** call, `view.kwargs` is empty by default (a tool has no URL). So a
@@ -562,8 +612,9 @@ forms) accept three behavior knobs:
 ### A tool that cannot run now is not listed
 
 A service's `affordances` say when the operation is possible. A condition written
-as a callable is answered against the pool's seeds — `user`, `request`, `progress`
-— and never against the call's arguments, so when it is unmet **every** call of
+as a callable is answered against the pool's seeds — `user`, `request`, `progress`,
+and any the server registers with [`pool_seeds=`](#pool-seeds) — and never
+against the call's arguments, so when it is unmet **every** call of
 the tool is refused, whatever the client sends. `tools/list` therefore asks each
 such condition, through drf-services' `unmet_operation_affordance`, and leaves the
 tool out while any is unmet:
@@ -1857,7 +1908,8 @@ The MCP package owns its own dispatch flow. It does **not** import
    `self.instance`. A `many=True` spec validates the list under its
    `many_argument` instead, item by item, with no target to resolve
    ([A list payload](#list-payload)).
-5. Build a kwarg pool: `{request, user, data}` plus — when present — the
+5. Build a kwarg pool: `{request, user, data}` and the server's
+   [`pool_seeds`](#pool-seeds), plus — when present — the
    resolved `instance` and the bound, validated `serializer` (both
    reserved seeds clients cannot poison; services opt in by declaring
    the parameter, e.g. to call `serializer.save()`).

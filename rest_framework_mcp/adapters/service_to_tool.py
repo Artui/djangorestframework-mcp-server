@@ -4,7 +4,13 @@ from collections.abc import Mapping
 from typing import Any
 
 from django.core.exceptions import ImproperlyConfigured
-from rest_framework_services import UNSET, FieldMarking, UnsetType
+from rest_framework_services import (
+    DEFAULT_POOL_SEEDS,
+    UNSET,
+    FieldMarking,
+    PoolSeeds,
+    UnsetType,
+)
 from rest_framework_services.types.service_spec import ServiceSpec
 
 from rest_framework_mcp.adapters.utils import (
@@ -58,6 +64,7 @@ def service_spec_to_tool(
     query_params: tuple[QueryParam, ...] = (),
     max_result_bytes: int | None | UnsetType = UNSET,
     dispatch_timeout: float | None | UnsetType = UNSET,
+    pool_seeds: PoolSeeds = DEFAULT_POOL_SEEDS,
 ) -> ToolBinding:
     """Lift a ``ServiceSpec`` into a
     [`ToolBinding`][rest_framework_mcp.registry.types.tool_binding.ToolBinding].
@@ -99,6 +106,7 @@ def service_spec_to_tool(
         callable_=spec.service,
         argument_binding=argument_binding,
         spec_kwargs_provides=frozenset(spec_kwargs_provides),
+        pool_seeds=pool_seeds,
         provides_instance=(
             spec.instance_selector_spec is not None
             and spec.instance_selector_spec.selector is not None
@@ -108,9 +116,14 @@ def service_spec_to_tool(
             and spec.collection_selector_spec.selector is not None
         ),
     )
-    validate_url_kwargs(label=f"service tool {name!r}", url_kwargs=url_kwargs)
+    validate_url_kwargs(
+        label=f"service tool {name!r}", url_kwargs=url_kwargs, pool_seeds=pool_seeds
+    )
     validate_query_params(
-        label=f"service tool {name!r}", query_params=query_params, url_kwargs=url_kwargs
+        label=f"service tool {name!r}",
+        query_params=query_params,
+        url_kwargs=url_kwargs,
+        pool_seeds=pool_seeds,
     )
     spec_perms: tuple[Any, ...] = wrap_spec_permissions(spec.permission_classes, label=name)
     effective_perms: tuple[Any, ...] = spec_perms + tuple(permissions)

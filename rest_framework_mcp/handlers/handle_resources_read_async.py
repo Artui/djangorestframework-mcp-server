@@ -5,6 +5,7 @@ from typing import Any
 from rest_framework.exceptions import PermissionDenied
 from rest_framework_services import (
     UNSET,
+    base_pool,
     build_offline_context,
     resolve_callable_kwargs,
 )
@@ -103,12 +104,12 @@ async def handle_resources_read_async(
         drf_request = offline.request
         view = offline.view
 
-        # See the sync sibling: the transport's seeds land after the
-        # URI-template variables, so neither can be shadowed from the URI.
+        # See the sync sibling: the transport's seeds, the server's
+        # ``pool_seeds`` among them, land after the URI-template variables, so
+        # none can be shadowed from the URI.
         pool: dict[str, Any] = {
             **vars_,
-            "request": drf_request,
-            "user": context.token.user,
+            **base_pool(user=context.token.user, request=drf_request, seeds=context.pool_seeds),
         }
         if binding.kwargs_provider is not None:
             # ``SelectorSpec.kwargs``, invoked by name through the keyword pool

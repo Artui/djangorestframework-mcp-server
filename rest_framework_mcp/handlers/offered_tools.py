@@ -109,7 +109,7 @@ def _answer(
             continue
         if pool is None:
             pool = _list_time_pool(context)
-        answers.append((binding, _first_unmet(gating, pool)))
+        answers.append((binding, _first_unmet(gating, pool, context.pool_seeds.reserved)))
     return answers, pool is not None
 
 
@@ -124,19 +124,24 @@ def _asked_specs(binding: ToolBindingLike) -> tuple[ServiceSpec[Any, Any, Any], 
 
 
 def _first_unmet(
-    gating: tuple[ServiceSpec[Any, Any, Any], ...], pool: dict[str, Any]
+    gating: tuple[ServiceSpec[Any, Any, Any], ...],
+    pool: dict[str, Any],
+    reserved: frozenset[str],
 ) -> Affordance | None:
     """The first unmet condition across ``gating``, in order, or ``None``.
 
     Stops at the first spec refusing, as the listing always did, so a later
     step's condition is not asked once an earlier one has decided.
 
-    ``reserved`` is left at drf-services' default because this server registers
-    no ``PoolSeeds``: dispatch runs with the default seeds, so the condition is
-    asked here with the names it sees there.
+    ``reserved`` is the server's ``pool_seeds.reserved``, the set dispatch hands
+    the condition at the call: a callable condition sees only the reserved
+    names of its pool, so without a registered seed in that set a condition
+    reading it is asked here without it. The pool holding the seed's value is
+    the other half (``_list_time_pool``), and each is held on its own by
+    test_list_tools_and_unavailable_tools_ask_conditions_with_the_seeds.
     """
     for spec in gating:
-        unmet: Affordance | None = unmet_operation_affordance(spec, pool)
+        unmet: Affordance | None = unmet_operation_affordance(spec, pool, reserved=reserved)
         if unmet is not None:
             return unmet
     return None
@@ -189,11 +194,15 @@ def _list_time_pool(context: MCPCallContext) -> dict[str, Any]:
     There are no call arguments at list time, so ``request.data`` is empty; a
     condition reading it was reading client input, which an operation-scope
     condition must not depend on.
+
+    The server's ``pool_seeds`` are resolved into it as ``dispatch_spec``
+    resolves them at the call, so a condition reading a registered seed (a
+    tenant, a clock) is asked the same question in both places.
     """
     offline = build_offline_context(
         context.token.user, http_request=context.http_request, query_params={}
     )
-    return base_pool(user=context.token.user, request=offline.request)
+    return base_pool(user=context.token.user, request=offline.request, seeds=context.pool_seeds)
 
 
 __all__ = ["declares_operation_conditions", "offered_tools", "unavailable_tools"]
