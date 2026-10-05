@@ -42,8 +42,8 @@ class RedisSSEReplayBuffer:
     default) or ``stream-node-max-bytes`` (4096 by default), whichever comes
     first, so the margin is under 100 events and under about 4 KB, and none at
     all once events pass about 2 KB. The lower bound is the one replay needs.
-    One trim also removes at most 100 nodes' worth of entries (10,000 by
-    default), so after ``max_events`` is lowered on a long stream the first
+    One trim also removes at most 10,000 entries (100 times
+    ``stream-node-max-entries``), so after ``max_events`` is lowered on a long stream the first
     few writes leave it above the bound before it catches up.
 
     Wire it into [`MCPServer`][rest_framework_mcp.server.mcp_server.MCPServer]:

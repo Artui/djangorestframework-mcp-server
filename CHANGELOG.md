@@ -10,8 +10,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Documentation
 
 - **`RedisSSEReplayBuffer` keeps less than one stream node more than
-  `max_events`, not "slightly" more.** The SSE replay buffer recipe said
-  retention "may be slightly above the cap between trim events". `MAXLEN ~ N`
+  `max_events`.** The SSE replay buffer recipe said retention "may be slightly
+  above the cap between trim events". `MAXLEN ~ N`
   trims only by dropping whole internal nodes of the stream, so a session keeps
   at least its newest `max_events` events and less than one node beyond them,
   all the time rather than between trims. A node closes at
