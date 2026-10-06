@@ -50,7 +50,14 @@ tool and the parameter, in place of a `TypeError` or a wrong answer per call.
   served page 1 when asked for page 2. The check reads the tool's effective
   `query_params`, an `agent_contract`'s included. A `UrlKwarg` sharing a
   parameter's name stays allowed, since its value reaches the selector through
-  `view.kwargs`, and a `**kwargs` catch-all names nothing to refuse.
+  `view.kwargs`, and a `**kwargs` catch-all names nothing to refuse. So does a
+  name the tool's `input_serializer` declares as a field, because the validated
+  values are laid back over the stripped arguments and the selector does receive
+  it: `page=1` beside a serializer `page` field reads the caller's `page=3`. The
+  exemption covers only a field whose value is laid back under its own name, so
+  it does not apply to a bare dataclass or a `DataclassSerializer` (whose
+  validated value is a dataclass instance, which is not laid back), a
+  `read_only` field, or a field whose `source=` names another attribute.
 
 ### Fixed
 

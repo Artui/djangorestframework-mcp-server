@@ -16,6 +16,7 @@ from typing import Any
 
 from django.core.exceptions import ImproperlyConfigured
 from rest_framework import serializers as drf_serializers
+from rest_framework_dataclasses.serializers import DataclassSerializer
 from rest_framework_services.types.pool_seeds import DEFAULT_POOL_SEEDS, PoolSeeds
 from rest_framework_services.types.validate_channel_names import validate_channel_names
 
@@ -180,7 +181,11 @@ def validate_query_params(
 
 
 def validate_selector_parameter_names(
-    *, label: str, selector: Any, query_params: tuple[QueryParam, ...]
+    *,
+    label: str,
+    selector: Any,
+    query_params: tuple[QueryParam, ...],
+    input_serializer: type | None,
 ) -> None:
     """Fail-fast on a selector parameter the selector-tool transport takes away.
 
@@ -198,6 +203,15 @@ def validate_selector_parameter_names(
     - a name one of the tool's ``query_params`` declares, whose value is routed
       to ``request.query_params`` and split out of the arguments.
 
+    Neither is refused for a name the ``input_serializer`` lays back
+    (``_overlaid_field_names``): dispatch overlays the validated values on the
+    stripped arguments, so the selector does receive the caller's value under
+    that name. The subtraction is held by
+    ``test_a_pagination_named_parameter_the_input_serializer_declares_is_allowed``
+    and ``test_a_parameter_a_query_param_shadows_is_allowed_when_the_input_serializer_declares_it``,
+    and its limit to the declared names by
+    ``test_a_serializer_declaring_another_name_exempts_nothing``.
+
     A ``UrlKwarg`` sharing a parameter's name stays allowed: its value reaches
     the selector through ``view.kwargs``, as ``validate_url_kwargs`` documents.
     A ``**kwargs`` catch-all names nothing, so there is nothing to refuse.
@@ -208,7 +222,7 @@ def validate_selector_parameter_names(
     """
     parameters: frozenset[str] = frozenset(
         parameter.name for parameter in _keyword_parameters(selector)
-    )
+    ) - _overlaid_field_names(input_serializer)
     pagination: list[str] = sorted(parameters & RESERVED_POST_FETCH_KEYS)
     if pagination:
         raise ImproperlyConfigured(
@@ -309,6 +323,42 @@ def _resolve_signature(callable_: Any) -> inspect.Signature | None:
         return inspect.signature(callable_)
     except (TypeError, ValueError):  # pragma: no cover - defensive fallback
         return None
+
+
+def _overlaid_field_names(input_serializer: type | None) -> frozenset[str]:
+    """The names a selector tool's validated input lays back over its arguments.
+
+    Selector dispatch overlays the validated values on the arguments only when
+    they are a ``dict`` (``handlers.selector_tool_dispatch._selector_dispatch_params``),
+    so only a plain DRF ``Serializer`` lays any name back; the same reasoning as
+    ``schema.utils._serializer_fills``. The chain is one branch arc, so each
+    condition is held by a case of
+    ``test_a_field_whose_value_is_not_laid_back_exempts_nothing``:
+
+    - a DRF ``Serializer`` class: a bare ``@dataclass`` validates into a
+      dataclass instance (``bare-dataclass``). The ``isinstance`` arm is the
+      ``None`` of a tool with no ``input_serializer``, which every such
+      registration passes through
+      (``test_a_defaulted_pagination_named_parameter_is_refused``);
+    - not a ``DataclassSerializer``, which does too (``dataclass-serializer``);
+    - not ``read_only``: DRF keeps the field out of the validated values
+      (``read-only-field``);
+    - a ``source`` that is the field's own name: a field bound with
+      ``source="number"`` puts its value under ``number``, and ``source="*"``
+      merges it, so neither lays back the name the field is declared under
+      (``source-elsewhere``).
+    """
+    if (
+        not isinstance(input_serializer, type)
+        or not issubclass(input_serializer, drf_serializers.Serializer)
+        or issubclass(input_serializer, DataclassSerializer)
+    ):
+        return frozenset()
+    return frozenset(
+        name
+        for name, field in input_serializer().fields.items()
+        if not field.read_only and field.source == name
+    )
 
 
 def _keyword_parameters(callable_: Any) -> list[inspect.Parameter]:
@@ -444,6 +494,9 @@ def _validate_required_params_have_sources(
     """
     if _accepts_var_keyword(sig):
         return
+    # Only a parameter a keyword can fill is counted: a ``*args`` has no default
+    # and needs no source, since dispatch binds by keyword and leaves it empty
+    # (``test_a_var_positional_parameter_needs_no_source``).
     required_params: frozenset[str] = frozenset(
         name
         for name, param in sig.parameters.items()

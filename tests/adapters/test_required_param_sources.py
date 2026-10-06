@@ -215,3 +215,24 @@ def test_a_url_kwarg_is_no_source_for_a_service_parameter() -> None:
             spec=ServiceSpec(service=_move_task, input_serializer=_MoveIn, atomic=False),
             url_kwargs=(UrlKwarg("project_pk", required=True),),
         )
+
+
+# ---------- only a parameter a keyword can fill is counted ----------
+
+
+def _tag_note(*tags: Any, data: Any) -> Any:
+    return {"tags": list(tags), "saved": data}
+
+
+async def test_a_var_positional_parameter_needs_no_source() -> None:
+    # ``*tags`` has no default, so a check counting every parameter would call
+    # it required with no source; dispatch binds by keyword and leaves it empty.
+    server = _server()
+    server.register_service_tool(
+        name="note",
+        description="Save a note.",
+        spec=ServiceSpec(service=_tag_note, input_serializer=_NoteIn, atomic=False),
+    )
+    out = await server.acall_tool("note", {"text": "hello"}, user=None)
+    assert isinstance(out, dict)
+    assert out["structuredContent"] == {"tags": [], "saved": {"text": "hello"}}

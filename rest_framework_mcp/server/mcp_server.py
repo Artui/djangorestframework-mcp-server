@@ -548,6 +548,7 @@ class MCPServer:
             label=f"selector tool {binding.name!r}",
             selector=binding.selector,
             query_params=binding.query_params,
+            input_serializer=binding.input_serializer,
         )
         check_tool_permissions_declared(
             binding.name, binding.permissions, require=self._config.require_tool_permissions

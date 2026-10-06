@@ -344,9 +344,9 @@ server.register_service_tool(
 Because a URL kwarg is popped before the spec sees the arguments, it never counts
 as an unknown argument (the `REJECT` policy ignores it) and never lands in the
 service's validated payload — it routes **only** through `view.kwargs`. A name
-can't collide with a reserved transport key (`ordering` / `page` / `limit`, or the
-`request` / `user` / `data` / `instance` / `serializer` / `collection` pool
-seeds); colliding with an ordinary spec input is allowed and is the intended way
+can't collide with a reserved transport key (`page` / `limit`, or the
+`request` / `user` / `progress` / `data` / `instance` / `serializer` /
+`collection` pool seeds); colliding with an ordinary spec input is allowed and is the intended way
 to route a route-capture the spec *also* reads directly.
 
 A capture the spec genuinely cannot run without takes `required=True`:
@@ -384,6 +384,7 @@ value on the request:
 | Reaches the selector | yes, as a spec param | yes, via the `view.kwargs` spread |
 | Reaches `view.kwargs` | **no** | yes |
 | Ranks above caller-supplied params | no — it *is* caller input | yes |
+| Source of a required selector parameter at registration | not needed — `**extras` names no parameter | yes, when `required=True` or it declares a default |
 
 So anything that reads request state rather than its own arguments — a
 `spec.kwargs` provider, `extend_queryset`, a permission class, an
@@ -433,7 +434,7 @@ The value is advertised in the tool's `inputSchema`, **popped** from the
 arguments, and handed to `build_offline_context(query_params=…)`. It never
 reaches the spec as an input, so the unknown-argument policy never sees it.
 
-Three rules worth knowing:
+Four rules worth knowing:
 
 - **Never required.** A read-shaping param the spec runs fine without cannot be
   required, which is why `QueryParam` has no such flag — unlike `UrlKwarg`,
@@ -445,6 +446,16 @@ Three rules worth knowing:
   generated into the tool schema and flow through as ordinary arguments, which is
   where `dispatch_spec` reads them. Declaring one as a `QueryParam` would pop it
   out of the arguments and it would silently stop filtering.
+- **Nor is a selector parameter.** The value is popped before the selector is
+  called, so a parameter of the same name would never receive it: a required one
+  would be answered `This field is required.` for an argument the call carried,
+  a defaulted one would run on its default. `register_selector_tool` refuses
+  that selector, unless the tool's `input_serializer` declares the name as a
+  field: the validated values are laid back over the popped arguments, so the
+  selector receives the caller's value too. That takes a DRF `Serializer`; a
+  dataclass input validates into an instance, which is not laid back, so it
+  exempts nothing. `call_tool` does not run a selector tool's
+  `input_serializer`, so there the value reaches only `request.query_params`.
 
 !!! warning "The MCP endpoint's query string is no longer a channel"
     Every dispatch path wraps the real Django `POST` to the MCP endpoint, so
@@ -700,11 +711,12 @@ forms) accept three behavior knobs:
   `djangorestframework-services` (the transport-neutral `dispatch_spec` owns
   these policies).
   - `ArgumentBinding.BUNDLE` (default for service tools) — only
-    `data=<validated>` enters the pool.
+    `data=<validated>` enters the pool. Without an `input_serializer` nothing
+    does, so a service requiring `data` is refused at registration.
   - `ArgumentBinding.SPREAD_AUTHOR_WINS` (default for selector tools) — every
     key from the validated arguments is spread into the pool as a top-level
     kwarg, so selectors can declare individual parameters
-    (`def list_drafts(*, project_id, page=1)`). `spec.kwargs(...)` wins
+    (`def list_drafts(*, project_id, status="draft")`). `spec.kwargs(...)` wins
     on conflict so author-declared invariants beat client input.
   - `ArgumentBinding.SPREAD_CALLER_WINS` — like `SPREAD_AUTHOR_WINS` but the
     spread wins on conflict, so `spec.kwargs(...)` supplies client-overridable
@@ -712,11 +724,17 @@ forms) accept three behavior knobs:
   - `ArgumentBinding.AUTO` — resolve per spec type (service → `BUNDLE`,
     selector → `SPREAD_AUTHOR_WINS`).
 
-  Reserved transport-pool seeds (`request` / `user` / `data` / `instance` /
-  `serializer`) and the
-  selector pipeline keys (`ordering` / `page` / `limit`) are stripped
-  from the spread regardless of mode so clients can't poison
-  transport-controlled state.
+  Reserved transport-pool seeds (`request` / `user` / `progress` / `data` /
+  `instance` / `serializer` / `collection`) and the selector pipeline keys
+  (`page` / `limit`) are stripped from the spread regardless of mode so clients
+  can't poison transport-controlled state. So trust mode (no `input_serializer`
+  under a spreading binding) does not count a reserved seed as one the caller
+  supplies: a callable requiring a seed that nothing on the transport fills is
+  refused at registration. For the same reason, registration refuses a selector
+  parameter named `page` or `limit`, or named by one of the tool's
+  [`QueryParam`s](#query-params-read-shaping-values-the-serializer-reads), unless
+  the tool's `input_serializer` declares it as a field, whose validated value is
+  laid back over the stripped arguments.
 
 - **`unknown_arguments=`** — how `arguments` keys outside the binding's
   declared field set are handled.
