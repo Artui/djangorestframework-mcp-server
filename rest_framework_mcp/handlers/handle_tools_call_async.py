@@ -194,6 +194,27 @@ async def _dispatch_tool_call_async(
             return refusal_result(prior.refused_with)
         arguments_raw = prior.arguments
 
+        # See the sync sibling: an answer that moved the route is judged again
+        # on the route it names, before the target is looked up. The same
+        # tests hold both conditions here, each parametrized over this handler.
+        _, answered_url_kwargs = split_url_kwargs(
+            arguments_raw, binding.url_kwargs, refuse_missing=False
+        )
+        if answered_url_kwargs != delivered_url_kwargs:
+            allowed, required_scopes = await acall(
+                check_permissions,
+                binding.permissions,
+                context.http_request,
+                context.token,
+                view_kwargs=answered_url_kwargs,
+            )
+            if not allowed:
+                return JsonRpcError(
+                    JsonRpcErrorCode.FORBIDDEN,
+                    "Insufficient permission",
+                    data={"requiredScopes": required_scopes} if required_scopes else None,
+                )
+
         # See the sync sibling: URL kwargs route through the view, not the params,
         # and the split runs inside the ``try`` so a missing ``required=True``
         # kwarg reaches the ``isError`` mapping instead of escaping.

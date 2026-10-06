@@ -33,9 +33,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   permission denies is told so, and a caller it admits is then told which
   argument it left out. A caller the permission denies is still charged no
   rate limit and queues no task. The permission reads a tool call's arguments
-  as sent, before a retry's `inputResponses` are merged in; an answer naming a
-  different capture is judged again by the target guard, against the view the
-  service runs with.
+  as sent, before a retry's `inputResponses` are merged in, so a denied caller
+  is refused before its answers are read. An answer that names a different
+  URL kwarg, or fills one the call left out, is judged again on the route it
+  produces, before the target is looked up or the service runs, for a
+  per-binding permission and a spec's `permission_classes` alike; an answer
+  leaving the route as sent is not judged twice.
 - **A chain step raising DRF's `ValidationError` is a `validation_error`
   result, not a 500.** A step's arm caught drf-services'
   `ServiceValidationError` only, so the exception a service's

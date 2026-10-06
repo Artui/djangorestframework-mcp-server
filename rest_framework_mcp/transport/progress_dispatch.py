@@ -94,11 +94,14 @@ def preflight_permissions(method: str, params: Any, context: MCPCallContext) -> 
     # an object delivers nothing here, as an absent one does there, and the
     # handler is left to name the fault
     # (``test_a_call_with_no_arguments_object_is_judged_on_the_route_defaults``).
-    # A chain declares no URL kwargs.
+    # ``url_kwargs`` is read bare because only a service or a selector binding
+    # gets here: a chain declares none, and ``can_report_progress`` refuses to
+    # stream one, so the transport never pre-flights it
+    # (``test_a_chain_tool_is_not_given_a_stream_it_cannot_use``).
     arguments: Any = params.get("arguments")
     _, delivered_url_kwargs = split_url_kwargs(
         arguments if isinstance(arguments, dict) else {},
-        getattr(binding, "url_kwargs", ()),
+        binding.url_kwargs,
         refuse_missing=False,
     )
     allowed, required_scopes = check_permissions(

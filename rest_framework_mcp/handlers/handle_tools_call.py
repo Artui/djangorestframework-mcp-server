@@ -157,9 +157,7 @@ def _dispatch_tool_call(
         # and the strict split below still refuses it after.
         # The arguments as sent, before a retry's answers are merged in below,
         # since a denied caller is told so before its answers are read; an
-        # answer naming another route is judged again by the target guard
-        # against the view the service runs with
-        # (``test_an_answer_that_changes_the_route_is_judged_again_before_the_service_runs``).
+        # answer naming another route is judged again once they are.
         _, delivered_url_kwargs = split_url_kwargs(
             arguments_raw, binding.url_kwargs, refuse_missing=False
         )
@@ -193,6 +191,40 @@ def _dispatch_tool_call(
         if prior.refused_with is not None:
             return refusal_result(prior.refused_with)
         arguments_raw = prior.arguments
+
+        # An answer is merged over the arguments with no limit on its keys, so
+        # it can name a URL kwarg the call sent or left out, and the route the
+        # service runs with is then not the one judged above. Judged again on
+        # that route, before the target is looked up: the target guard reads
+        # only the spec's own classes, so a per-binding adapter answered with
+        # ``project_pk: 8`` ran the service on a project the caller holds no
+        # grant on
+        # (``test_an_answer_naming_another_route_is_refused_by_a_per_binding_permission``),
+        # and a spec class judged only there told an existing target from a
+        # missing one (``test_an_answer_cannot_tell_an_existing_target_from_a_missing_one``).
+        # Only when the route moved, so an ordinary retry is judged once
+        # (``test_an_answer_leaving_the_route_unchanged_is_not_judged_again``);
+        # an answer filling a kwarg the call left out is a move
+        # (``test_an_answer_filling_a_route_kwarg_left_out_is_judged_on_the_filled_route``).
+        # Not refusing a missing kwarg, as the split above does not, since the
+        # strict split below is where that is answered
+        # (``test_an_answer_leaving_a_required_route_kwarg_missing_is_told_which``).
+        _, answered_url_kwargs = split_url_kwargs(
+            arguments_raw, binding.url_kwargs, refuse_missing=False
+        )
+        if answered_url_kwargs != delivered_url_kwargs:
+            allowed, required_scopes = check_permissions(
+                binding.permissions,
+                context.http_request,
+                context.token,
+                view_kwargs=answered_url_kwargs,
+            )
+            if not allowed:
+                return JsonRpcError(
+                    JsonRpcErrorCode.FORBIDDEN,
+                    "Insufficient permission",
+                    data={"requiredScopes": required_scopes} if required_scopes else None,
+                )
 
         # ``enforce_permissions`` is the object-permission hook: it runs
         # ``spec.permission_classes`` against the resolved target.

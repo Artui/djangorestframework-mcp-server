@@ -333,14 +333,18 @@ def check_permissions(
     **``view_kwargs`` is the route the request names**, and every
     [`DRFPermissionAdapter`][rest_framework_mcp.auth.permissions.drf_permission_adapter.DRFPermissionAdapter]
     among ``permissions`` is judged against a copy whose stand-in view carries
-    it: the URL kwargs a ``tools/call`` delivered, or the variables of the URI a
+    it: the URL kwargs a ``tools/call`` delivered, then the ones a retry's
+    answers produce where they moved the route, or the variables of the URI a
     ``resources/read`` names, the values the dispatch then puts in
     ``view.kwargs``. A spec permission scoping by a route capture reads
     ``view.kwargs["project_pk"]``, as it would over HTTP, and judged against
     ``{}`` it denied a caller it admits. Any other permission is judged as it
     is, since an ``MCPPermission`` judges the request and token and has no view.
     ``None`` judges every permission as registered, for the paths that name no
-    route: ``prompts/get``, ``completion/complete`` and chain steps.
+    route: ``prompts/get``, ``completion/complete``, and a chain tool's up-front
+    check of its binding's permissions, which a chain declares no URL kwargs
+    for. Its steps are not judged here: each runs ``enforce_permissions``
+    against the target it resolved.
 
     The registered adapters are never written to, because every concurrent
     call to the binding shares them, and the wrapped DRF permission is not

@@ -222,8 +222,9 @@ async def test_an_answer_that_changes_the_route_is_judged_again_before_the_servi
     # The permission is judged on the arguments as sent, before a retry's
     # ``inputResponses`` are merged over them, because a denied caller is told
     # so before its answers are read. An answer naming a different capture is
-    # still judged: the target guard runs the class-level check again against
-    # the view the service is dispatched with.
+    # still judged, on the route it names and before the service runs; a
+    # per-binding permission, which the target guard never reads, is held the
+    # same way in ``test_an_answer_is_judged_on_the_route_it_names``.
     ran: list[bool] = []
 
     def _archive_project() -> dict[str, Any]:
