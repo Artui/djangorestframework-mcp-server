@@ -4,6 +4,10 @@ from __future__ import annotations
 
 import json
 import secrets
+import threading
+from collections.abc import Callable
+from concurrent.futures import ThreadPoolExecutor
+from typing import Any
 
 import pytest
 from django.test import RequestFactory, override_settings
@@ -65,10 +69,76 @@ def test_initial_access_token_wrong_value_returns_401() -> None:
     assert response.status_code == 401
 
 
+# From Python 3.14 the decoder's recursion is bounded by the C stack rather than
+# a count, so how deep a body must nest to raise depends on the stack the parse
+# runs on: about 74,000 levels on an 8 MiB main thread, and about 600,000 under
+# ``make``, which raises the soft stack limit to the hard one (64 MiB on macOS)
+# for the processes it starts. A thread's stack is the size it was created with,
+# so on this one the limit is about 37,000 levels on 3.14 and the count, about
+# 1,000 or 10,000, on earlier Pythons: 100,000 is past it wherever the suite runs.
+_BOUNDED_STACK_BYTES: int = 4 * 1024 * 1024
+
+
+def _on_a_bounded_stack(call: Callable[[], Any]) -> Any:
+    """Run ``call`` on a fresh thread with a 4 MiB stack and return its result."""
+    previous: int = threading.stack_size(_BOUNDED_STACK_BYTES)
+    try:
+        with ThreadPoolExecutor(max_workers=1) as pool:
+            return pool.submit(call).result()
+    finally:
+        threading.stack_size(previous)
+
+
 def test_invalid_json_returns_400() -> None:
     response = _post("not-json")
     assert response.status_code == 400
     assert response.data["error"] == "invalid_request"
+
+
+@pytest.mark.parametrize(
+    ("body", "raises"),
+    [
+        # Past the decoder's recursion limit on the bounded stack, on every
+        # supported Python.
+        pytest.param(
+            b"[" * 100_000 + b"]" * 100_000, RecursionError, id="nested-past-the-recursion-limit"
+        ),
+        # Over the 4300-digit cap on int conversion: a plain ``ValueError``.
+        pytest.param(
+            b'{"redirect_uris": ["https://x/cb"], "n": ' + b"9" * 5000 + b"}",
+            ValueError,
+            id="integer-over-the-digit-limit",
+        ),
+        # Not UTF-8: a ``UnicodeDecodeError`` from decoding the bytes.
+        pytest.param(
+            b'{"redirect_uris": ["https://x/\xff"]}', UnicodeDecodeError, id="invalid-utf-8"
+        ),
+    ],
+)
+def test_a_body_json_cannot_decode_is_invalid_request(body: bytes, raises: type[Exception]) -> None:
+    """None of these is a ``JSONDecodeError``, and each escaped ``create`` as a 500.
+
+    With registration open and no initial access token, anyone reaches the parse.
+    The view runs on a bounded stack so the nested body raises however large the
+    stack the suite was started with.
+    """
+
+    def post() -> Any:
+        # Checked on the thread that decodes it, because that thread's stack
+        # is what the nested body's limit depends on. A body that decoded here
+        # would be answered by the metadata validation and pass without the fix.
+        with pytest.raises(raises) as raised:
+            json.loads(body)
+        assert raised.type is raises
+        return _post(body)
+
+    response: Any = _on_a_bounded_stack(post)
+    assert response.data["error"] != "invalid_client_metadata"
+    assert response.status_code == 400
+    assert response.data == {
+        "error": "invalid_request",
+        "error_description": "Request body is not valid JSON",
+    }
 
 
 def test_invalid_schema_returns_400_with_detail() -> None:

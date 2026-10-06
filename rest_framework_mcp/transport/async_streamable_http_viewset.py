@@ -256,11 +256,23 @@ class AsyncStreamableHttpViewSet(ViewSet):
                 status=413,
             )
 
+        # Wider than ``JSONDecodeError`` for the reasons the sync sibling gives:
+        # a ``RecursionError``, an over-long integer's ``ValueError`` and a
+        # ``UnicodeDecodeError`` each escaped as a 500, before authentication.
+        # Held by ``test_async_body_json_cannot_decode_is_a_parse_error``: its
+        # nested case fails without ``RecursionError``, the other two without
+        # widening ``JSONDecodeError`` to ``ValueError``.
         try:
             payload: Any = json.loads(http_request.body or b"null")
-        except json.JSONDecodeError as exc:
+        except (ValueError, RecursionError) as exc:
+            # Only ``JSONDecodeError`` carries ``msg``; the others get a fixed
+            # message rather than an interpreter internal. The kept detail is
+            # held by ``test_async_decode_error_keeps_the_decoders_detail``.
+            detail: str = (
+                exc.msg if isinstance(exc, json.JSONDecodeError) else "body could not be decoded"
+            )
             return _error_response(
-                code=JsonRpcErrorCode.PARSE_ERROR, message=f"Invalid JSON: {exc.msg}"
+                code=JsonRpcErrorCode.PARSE_ERROR, message=f"Invalid JSON: {detail}"
             )
 
         try:

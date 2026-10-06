@@ -1,6 +1,11 @@
 from __future__ import annotations
 
+import asyncio
 import json
+import threading
+from collections.abc import Callable
+from concurrent.futures import ThreadPoolExecutor
+from typing import Any
 
 import pytest
 from django import VERSION as DJANGO_VERSION
@@ -207,6 +212,99 @@ async def test_async_invalid_json(async_urlconf) -> None:
         headers={"Mcp-Protocol-Version": "2025-11-25"},
     )
     assert response.json()["error"]["code"] == -32700
+
+
+# A 4 MiB thread stack, for the reason ``test_streamable_http_view`` gives: from
+# Python 3.14 the decoder's recursion limit follows the stack, and ``make``
+# raises the main thread's, so 100,000 levels can decode there. On this stack
+# the limit is about 37,000 levels on 3.14 and the count on earlier Pythons.
+_BOUNDED_STACK_BYTES: int = 4 * 1024 * 1024
+
+
+def _on_a_bounded_stack(call: Callable[[], Any]) -> Any:
+    """Run ``call`` on a fresh thread with a 4 MiB stack and return its result."""
+    previous: int = threading.stack_size(_BOUNDED_STACK_BYTES)
+    try:
+        with ThreadPoolExecutor(max_workers=1) as pool:
+            return pool.submit(call).result()
+    finally:
+        threading.stack_size(previous)
+
+
+async def test_async_decode_error_keeps_the_decoders_detail(async_urlconf) -> None:
+    """A ``JSONDecodeError`` names what it expected, and the refusal carries it."""
+    client = AsyncClient()
+    response = await client.post(
+        "/mcp/",
+        data="not json",
+        content_type="application/json",
+        headers={"Mcp-Protocol-Version": "2025-11-25"},
+    )
+    assert response.json()["error"]["message"] == "Invalid JSON: Expecting value"
+
+
+@pytest.mark.parametrize(
+    ("body", "raises"),
+    [
+        # Past the decoder's recursion limit on the bounded stack, on every
+        # supported Python. 200 KB, under the 1 MiB default cap.
+        pytest.param(
+            b"[" * 100_000 + b"]" * 100_000, RecursionError, id="nested-past-the-recursion-limit"
+        ),
+        # Over the 4300-digit cap on int conversion: a plain ``ValueError``.
+        pytest.param(
+            b'{"jsonrpc": "2.0", "id": 1, "method": "ping", "params": {"n": ' + b"9" * 5000 + b"}}",
+            ValueError,
+            id="integer-over-the-digit-limit",
+        ),
+        # Not UTF-8: a ``UnicodeDecodeError`` from decoding the bytes.
+        pytest.param(
+            b'{"jsonrpc": "2.0", "id": 1, "method": "\xff"}',
+            UnicodeDecodeError,
+            id="invalid-utf-8",
+        ),
+    ],
+)
+def test_async_body_json_cannot_decode_is_a_parse_error(
+    async_urlconf, body: bytes, raises: type[Exception]
+) -> None:
+    """None of these is a ``JSONDecodeError``, and each escaped as a 500.
+
+    The parse runs before authentication, so anyone could send one. The id is
+    ``null`` because a body that never decoded has no id to echo. A sync test
+    on purpose: the async view parses on the thread running its event loop, so
+    the loop is started on the bounded stack rather than on pytest's.
+    """
+
+    async def post() -> Any:
+        return await AsyncClient().post(
+            "/mcp/",
+            data=body,
+            content_type="application/json",
+            headers={"Mcp-Protocol-Version": "2025-11-25"},
+        )
+
+    def run() -> Any:
+        # Checked on the thread that decodes it, because that thread's stack
+        # is what the nested body's limit depends on. A body that decoded here
+        # would be answered by a later check and pass without the fix.
+        with pytest.raises(raises) as raised:
+            json.loads(body)
+        assert raised.type is raises
+        return asyncio.run(post())
+
+    response = _on_a_bounded_stack(run)
+    payload: Any = response.json()
+    # Neither the size cap, which runs before the parse, nor the shape check
+    # a body that decoded would reach after it.
+    assert payload["error"]["message"] != "Request body too large"
+    assert payload["error"]["message"] != "JSON-RPC message must be a JSON object"
+    assert response.status_code == 400
+    assert payload == {
+        "jsonrpc": "2.0",
+        "id": None,
+        "error": {"code": -32700, "message": "Invalid JSON: body could not be decoded"},
+    }
 
 
 async def test_async_invalid_request_shape(async_urlconf) -> None:
