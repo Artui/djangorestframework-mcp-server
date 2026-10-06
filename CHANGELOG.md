@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.51.0] — 2026-10-06
+
 ### Added
 
 - **`MCPServer(conventions=)` changes the sentences the server writes for a
@@ -5399,7 +5401,8 @@ Pinned to `djangorestframework-services==0.6.0`.
 - 100% line + branch coverage enforced by pytest (**451 tests** at
   release).
 
-[Unreleased]: https://github.com/Artui/djangorestframework-mcp-server/compare/v0.50.0...HEAD
+[Unreleased]: https://github.com/Artui/djangorestframework-mcp-server/compare/v0.51.0...HEAD
+[0.51.0]: https://github.com/Artui/djangorestframework-mcp-server/compare/v0.50.0...v0.51.0
 [0.50.0]: https://github.com/Artui/djangorestframework-mcp-server/compare/v0.49.0...v0.50.0
 [0.49.0]: https://github.com/Artui/djangorestframework-mcp-server/compare/v0.48.0...v0.49.0
 [0.48.0]: https://github.com/Artui/djangorestframework-mcp-server/compare/v0.47.0...v0.48.0
