@@ -19,8 +19,9 @@ against the step's resolved target, a service's ``affordances`` through
 ``enforce_affordances``, and the spec's ``preconditions`` — so a rule written once
 on a spec holds on this path as well.
 
-A step raising ``ServiceValidationError`` / ``ServiceError`` is mapped to an
-error carrying ``failedStep`` (and, for a refusal, the affordance's ``code``
+A step raising ``ServiceValidationError`` or DRF's ``ValidationError`` (a
+``validation_error``), or a ``ServiceError``, is mapped to an error carrying
+``failedStep`` (and, for a refusal, the affordance's ``code``
 beside it); under an atomic chain the mapped error is
 re-raised as a private abort signal so the surrounding ``transaction.atomic()``
 unwinds, then returned.
@@ -311,11 +312,20 @@ def _run_step(
             result: Any = _run_service_step(step.spec, pool, offline, seeds.reserved)
         else:
             result = _run_selector_step(step.spec, pool, offline)
-    except ServiceValidationError as exc:
+    except (drf_serializers.ValidationError, ServiceValidationError) as exc:
         # Tool-level failure, so an ``isError`` result carrying ``failedStep``;
-        # an atomic chain still rolls back via ``_ChainAbort``.
+        # an atomic chain still rolls back via ``_ChainAbort``. DRF's exception
+        # shares the arm, as it does on every service-tool path: it is what a
+        # service's ``serializer.is_valid(raise_exception=True)`` raises, and it
+        # escaped this one as a 500
+        # (``test_a_steps_drf_validation_error_is_a_validation_error_result``).
+        # It has no message of its own, so it keeps the one
+        # ``validation_error_result`` gives it, while a kernel refusal keeps the
+        # service's (``test_a_steps_service_validation_error_keeps_its_own_message``).
+        # Before the ``ServiceError`` arm, which would otherwise take
+        # ``ServiceValidationError`` as a plain failure.
         return build_error_tool_result(
-            exc.message,
+            exc.message if isinstance(exc, ServiceValidationError) else "Invalid arguments",
             error_type="validation_error",
             detail={
                 "failedStep": step.alias,

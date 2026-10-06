@@ -19,6 +19,7 @@ from rest_framework_mcp.handlers.handle_initialize import handle_initialize
 from rest_framework_mcp.handlers.types.context import MCPCallContext
 from rest_framework_mcp.protocol.types.json_rpc_error import JsonRpcError
 from rest_framework_mcp.transport.in_memory_session_store import InMemorySessionStore
+from tests.utils import granting_route
 
 LANGUAGES = ["python", "pytorch", "pyside", "ruby"]
 
@@ -258,6 +259,40 @@ def test_completion_runs_the_bindings_permissions() -> None:
     )
     assert isinstance(result, JsonRpcError)
     assert result.code == -32006
+
+
+def test_a_route_scoped_templates_completion_is_judged_on_no_route() -> None:
+    """Fails closed: a permission reading a URI variable sees ``{}`` and refuses.
+
+    A completion names a template, not a URI, so there is no route to judge,
+    and ``context.arguments`` is a partial route no read produces; a completer
+    ignoring it would offer one project's caller the ids of every project. So a
+    template whose permission scopes by ``view.kwargs`` completes for nobody,
+    including a caller ``resources/read`` admits, as ``docs/auth.md`` states.
+    """
+    seen: list[dict[str, Any]] = []
+    server = _server()
+    server.register_resource(
+        name="project-invoices",
+        uri_template="projects://{project_pk}/invoices",
+        selector=SelectorSpec(
+            kind=SelectorKind.LIST,
+            selector=lambda **_: [],
+            permission_classes=[granting_route("project_pk", "7", seen)],
+        ),
+        completions={"project_pk": lambda: ["7", "8"]},
+    )
+    result = _complete(
+        server,
+        {
+            "ref": {"type": "ref/resource", "uri": "projects://{project_pk}/invoices"},
+            "argument": {"name": "project_pk", "value": ""},
+            "context": {"arguments": {"project_pk": "7"}},
+        },
+    )
+    assert isinstance(result, JsonRpcError)
+    assert result.code == -32006
+    assert seen == [{}]
 
 
 class _AlwaysLimited:

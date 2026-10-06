@@ -75,6 +75,47 @@ tool and the parameter, in place of a `TypeError` or a wrong answer per call.
   unchanged: drf-services spreads `view.kwargs` into its target lookup's pool,
   not the service's.
 
+- **A spec permission reading `view.kwargs` judges the route a request
+  names, wherever it is judged.** A service or selector tool's, or a
+  resource's, `permission_classes` were judged against a stand-in view whose
+  `kwargs` were always `{}`, so a permission scoping by a route capture,
+  `view.kwargs["project_pk"]`, denied a caller it admits. Each check now sees
+  the values the dispatch puts in `view.kwargs`:
+  - on `tools/call`, through the sync and async handlers and so `acall_tool`,
+    the URL kwargs the call delivered, split out of its arguments first, as
+    `call_tool` already split them, for a service and a selector tool alike;
+  - on a streamed `tools/call`, the same URL kwargs in the permission
+    pre-flight the async transport runs before it opens the stream, which
+    answered such a call `403`;
+  - on a task-augmented `tools/call`, the same URL kwargs in the check made
+    before the task is created, which refused the task;
+  - on `resources/read`, sync and async, the variables of the URI the read
+    names;
+  - on a resource subscription, the variables of each URI it names, so a
+    caller may watch exactly the URIs it may read.
+
+  A call missing a required URL kwarg is refused as before and in the same
+  order: the split ahead of the permission refuses nothing, a caller the
+  permission denies is told so, and a caller it admits is then told which
+  argument it left out. A caller the permission denies is still charged no
+  rate limit and queues no task. The permission reads a tool call's arguments
+  as sent, before a retry's `inputResponses` are merged in, so a denied caller
+  is refused before its answers are read. An answer that names a different
+  URL kwarg, or fills one the call left out, is judged again on the route it
+  produces, before the target is looked up or the service runs, for a
+  per-binding permission and a spec's `permission_classes` alike; an answer
+  leaving the route as sent is not judged twice.
+- **A chain step raising DRF's `ValidationError` is a `validation_error`
+  result, not a 500.** A step's arm caught drf-services'
+  `ServiceValidationError` only, so the exception a service's
+  `serializer.is_valid(raise_exception=True)` raises escaped the chain:
+  `acall_tool` and the sync handler raised it, and the wire answered HTTP 500
+  with `-32603 Internal error`. It now answers as the same exception from a
+  service tool does, an `isError` result with `type: "validation_error"`, the
+  message `Invalid arguments` and DRF's `detail` as raised, with `failedStep`
+  naming the step, from a service step and a selector step alike. An atomic
+  chain rolls back the steps before it, as for any mapped step error.
+
 ## [0.51.0] — 2026-10-06
 
 ### Added

@@ -9,6 +9,7 @@ from concurrent.futures import ThreadPoolExecutor
 from typing import Any
 
 import pytest
+from rest_framework.permissions import BasePermission
 
 from rest_framework_mcp.conf import get_setting
 
@@ -26,6 +27,39 @@ def tool_error(out: Any) -> dict[str, Any]:
     assert out.get("isError") is True
     assert "structuredContent" not in out
     return json.loads(out["content"][0]["text"])["error"]
+
+
+def granting_route(key: str, value: Any, seen: list[dict[str, Any]]) -> type[BasePermission]:
+    """A DRF permission granting a route whose ``view.kwargs[key]`` is ``value``.
+
+    Records every ``view.kwargs`` it is shown into ``seen``: a class rather than
+    an instance is what a spec declares, and the paths instantiate it at
+    different times, so the record lives outside the instance. Reads with
+    ``.get`` so a check made against ``{}`` denies rather than raising, which is
+    what the routes this stands in for looked like before they were bound.
+    """
+
+    class _GrantsOneRoute(BasePermission):
+        def has_permission(self, request: Any, view: Any) -> bool:
+            seen.append(dict(view.kwargs))
+            return view.kwargs.get(key) == value
+
+    return _GrantsOneRoute
+
+
+class RefusingRateLimit:
+    """An ``MCPRateLimit`` refusing every call, counting the calls it was asked about.
+
+    Pins the refusal order on a path that judges permissions before it charges a
+    quota: a caller the permission denies is told so, and is never charged.
+    """
+
+    def __init__(self) -> None:
+        self.consumed: int = 0
+
+    def consume(self, request: Any, token: Any) -> int | None:
+        self.consumed += 1
+        return 30
 
 
 # How deep a body must nest before ``json.loads`` raises ``RecursionError``

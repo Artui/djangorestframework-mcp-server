@@ -96,8 +96,14 @@ def _may_watch_resource(uri: str, context: MCPCallContext) -> bool:
     resolved: Any = context.resources.resolve(uri)
     if resolved is None:
         return False
-    binding: Any = resolved[0]
-    allowed, _ = check_permissions(binding.permissions, context.http_request, context.token)
+    binding, vars_ = resolved
+    # Judged on the URI's variables, as the read of it is, so a permission
+    # scoping by ``view.kwargs["project_pk"]`` grants a watch on exactly the
+    # URIs it would let this caller read
+    # (``test_a_subscription_is_granted_the_uris_the_read_would_admit``).
+    allowed, _ = check_permissions(
+        binding.permissions, context.http_request, context.token, view_kwargs=vars_
+    )
     return bool(allowed)
 
 

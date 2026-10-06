@@ -204,6 +204,19 @@ auto-wrapped and prepended to the per-binding `permissions` tuple —
 the same spec that backs your HTTP view governs the MCP binding
 without you restating the contract at the MCP call site.
 
+The adapter's stand-in view carries the call's URL kwargs, and a resource
+read's URI variables, wherever a request names a route (on `tools/call`, the
+pre-flight of a streamed call, a task's creation, `resources/read` and a
+resource subscription alike), so a class scoping by `view.kwargs["project_pk"]`
+reads the route the request names, as it does over HTTP. A `tools/call` retry
+whose `inputResponses` name a different URL kwarg, or fill one the call left
+out, is judged again on the route the answer produces, before the target is
+looked up or the service runs. Two checks name no route and judge `{}`:
+`completion/complete` on a resource template, which names the template rather
+than a URI, so a template whose permission scopes by a URI variable completes
+for nobody; and the listings filter described
+[below](#filtering-listings-by-permissions).
+
 ### Object-level permissions
 
 `has_object_permission` runs on every path, against the row the dispatch

@@ -77,8 +77,13 @@ def handle_resources_read(
         "mcp.resources.read",
         attributes={**_span_attrs(binding.name, context), "mcp.resource.uri": uri},
     ):
+        # The URI's variables are what the dispatch below puts in
+        # ``view.kwargs``, so the spec's permission classes judge them here
+        # too: a permission scoping by ``view.kwargs["project_pk"]`` was judged
+        # against ``{}`` and denied a caller it admits
+        # (``test_a_resource_permission_sees_the_uri_variables_of_the_read``).
         allowed, required_scopes = check_permissions(
-            binding.permissions, context.http_request, context.token
+            binding.permissions, context.http_request, context.token, view_kwargs=vars_
         )
         if not allowed:
             return JsonRpcError(
