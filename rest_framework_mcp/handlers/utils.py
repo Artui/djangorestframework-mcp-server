@@ -596,6 +596,22 @@ class _MissingArguments(drf_serializers.ValidationError):
         self.names: tuple[str, ...] = tuple(names)
 
 
+def render_convention(template: str | None) -> str | None:
+    """One placeholder-free ``AgentConventions`` field as the model reads it.
+
+    Every field is a ``str.format`` template, rendered whether or not it has a
+    placeholder, so a doubled brace is one brace in all of them alike -- the
+    Pydantic-AI toolset's rule -- rather than reaching a model doubled from the
+    three fields that take no placeholder
+    (``test_a_doubled_brace_reaches_the_model_as_one_in_every_field``). ``None``
+    is a dropped sentence and stays ``None``. The template was validated against
+    this exact call when the conventions were built, so this cannot raise.
+    ``missing_arguments``, the one field with a placeholder, is rendered where
+    its names are known, in ``validation_error_result``.
+    """
+    return None if template is None else template.format()
+
+
 def validation_error_result(
     exc: drf_serializers.ValidationError | ServiceValidationError,
     arguments: Any,
@@ -766,8 +782,9 @@ def read_shaping_error_result(
     # (``paginated``) and
     # ``test_none_drops_the_handle_wording_and_the_scope_sentence`` (the
     # ``None`` check, which would otherwise append the text "None").
-    if paginated and conventions.query_param_on_pages is not None:
-        message = f"{message} {conventions.query_param_on_pages}"
+    scope = render_convention(conventions.query_param_on_pages)
+    if paginated and scope is not None:
+        message = f"{message} {scope}"
     return build_error_tool_result(
         message,
         error_type="validation_error",
@@ -902,6 +919,7 @@ __all__ = [
     "permission_verdict",
     "read_shaping_error_result",
     "refuse_missing_arguments",
+    "render_convention",
     "resolve_bound",
     "run_with_deadline",
     "services_dispatch_policies",

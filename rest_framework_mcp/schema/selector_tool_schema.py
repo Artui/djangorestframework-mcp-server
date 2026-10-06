@@ -59,8 +59,9 @@ def build_selector_tool_input_schema(
         pool_seeds: The server's registered seeds, which fill a selector
             parameter of the same name, so it is not asked of the client.
         query_param_on_pages: What a ``QueryParam`` applies to on a paged tool,
-            the server's ``AgentConventions.query_param_on_pages``. ``None``
-            advertises each param exactly as declared.
+            the server's ``AgentConventions.query_param_on_pages`` already
+            rendered, so it is written as given. ``None`` advertises each param
+            exactly as declared.
 
     Returns:
         An object schema carrying ``properties``, and ``required`` only when at

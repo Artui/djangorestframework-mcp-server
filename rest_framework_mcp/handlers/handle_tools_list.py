@@ -11,6 +11,7 @@ from rest_framework_mcp.handlers.utils import (
     advertises_closed_items,
     advertises_closed_schema,
     catalog_cache_hints,
+    render_convention,
     resolve_bound,
     takes_list_payload,
 )
@@ -39,7 +40,8 @@ def handle_tools_list(
     relative cost is small and it keeps bindings cheap to construct. It is also
     what lets a binding stay server-neutral: the wording a listing carries (the
     handle description and line, a paged tool's scope sentence) is the context's
-    ``conventions``, read here, so the server that owns the request decides it.
+    ``conventions``, read and rendered here, so the server that owns the request
+    decides it and the schema builders write it as given.
 
     Pagination is opaque-cursor per the MCP spec: clients pass back the
     ``nextCursor`` they received without inspecting it.
@@ -91,7 +93,7 @@ def handle_tools_list(
                 binding,
                 max_page_size=resolve_bound(binding.max_page_size, context.config.max_page_size),
                 pool_seeds=context.pool_seeds,
-                query_param_on_pages=context.conventions.query_param_on_pages,
+                query_param_on_pages=render_convention(context.conventions.query_param_on_pages),
             )
         else:
             input_schema = build_service_tool_input_schema(binding, pool_seeds=context.pool_seeds)
@@ -133,7 +135,7 @@ def handle_tools_list(
             projection=binding.audience_projection,
             affordances=binding.rendered_affordances,
             may_be_empty=binding.can_present_nothing,
-            handle_description=context.conventions.handle_field_description,
+            handle_description=render_convention(context.conventions.handle_field_description),
         )
         # A media tool has no JSON result to describe, so the schema is dropped
         # rather than advertised over a payload arriving as an image block.
@@ -145,7 +147,7 @@ def handle_tools_list(
             description=append_agent_conventions(
                 binding.description,
                 binding.audience_projection,
-                handle_line=context.conventions.handle_line,
+                handle_line=render_convention(context.conventions.handle_line),
             ),
             title=binding.title,
             icons=binding.icons,

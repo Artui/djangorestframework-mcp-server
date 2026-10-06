@@ -90,7 +90,8 @@ def append_agent_conventions(
     beside the field it describes; this is the one sentence that has nowhere
     else to go.
 
-    ``handle_line`` is the server's ``AgentConventions.handle_line``. ``None``
+    ``handle_line`` is the server's ``AgentConventions.handle_line``, already
+    rendered, so it is written as given. ``None``
     drops the line and the ``Identify records by`` prefix with it, which is
     framing for that line and says nothing on its own. Whether the line appears
     is still decided here, so a consumer changes the text and never the

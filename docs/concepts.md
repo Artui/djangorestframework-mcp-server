@@ -1157,7 +1157,7 @@ Each field is one sentence, and lands in exactly these places:
 | `handle_field_description` | The `outputSchema` description of a handle field that declares none of its own ([Hide plumbing from the model](recipes/agent-audience.md)). | The field is left undescribed. |
 | `handle_line` | The line appended to the description of a tool whose output carries a handle. | The line is dropped, with its ``Identify records by `<label>`.`` prefix. |
 | `query_param_on_pages` | The end of a read-shaping query param's description on a paged tool, and the end of the `isError` message when a value it supplied is refused while rendering ([On a paged tool](#query-param-per-item)). | Dropped from both. |
-| `missing_arguments` | The message of a call refused for leaving out an argument the selectors require, or a `UrlKwarg(required=True)` ([Which selector parameters a client is asked for](#selector-requiredness)). | Refused with `ImproperlyConfigured`: it is the result's whole message. |
+| `missing_arguments` | The message of a call refused for leaving out an argument the selectors require, or a `UrlKwarg(required=True)` ([Which selector parameters a client is asked for](#selector-requiredness)). | Refused with `ImproperlyConfigured`, as is an empty or whitespace-only string: it is the result's whole message. |
 
 `AgentConventions()` is the default, and a server given none uses it. Change one
 field and the others keep the package's wording, so a later correction to a
@@ -1169,12 +1169,19 @@ conventions say. A field changes **what it says**. The wording reaches every
 route a server answers on: both transports in both eras, `call_tool`,
 `acall_tool`, `list_tools`, and a task's worker.
 
-`missing_arguments` is a format string with one placeholder, `{names}`, filled
-with the missing names sorted, each in backticks, joined with `", "`; the
-default reads ``Missing required argument(s): `pk`.``. Any other placeholder
-raises `ImproperlyConfigured` when the conventions are built, rather than
-inside the first call that leaves an argument out; write a literal brace as
-`{{` or `}}`. The other fields are used as written, braces and all.
+Every field is a `str.format` template, rendered wherever it lands whether or
+not it has a placeholder, so a literal brace is written twice, `{{` or `}}`, in
+every field alike: `handle_line="Ids look like {{this}}."` reaches the model as
+`Ids look like {this}.`. Only `missing_arguments` has a placeholder, `{names}`,
+filled with the missing names sorted, each in backticks, joined with `", "`;
+the default reads ``Missing required argument(s): `pk`.``. A field the server
+could not render raises `ImproperlyConfigured` naming it when the conventions
+are built, rather than inside the first call that reaches it: a placeholder
+the field does not accept, a single brace, a format spec or conversion its
+value cannot take (`{names:q}`, `{names!z}`), or a value that is neither a
+string nor `None`. This is the rule the Pydantic-AI toolset applies to its own
+`AgentConventions`, so a template one transport accepts reads the same on the
+other.
 
 Two of these sentences state facts: that a selection applies to each item and
 never to the envelope, and that the envelope's keys are `items`, `page`,

@@ -55,9 +55,9 @@ def build_output_schema(
     The wording for an unlabelled handle is supplied here rather than upstream:
     it is a sentence written for a model, and drf-services does not know that a
     model is what is reading. ``handle_description`` is that wording, the
-    server's ``AgentConventions.handle_field_description``; ``None`` leaves such
-    a handle undescribed, and a handle declaring its own wording keeps it either
-    way.
+    server's ``AgentConventions.handle_field_description`` already rendered, so
+    it is written as given; ``None`` leaves such a handle undescribed, and a
+    handle declaring its own wording keeps it either way.
 
     ``may_be_empty`` says a successful call can present nothing, which is served
     as ``structuredContent: {}`` (each binding answers it as

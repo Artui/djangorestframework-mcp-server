@@ -102,6 +102,45 @@ async def test_none_drops_the_handle_wording_and_the_scope_sentence() -> None:
 
 
 @pytest.mark.django_db(transaction=True)
+async def test_a_doubled_brace_reaches_the_model_as_one_in_every_field() -> None:
+    # Every field is a ``str.format`` template, rendered whether or not it has a
+    # placeholder, so ``{{`` is one brace wherever a field lands -- the rule the
+    # Pydantic-AI toolset applies to the same fields. Only ``missing_arguments``
+    # was rendered before; the other three were written out as given, doubled
+    # braces and all.
+    await Invoice.objects.acreate(number="INV-1")
+    server = conventions_server(
+        AgentConventions(
+            handle_field_description="Handle {{d}}.",
+            handle_line="Line {{l}}.",
+            query_param_on_pages="Scope {{s}}.",
+            missing_arguments="Missing {{m}}: {names}.",
+        )
+    )
+
+    seen = await _observe(server)
+
+    tools = {tool["name"]: tool for tool in seen["listing"]["tools"]}
+    listed, rename = tools["invoices.list"], tools["invoices.rename"]
+    # The output-schema description of a handle, on a bare row and on a page's item.
+    assert rename["outputSchema"]["properties"]["id"]["description"] == "Handle {d}."
+    item = listed["outputSchema"]["properties"]["items"]["items"]
+    assert item["properties"]["id"]["description"] == "Handle {d}."
+    # The handle line in each tool's description.
+    assert rename["description"] == "Rename an invoice.\n\nLine {l}."
+    assert listed["description"] == "List invoices.\n\nLine {l}."
+    # The scope sentence on the paged param, and in the render refusal.
+    fields = listed["inputSchema"]["properties"]["fields"]
+    assert fields["description"] == "Fields to return. Scope {s}."
+    assert tool_error(seen["refused_selection"])["message"] == (
+        "`fields` was rejected while rendering the result: `items` field is not found. Scope {s}."
+    )
+    # The missing-argument message, from both in-process routes.
+    assert tool_error(seen["missing"])["message"] == "Missing {m}: `pk`."
+    assert tool_error(seen["missing_in_process"])["message"] == "Missing {m}: `pk`."
+
+
+@pytest.mark.django_db(transaction=True)
 async def test_two_servers_in_one_process_keep_their_own_wording() -> None:
     # Conventions are instance state: nothing is read from, or written to, the
     # module, so a second server cannot change what the first one says, in

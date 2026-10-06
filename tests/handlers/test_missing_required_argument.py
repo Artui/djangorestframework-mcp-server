@@ -35,7 +35,7 @@ from rest_framework_services.types.selector_spec import SelectorSpec
 from rest_framework_services.types.service_spec import ServiceSpec
 from typing_extensions import TypedDict
 
-from rest_framework_mcp import ChainStep, MCPServer, UrlKwarg
+from rest_framework_mcp import AgentConventions, ChainStep, MCPServer, UrlKwarg
 from rest_framework_mcp.auth.backends.allow_any_backend import AllowAnyBackend
 from rest_framework_mcp.auth.types.token_info import TokenInfo
 from rest_framework_mcp.config.build_mcp_config import build_mcp_config
@@ -203,6 +203,9 @@ def _ctx(server: MCPServer, pool_seeds: PoolSeeds = DEFAULT_POOL_SEEDS) -> MCPCa
         prompts=server.prompts,
         protocol_version="2025-11-25",
         pool_seeds=pool_seeds,
+        # The server's wording, as the viewsets hand it to the context they
+        # build, so a handler route answers in the words the server was given.
+        conventions=server.conventions,
     )
 
 
@@ -672,9 +675,11 @@ async def test_a_missing_url_kwarg_is_answered_before_a_selector_tools_input_ser
 # ---------- what is not refused ----------
 
 
-def _url_kwarg_server(*, required: bool = False) -> MCPServer:
+def _url_kwarg_server(*, required: bool = False, **server_kwargs: Any) -> MCPServer:
     """Both tool kinds, each taking ``pk`` as a ``UrlKwarg`` with no default."""
-    server = MCPServer(name="t", auth_backend=AllowAnyBackend(), session_store=None)
+    server = MCPServer(
+        name="t", auth_backend=AllowAnyBackend(), session_store=None, **server_kwargs
+    )
     pk = (UrlKwarg("pk", type="integer", required=required),)
     server.register_selector_tool(
         name="get",
@@ -1095,3 +1100,38 @@ async def test_a_key_the_provider_declines_is_the_callers_to_send(route: str) ->
     )
 
     assert out["structuredContent"]["number"] == "beta-1"
+
+
+# ---------- in the server's own words ----------
+
+
+_WORDED = AgentConventions(missing_arguments="Left out: {names}.")
+
+
+@pytest.mark.django_db(transaction=True)
+@pytest.mark.parametrize("route", _ROUTES)
+@pytest.mark.parametrize(
+    "build",
+    [
+        # A selector parameter, refused inside dispatch: the sync selector
+        # sibling's ``except`` arm answers the handler, the async one
+        # ``async_handler`` and ``acall_tool``.
+        lambda: _server(conventions=_WORDED),
+        # A ``UrlKwarg(required=True)``, refused by the channel split before
+        # dispatch: in the request-building step both selector siblings share,
+        # and in ``call_tool``'s own split ahead of its permission check.
+        lambda: _url_kwarg_server(required=True, conventions=_WORDED),
+    ],
+    ids=["selector-parameter", "required-url-kwarg"],
+)
+async def test_a_selector_tools_missing_argument_is_worded_by_the_server(
+    build: Any, route: str
+) -> None:
+    # Each of these four sites builds its result from the context's
+    # conventions, and none was reached by a server with wording of its own: a
+    # default instance in place of ``conventions`` passed everything else.
+    out = await _via(build(), route, "get", {})
+
+    error = tool_error(out)
+    assert error["message"] == "Left out: `pk`."
+    assert error["detail"] == {"pk": _REQUIRED}

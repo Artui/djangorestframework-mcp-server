@@ -24,10 +24,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   changing one field leaves the others in the package's wording. `None` drops
   the handle description, the handle line with its `Identify records by` prefix,
   or the scope sentence; the server still decides whether each sentence
-  appears, and the conventions decide only what it says. `missing_arguments` is
-  a format string whose one placeholder, `{names}`, is the missing names sorted,
-  each in backticks, joined with `", "`; any other placeholder, or a value that
-  is not a string, raises `ImproperlyConfigured` when the conventions are built.
+  appears, and the conventions decide only what it says. Every field is a
+  `str.format` template, rendered wherever it lands whether or not it has a
+  placeholder, so a literal brace is written twice, `{{` or `}}`, in every
+  field alike; only `missing_arguments` has a placeholder, `{names}`, the
+  missing names sorted, each in backticks, joined with `", "`. A placeholder a
+  field does not accept, a single brace, a format spec or conversion its value
+  cannot take (`{names:q}`, `{names!z}`, `{names:>{width}}`), a value that is
+  neither a string nor `None`, and a `missing_arguments` that is `None`, empty
+  or only whitespace each raise `ImproperlyConfigured` naming the field when
+  the conventions are built, rather than answering the first call that reaches
+  it with an internal error. Those are the Pydantic-AI toolset's rules for its
+  own `AgentConventions`, so a template reads the same on both transports.
   The wording reaches both transports in both eras, `call_tool`, `acall_tool`,
   `list_tools` and a task's worker: `MCPServer.urls` and `async_urls` hand it to
   each viewset as a `conventions` class attribute beside `pool_seeds`, and
@@ -35,7 +43,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `MCPServer.conventions`. `build_output_schema` takes `handle_description=`,
   `build_selector_tool_input_schema` takes `query_param_on_pages=`, and
   `append_agent_conventions` takes `handle_line=`, each defaulting to the
-  package's wording.
+  package's wording and writing the text it is given as given: the server
+  renders each field before passing it.
 
 ### Changed
 
