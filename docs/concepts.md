@@ -352,15 +352,11 @@ to route a route-capture the spec *also* reads directly.
 On a selector tool that holds for its `input_serializer` as well. The validated
 values are laid back over the arguments, and a field bound with
 `source="project_pk"` would put a `project_pk` back, so every name a `UrlKwarg`
-declares is dropped from them again: the selector reads the value
-`view.kwargs` carries, the one the permission judged, under every
-`argument_binding`, and a call leaving the kwarg out leaves it out for the
-selector too. One field keeps its value: a field declared under the kwarg's own
-name, such as `project_pk = serializers.IntegerField(default=5)`, when no other
-field writes `project_pk` through its `source` or a `source="*"`. It reads the
-argument the permission judged, so what it lays back is that value as the field
-coerced it, which the selector reads under `SPREAD_CALLER_WINS`, or its default
-when the call leaves an optional kwarg out.
+declares is dropped from them again, whatever wrote it: a `source=`, a
+`source="*"` field, `validate`, or the field of the kwarg's own name coercing
+it. The route reaches the selector as sent, uncoerced, under every
+`argument_binding`, and a field of the same name supplies only its default,
+for a kwarg the call leaves out.
 
 A capture the spec genuinely cannot run without takes `required=True`:
 

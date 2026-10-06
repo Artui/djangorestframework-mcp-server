@@ -15,12 +15,11 @@ route the permission judged as naming no project. Names a ``UrlKwarg`` declares
 are dropped from the selector's arguments after the overlay, so the route the
 permission judged is the one the selector reads, under every binding.
 
-One writer is kept: a field declared under the kwarg's own name, when nothing
-else the serializer declares writes that name. It reads the argument the split
-routed into ``view.kwargs``, so what it lays back is the judged value as the
-author's field coerced it, or the author's default for a route that left an
-optional kwarg out, and never a value the caller chose apart from the route.
-
+A kwarg the call sent therefore reaches the selector as sent, uncoerced,
+whatever the serializer validated under its name. For a kwarg the call left
+out, a field declared under its name supplies only its default, which is the
+author's and fills a name registration counted as filled; nothing else the
+serializer validated under the name reaches the selector.
 
 **Service tools**, as ``docs/concepts.md`` states beside the bindings. A URL
 kwarg does not reach a service's pool at all, only ``view.kwargs``, so a
@@ -32,6 +31,7 @@ must act on the judged route takes it from.
 
 from __future__ import annotations
 
+from dataclasses import dataclass
 from typing import Any
 
 import pytest
@@ -39,6 +39,7 @@ from asgiref.sync import sync_to_async
 from django.http import HttpRequest
 from rest_framework import serializers
 from rest_framework.permissions import BasePermission
+from rest_framework_dataclasses.serializers import DataclassSerializer
 from rest_framework_services.types.selector_kind import SelectorKind
 from rest_framework_services.types.selector_spec import SelectorSpec
 from rest_framework_services.types.service_spec import ServiceSpec
@@ -79,7 +80,7 @@ def _server(
     permission: type[BasePermission],
     read: list[Any],
     url_kwarg: UrlKwarg,
-    input_serializer: type[serializers.Serializer] = _AliasInput,
+    input_serializer: type[Any] = _AliasInput,
     *,
     requires_project: bool = False,
 ) -> MCPServer:
@@ -174,22 +175,6 @@ async def test_a_serializer_field_sourcing_a_url_kwarg_left_out_does_not_fill_th
     assert seen == [{}, {}]
 
 
-class _SameNameInput(serializers.Serializer):
-    """A field declared under the URL kwarg's own name, coercing and defaulting it."""
-
-    project_pk = serializers.IntegerField(default=5)
-
-
-class _SameNameBesideAReadOnlyField(_SameNameInput):
-    """The namesake beside a read-only field, whose ``source`` is ``"*"``.
-
-    A read-only field writes nothing into the validated values, so it is not a
-    second writer of ``project_pk`` and leaves the namesake's value standing.
-    """
-
-    label = serializers.SerializerMethodField()
-
-
 def _recording(seen: list[dict[str, Any]]) -> type[BasePermission]:
     """Admits every route, recording the one judged."""
 
@@ -201,73 +186,28 @@ def _recording(seen: list[dict[str, Any]]) -> type[BasePermission]:
     return _Records
 
 
-@pytest.mark.django_db(transaction=True)
-@pytest.mark.parametrize("is_async", [False, True])
-@pytest.mark.parametrize(
-    ("binding", "expected"),
-    [(ArgumentBinding.SPREAD_AUTHOR_WINS, "7"), (ArgumentBinding.SPREAD_CALLER_WINS, 7)],
-    ids=["author-wins", "caller-wins"],
-)
-@pytest.mark.parametrize(
-    "input_serializer",
-    [_SameNameInput, _SameNameBesideAReadOnlyField],
-    ids=["namesake", "namesake-beside-read-only"],
-)
-async def test_a_field_named_after_a_url_kwarg_lays_back_its_coercion_of_the_route(
-    is_async: bool,
-    binding: ArgumentBinding,
-    expected: Any,
-    input_serializer: type[serializers.Serializer],
-) -> None:
-    # The field reads the argument the split routed into ``view.kwargs``, so
-    # what it lays back is the judged ``"7"`` as the author's field coerced it.
-    # ``SPREAD_CALLER_WINS`` ranks it above ``view.kwargs`` and the selector
-    # reads ``7``; ``SPREAD_AUTHOR_WINS`` ranks ``view.kwargs`` first, so the
-    # selector reads the route's own ``"7"`` there, as it always has.
-    seen: list[dict[str, Any]] = []
-    read: list[Any] = []
-    server = _server(
-        binding,
-        _recording(seen),
-        read,
-        UrlKwarg("project_pk", type="integer", required=True),
-        input_serializer,
-    )
+class _SameNameInput(serializers.Serializer):
+    """A field declared under the URL kwarg's own name, coercing and defaulting it."""
 
-    out = await _call(server, {"project_pk": "7"}, is_async=is_async)
-
-    assert out.get("isError") is not True, f"answered {out!r}"
-    assert repr(read) == repr([expected])
-    assert seen == [{"project_pk": "7"}, {"project_pk": "7"}]
+    project_pk = serializers.IntegerField(default=5)
 
 
-@pytest.mark.django_db(transaction=True)
-@pytest.mark.parametrize("is_async", [False, True])
-@_SPREADING
-async def test_a_field_named_after_a_url_kwarg_defaults_a_route_left_out(
-    is_async: bool, binding: ArgumentBinding
-) -> None:
-    # The selector requires ``project_pk``, and registration admits it because
-    # the field's default fills the name. Dropped with every other URL kwarg
-    # name, a call leaving the kwarg out reached the selector without it and
-    # raised ``TypeError``. The default is the author's, on a route the caller
-    # left without a project, so it is not a value the caller chose.
-    seen: list[dict[str, Any]] = []
-    read: list[Any] = []
-    server = _server(
-        binding,
-        _recording(seen),
-        read,
-        UrlKwarg("project_pk", type="integer"),
-        _SameNameInput,
-        requires_project=True,
-    )
+class _SameNameTrims(serializers.Serializer):
+    """A ``CharField`` namesake, which trims whitespace by default."""
 
-    out = await _call(server, {}, is_async=is_async)
+    project_pk = serializers.CharField()
 
-    assert out.get("isError") is not True, f"answered {out!r}"
-    assert read == [5]
-    assert seen == [{}, {}]
+
+class _SameNameThenValidateRewrites(serializers.Serializer):
+    """A namesake whose value the serializer's ``validate`` replaces with ``project``'s."""
+
+    project_pk = serializers.IntegerField(required=False)
+    project = serializers.IntegerField(required=False)
+
+    def validate(self, attrs: dict[str, Any]) -> dict[str, Any]:
+        if "project" in attrs:
+            attrs["project_pk"] = attrs.pop("project")
+        return attrs
 
 
 class _AliasBesideNamesake(serializers.Serializer):
@@ -306,39 +246,161 @@ class _ValidateRenames(serializers.Serializer):
 @pytest.mark.parametrize("is_async", [False, True])
 @_SPREADING
 @pytest.mark.parametrize(
-    ("input_serializer", "arguments"),
+    ("input_serializer", "url_kwarg_type", "arguments"),
     [
-        (_AliasBesideNamesake, {"project_pk": 7, "project": 8}),
-        (_StarBesideNamesake, {"project_pk": 7, "meta": {"project_pk": 8}}),
-        (_ValidateRenames, {"project_pk": 7, "project": 8}),
+        (_SameNameInput, "integer", {"project_pk": "7"}),
+        (_SameNameTrims, "string", {"project_pk": " acme "}),
+        (_SameNameThenValidateRewrites, "integer", {"project_pk": 7, "project": 8}),
+        (_AliasBesideNamesake, "integer", {"project_pk": 7, "project": 8}),
+        (_StarBesideNamesake, "integer", {"project_pk": 7, "meta": {"project_pk": 8}}),
+        (_ValidateRenames, "integer", {"project_pk": 7, "project": 8}),
     ],
-    ids=["alias-beside-namesake", "star-beside-namesake", "validate-without-namesake"],
+    ids=[
+        "namesake-coerces",
+        "namesake-trims",
+        "namesake-then-validate-rewrites",
+        "alias-beside-namesake",
+        "star-beside-namesake",
+        "validate-without-namesake",
+    ],
 )
-async def test_a_value_only_a_namesake_did_not_write_does_not_move_the_route(
+async def test_a_url_kwarg_the_call_sent_reaches_the_selector_as_sent(
     is_async: bool,
     binding: ArgumentBinding,
     input_serializer: type[serializers.Serializer],
+    url_kwarg_type: str,
     arguments: dict[str, Any],
 ) -> None:
-    # Each serializer validates ``project_pk`` to 8 from an argument other than
-    # ``project_pk``, so the namesake is not the only thing that can have put
-    # the value there, and it is dropped: the selector reads the judged 7
-    # under both bindings rather than 8 under ``SPREAD_CALLER_WINS``.
+    # Each serializer validates ``project_pk`` to something other than what
+    # was sent: a coercion, a trim, or 8 from another argument. Whatever wrote
+    # it, the overlay's value is dropped, so the selector reads the value the
+    # permission judged, uncoerced, rather than the overlay's under
+    # ``SPREAD_CALLER_WINS``. A trimmed ``" acme "`` is another row to a
+    # string lookup, and the namesake's own coercion is no exception to the
+    # rule: the route reaches the selector as sent.
     seen: list[dict[str, Any]] = []
     read: list[Any] = []
     server = _server(
         binding,
-        _admitting_seven_or_none(seen),
+        _recording(seen),
         read,
-        UrlKwarg("project_pk", type="integer", required=True),
+        UrlKwarg("project_pk", type=url_kwarg_type, required=True),
         input_serializer,
     )
 
     out = await _call(server, arguments, is_async=is_async)
 
     assert out.get("isError") is not True, f"answered {out!r}"
-    assert read == [7]
-    assert seen == [{"project_pk": 7}, {"project_pk": 7}]
+    sent = arguments["project_pk"]
+    assert repr(read) == repr([sent])
+    assert seen == [{"project_pk": sent}, {"project_pk": sent}]
+
+
+class _DefaultBesideAlias(serializers.Serializer):
+    """A namesake default beside an alias the caller can fill."""
+
+    project_pk = serializers.IntegerField(default=5)
+    project = serializers.IntegerField(source="project_pk", required=False)
+
+
+class _DefaultThenValidateMoves(serializers.Serializer):
+    """A namesake default, which ``validate`` overwrites from ``project``."""
+
+    project_pk = serializers.IntegerField(default=5)
+    project = serializers.IntegerField(required=False)
+
+    def validate(self, attrs: dict[str, Any]) -> dict[str, Any]:
+        if "project" in attrs:
+            attrs["project_pk"] = attrs.pop("project")
+        return attrs
+
+
+class _NullableDefault(serializers.Serializer):
+    """A namesake default that also admits a null, which the split counts as left out."""
+
+    project_pk = serializers.IntegerField(default=5, allow_null=True)
+
+
+class _ReadOnlyDefault(serializers.Serializer):
+    """A read-only namesake with a default, which DRF keeps out of the validated values."""
+
+    project_pk = serializers.IntegerField(read_only=True, default=5)
+
+
+@dataclass
+class _ProjectInput:
+    project_pk: int = 5
+
+
+class _DataclassDefault(DataclassSerializer):
+    """A dataclass input, which validates into an instance that is not overlaid.
+
+    The field is declared rather than generated, so it carries a default of its
+    own: a generated one leaves the default to the dataclass.
+    """
+
+    project_pk = serializers.IntegerField(default=5)
+
+    class Meta:
+        dataclass = _ProjectInput
+
+
+@pytest.mark.django_db(transaction=True)
+@pytest.mark.parametrize("is_async", [False, True])
+@_SPREADING
+@pytest.mark.parametrize(
+    ("input_serializer", "arguments", "requires_project", "expected"),
+    [
+        (_SameNameInput, {}, True, 5),
+        (_NullableDefault, {"project_pk": None}, False, 5),
+        (_DefaultBesideAlias, {"project": 8}, True, 5),
+        (_DefaultThenValidateMoves, {"project": 8}, True, 5),
+        (_SameNameThenValidateRewrites, {"project": 8}, False, None),
+        (_ReadOnlyDefault, {}, False, None),
+        (_DataclassDefault, {}, False, None),
+    ],
+    ids=[
+        "namesake-default",
+        "null-is-left-out",
+        "default-beside-alias",
+        "default-then-validate-moves",
+        "no-default-then-validate-moves",
+        "read-only-default",
+        "dataclass-default",
+    ],
+)
+async def test_a_url_kwarg_the_call_left_out_reaches_the_selector_only_as_a_namesake_default(
+    is_async: bool,
+    binding: ArgumentBinding,
+    input_serializer: type[Any],
+    arguments: dict[str, Any],
+    requires_project: bool,
+    expected: Any,
+) -> None:
+    # The route names no project, and that is what the permission judged. A
+    # field declared under the kwarg's name with a default supplies it, so a
+    # selector requiring the name runs, which registration promised by counting
+    # the name as filled, rather than raising ``TypeError``. Nothing else
+    # does: 8, moved onto ``project_pk`` by an alias or by ``validate``, is a
+    # project nobody judged, so with no default the name stays out. A
+    # read-only default never reaches the validated values, and a dataclass
+    # input's values are not overlaid at all, so neither fills the name.
+    seen: list[dict[str, Any]] = []
+    read: list[Any] = []
+    server = _server(
+        binding,
+        _recording(seen),
+        read,
+        UrlKwarg("project_pk", type="integer"),
+        input_serializer,
+        requires_project=requires_project,
+    )
+
+    out = await _call(server, arguments, is_async=is_async)
+
+    assert out.get("isError") is not True, f"answered {out!r}"
+    assert read == [expected]
+    assert seen == [{}, {}]
 
 
 # ----- service tools: the documented precedence, pinned -----

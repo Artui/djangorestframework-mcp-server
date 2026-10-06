@@ -23,6 +23,7 @@ from typing import Any
 
 from rest_framework import serializers as drf_serializers
 from rest_framework.exceptions import PermissionDenied
+from rest_framework.fields import empty
 from rest_framework_services import (
     DEFAULT_PAGE_SIZE,
     OfflineServiceView,
@@ -275,10 +276,10 @@ def _build_request_and_validate(
     """Build the synthesised request + view, and validate the ``input_serializer``.
 
     Returns ``(drf_request, view, validated, serializer, error)``, ``serializer``
-    being the bound one that validated, whose fields say which URL kwarg names
-    the overlay may lay back (``_route_kwargs_a_namesake_owns``); ``error`` is
-    non-``None`` when the call is already answered — a ``validation_error`` tool result, for a
-    serializer rejection, an unexpected argument under ``REJECT`` or a missing
+    being the bound one that validated, whose fields supply the defaults for URL
+    kwargs the call left out (``_url_kwarg_defaults``); ``error`` is non-``None``
+    when the call is already answered — a ``validation_error`` tool result, for
+    a serializer rejection, an unexpected argument under ``REJECT`` or a missing
     required URL kwarg alike.
 
     The ``view`` is built **once**, here, and threaded through dispatch and
@@ -587,21 +588,24 @@ def _dispatch_kwargs(
     spec_params, _query_param_values = split_query_params(spec_params, binding.query_params)
     # The overlay can put a URL kwarg's name back: a field bound with
     # ``source="project_pk"`` validates the argument ``project`` into
-    # ``project_pk``. Dropped after it, so the selector reads the route the
-    # permission judged, from ``view.kwargs``, under every binding. Left in,
-    # ``SPREAD_CALLER_WINS`` ranked it above the route
-    # (``test_a_serializer_field_sourcing_a_url_kwarg_does_not_move_the_route``),
-    # and under either spreading binding it stood in for a kwarg the call left
-    # out, on a route judged as naming none
-    # (``test_a_serializer_field_sourcing_a_url_kwarg_left_out_does_not_fill_the_route``).
-    # Kept where the value can only be the route's own namesake field's.
+    # ``project_pk``, and a ``source="*"`` field, a ``validate`` or the
+    # namesake's own coercion write there too. Every such value is dropped, so
+    # the selector reads the route the permission judged. Left in,
+    # ``SPREAD_CALLER_WINS`` ranked it above a kwarg the call sent, which then
+    # reached the selector other than as sent
+    # (``test_a_url_kwarg_the_call_sent_reaches_the_selector_as_sent``), and
+    # under either spreading binding it stood in for a kwarg the call left out,
+    # on a route judged as naming none
+    # (``test_a_url_kwarg_the_call_left_out_reaches_the_selector_only_as_a_namesake_default``).
+    # A sent kwarg reaches the selector through ``view.kwargs``; a left-out
+    # one, only as the default a field of its name declares.
     route_names = {url_kwarg.name for url_kwarg in binding.url_kwargs}
-    dropped = route_names - _route_kwargs_a_namesake_owns(serializer, route_names)
     params = {
         name: value
         for name, value in _selector_dispatch_params(spec_params, validated).items()
-        if name not in dropped
+        if name not in route_names
     }
+    params.update(_url_kwarg_defaults(serializer, validated, route_names - url_kwarg_values.keys()))
     # Evaluated inside both siblings' dispatch ``try``, after the permission and
     # rate-limit answers and the ``input_serializer``: a missing argument is the
     # same ``validation_error`` result a refused one is. Checked against what
@@ -643,55 +647,42 @@ def _dispatch_kwargs(
     }
 
 
-def _route_kwargs_a_namesake_owns(serializer: Any, route_names: set[str]) -> frozenset[str]:
-    """The URL kwargs whose laid-back value only a field of the kwarg's own name writes.
+def _url_kwarg_defaults(serializer: Any, validated: Any, left_out: set[str]) -> dict[str, Any]:
+    """The defaults the ``input_serializer`` declares for URL kwargs the call left out.
 
-    Such a field reads the argument under the kwarg's name, which is the value
-    the split routed into ``view.kwargs`` and the permission judged, so what it
-    lays back is that value as the author's field coerced it, or the author's
-    default for a route that left an optional kwarg out. Neither is a value the
-    caller chose apart from the route, so the name stays in the selector's
-    params: under ``SPREAD_CALLER_WINS`` the selector reads ``7`` for the
-    route's ``"7"``
-    (``test_a_field_named_after_a_url_kwarg_lays_back_its_coercion_of_the_route``),
-    and a selector requiring the name gets the default rather than raising
-    ``TypeError`` (``test_a_field_named_after_a_url_kwarg_defaults_a_route_left_out``).
+    Left out as the split counts it, a null included. The route the permission
+    judged names none of them, so the selector gets nothing under those names
+    from the overlay, whatever it holds; a field declared under the name with a
+    default supplies that default, which is the author's rather than the
+    caller's. It is the name ``schema.utils._serializer_fills`` counts as filled
+    when it decides what a selector tool requires, so a selector requiring it
+    runs rather than raising ``TypeError``
+    (``[namesake-default]`` and ``[default-beside-alias]`` of
+    ``test_a_url_kwarg_the_call_left_out_reaches_the_selector_only_as_a_namesake_default``).
+    ``get_default`` runs on the bound field, so a default reading the
+    serializer's context reads this call's.
 
-    Owned only when the namesake is the name's sole writer among the declared
-    fields. A writable field writes the name its ``source`` starts with, and a
-    ``source="*"`` field merges a mapping into the top level, which can carry
-    any name. The chain is one branch arc, so each condition is held by a case
-    of ``test_a_value_only_a_namesake_did_not_write_does_not_move_the_route``,
-    or of the coercion test above:
+    The conditions mirror ``_serializer_fills``, and the chain is one branch
+    arc, so each is held by a case of that test:
 
-    - a field of the kwarg's name, where none means whatever sits under the
-      name came from an alias or from the serializer's own ``validate``
-      (``[validate-without-namesake]``, and
-      ``test_a_serializer_field_sourcing_a_url_kwarg_does_not_move_the_route``);
-    - no other field whose ``source`` names it (``[alias-beside-namesake]``);
-    - no ``source="*"`` field (``[star-beside-namesake]``);
-    - read-only fields set aside, since they write nothing into the validated
-      values, ``SerializerMethodField`` among them with its ``source="*"``
-      (``[namesake-beside-read-only-caller-wins]`` of the coercion test).
-
-    A ``validate`` or ``to_internal_value`` override can still write the name
-    beside its namesake. That is the author's own code choosing the value, which
-    no declaration shows, and it is what a field's ``validate_<name>`` hook is
-    for in any case.
+    - values that are overlaid at all: a dataclass input validates into an
+      instance, which is not (``[dataclass-default]``);
+    - a field of the name, with none meaning nothing to supply
+      (``test_a_serializer_field_sourcing_a_url_kwarg_left_out_does_not_fill_the_route``,
+      which raises ``KeyError`` without it);
+    - not read-only, since DRF keeps a read-only default out of the validated
+      values (``[read-only-default]``);
+    - a default, with none meaning the name stays out
+      (``[no-default-then-validate-moves]``, where ``validate`` moved 8 onto it).
     """
-    if serializer is None:
-        return frozenset()
+    if not isinstance(validated, dict):
+        return {}
     fields = serializer.fields
-    owned: set[str] = set()
-    for name in route_names:
-        writers = [
-            field
-            for field in fields.values()
-            if not field.read_only and field.source_attrs[:1] in ([name], [])
-        ]
-        if writers == [fields.get(name)]:
-            owned.add(name)
-    return frozenset(owned)
+    return {
+        name: fields[name].get_default()
+        for name in left_out
+        if name in fields and not fields[name].read_only and fields[name].default is not empty
+    }
 
 
 def _selector_dispatch_params(

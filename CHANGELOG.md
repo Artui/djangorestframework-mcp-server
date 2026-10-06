@@ -120,11 +120,11 @@ tool and the parameter, in place of a `TypeError` or a wrong answer per call.
   field's value read in its place, on a route judged as naming no project.
   Every name a `UrlKwarg` declares is now dropped from the selector's
   arguments after the overlay, so the selector reads the route the permission
-  judged under every binding, as the URL kwarg documentation states. One value
-  is kept: a field declared under the kwarg's own name, when no other field
-  writes that name, reads the argument the permission judged, so the selector
-  still gets the field's coerced value under `SPREAD_CALLER_WINS`, and its
-  default when the call leaves an optional kwarg out. On a service tool a URL
+  judged under every binding, as the URL kwarg documentation states, whatever
+  wrote the name: a `source=`, a `source="*"` field, `validate`, or the
+  field of the kwarg's own name. The route reaches the selector as sent,
+  uncoerced, under every binding, and a field of the same name supplies only
+  its default, for a kwarg the call leaves out. On a service tool a URL
   kwarg reaches only `view.kwargs` and the target lookup, so a `spec.kwargs`
   provider copying it into the service's pool stays overridable under
   `SPREAD_CALLER_WINS`, as every provider key is; the argument-binding notes
