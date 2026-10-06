@@ -57,6 +57,7 @@ from rest_framework_mcp.registry.types.ui_csp import UICsp
 from rest_framework_mcp.registry.types.ui_resource_meta import UIResourceMeta
 from rest_framework_mcp.registry.types.ui_tool_meta import UIToolMeta
 from rest_framework_mcp.registry.types.url_kwarg import UrlKwarg
+from rest_framework_mcp.schema.types.agent_conventions import AgentConventions
 from rest_framework_mcp.server.mcp_server import MCPServer
 from rest_framework_mcp.subscriptions.in_memory_subscription_broker import (
     InMemorySubscriptionBroker,
@@ -81,6 +82,7 @@ from rest_framework_mcp.version import __version__
 __all__ = [
     "UI_EXTENSION_ID",
     "UI_RESOURCE_MIME_TYPE",
+    "AgentConventions",
     "ArgumentBinding",
     "ChainContext",
     "ChainStep",

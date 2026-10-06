@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import dataclasses
-from collections.abc import Awaitable, Iterable, Mapping
+from collections.abc import Awaitable, Iterable, Mapping, Sequence
 from typing import Any
 
 from django.http import HttpRequest
@@ -50,7 +50,7 @@ from rest_framework_mcp.registry.types.query_param import QueryParam
 from rest_framework_mcp.registry.types.selector_tool_binding import SelectorToolBinding
 from rest_framework_mcp.registry.types.tool_binding import ToolBinding
 from rest_framework_mcp.registry.types.url_kwarg import UrlKwarg
-from rest_framework_mcp.schema.agent_conventions import PAGED_QUERY_PARAM_SCOPE
+from rest_framework_mcp.schema.types.agent_conventions import AgentConventions
 from rest_framework_mcp.schema.utils import declares_default, end_sentence, required_arguments
 
 _SPREAD_BINDINGS = frozenset(
@@ -542,9 +542,10 @@ def refuse_missing_arguments(
     the server fills is never among them.
 
     Raised as DRF's ``ValidationError`` keyed by field with DRF's own
-    ``required`` message and code, the answer an input serializer gives a
-    missing field, so every caller's ``validation_error_result`` arm turns it
-    into the same ``"Invalid arguments"`` result. ``present`` is every name the
+    ``required`` message and code, the detail an input serializer gives a
+    missing field, so every caller's existing ``ValidationError`` arm catches
+    it; ``validation_error_result`` reads it as this check's refusal and words
+    it with the server's ``missing_arguments``. ``present`` is every name the
     call delivers to the selector: the arguments left after the channel splits
     plus the ``UrlKwarg`` values, which reach the pool through ``view.kwargs``.
     ``input_serializer_runs=False`` is for ``call_tool``, which does not run a
@@ -568,13 +569,31 @@ def refuse_missing_arguments(
 def _missing_arguments_error(names: list[str]) -> drf_serializers.ValidationError:
     """The refusal of a call that left ``names`` out.
 
-    DRF's own ``required`` message and code, keyed by each name: the answer an
-    input serializer gives a missing field, which every caller's
-    ``validation_error_result`` arm turns into the same ``"Invalid arguments"``
-    result.
+    Both checks that ask for an argument before anything runs raise this: the
+    selectors' (``refuse_missing_arguments``) and a ``UrlKwarg(required=True)``'s
+    (``split_url_kwargs``). Those are the two the Pydantic-AI toolset words as
+    ``Missing required argument(s): ...``, so both are answered that way here.
     """
-    message = drf_serializers.Field.default_error_messages["required"]
-    return drf_serializers.ValidationError({name: [message] for name in names}, code="required")
+    return _MissingArguments(names)
+
+
+class _MissingArguments(drf_serializers.ValidationError):
+    """DRF's ``ValidationError`` for arguments a call left out, marked as such.
+
+    The detail is DRF's own ``required`` message and code keyed by each name,
+    which is what an input serializer gives a missing field: a client reading
+    the detail reads one shape for both. A subclass because the detail cannot
+    tell them apart, and the message must: only this refusal gets the server's
+    ``missing_arguments``, while a serializer's own missing field keeps
+    ``"Invalid arguments"``
+    (``test_a_service_tools_serializer_keeps_the_generic_message_for_its_own_field``).
+    Every ``except ValidationError`` arm still catches it unchanged.
+    """
+
+    def __init__(self, names: Sequence[str]) -> None:
+        message = drf_serializers.Field.default_error_messages["required"]
+        super().__init__({name: [message] for name in names}, code="required")
+        self.names: tuple[str, ...] = tuple(names)
 
 
 def validation_error_result(
@@ -582,6 +601,7 @@ def validation_error_result(
     arguments: Any,
     *,
     config: MCPConfig,
+    conventions: AgentConventions,
 ) -> ToolResult:
     """The ``isError`` result for a tool call whose arguments were refused.
 
@@ -589,10 +609,10 @@ def validation_error_result(
     is dispatched: DRF's ``ValidationError`` (an unexpected argument under
     ``UnknownArguments.REJECT``, an ``input_serializer`` rejection, a value a
     spec's ``FilterSet`` refuses) and drf-services' ``ServiceValidationError``
-    (a service's own validation, a missing ``InputRequired`` argument, an omitted
-    ``required=True`` URL kwarg). The MCP spec's tools "Error Handling" section
-    files "input validation errors (e.g., date in wrong format, value out of
-    range)" under tool execution errors, reported with ``isError: true`` so the
+    (a service's own validation, a missing ``InputRequired`` argument a
+    ``kwargs=`` provider might have filled). The MCP spec's tools "Error
+    Handling" section files "input validation errors (e.g., date in wrong
+    format, value out of range)" under tool execution errors, reported with ``isError: true`` so the
     model can read them and correct its call; a JSON-RPC protocol error is for
     an unknown tool or a request that fails the ``CallToolRequest`` schema. The
     same rule holds in every served protocol version: 2025-06-18 lists "invalid
@@ -603,7 +623,14 @@ def validation_error_result(
     produces it, and ``value`` only under ``INCLUDE_VALIDATION_VALUE``. Those are
     the names the ``-32602`` envelope's ``data`` carried, so a client reading
     the detail finds it under the same key one level down. A DRF error has no
-    message of its own, so it keeps the one that envelope had.
+    message of its own, so it keeps the one that envelope had, with one
+    exception: arguments a call left out before anything ran (a selector
+    parameter with no default, a service tool's target lookup, a
+    ``UrlKwarg(required=True)``) are named in the server's
+    ``conventions.missing_arguments``, ``Missing required argument(s): `pk`.``
+    by default. Only that refusal: an input serializer's, a missing field
+    included, is indistinguishable by its detail and keeps ``"Invalid
+    arguments"``, because the marker is the exception's type, not its codes.
 
     Every argument-validation arm on the ``tools/call`` paths builds its result
     here -- the service tool handlers sync and async, the in-process
@@ -612,7 +639,17 @@ def validation_error_result(
     chain *step* adds ``failedStep`` and builds its own, and a refusal while
     rendering goes through ``read_shaping_error_result``.
     """
-    message: str = exc.message if isinstance(exc, ServiceValidationError) else "Invalid arguments"
+    message: str
+    if isinstance(exc, _MissingArguments):
+        # Sorted, each in backticks, joined with ", ": the Pydantic-AI toolset's
+        # format, so one omission reads the same on both transports
+        # (``test_several_missing_names_are_sorted_and_joined``).
+        names = ", ".join(f"`{name}`" for name in sorted(exc.names))
+        message = conventions.missing_arguments.format(names=names)
+    elif isinstance(exc, ServiceValidationError):
+        message = exc.message
+    else:
+        message = "Invalid arguments"
     return build_error_tool_result(
         message,
         error_type="validation_error",
@@ -661,6 +698,7 @@ def read_shaping_error_result(
     arguments: Mapping[str, Any],
     paginated: bool,
     config: MCPConfig,
+    conventions: AgentConventions,
 ) -> ToolResult:
     """The ``isError`` result for a validation error raised while *rendering*.
 
@@ -697,7 +735,9 @@ def read_shaping_error_result(
     under one would be a guess presented as a fact. On a paged tool the message
     also says what the param applies to, since selecting the page envelope —
     the shape the tool's ``outputSchema`` shows — is the likeliest way to get
-    here.
+    here. That sentence is the server's ``conventions.query_param_on_pages``,
+    the one its ``tools/list`` appends to the param, and ``None`` drops it from
+    both.
     """
     # ``is not None`` rather than ``in``: the null rule is its own condition, held
     # by ``test_an_explicit_null_is_not_supplied``, which fails with ``in``.
@@ -721,8 +761,13 @@ def read_shaping_error_result(
         f"{_name_list(supplied)} was rejected while rendering the result: "
         f"{_readable_detail(detail)}"
     )
-    if paginated:
-        message = f"{message} {PAGED_QUERY_PARAM_SCOPE}"
+    # One branch arc for two conditions, so each is named by the test that fails
+    # without it: ``test_an_unpaged_selector_tool_gets_no_page_sentence``
+    # (``paginated``) and
+    # ``test_none_drops_the_handle_wording_and_the_scope_sentence`` (the
+    # ``None`` check, which would otherwise append the text "None").
+    if paginated and conventions.query_param_on_pages is not None:
+        message = f"{message} {conventions.query_param_on_pages}"
     return build_error_tool_result(
         message,
         error_type="validation_error",

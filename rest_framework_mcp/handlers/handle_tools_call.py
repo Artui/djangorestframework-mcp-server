@@ -231,7 +231,9 @@ def _dispatch_tool_call(
             # spec: an ``isError`` result the model can correct from, not a
             # protocol error. Before the ``ServiceError`` arm, which would
             # otherwise take ``ServiceValidationError`` as a plain failure.
-            return validation_error_result(exc, arguments_raw, config=context.config).to_dict()
+            return validation_error_result(
+                exc, arguments_raw, config=context.config, conventions=context.conventions
+            ).to_dict()
         except AdditionalInputRequired as exc:
             # **Must precede the ``ServiceError`` arm below** — this is a
             # subclass of it, so the generic handler would otherwise swallow the
@@ -269,6 +271,7 @@ def _dispatch_tool_call(
                 arguments=arguments_raw,
                 paginated=False,
                 config=context.config,
+                conventions=context.conventions,
             ).to_dict()
         output_format: OutputFormat = OutputFormat.coerce(
             params.get("outputFormat") or binding.output_format

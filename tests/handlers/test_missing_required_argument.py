@@ -5,9 +5,11 @@ target through -- called without a parameter it has no default for raises
 ``TypeError``. That escaped every handler: the wire answered HTTP 500 with
 JSON-RPC ``-32603`` "Internal error", and ``call_tool`` / ``acall_tool`` raised
 it to the caller. Now the names the tool's ``inputSchema`` requires of its
-selectors are checked before dispatch, and a missing one is answered the way the
-input serializer answers a missing field: ``"Invalid arguments"`` with
-``{"pk": ["This field is required."]}`` under ``detail``.
+selectors are checked before dispatch, and a missing one is answered
+``"Missing required argument(s): `pk`."`` -- the sentence the Pydantic-AI toolset
+gives the same call -- with ``{"pk": ["This field is required."]}`` under
+``detail``, the shape an input serializer gives a missing field. A serializer's
+own refusal, a missing field included, still reads ``"Invalid arguments"``.
 
 The check runs after the transport-level permissions, so a caller the listing
 hides the tool from is refused for the permission and never learns, from a
@@ -234,7 +236,21 @@ async def _via(server: MCPServer, route: str, name: str, arguments: dict[str, An
 
 
 def _missing(out: Any) -> dict[str, Any]:
-    """The detail of the result a missing argument earns."""
+    """The detail of the result a missing argument earns.
+
+    Its message names exactly the names its detail is keyed by, so a caller
+    asserting the detail asserts the message with it.
+    """
+    assert not isinstance(out, JsonRpcError), f"answered as a protocol error: {out!r}"
+    error = tool_error(out)
+    assert error["type"] == "validation_error"
+    names = ", ".join(f"`{name}`" for name in sorted(error["detail"]))
+    assert error["message"] == f"Missing required argument(s): {names}."
+    return error["detail"]
+
+
+def _refused(out: Any) -> dict[str, Any]:
+    """The detail of a refusal an input serializer answered: the generic message."""
     assert not isinstance(out, JsonRpcError), f"answered as a protocol error: {out!r}"
     error = tool_error(out)
     assert error["type"] == "validation_error"
@@ -248,24 +264,25 @@ def _missing(out: Any) -> dict[str, Any]:
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.parametrize("is_async", [False, True])
 @pytest.mark.parametrize(
-    ("name", "arguments", "detail"),
+    ("name", "arguments", "detail", "read"),
     [
         # A selector tool's own parameter.
-        ("get", {}, {"pk": _REQUIRED}),
+        ("get", {}, {"pk": _REQUIRED}, _missing),
         # A service tool's instance lookup, beside a valid serializer field.
-        ("rename", {"number": "INV-2"}, {"pk": _REQUIRED}),
+        ("rename", {"number": "INV-2"}, {"pk": _REQUIRED}, _missing),
         # A service tool's collection lookup.
-        ("rename_all", {"number": "INV-2"}, {"ids": _REQUIRED}),
-        # A chain advertises its input serializer, which answers for itself.
-        ("chain", {"amount_cents": 1}, {"number": _REQUIRED}),
+        ("rename_all", {"number": "INV-2"}, {"ids": _REQUIRED}, _missing),
+        # A chain advertises its input serializer, which answers for itself, in
+        # its own words: the missing-argument sentence is the selectors' check.
+        ("chain", {"amount_cents": 1}, {"number": _REQUIRED}, _refused),
     ],
 )
 async def test_a_missing_argument_is_a_validation_error_result(
-    name: str, arguments: dict[str, Any], detail: dict[str, Any], is_async: bool
+    name: str, arguments: dict[str, Any], detail: dict[str, Any], read: Any, is_async: bool
 ) -> None:
     out = await _call(_server(), name, arguments, is_async=is_async)
 
-    assert _missing(out) == detail
+    assert read(out) == detail
 
 
 @pytest.mark.django_db
@@ -555,8 +572,76 @@ async def test_a_selector_tools_input_serializer_answers_first(is_async: bool) -
     neither = await _call(server, "get", {}, is_async=is_async)
     no_pk = await _call(server, "get", {"number": "INV-1"}, is_async=is_async)
 
-    assert _missing(neither) == {"number": _REQUIRED}
+    assert _refused(neither) == {"number": _REQUIRED}
     assert _missing(no_pk) == {"pk": _REQUIRED}
+
+
+@pytest.mark.django_db(transaction=True)
+@pytest.mark.parametrize("route", _ROUTES)
+async def test_several_missing_names_are_sorted_and_joined(route: str) -> None:
+    # The selector declares ``pk`` before ``number``, so the check finds them in
+    # that order; the sentence sorts them, as the Pydantic-AI toolset does, so
+    # one omission reads the same on every call and on both transports.
+    server = MCPServer(name="t", auth_backend=AllowAnyBackend(), session_store=None)
+    server.register_selector_tool(
+        name="get",
+        spec=SelectorSpec(
+            kind=SelectorKind.RETRIEVE,
+            selector=_by_pk_and_number,
+            output_serializer=InvoiceOutputSerializer,
+        ),
+    )
+
+    out = await _via(server, route, "get", {})
+
+    error = tool_error(out)
+    assert error["message"] == "Missing required argument(s): `number`, `pk`."
+    assert error["detail"] == {"pk": _REQUIRED, "number": _REQUIRED}
+
+
+@pytest.mark.django_db(transaction=True)
+@pytest.mark.parametrize("route", _ROUTES)
+async def test_a_service_tools_serializer_keeps_the_generic_message_for_its_own_field(
+    route: str,
+) -> None:
+    # The lookup's ``pk`` is sent, so the selectors' check passes and the input
+    # serializer answers for ``number``: a missing field, but the serializer's
+    # refusal rather than the selectors' check, so "Invalid arguments".
+    invoice = await Invoice.objects.acreate(number="INV-1")
+
+    out = await _via(_server(), route, "rename", {"pk": invoice.pk})
+
+    assert _refused(out) == {"number": _REQUIRED}
+
+
+class _OptionalPkShortNumber(serializers.Serializer):
+    pk = serializers.IntegerField(required=False)
+    number = serializers.CharField(max_length=3)
+
+
+@pytest.mark.django_db(transaction=True)
+@pytest.mark.parametrize("route", ["handler", "async_handler", "acall_tool"])
+async def test_a_refused_value_beside_a_missing_argument_keeps_the_generic_message(
+    route: str,
+) -> None:
+    # ``pk`` is missing and ``number`` is refused. A selector tool's serializer
+    # answers first, so the refusal is the serializer's and reads "Invalid
+    # arguments", with only its own field in the detail. ``call_tool`` is not
+    # among the routes: it does not run this serializer.
+    server = MCPServer(name="t", auth_backend=AllowAnyBackend(), session_store=None)
+    server.register_selector_tool(
+        name="get",
+        spec=SelectorSpec(
+            kind=SelectorKind.RETRIEVE,
+            selector=_by_pk_and_number,
+            output_serializer=InvoiceOutputSerializer,
+        ),
+        input_serializer=_OptionalPkShortNumber,
+    )
+
+    out = await _via(server, route, "get", {"number": "INV-0001"})
+
+    assert list(_refused(out)) == ["number"]
 
 
 @pytest.mark.django_db(transaction=True)

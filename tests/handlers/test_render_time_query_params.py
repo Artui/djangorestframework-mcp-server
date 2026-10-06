@@ -40,7 +40,7 @@ from rest_framework_services.types.selector_kind import SelectorKind
 from rest_framework_services.types.selector_spec import SelectorSpec
 from rest_framework_services.types.service_spec import ServiceSpec
 
-from rest_framework_mcp import MCPServer, QueryParam
+from rest_framework_mcp import AgentConventions, MCPServer, QueryParam
 from rest_framework_mcp.auth.backends.allow_any_backend import AllowAnyBackend
 from rest_framework_mcp.auth.types.token_info import TokenInfo
 from rest_framework_mcp.config.build_mcp_config import build_mcp_config
@@ -621,6 +621,7 @@ def _helper_error(
         arguments=arguments,
         paginated=False,
         config=build_mcp_config(**config),
+        conventions=AgentConventions(),
     )
     return _error(result.to_dict())
 

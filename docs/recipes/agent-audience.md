@@ -56,8 +56,15 @@ The tool description gains one generated line, and only when the tool actually
 has a handle to explain:
 
 > Identify records by `number`. Fields described as opaque identifiers are for
-> other tool calls, not for the reader: pass them on where a tool asks for one,
-> and never read them out.
+> other tool calls, not for the reader: pass them to other tools that ask for
+> one; refer to records by their name in anything you say, never by the
+> identifier.
+
+A handle that declares no wording of its own is described as "An opaque
+identifier. Pass it to other tools that ask for one; refer to the record by its
+name in anything you say, never by this value." Both sentences are the server's
+to change, per server, through
+[`MCPServer(conventions=...)`](../concepts.md#agent-conventions).
 
 ## Why the payload and not just the description
 

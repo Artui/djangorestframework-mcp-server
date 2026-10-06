@@ -16,6 +16,7 @@ def build_selector_tool_input_schema(
     *,
     max_page_size: int | None = None,
     pool_seeds: PoolSeeds = DEFAULT_POOL_SEEDS,
+    query_param_on_pages: str | None = PAGED_QUERY_PARAM_SCOPE,
 ) -> dict[str, Any]:
     """Build the JSON Schema for a selector tool's ``inputSchema``.
 
@@ -57,6 +58,9 @@ def build_selector_tool_input_schema(
             the server's. ``None`` advertises no ``maximum``.
         pool_seeds: The server's registered seeds, which fill a selector
             parameter of the same name, so it is not asked of the client.
+        query_param_on_pages: What a ``QueryParam`` applies to on a paged tool,
+            the server's ``AgentConventions.query_param_on_pages``. ``None``
+            advertises each param exactly as declared.
 
     Returns:
         An object schema carrying ``properties``, and ``required`` only when at
@@ -90,7 +94,9 @@ def build_selector_tool_input_schema(
     # Routed to ``request.query_params`` at dispatch, and never required — see
     # ``build_service_tool_input_schema``.
     for query_param in binding.query_params:
-        properties[query_param.name] = _query_param_schema(query_param, paged=binding.paginate)
+        properties[query_param.name] = _query_param_schema(
+            query_param, scope=query_param_on_pages if binding.paginate else None
+        )
 
     out: dict[str, Any] = {"type": "object", "properties": properties}
     if required:
@@ -98,7 +104,7 @@ def build_selector_tool_input_schema(
     return out
 
 
-def _query_param_schema(query_param: QueryParam, *, paged: bool) -> dict[str, Any]:
+def _query_param_schema(query_param: QueryParam, *, scope: str | None) -> dict[str, Any]:
     """A ``QueryParam``'s advertised property, told what it applies to on a page.
 
     On a paged tool the ``outputSchema`` describes the envelope, and a
@@ -111,16 +117,13 @@ def _query_param_schema(query_param: QueryParam, *, paged: bool) -> dict[str, An
     The ``outputSchema`` is left alone on purpose: the envelope is what the
     result is, and the sentence explains how the param relates to it rather than
     pretending the result has another shape. An unpaginated tool has no envelope,
-    so its param is advertised exactly as declared.
+    so its param is advertised exactly as declared, and so is every param of a
+    server whose conventions drop the sentence: ``scope`` is ``None`` for both.
     """
     schema: dict[str, Any] = query_param.json_schema()
-    if paged:
+    if scope is not None:
         declared: str | None = schema.get("description")
-        schema["description"] = (
-            f"{end_sentence(declared)} {PAGED_QUERY_PARAM_SCOPE}"
-            if declared
-            else PAGED_QUERY_PARAM_SCOPE
-        )
+        schema["description"] = f"{end_sentence(declared)} {scope}" if declared else scope
     return schema
 
 

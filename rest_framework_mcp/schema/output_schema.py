@@ -19,6 +19,7 @@ def build_output_schema(
     projection: AudienceProjection | None = None,
     affordances: Mapping[str, ServiceSpec[Any, Any, Any]] | None = None,
     may_be_empty: bool = False,
+    handle_description: str | None = HANDLE_DESCRIPTION,
 ) -> dict[str, Any] | None:
     """Build a JSON Schema for a tool's output, or ``None`` if not declared.
 
@@ -53,7 +54,10 @@ def build_output_schema(
 
     The wording for an unlabelled handle is supplied here rather than upstream:
     it is a sentence written for a model, and drf-services does not know that a
-    model is what is reading.
+    model is what is reading. ``handle_description`` is that wording, the
+    server's ``AgentConventions.handle_field_description``; ``None`` leaves such
+    a handle undescribed, and a handle declaring its own wording keeps it either
+    way.
 
     ``may_be_empty`` says a successful call can present nothing, which is served
     as ``structuredContent: {}`` (each binding answers it as
@@ -85,7 +89,7 @@ def build_output_schema(
         kind=kind,
         paginate=paginate,
         projection=projection,
-        handle_description=HANDLE_DESCRIPTION,
+        handle_description=handle_description,
         affordances=affordances,
     )
     if (

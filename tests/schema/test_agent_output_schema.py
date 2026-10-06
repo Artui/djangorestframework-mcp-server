@@ -68,5 +68,39 @@ def test_an_unlabelled_handle_gets_this_transport_s_wording() -> None:
     schema: Any = build_output_schema(_Thing, projection=build_audience_projection(_Thing))
 
     assert schema["properties"]["ref"]["description"] == HANDLE_DESCRIPTION
+    # The Pydantic-AI toolset's sentence; it was "... do not read it out."
+    assert schema["properties"]["ref"]["description"] == (
+        "An opaque identifier. Pass it to other tools that ask for one; refer to the "
+        "record by its name in anything you say, never by this value."
+    )
     # A handle that says what it is keeps its own words.
+    assert schema["properties"]["described"]["description"] == "A widget handle."
+
+
+class _Handles(serializers.Serializer):
+    ref = serializers.CharField(style={MARKING: FieldMarking.handle()})
+    described = serializers.CharField(style={MARKING: FieldMarking.handle("A widget handle.")})
+
+
+def test_the_handle_description_is_the_one_passed() -> None:
+    """A server's ``AgentConventions.handle_field_description`` arrives here as text."""
+    schema: Any = build_output_schema(
+        _Handles,
+        kind=SelectorKind.LIST,
+        paginate=True,
+        projection=build_audience_projection(_Handles),
+        handle_description="Pass it on.",
+    )
+
+    item = schema["properties"]["items"]["items"]
+    assert item["properties"]["ref"]["description"] == "Pass it on."
+    assert item["properties"]["described"]["description"] == "A widget handle."
+
+
+def test_none_leaves_an_undescribed_handle_undescribed() -> None:
+    schema: Any = build_output_schema(
+        _Handles, projection=build_audience_projection(_Handles), handle_description=None
+    )
+
+    assert "description" not in schema["properties"]["ref"]
     assert schema["properties"]["described"]["description"] == "A widget handle."

@@ -54,6 +54,7 @@ from rest_framework_mcp.protocol.types.tool_result import ToolResult
 from rest_framework_mcp.registry.types.chain_tool_binding import ChainToolBinding
 from rest_framework_mcp.registry.types.selector_tool_binding import SelectorToolBinding
 from rest_framework_mcp.registry.types.tool_binding import ToolBinding
+from rest_framework_mcp.schema.types.agent_conventions import AgentConventions
 
 
 def call_spec_tool(
@@ -63,6 +64,7 @@ def call_spec_tool(
     user: Any,
     request: Any = None,
     config: MCPConfig,
+    conventions: AgentConventions,
     pool_seeds: PoolSeeds = DEFAULT_POOL_SEEDS,
 ) -> ToolResult:
     """Invoke a spec-backed tool through the transport-neutral dispatch core.
@@ -85,6 +87,8 @@ def call_spec_tool(
     ``pool_seeds`` is the owning server's, handed to ``dispatch_spec`` as the
     wire handlers hand it, so a spec reading a registered seed runs the same
     in-process as over HTTP.
+    ``conventions`` is the owning server's too, so a refused argument is worded
+    here as the wire words it.
     """
     if isinstance(binding, ChainToolBinding):
         raise TypeError(
@@ -115,7 +119,7 @@ def call_spec_tool(
                 1
             ],
         )
-        return validation_error_result(exc, arguments, config=config)
+        return validation_error_result(exc, arguments, config=config, conventions=conventions)
     spec_params, context = _offline_context(
         binding, spec_params, url_kwarg_values, user=user, request=request
     )
@@ -157,7 +161,7 @@ def call_spec_tool(
         # ``input_serializer`` rejection or a refused filter value is input the
         # model can correct, not a fault for the caller to catch. It was
         # raised out of here until the wire stopped answering it ``-32602``.
-        return validation_error_result(exc, arguments, config=config)
+        return validation_error_result(exc, arguments, config=config, conventions=conventions)
     except ServiceError as exc:
         return service_error_result(exc)
 
@@ -196,6 +200,7 @@ def call_spec_tool(
             # to the wire handlers, so the result has no envelope to explain.
             paginated=False,
             config=config,
+            conventions=conventions,
         )
     _emit_output_schema, emit_structured_content = resolve_structured_output(
         include_output_schema_override=binding.include_output_schema,

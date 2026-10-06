@@ -36,7 +36,10 @@ def handle_tools_list(
 
     JSON Schemas are rebuilt on every request rather than cached on the
     binding — discovery already runs at router-construction time, so the
-    relative cost is small and it keeps bindings cheap to construct.
+    relative cost is small and it keeps bindings cheap to construct. It is also
+    what lets a binding stay server-neutral: the wording a listing carries (the
+    handle description and line, a paged tool's scope sentence) is the context's
+    ``conventions``, read here, so the server that owns the request decides it.
 
     Pagination is opaque-cursor per the MCP spec: clients pass back the
     ``nextCursor`` they received without inspecting it.
@@ -88,6 +91,7 @@ def handle_tools_list(
                 binding,
                 max_page_size=resolve_bound(binding.max_page_size, context.config.max_page_size),
                 pool_seeds=context.pool_seeds,
+                query_param_on_pages=context.conventions.query_param_on_pages,
             )
         else:
             input_schema = build_service_tool_input_schema(binding, pool_seeds=context.pool_seeds)
@@ -129,6 +133,7 @@ def handle_tools_list(
             projection=binding.audience_projection,
             affordances=binding.rendered_affordances,
             may_be_empty=binding.can_present_nothing,
+            handle_description=context.conventions.handle_field_description,
         )
         # A media tool has no JSON result to describe, so the schema is dropped
         # rather than advertised over a payload arriving as an image block.
@@ -137,7 +142,11 @@ def handle_tools_list(
             output_schema = None
         tool = Tool(
             name=binding.name,
-            description=append_agent_conventions(binding.description, binding.audience_projection),
+            description=append_agent_conventions(
+                binding.description,
+                binding.audience_projection,
+                handle_line=context.conventions.handle_line,
+            ),
             title=binding.title,
             icons=binding.icons,
             input_schema=input_schema,

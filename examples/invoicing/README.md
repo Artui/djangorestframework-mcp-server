@@ -13,6 +13,7 @@ MCP using every public registration surface of
 | `register_selector_tool`       | `invoices.list` — list with `FilterSet`, ordering, pagination, and a `QueryParam` for field selection.|
 | `register_selector_tool`       | `invoices.find` — an `allow_none` RETRIEVE: a miss is `structuredContent: {}`, which its `outputSchema` admits.|
 | `MCPServer(pool_seeds=)`       | `invoices.outstanding` — reads the mount's `currency` seed, which its `inputSchema` does not advertise; a client `currency` argument cannot replace it.|
+| `MCPServer(conventions=)`      | `invoices.set_amount` without `number` — the refusal's message is the server's own `missing_arguments` wording, which points the model at `invoices.list`; every sentence it does not override keeps the package's words.|
 | `register_resource`            | `invoice` — single invoice by PK via `invoices://{pk}` URI.  |
 | `register_prompt`              | `compose_invoice_email` — render an email body for an invoice.|
 

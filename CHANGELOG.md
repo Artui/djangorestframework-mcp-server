@@ -7,6 +7,64 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- **`MCPServer(conventions=)` changes the sentences the server writes for a
+  model**, per server. It takes an `AgentConventions`, a frozen value exported
+  from `rest_framework_mcp`, with one field per sentence:
+  `handle_field_description` (a handle field's `outputSchema` description when
+  it declares none), `handle_line` (the line a tool whose output carries a
+  handle gains in its description), `query_param_on_pages` (the scope sentence
+  on a paged tool's read-shaping query param, and in the message when a value
+  it supplied is refused while rendering) and `missing_arguments` (the message
+  of a call refused for leaving out a required argument). `AgentConventions()`
+  is the default, and a server given none, or `conventions=None`, uses it, so
+  changing one field leaves the others in the package's wording. `None` drops
+  the handle description, the handle line with its `Identify records by` prefix,
+  or the scope sentence; the server still decides whether each sentence
+  appears, and the conventions decide only what it says. `missing_arguments` is
+  a format string whose one placeholder, `{names}`, is the missing names sorted,
+  each in backticks, joined with `", "`; any other placeholder, or a value that
+  is not a string, raises `ImproperlyConfigured` when the conventions are built.
+  The wording reaches both transports in both eras, `call_tool`, `acall_tool`,
+  `list_tools` and a task's worker: `MCPServer.urls` and `async_urls` hand it to
+  each viewset as a `conventions` class attribute beside `pool_seeds`, and
+  `MCPCallContext` carries it as `conventions`. The server exposes it as
+  `MCPServer.conventions`. `build_output_schema` takes `handle_description=`,
+  `build_selector_tool_input_schema` takes `query_param_on_pages=`, and
+  `append_agent_conventions` takes `handle_line=`, each defaulting to the
+  package's wording.
+
+### Changed
+
+- **A call refused for leaving out a required argument says which ones.** The
+  `validation_error` result for an argument the tool's selectors cannot run
+  without, a service tool's target lookup included, and for a missing
+  `UrlKwarg(required=True)`, now carries the message
+  ``Missing required argument(s): `pk`.`` where it said `"Invalid arguments"`,
+  so a model reading only the message knows what to add. Several names are
+  sorted and joined with `", "`. The `detail` is unchanged, still keyed by each
+  name with `["This field is required."]`. Only that check changed: an input
+  serializer's own refusal, a missing field of its own included, and a call
+  that is both missing an argument and refused by a selector tool's input
+  serializer, still say `"Invalid arguments"`. The message is the
+  Pydantic-AI toolset's for the same call, and `conventions.missing_arguments`
+  rewords it.
+- **The handle wording now tells a model how to refer to a record, not only what
+  to do with its identifier.** A handle field declaring no wording of its own
+  is described as "An opaque identifier. Pass it to other tools that ask for
+  one; refer to the record by its name in anything you say, never by this
+  value." where it said "Opaque identifier. Pass it to other tools that ask for
+  one; do not read it out." That is the Pydantic-AI toolset's sentence, so a
+  spec served both ways describes its handles the same way. The line a tool
+  with a handle gains in its description keeps its framing and its
+  ``Identify records by `<label>`.`` prefix, and its advice now matches: it
+  ends "pass them to other tools that ask for one; refer to records by their
+  name in anything you say, never by the identifier." where it ended "pass them
+  on where a tool asks for one, and never read them out." Both are
+  `AgentConventions` fields. `HANDLE_DESCRIPTION` holds the new sentence, and
+  `PAGED_QUERY_PARAM_SCOPE` is unchanged.
+
 ### Documentation
 
 - **`RedisSSEReplayBuffer` keeps less than one stream node more than

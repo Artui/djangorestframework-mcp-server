@@ -80,6 +80,7 @@ from rest_framework_mcp.registry.types.tool_binding import ToolBinding
 from rest_framework_mcp.registry.types.ui_resource_meta import UIResourceMeta
 from rest_framework_mcp.registry.types.ui_tool_meta import UIToolMeta
 from rest_framework_mcp.registry.types.url_kwarg import UrlKwarg
+from rest_framework_mcp.schema.types.agent_conventions import AgentConventions
 from rest_framework_mcp.server.utils import (
     build_ui_tool_meta,
     check_completions_declared,
@@ -163,6 +164,19 @@ class MCPServer:
     ``tools/list`` availability included, and a registered name is reserved: a
     client argument cannot occupy it, and a ``UrlKwarg``, ``QueryParam`` or
     URI-template variable naming it is refused at registration.
+
+    What the server tells a model in its own words -- the handle description and
+    line, a paged tool's scope sentence, the missing-argument message -- is
+    ``conventions=``, an
+    [`AgentConventions`][rest_framework_mcp.schema.types.agent_conventions.AgentConventions].
+    Change one sentence and keep the rest:
+
+        server = MCPServer(
+            conventions=AgentConventions(handle_line="Pass ids to other tools; never show them."),
+        )
+
+    The server still decides where each sentence appears; the conventions
+    decide what it says, on every route the seeds above reach.
     """
 
     def __init__(
@@ -184,6 +198,7 @@ class MCPServer:
         task_executor: TaskExecutor | None = None,
         subscription_broker: SubscriptionBroker | None = None,
         pool_seeds: PoolSeeds = DEFAULT_POOL_SEEDS,
+        conventions: AgentConventions | None = None,
         url_namespace: str = "mcp",
     ) -> None:
         check_removed_settings()
@@ -256,6 +271,13 @@ class MCPServer:
         # second server. Read by every dispatch and every condition this server
         # asks, and by registration, which reserves the names.
         self._pool_seeds: PoolSeeds = pool_seeds
+        # The sentences this server writes for a model. Instance state like the
+        # seeds above, and for the same reason: two servers in one project can
+        # be talking to different readers. Read into every context this server
+        # builds, in-process here and over HTTP by both viewsets.
+        self._conventions: AgentConventions = (
+            conventions if conventions is not None else AgentConventions()
+        )
         # The executor is the switch: supply one and a cache-backed store
         # appears (namespaced like the session store, for the same reason),
         # supply neither and this server runs no tasks. A store with nowhere to
@@ -793,6 +815,7 @@ class MCPServer:
             user=user,
             request=request,
             config=self._config,
+            conventions=self._conventions,
             pool_seeds=self._pool_seeds,
         )
 
@@ -982,6 +1005,7 @@ class MCPServer:
             task_executor=self._task_executor,
             subscriptions=self._subscription_broker,
             pool_seeds=self._pool_seeds,
+            conventions=self._conventions,
         )
 
     def run_task(self, task_id: str) -> None:
@@ -1046,6 +1070,7 @@ class MCPServer:
             task_executor=self._task_executor,
             subscriptions=self._subscription_broker,
             pool_seeds=self._pool_seeds,
+            conventions=self._conventions,
             enforce_rate_limits=False,
         )
 
@@ -1707,6 +1732,11 @@ class MCPServer:
         return self._pool_seeds
 
     @property
+    def conventions(self) -> AgentConventions:
+        """The ``conventions=`` every listing and refusal on this server is worded with."""
+        return self._conventions
+
+    @property
     def auth_backend(self) -> MCPAuthBackend:
         return self._auth_backend
 
@@ -1781,6 +1811,7 @@ class MCPServer:
             # ``async_urls`` has always passed it.
             subscription_broker=self._subscription_broker,
             pool_seeds=self._pool_seeds,
+            conventions=self._conventions,
             server_info=self._server_info,
             instructions=self.description,
             config=self._config,
@@ -1809,6 +1840,7 @@ class MCPServer:
             task_executor=self._task_executor,
             subscription_broker=self._subscription_broker,
             pool_seeds=self._pool_seeds,
+            conventions=self._conventions,
             sse_broker=self._sse_broker,
             sse_replay_buffer=self._sse_replay_buffer,
             server_info=self._server_info,
