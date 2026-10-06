@@ -33,28 +33,12 @@ from rest_framework_mcp.handlers.types.context import MCPCallContext
 from rest_framework_mcp.protocol.types.json_rpc_error import JsonRpcError
 from tests.testapp.models import Invoice
 from tests.testapp.serializers import InvoiceOutputSerializer
-from tests.utils import tool_error
+from tests.utils import granting_route, tool_error
 
 # Every entry point a tool call takes. ``call_tool`` was already right and is
 # here as the reference the other three are held to.
 _ROUTES = ["handler", "async_handler", "call_tool", "acall_tool"]
 _KINDS = ["service", "selector"]
-
-
-def _granting(key: str, value: Any, seen: list[dict[str, Any]]) -> type[BasePermission]:
-    """A permission granting a route whose ``view.kwargs[key]`` is ``value``.
-
-    Records every ``view.kwargs`` it is shown into ``seen``: a class rather than
-    an instance is what a spec declares, and the routes instantiate it at
-    different times, so the record lives outside the instance.
-    """
-
-    class _GrantsOneRoute(BasePermission):
-        def has_permission(self, request: Any, view: Any) -> bool:
-            seen.append(dict(view.kwargs))
-            return view.kwargs.get(key) == value
-
-    return _GrantsOneRoute
 
 
 def _archive() -> dict[str, Any]:
@@ -141,7 +125,7 @@ async def test_a_spec_permission_sees_the_url_kwargs_the_call_delivers(
     seen: list[dict[str, Any]] = []
     server = _server(
         kind,
-        _granting("project_pk", 7, seen),
+        granting_route("project_pk", 7, seen),
         UrlKwarg("project_pk", type="integer", required=True),
     )
 
@@ -165,7 +149,7 @@ async def test_a_spec_permission_still_denies_a_route_it_does_not_grant(
     seen: list[dict[str, Any]] = []
     server = _server(
         kind,
-        _granting("project_pk", 7, seen),
+        granting_route("project_pk", 7, seen),
         UrlKwarg("project_pk", type="integer", required=True),
     )
 
@@ -197,7 +181,7 @@ async def test_a_permission_granting_the_delivered_route_is_followed_by_the_miss
     seen: list[dict[str, Any]] = []
     server = _server(
         kind,
-        _granting("tenant", "acme", seen),
+        granting_route("tenant", "acme", seen),
         UrlKwarg("project_pk", type="integer", required=True),
         UrlKwarg("tenant"),
     )
@@ -219,7 +203,7 @@ async def test_a_permission_denying_the_delivered_route_answers_before_the_missi
     seen: list[dict[str, Any]] = []
     server = _server(
         kind,
-        _granting("tenant", "acme", seen),
+        granting_route("tenant", "acme", seen),
         UrlKwarg("project_pk", type="integer", required=True),
         UrlKwarg("tenant"),
     )
@@ -252,7 +236,7 @@ async def test_an_answer_that_changes_the_route_is_judged_again_before_the_servi
         name="tool",
         description="Archive a project.",
         spec=ServiceSpec(
-            service=_archive_project, permission_classes=[_granting("project_pk", 7, seen)]
+            service=_archive_project, permission_classes=[granting_route("project_pk", 7, seen)]
         ),
         url_kwargs=(UrlKwarg("project_pk", type="integer", required=True),),
     )

@@ -13,7 +13,6 @@ from rest_framework_services.exceptions.service_validation_error import ServiceV
 
 from rest_framework_mcp._compat.acall import acall
 from rest_framework_mcp._compat.tracing import span
-from rest_framework_mcp.auth.permissions.drf_permission_adapter import DRFPermissionAdapter
 from rest_framework_mcp.constants import JsonRpcErrorCode, OutputFormat
 from rest_framework_mcp.elicitation.types.resolved_input import ResolvedInput
 from rest_framework_mcp.handlers.chain_tool_dispatch import dispatch_chain_tool_async
@@ -163,9 +162,10 @@ async def _dispatch_tool_call_async(
         )
         allowed, required_scopes = await acall(
             check_permissions,
-            DRFPermissionAdapter.bind_view_kwargs(binding.permissions, delivered_url_kwargs),
+            binding.permissions,
             context.http_request,
             context.token,
+            view_kwargs=delivered_url_kwargs,
         )
         if not allowed:
             return JsonRpcError(

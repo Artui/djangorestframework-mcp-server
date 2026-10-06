@@ -69,8 +69,13 @@ async def handle_resources_read_async(
         "mcp.resources.read",
         attributes={**_span_attrs(binding.name, context), "mcp.resource.uri": uri},
     ):
+        # See the sync sibling: the permissions judge the URI's variables.
         allowed, required_scopes = await acall(
-            check_permissions, binding.permissions, context.http_request, context.token
+            check_permissions,
+            binding.permissions,
+            context.http_request,
+            context.token,
+            view_kwargs=vars_,
         )
         if not allowed:
             return JsonRpcError(

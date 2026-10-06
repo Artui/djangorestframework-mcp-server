@@ -7,34 +7,35 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-### Added
-
-- **`DRFPermissionAdapter.bind_view_kwargs(permissions, view_kwargs)`** returns
-  `permissions` with every `DRFPermissionAdapter` among them replaced by a copy
-  whose stand-in view carries `view_kwargs`, and every other permission as it
-  was. The registered adapters are left unbound, because every call to a tool
-  shares them, and the wrapped permission is not instantiated again. Each check
-  hands the permission a fresh `view.kwargs`, so a permission writing into it
-  cannot carry a value into the next check. `tools/call` uses it to show a
-  spec's permission classes the route the call names.
-
 ### Fixed
 
-- **A spec permission reading `view.kwargs` judges the route a `tools/call`
-  names.** On the sync and async handlers, and so through `acall_tool`, a
-  service or selector tool's `permission_classes` were judged against a
-  stand-in view whose `kwargs` were always `{}`, before the call's `UrlKwarg`
-  values were split out of its arguments. A permission scoping by a route
-  capture, `view.kwargs["project_pk"]`, denied a caller it admits, and the call
-  was answered `-32006 Insufficient permission`. The URL kwargs the call
-  delivered are now split out first, as `call_tool` already split them, so the
-  permission sees the values the dispatch puts in `view.kwargs`. A call missing
-  a required URL kwarg is refused as before and in the same order: the split
-  ahead of the permission refuses nothing, a caller the permission denies is
-  told so, and a caller it admits is then told which argument it left out. The
-  permission reads the arguments as sent, before a retry's `inputResponses` are
-  merged in; an answer naming a different capture is judged again by the
-  target guard, against the view the service runs with.
+- **A spec permission reading `view.kwargs` judges the route a request
+  names, wherever it is judged.** A service or selector tool's, or a
+  resource's, `permission_classes` were judged against a stand-in view whose
+  `kwargs` were always `{}`, so a permission scoping by a route capture,
+  `view.kwargs["project_pk"]`, denied a caller it admits. Each check now sees
+  the values the dispatch puts in `view.kwargs`:
+  - on `tools/call`, through the sync and async handlers and so `acall_tool`,
+    the URL kwargs the call delivered, split out of its arguments first, as
+    `call_tool` already split them, for a service and a selector tool alike;
+  - on a streamed `tools/call`, the same URL kwargs in the permission
+    pre-flight the async transport runs before it opens the stream, which
+    answered such a call `403`;
+  - on a task-augmented `tools/call`, the same URL kwargs in the check made
+    before the task is created, which refused the task;
+  - on `resources/read`, sync and async, the variables of the URI the read
+    names;
+  - on a resource subscription, the variables of each URI it names, so a
+    caller may watch exactly the URIs it may read.
+
+  A call missing a required URL kwarg is refused as before and in the same
+  order: the split ahead of the permission refuses nothing, a caller the
+  permission denies is told so, and a caller it admits is then told which
+  argument it left out. A caller the permission denies is still charged no
+  rate limit and queues no task. The permission reads a tool call's arguments
+  as sent, before a retry's `inputResponses` are merged in; an answer naming a
+  different capture is judged again by the target guard, against the view the
+  service runs with.
 - **A chain step raising DRF's `ValidationError` is a `validation_error`
   result, not a 500.** A step's arm caught drf-services'
   `ServiceValidationError` only, so the exception a service's

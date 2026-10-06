@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import copy
-from collections.abc import Iterable, Mapping
+from collections.abc import Mapping
 from typing import Any, cast
 
 from django.http import HttpRequest
@@ -45,17 +45,18 @@ class DRFPermissionAdapter:
     **``view.kwargs`` is the route the call names.** A permission scoping by a
     route capture reads ``view.kwargs["project_pk"]``, as it would over HTTP.
     The adapter is built once at registration, where no call has named a route
-    yet, so its own view carries ``{}``; a ``tools/call`` hands the URL kwargs it
-    delivered through
-    [`bind_view_kwargs`][rest_framework_mcp.auth.permissions.drf_permission_adapter.DRFPermissionAdapter.bind_view_kwargs]
-    before the check, the same values its dispatch puts in ``view.kwargs``.
+    yet, so its own view carries ``{}``. Every check that names one, a
+    ``tools/call``'s URL kwargs or the variables of the URI a ``resources/read``
+    names, is made against a copy carrying it, the values the dispatch then puts
+    in ``view.kwargs``; the transport makes those copies itself, wherever it
+    judges a binding's permissions.
     """
 
     def __init__(self, permission_class: type[BasePermission]) -> None:
         self._permission_class: type[BasePermission] = permission_class
         self._instance: BasePermission = permission_class()
-        # Empty until ``bind_view_kwargs`` hands a copy a call's route; a check
-        # made with the registered adapter itself judges ``{}``
+        # Empty until ``_bound_to`` hands a copy a call's route; a check made
+        # with the registered adapter itself judges ``{}``
         # (``test_an_unbound_adapter_judges_an_empty_route``).
         self._view_kwargs: Mapping[str, Any] = {}
 
@@ -63,30 +64,25 @@ class DRFPermissionAdapter:
     def permission_class(self) -> type[BasePermission]:
         return self._permission_class
 
-    @classmethod
-    def bind_view_kwargs(
-        cls, permissions: Iterable[Any], view_kwargs: Mapping[str, Any]
-    ) -> tuple[Any, ...]:
-        """``permissions`` as one call judges them, against the route it names.
-
-        Every adapter among them is replaced by a copy whose stand-in view
-        carries ``view_kwargs``; any other permission passes through as it is,
-        since an ``MCPPermission`` judges the request and token and has no view.
-        Copies rather than the registered adapters, which every concurrent call
-        to the tool shares: a route written onto one would be judged on another
-        caller's call (``test_binding_leaves_the_registered_adapter_unbound``).
-        The wrapped DRF instance is shared by the copies, as it is by every call
-        already.
-        """
-        return tuple(
-            perm._bound_to(view_kwargs) if isinstance(perm, cls) else perm for perm in permissions
-        )
-
     def _bound_to(self, view_kwargs: Mapping[str, Any]) -> DRFPermissionAdapter:
+        # This adapter as one check judges it, against the route the request
+        # names. Private on purpose, with one caller: ``check_permissions`` in
+        # ``handlers/utils.py`` calls it for every adapter when it is handed
+        # ``view_kwargs``, so a route is bound where a check is made rather
+        # than by every path that makes one.
+        #
+        # A copy rather than this adapter, which every concurrent call to the
+        # binding shares: a route written onto it would be judged on another
+        # caller's call (``test_the_registered_adapter_is_left_unbound``).
         # ``copy.copy`` rather than the constructor, so a subclass keeps what
-        # its own ``__init__`` set and the permission is not instantiated again.
+        # its own ``__init__`` set and the permission is not instantiated again
+        # (``test_the_permission_is_not_instantiated_again_nor_a_subclass_state_dropped``);
+        # the copies share the wrapped DRF instance, as every call already does.
         bound: DRFPermissionAdapter = copy.copy(self)
-        bound._view_kwargs = dict(view_kwargs)
+        # Held as given: ``_PermissionView`` copies it for every check, which
+        # is the one copy that keeps a permission's writes off the caller's
+        # mapping and out of the next check.
+        bound._view_kwargs = view_kwargs
         return bound
 
     def has_permission(self, request: HttpRequest, token: TokenInfo) -> bool:
@@ -109,8 +105,9 @@ class _PermissionView:
     DRF permissions take ``has_permission(request, view)``, and most stock ones
     only read ``view.action`` — which has no meaning outside a viewset, so it
     is ``None`` here. ``kwargs`` is a fresh dict per check, so a permission
-    that writes into it cannot carry a value into the next one
-    (``test_a_permission_writing_view_kwargs_does_not_reach_the_next_check``).
+    that writes into it cannot carry a value into the next check, whether that
+    check names a route or not, nor into the route the caller handed over
+    (``test_a_permission_writing_view_kwargs_reaches_neither_the_next_check_nor_the_caller``).
     """
 
     def __init__(self, *, request: Request, kwargs: Mapping[str, Any]) -> None:

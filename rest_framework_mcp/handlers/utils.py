@@ -27,6 +27,7 @@ from rest_framework_services.types.pool_seeds import PoolSeeds
 from rest_framework_services.types.service_spec import ServiceSpec
 
 from rest_framework_mcp._compat.reject_awaitable import reject_awaitable
+from rest_framework_mcp.auth.permissions.drf_permission_adapter import DRFPermissionAdapter
 from rest_framework_mcp.auth.rate_limits.types.mcp_rate_limit import MCPRateLimit
 from rest_framework_mcp.auth.types.token_info import TokenInfo
 from rest_framework_mcp.config.types.mcp_config import MCPConfig
@@ -320,16 +321,45 @@ def check_permissions(
     permissions: tuple[Any, ...],
     http_request: HttpRequest,
     token: TokenInfo,
+    *,
+    view_kwargs: Mapping[str, Any] | None = None,
 ) -> tuple[bool, list[str]]:
     """Return ``(allowed, required_scopes)`` after evaluating every permission.
 
     Permissions are AND-combined. The aggregated ``required_scopes`` from any
     permission that would deny is returned so the transport can surface them in
     the ``WWW-Authenticate`` header.
+
+    **``view_kwargs`` is the route the request names**, and every
+    [`DRFPermissionAdapter`][rest_framework_mcp.auth.permissions.drf_permission_adapter.DRFPermissionAdapter]
+    among ``permissions`` is judged against a copy whose stand-in view carries
+    it: the URL kwargs a ``tools/call`` delivered, or the variables of the URI a
+    ``resources/read`` names, the values the dispatch then puts in
+    ``view.kwargs``. A spec permission scoping by a route capture reads
+    ``view.kwargs["project_pk"]``, as it would over HTTP, and judged against
+    ``{}`` it denied a caller it admits. Any other permission is judged as it
+    is, since an ``MCPPermission`` judges the request and token and has no view.
+    ``None`` judges every permission as registered, for the paths that name no
+    route: ``prompts/get``, ``completion/complete`` and chain steps.
+
+    The registered adapters are never written to, because every concurrent
+    call to the binding shares them, and the wrapped DRF permission is not
+    instantiated again (``test_the_registered_adapter_is_left_unbound``,
+    ``test_the_permission_is_not_instantiated_again_nor_a_subclass_state_dropped``).
     """
     required: list[str] = []
     allowed: bool = True
-    for perm in permissions:
+    for registered in permissions:
+        perm: Any = registered
+        # Both conjuncts hold a test: without the ``None`` check every adapter
+        # on a path naming no route is bound to ``None``
+        # (``test_without_view_kwargs_every_adapter_is_judged_on_an_empty_route``),
+        # and without the ``isinstance`` an ``MCPPermission``, which has no view,
+        # is handed one (``test_view_kwargs_reach_every_adapter_and_pass_the_rest_through``).
+        if view_kwargs is not None and isinstance(registered, DRFPermissionAdapter):
+            # The adapter's private hook, and this is its one caller: binding a
+            # route is how a check is made, not something a consumer composes.
+            perm = registered._bound_to(view_kwargs)  # noqa: SLF001
         # Do not gate this loop on ``isinstance(perm, MCPPermission)``: the
         # Protocol is ``runtime_checkable``, so that demands *every* member
         # including ``required_scopes``, and a gate-only permission would be

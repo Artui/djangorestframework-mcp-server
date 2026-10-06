@@ -42,7 +42,6 @@ from rest_framework_services.types.dispatch_result import DispatchResult
 from rest_framework_services.types.selector_kind import SelectorKind
 
 from rest_framework_mcp._compat.acall import acall
-from rest_framework_mcp.auth.permissions.drf_permission_adapter import DRFPermissionAdapter
 from rest_framework_mcp.config.types.mcp_config import MCPConfig
 from rest_framework_mcp.constants import (
     RESERVED_POST_FETCH_KEYS,
@@ -241,9 +240,10 @@ def _check_auth_and_rate_limits(
         arguments_raw, binding.url_kwargs, refuse_missing=False
     )
     allowed, required_scopes = check_permissions(
-        DRFPermissionAdapter.bind_view_kwargs(binding.permissions, delivered_url_kwargs),
+        binding.permissions,
         context.http_request,
         context.token,
+        view_kwargs=delivered_url_kwargs,
     )
     if not allowed:
         return JsonRpcError(
