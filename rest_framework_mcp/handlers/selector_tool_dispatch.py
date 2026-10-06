@@ -576,7 +576,21 @@ def _dispatch_kwargs(
     # ``_build_request_and_validate`` ran it first.
     spec_params, url_kwarg_values = split_url_kwargs(arguments_raw, binding.url_kwargs)
     spec_params, _query_param_values = split_query_params(spec_params, binding.query_params)
-    params = _selector_dispatch_params(spec_params, validated)
+    # The overlay can put a URL kwarg's name back: a field bound with
+    # ``source="project_pk"`` validates the argument ``project`` into
+    # ``project_pk``. Dropped after it, so the selector reads the route the
+    # permission judged, from ``view.kwargs``, under every binding. Left in,
+    # ``SPREAD_CALLER_WINS`` ranked it above the route
+    # (``test_a_serializer_field_sourcing_a_url_kwarg_does_not_move_the_route``),
+    # and under either spreading binding it stood in for a kwarg the call left
+    # out, on a route judged as naming none
+    # (``test_a_serializer_field_sourcing_a_url_kwarg_left_out_does_not_fill_the_route``).
+    route_names = {url_kwarg.name for url_kwarg in binding.url_kwargs}
+    params = {
+        name: value
+        for name, value in _selector_dispatch_params(spec_params, validated).items()
+        if name not in route_names
+    }
     # Evaluated inside both siblings' dispatch ``try``, after the permission and
     # rate-limit answers and the ``input_serializer``: a missing argument is the
     # same ``validation_error`` result a refused one is. Checked against what

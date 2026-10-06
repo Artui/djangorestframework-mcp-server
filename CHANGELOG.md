@@ -101,10 +101,40 @@ tool and the parameter, in place of a `TypeError` or a wrong answer per call.
   rate limit and queues no task. The permission reads a tool call's arguments
   as sent, before a retry's `inputResponses` are merged in, so a denied caller
   is refused before its answers are read. An answer that names a different
-  URL kwarg, or fills one the call left out, is judged again on the route it
-  produces, before the target is looked up or the service runs, for a
-  per-binding permission and a spec's `permission_classes` alike; an answer
-  leaving the route as sent is not judged twice.
+  URL kwarg, fills one the call left out or clears one it sent is judged again
+  on the route it produces, before the rate limit is charged, the target is
+  looked up or the service runs, for a per-binding permission and a spec's
+  `permission_classes` alike, so a caller refused on that route is not charged
+  either. Different means by value and by type: `true` or `1.0` answered for
+  `1`, which Python's `==` calls equal, is another route, since a lookup
+  through a `CharField` reads `"True"` or `"1.0"`. An answer leaving the route
+  exactly as sent is not judged twice, and a declined or cancelled answer is
+  charged as before.
+- **A selector tool's `input_serializer` cannot put a value back under a URL
+  kwarg's name.** The validated values are laid back over the arguments after
+  the URL kwargs are split out of them, so a field bound with
+  `source="project_pk"` put a `project_pk` back. Under `SPREAD_CALLER_WINS`
+  drf-services ranks the arguments above `view.kwargs`, so a call sending
+  `project_pk: 7` and `project: 8` was judged on project 7 and read project 8,
+  and under either spreading binding a call leaving `project_pk` out had the
+  field's value read in its place, on a route judged as naming no project.
+  Every name a `UrlKwarg` declares is now dropped from the selector's
+  arguments after the overlay, so the selector reads the route the permission
+  judged under every binding, as the URL kwarg documentation states. A field
+  declared under the kwarg's own name no longer reaches the selector either:
+  under `SPREAD_CALLER_WINS` it read the field's coerced value, and now reads
+  `view.kwargs` as `SPREAD_AUTHOR_WINS` already did. On a service tool a URL
+  kwarg reaches only `view.kwargs` and the target lookup, so a `spec.kwargs`
+  provider copying it into the service's pool stays overridable under
+  `SPREAD_CALLER_WINS`, as every provider key is; the argument-binding notes
+  now say so, and where to read the judged route instead.
+- **The invalidation a retried call announces names the route it ran on.**
+  `invalidates=` templates were rendered against the arguments as sent, so a
+  retry whose `inputResponses` named another `project_pk` announced
+  `projects://7` for a service that archived project 8: a subscriber to 8
+  missed the change and one to 7 re-read an unchanged resource. They are now
+  rendered against the arguments the tool ran with, the answers merged in, on
+  the sync and async handlers alike.
 - **A chain step raising DRF's `ValidationError` is a `validation_error`
   result, not a 500.** A step's arm caught drf-services'
   `ServiceValidationError` only, so the exception a service's

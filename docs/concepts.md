@@ -349,6 +349,14 @@ can't collide with a reserved transport key (`page` / `limit`, or the
 `collection` pool seeds); colliding with an ordinary spec input is allowed and is the intended way
 to route a route-capture the spec *also* reads directly.
 
+On a selector tool that holds for its `input_serializer` as well. The validated
+values are laid back over the arguments, and a field bound with
+`source="project_pk"` would put a `project_pk` back, so every name a `UrlKwarg`
+declares is dropped from them again: the selector reads the value
+`view.kwargs` carries, the one the permission judged, under every
+`argument_binding`. A call leaving the kwarg out leaves it out for the selector
+too, whatever a field sourced or defaulted under that name.
+
 A capture the spec genuinely cannot run without takes `required=True`:
 
 ```python
@@ -720,7 +728,13 @@ forms) accept three behavior knobs:
     on conflict so author-declared invariants beat client input.
   - `ArgumentBinding.SPREAD_CALLER_WINS` — like `SPREAD_AUTHOR_WINS` but the
     spread wins on conflict, so `spec.kwargs(...)` supplies client-overridable
-    defaults.
+    defaults. That includes a provider copying a route kwarg into a service's
+    pool, `{"project_pk": view.kwargs["project_pk"]}`, which an `input_serializer`
+    field validated into `project_pk` outranks, while the
+    [URL kwarg](#url-kwargs-route-values-a-provider-reads-off-viewkwargs) itself
+    is not overridable: where the service must act on the route the permission
+    judged, take it from the target lookup, which reads `view.kwargs` under
+    every binding, rather than from the pool.
   - `ArgumentBinding.AUTO` — resolve per spec type (service → `BUNDLE`,
     selector → `SPREAD_AUTHOR_WINS`).
 
@@ -1576,7 +1590,9 @@ server.register_service_tool(
 Templates use the same `{var}` syntax as a resource's `uri_template`, rendered
 against the result merged with the call's arguments (**result wins** — after a
 write it is authoritative; the arguments cover a delete, whose result carries
-nothing). Publishing happens **after the transaction commits**, and a call that
+nothing). The arguments are the ones the tool ran with: on a retry, its
+`inputResponses` merged over the arguments as sent, so an answer naming another
+`{project_pk}` announces the project the service ran on. Publishing happens **after the transaction commits**, and a call that
 came back `isError` publishes nothing.
 
 **Its boundary is real, and is why the explicit trigger exists too.** It fires
@@ -1809,6 +1825,16 @@ different process, behind a load balancer that knows nothing about the first one
 The service is not resumed; it **runs again from the top**, with the answer
 present. A service that did irreversible non-transactional work before raising
 will do it twice, which is a reason to raise early and to keep `atomic=True`.
+
+**An answer can move the route.** It is merged over the arguments with no limit
+on its keys, so it can name a [URL kwarg](#url-kwargs-route-values-a-provider-reads-off-viewkwargs)
+the call sent or left out. The tool's permissions judge the arguments as sent
+first, and judge again the route the merge produces whenever it is not exactly
+that one, before the rate limit is charged, the target is looked up or the
+service runs. Exactly means by value and by type: `true` or `1.0` answered for
+`1` is another route, since a lookup through a `CharField` reads `"True"` or
+`"1.0"`. A caller refused on either route is not charged; a declined or
+cancelled answer is, as any other call is.
 
 ### `requestState` is attacker-controlled
 

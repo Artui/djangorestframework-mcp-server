@@ -20,6 +20,7 @@ from rest_framework_services import UNSET
 
 from rest_framework_mcp import QueryParam, UrlKwarg
 from rest_framework_mcp.handlers.utils import (
+    same_route,
     split_query_params,
     split_url_kwargs,
     validate_input_against_serializer,
@@ -107,3 +108,64 @@ def test_no_default_still_reaches_the_required_check(no_default: Any) -> None:
 
     assert refused.value.detail == {"project_pk": ["This field is required."]}
     assert refused.value.get_codes() == {"project_pk": ["required"]}
+
+
+_AN_OBJECT = object()
+
+
+class _Equal:
+    """Equal to every other instance, with the default ``repr`` naming its address."""
+
+    def __eq__(self, other: object) -> bool:
+        return isinstance(other, _Equal)
+
+    def __hash__(self) -> int:
+        return 0
+
+
+@pytest.mark.parametrize(
+    ("answered", "delivered", "same"),
+    [
+        ({"pk": 1}, {"pk": 1}, True),
+        ({}, {}, True),
+        # The same names in another order are the same route.
+        ({"a": 1, "b": "x"}, {"b": "x", "a": 1}, True),
+        # One object is one value, whatever its ``repr``.
+        ({"pk": _AN_OBJECT}, {"pk": _AN_OBJECT}, True),
+        # Equal under ``==``, each naming another row through a ``CharField``.
+        ({"pk": True}, {"pk": 1}, False),
+        ({"pk": 1.0}, {"pk": 1}, False),
+        ({"pk": -0.0}, {"pk": 0.0}, False),
+        ({"pk": "1"}, {"pk": 1}, False),
+        # Nested values are compared the same way.
+        ({"pk": [True]}, {"pk": [1]}, False),
+        ({"pk": {"id": 1.0}}, {"pk": {"id": 1}}, False),
+        # Erring toward judging again: a nested mapping in another order, and
+        # two equal objects whose ``repr`` is their address.
+        ({"pk": {"a": 1, "b": 2}}, {"pk": {"b": 2, "a": 1}}, False),
+        ({"pk": _Equal()}, {"pk": _Equal()}, False),
+        # A name filled, or cleared, is a move.
+        ({"pk": 1}, {}, False),
+        ({}, {"pk": 1}, False),
+    ],
+    ids=[
+        "same",
+        "both-empty",
+        "names-reordered",
+        "same-object",
+        "true-for-1",
+        "float-for-int",
+        "negative-zero",
+        "string-for-int",
+        "nested-list",
+        "nested-mapping",
+        "nested-mapping-reordered",
+        "equal-objects",
+        "filled",
+        "cleared",
+    ],
+)
+def test_same_route_is_the_same_value_of_the_same_type(
+    answered: dict[str, Any], delivered: dict[str, Any], same: bool
+) -> None:
+    assert same_route(answered, delivered) is same

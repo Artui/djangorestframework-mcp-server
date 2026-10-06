@@ -112,6 +112,40 @@ def split_url_kwargs(
     return params, values
 
 
+def same_route(answered: Mapping[str, Any], delivered: Mapping[str, Any]) -> bool:
+    """Whether a retry's answers left the URL kwargs exactly as the call delivered them.
+
+    ``tools/call`` judges the permission again only when this is ``False``, so
+    a route it calls the same is one nothing judges. Not ``==``: ``1``, ``1.0``
+    and ``True`` are equal in Python, while a target lookup through a
+    ``CharField`` reads ``str()`` of the value, so each names another row,
+    ``"1"``, ``"1.0"`` or ``"True"``. Nor ``==`` beside a type check, because
+    ``0.0`` and ``-0.0`` are equal floats and read ``"0.0"`` and ``"-0.0"``
+    (``test_an_answer_equal_to_the_route_but_naming_another_row_is_judged_again``).
+    So each value is compared by ``repr``, which for anything a JSON body
+    decodes into is the same only for the same value of the same type, nested
+    values included.
+
+    Where the two disagree they err toward judging again, which costs one more
+    permission check: an object whose ``repr`` is its address, or a nested
+    mapping whose keys arrive in another order, is a move. An unchanged answer,
+    the ordinary retry, is still judged once
+    (``test_an_answer_leaving_the_route_unchanged_is_not_judged_again``).
+
+    The two conditions are one branch arc, so each is held by a test of its
+    own:
+
+    - the same names: an answer of ``null`` drops a kwarg the call sent, and a
+      comparison over the answered names alone finds nothing to differ
+      (``test_an_answer_clearing_a_route_kwarg_is_judged_on_the_route_it_leaves``);
+    - each value spelled the same (the equal-value test above, and
+      ``test_an_answer_naming_another_route_is_refused_by_a_per_binding_permission``).
+    """
+    return answered.keys() == delivered.keys() and all(
+        repr(answered[name]) == repr(delivered[name]) for name in answered
+    )
+
+
 def split_query_params(
     arguments: dict[str, Any], query_params: tuple[QueryParam, ...]
 ) -> tuple[dict[str, Any], dict[str, Any]]:
@@ -956,6 +990,7 @@ __all__ = [
     "render_convention",
     "resolve_bound",
     "run_with_deadline",
+    "same_route",
     "services_dispatch_policies",
     "split_query_params",
     "split_url_kwargs",
