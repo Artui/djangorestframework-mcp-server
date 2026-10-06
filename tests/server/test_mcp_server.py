@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import pytest
 from django.core.exceptions import ImproperlyConfigured
+from rest_framework import serializers as drf_serializers
 from rest_framework_services.types.selector_kind import SelectorKind
 from rest_framework_services.types.selector_spec import SelectorSpec
 from rest_framework_services.types.service_spec import ServiceSpec
@@ -25,13 +26,21 @@ def _make() -> MCPServer:
     )
 
 
+class _Payload(drf_serializers.Serializer):
+    """What fills ``data`` for the fixture services below, which require it."""
+
+    text = drf_serializers.CharField()
+
+
 def test_register_tool_imperative() -> None:
     server = _make()
 
     def svc(*, data: dict) -> dict:
         return data
 
-    binding = server.register_service_tool(name="t", spec=ServiceSpec(service=svc))
+    binding = server.register_service_tool(
+        name="t", spec=ServiceSpec(service=svc, input_serializer=_Payload)
+    )
     assert server.tools.get("t") is binding
 
 
@@ -60,7 +69,7 @@ def test_register_resource_rejects_bare_callable() -> None:
 def test_tool_decorator_uses_function_doc_as_description() -> None:
     server = _make()
 
-    @server.service_tool(name="t.create")
+    @server.service_tool(name="t.create", input_serializer=_Payload)
     def create(*, data: dict) -> dict:
         """Create something."""
         return data
@@ -74,7 +83,7 @@ def test_tool_decorator_with_explicit_spec() -> None:
     def svc(*, data: dict) -> dict:
         return data
 
-    @server.service_tool(name="t.x", spec=ServiceSpec(service=svc))
+    @server.service_tool(name="t.x", spec=ServiceSpec(service=svc, input_serializer=_Payload))
     def placeholder(*, data: dict) -> dict:
         return {"ignored": True}
 
@@ -121,7 +130,7 @@ def test_service_tool_decorator_builds_output_selector_spec_when_serializer_give
 
     server = _make()
 
-    @server.service_tool(name="t.create", output_serializer=_Out)
+    @server.service_tool(name="t.create", input_serializer=_Payload, output_serializer=_Out)
     def create(*, data: dict) -> dict:
         return data
 

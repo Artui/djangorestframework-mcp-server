@@ -358,12 +358,17 @@ def test_register_selector_tool_threads_spec_kwargs_provides() -> None:
 
 
 # ---------- ``instance`` / ``collection`` come only from the lookup dispatch calls ----------
+#
+# Each is run under every binding a single-object service can take. With no
+# ``input_serializer``, the spreading ones are trust mode, where the caller's
+# arguments are spread verbatim; a reserved seed is still not the caller's,
+# because drf-services strips every reserved name from that spread.
 
 
-def _needs_instance(*, instance: Any, data: Any) -> None: ...  # noqa: ARG001
+def _needs_instance(*, instance: Any) -> None: ...  # noqa: ARG001
 
 
-def _needs_collection(*, collection: Any, data: Any) -> None: ...  # noqa: ARG001
+def _needs_collection(*, collection: Any) -> None: ...  # noqa: ARG001
 
 
 def _by_pk(*, pk: int) -> Any: ...  # noqa: ARG001
@@ -375,26 +380,46 @@ def _by_ids(*, ids: list[int]) -> Any: ...  # noqa: ARG001
 _INSTANCE_LOOKUP = SelectorSpec(kind=SelectorKind.RETRIEVE, selector=_by_pk)
 _COLLECTION_LOOKUP = SelectorSpec(kind=SelectorKind.LIST, selector=_by_ids)
 
-
-def _register(service: Any, **spec: Any) -> Any:
-    return service_spec_to_tool(name="t", spec=ServiceSpec(service=service, atomic=False, **spec))
-
-
-def test_an_instance_lookup_seeds_instance() -> None:
-    assert _register(_needs_instance, instance_selector_spec=_INSTANCE_LOOKUP).name == "t"
-
-
-def test_a_collection_lookup_seeds_collection() -> None:
-    assert _register(_needs_collection, collection_selector_spec=_COLLECTION_LOOKUP).name == "t"
+_BINDINGS = pytest.mark.parametrize(
+    "binding",
+    [
+        ArgumentBinding.BUNDLE,
+        ArgumentBinding.SPREAD_AUTHOR_WINS,
+        ArgumentBinding.SPREAD_CALLER_WINS,
+    ],
+)
 
 
-def test_an_instance_lookup_beside_a_collection_lookup_seeds_no_instance() -> None:
+def _register(service: Any, binding: ArgumentBinding = ArgumentBinding.BUNDLE, **spec: Any) -> Any:
+    return service_spec_to_tool(
+        name="t",
+        spec=ServiceSpec(service=service, atomic=False, **spec),
+        argument_binding=binding,
+    )
+
+
+@_BINDINGS
+def test_an_instance_lookup_seeds_instance(binding: ArgumentBinding) -> None:
+    assert _register(_needs_instance, binding, instance_selector_spec=_INSTANCE_LOOKUP).name == "t"
+
+
+@_BINDINGS
+def test_a_collection_lookup_seeds_collection(binding: ArgumentBinding) -> None:
+    registered = _register(_needs_collection, binding, collection_selector_spec=_COLLECTION_LOOKUP)
+    assert registered.name == "t"
+
+
+@_BINDINGS
+def test_an_instance_lookup_beside_a_collection_lookup_seeds_no_instance(
+    binding: ArgumentBinding,
+) -> None:
     # drf-services resolves the target through the collection lookup and never
     # calls the instance one beside it, so ``instance`` never reaches the service
     # and every call would raise ``TypeError``.
     with pytest.raises(ImproperlyConfigured, match=r"parameter\(s\) \['instance'\]"):
         _register(
             _needs_instance,
+            binding,
             instance_selector_spec=_INSTANCE_LOOKUP,
             collection_selector_spec=_COLLECTION_LOOKUP,
         )
@@ -402,16 +427,19 @@ def test_an_instance_lookup_beside_a_collection_lookup_seeds_no_instance() -> No
 
 def test_an_instance_lookup_on_a_list_payload_seeds_no_instance() -> None:
     # ``many=True`` dispatch resolves no target, so a lookup it declares is never
-    # called.
+    # called. ``BUNDLE`` only: a list payload refuses a spreading binding before
+    # the source check runs, so trust mode cannot arise here.
     with pytest.raises(ImproperlyConfigured, match=r"parameter\(s\) \['instance'\]"):
         _register(_needs_instance, many=True, instance_selector_spec=_INSTANCE_LOOKUP)
 
 
-def test_an_instance_lookup_seeds_no_collection() -> None:
+@_BINDINGS
+def test_an_instance_lookup_seeds_no_collection(binding: ArgumentBinding) -> None:
     with pytest.raises(ImproperlyConfigured, match=r"parameter\(s\) \['collection'\]"):
-        _register(_needs_collection, instance_selector_spec=_INSTANCE_LOOKUP)
+        _register(_needs_collection, binding, instance_selector_spec=_INSTANCE_LOOKUP)
 
 
+@_BINDINGS
 @pytest.mark.parametrize(
     ("service", "lookup", "seed"),
     [
@@ -419,7 +447,9 @@ def test_an_instance_lookup_seeds_no_collection() -> None:
         (_needs_collection, "collection_selector_spec", "collection"),
     ],
 )
-def test_a_lookup_without_a_selector_seeds_nothing(service: Any, lookup: str, seed: str) -> None:
+def test_a_lookup_without_a_selector_seeds_nothing(
+    service: Any, lookup: str, seed: str, binding: ArgumentBinding
+) -> None:
     # A selector spec with no ``selector`` resolves no target, so it is no source.
     with pytest.raises(ImproperlyConfigured, match=rf"parameter\(s\) \['{seed}'\]"):
-        _register(service, **{lookup: SelectorSpec(kind=SelectorKind.RETRIEVE)})
+        _register(service, binding, **{lookup: SelectorSpec(kind=SelectorKind.RETRIEVE)})

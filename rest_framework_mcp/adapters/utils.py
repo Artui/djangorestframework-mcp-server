@@ -26,6 +26,7 @@ from rest_framework_mcp.constants import (
 )
 from rest_framework_mcp.registry.types.query_param import QueryParam
 from rest_framework_mcp.registry.types.url_kwarg import UrlKwarg
+from rest_framework_mcp.schema.utils import declares_default
 
 
 def validate_serializer_shapes(
@@ -178,6 +179,56 @@ def validate_query_params(
         )
 
 
+def validate_selector_parameter_names(
+    *, label: str, selector: Any, query_params: tuple[QueryParam, ...]
+) -> None:
+    """Fail-fast on a selector parameter the selector-tool transport takes away.
+
+    The sibling of ``validate_url_kwargs`` / ``validate_query_params``, from the
+    selector's side of the same collision. Those refuse a *channel* named after
+    a name the read pipeline owns; this refuses a *selector parameter* that one
+    of those names would take, because the parameter registers, is advertised,
+    and then never receives what the caller sent. A required one is answered
+    "This field is required." for an argument the call carried; a defaulted one
+    runs on its default whatever the call asked for. Two cases, each refused
+    whether the parameter has a default or not:
+
+    - ``page`` / ``limit`` (``RESERVED_POST_FETCH_KEYS``), which the dispatch
+      strips from the selector's arguments whether or not the tool paginates.
+    - a name one of the tool's ``query_params`` declares, whose value is routed
+      to ``request.query_params`` and split out of the arguments.
+
+    A ``UrlKwarg`` sharing a parameter's name stays allowed: its value reaches
+    the selector through ``view.kwargs``, as ``validate_url_kwargs`` documents.
+    A ``**kwargs`` catch-all names nothing, so there is nothing to refuse.
+
+    Run by ``MCPServer.register_selector_tool`` on the adapter's binding, so it
+    reads the tool's effective ``query_params``, including those an
+    ``agent_contract`` supplies.
+    """
+    parameters: frozenset[str] = frozenset(
+        parameter.name for parameter in _keyword_parameters(selector)
+    )
+    pagination: list[str] = sorted(parameters & RESERVED_POST_FETCH_KEYS)
+    if pagination:
+        raise ImproperlyConfigured(
+            f"{label}: the selector declares parameter(s) {pagination!r}, but `page` "
+            "and `limit` belong to the read pipeline's pagination, which removes them "
+            "from the arguments before the selector is called, so the parameter would "
+            "never receive the caller's value. Rename the parameter."
+        )
+    shadowed: list[str] = sorted(parameters & {qp.name for qp in query_params})
+    if shadowed:
+        raise ImproperlyConfigured(
+            f"{label}: the selector declares parameter(s) {shadowed!r} that the tool "
+            "also declares as a QueryParam. A QueryParam's value is routed to "
+            "request.query_params and removed from the arguments before the selector "
+            "is called, so the parameter would never receive the caller's value. Read "
+            "the value from request.query_params and drop the parameter, or drop the "
+            "QueryParam so the argument reaches the selector."
+        )
+
+
 def validate_input_serializer_against_callable(
     *,
     label: str,
@@ -187,6 +238,7 @@ def validate_input_serializer_against_callable(
     spec_kwargs_provides: frozenset[str] = frozenset(),
     provides_instance: bool = False,
     provides_collection: bool = False,
+    selector_url_kwargs: tuple[UrlKwarg, ...] = (),
     pool_seeds: PoolSeeds = DEFAULT_POOL_SEEDS,
 ) -> None:
     """Fail-fast at registration time when input shape doesn't match the callable.
@@ -201,15 +253,20 @@ def validate_input_serializer_against_callable(
 
     2. **Required callable parameters have a source** — every parameter with no
        default must come from something the MCP transport can produce: an
-       ``input_serializer`` field, a reserved pool seed, or an explicit
+       ``input_serializer`` field, a pool seed the dispatch fills, a selector
+       tool's ``UrlKwarg`` that every dispatched call carries, or an explicit
        ``spec_kwargs_provides`` opt-in declaring that ``spec.kwargs(...)``
-       supplies it. Post-fetch keys (``ordering`` / ``page`` / ``limit``) are
-       *not* sources — the pipeline consumes them before the callable runs.
+       supplies it. Post-fetch keys (``page`` / ``limit``) are *not* sources —
+       the pipeline consumes them before the callable runs.
 
        The opt-in is explicit because ``spec.kwargs`` output depends on the
        transport: a spec reused across DRF views and MCP tools sees populated
        URL path params in the first case and none in the second, so it may
        return ``None`` for keys it derives from them.
+
+    ``selector_url_kwargs`` is passed by the selector adapter alone: drf-services
+    spreads ``view.kwargs`` into a selector's pool, and into a service tool's
+    target lookup but never into the service's own pool.
 
     ``input_serializer=None`` skips check (1) but check (2) still runs against
     the pool-seed and opt-in sources. ``callable_=None`` short-circuits
@@ -241,6 +298,7 @@ def validate_input_serializer_against_callable(
         spec_kwargs_provides=spec_kwargs_provides,
         provides_instance=provides_instance,
         provides_collection=provides_collection,
+        selector_url_kwargs=selector_url_kwargs,
         pool_seeds=pool_seeds,
     )
 
@@ -251,6 +309,22 @@ def _resolve_signature(callable_: Any) -> inspect.Signature | None:
         return inspect.signature(callable_)
     except (TypeError, ValueError):  # pragma: no cover - defensive fallback
         return None
+
+
+def _keyword_parameters(callable_: Any) -> list[inspect.Parameter]:
+    """The parameters a keyword pool can fill, or none for an exotic callable.
+
+    A ``**kwargs`` catch-all is not one: no argument is bound to its own name
+    (``test_a_catch_alls_own_name_is_not_a_parameter_name``).
+    """
+    sig = _resolve_signature(callable_)
+    parameters = sig.parameters.values() if sig is not None else ()
+    return [
+        parameter
+        for parameter in parameters
+        if parameter.kind
+        in (inspect.Parameter.POSITIONAL_OR_KEYWORD, inspect.Parameter.KEYWORD_ONLY)
+    ]
 
 
 def _validate_data_only(label: str, sig: inspect.Signature) -> None:
@@ -303,6 +377,15 @@ def _validate_merge_or_replace(label: str, sig: inspect.Signature, input_seriali
         )
 
 
+# ``data`` is the one missing name the generic remedy above misdirects: it is not
+# a serializer field to add, it is the validated payload of one.
+_DATA_HINT = (
+    " Nothing fills `data` without an input_serializer: declare one, give `data` a "
+    "default, or take the arguments as individual parameters under a spreading "
+    "argument_binding."
+)
+
+
 def _validate_required_params_have_sources(
     *,
     label: str,
@@ -312,29 +395,52 @@ def _validate_required_params_have_sources(
     spec_kwargs_provides: frozenset[str],
     provides_instance: bool,
     provides_collection: bool,
+    selector_url_kwargs: tuple[UrlKwarg, ...],
     pool_seeds: PoolSeeds,
 ) -> None:
     """Every required callable parameter must have a static source.
 
     Sources, in priority order:
 
-    - **Pool seeds.** ``request`` / ``user`` / ``data`` / ``progress`` always;
+    - **Pool seeds.** ``request`` / ``user`` / ``progress`` always;
       ``instance`` and ``collection`` only when the spec resolves one, and
-      ``serializer`` only when an ``input_serializer`` is declared. Every name
-      the server's ``pool_seeds=`` registers, always: dispatch resolves each
-      into every pool, so a callable declaring one is satisfiable on every call.
+      ``serializer`` and ``data`` only when an ``input_serializer`` is declared.
+      Every name the server's ``pool_seeds=`` registers, always: dispatch
+      resolves each into every pool, so a callable declaring one is satisfiable
+      on every call.
     - **``input_serializer`` fields**, in the spread modes only, where the
       validated dict is spread into the pool. Under ``BUNDLE`` the fields ride
       inside ``data`` and their names never reach the callable as kwargs.
+    - **``selector_url_kwargs``** that are ``required`` or declare a default: a
+      call omitting a required one is refused before dispatch, and a default is
+      seeded when the call omits it, so every call that reaches the selector
+      carries the name in ``view.kwargs``, which dispatch spreads into the pool.
+      A ``UrlKwarg`` with neither reaches the pool only when the caller sends
+      it, and so is no source. The ``or`` is one branch arc, held by
+      ``test_a_required_url_kwarg_fills_a_required_selector_parameter``,
+      ``test_a_defaulted_url_kwarg_fills_a_required_selector_parameter`` and
+      ``test_a_url_kwarg_a_call_may_omit_is_no_source``.
     - **``spec_kwargs_provides``** — the explicit opt-in that
       ``spec.kwargs(view, request)`` supplies these names at dispatch.
 
+    ``data`` is no source without an ``input_serializer`` under any binding.
+    drf-services seeds it from a validated serializer, or from the extras an
+    ``UnknownArguments.PASSTHROUGH`` policy forwards: none at all under
+    ``BUNDLE``, where this transport forwards no extras, and under a spreading
+    binding only the arguments the call happened to carry, so a call carrying
+    none leaves it unfilled. Held by
+    ``test_a_bundled_service_requiring_data_without_an_input_serializer_is_refused``
+    and ``test_a_trust_mode_service_requiring_data_is_refused``.
+
     ``**kwargs`` callables are exempt: every required name is structurally
-    satisfiable. With ``input_serializer=None`` the binding is in trust mode —
-    the client's raw ``arguments`` are spread verbatim, so there is no static
-    contract and only the pool seeds are checked. That still catches a callable
-    the transport could never satisfy, such as ``BUNDLE`` with no serializer and
-    no ``data`` parameter.
+    satisfiable. With ``input_serializer=None`` a spreading binding is in trust
+    mode — the client's raw ``arguments`` are spread verbatim, so there is no
+    static contract and every required parameter counts as one the caller
+    supplies, **except a reserved pool seed**: drf-services strips every
+    ``pool_seeds.reserved`` name from the spread, so a caller cannot supply
+    ``instance`` or ``serializer`` and only the sources above can. Held by
+    ``test_trust_mode_does_not_count_a_reserved_seed_as_the_callers`` and the
+    spreading cases of ``test_an_instance_lookup_seeds_no_collection``.
     """
     if _accepts_var_keyword(sig):
         return
@@ -352,24 +458,31 @@ def _validate_required_params_have_sources(
     # nowhere to send it: drf-services substitutes its no-op reporter, so the
     # parameter is always satisfiable and refusing to register a service that
     # declares one would refuse a service that runs perfectly well.
-    sources: set[str] = {"request", "user", "data", "progress"}
+    sources: set[str] = {"request", "user", "progress"}
     if provides_instance:
         sources.add("instance")
     if provides_collection:
         sources.add("collection")
     if input_serializer is not None:
         sources.add("serializer")
+        sources.add("data")
     sources.update(spec_kwargs_provides)
     sources.update(pool_seeds.names)
+    # ``declares_default`` is the test the URL-kwarg split seeds a default by, so
+    # a ``default=None`` that the split leaves unseeded is no source here either.
+    sources.update(
+        url_kwarg.name
+        for url_kwarg in selector_url_kwargs
+        if url_kwarg.required or declares_default(url_kwarg.default)
+    )
     if argument_binding is not ArgumentBinding.BUNDLE:
         if input_serializer is not None:
             sources.update(_serializer_field_names(input_serializer))
         else:
             # Trust mode: raw ``arguments`` are spread verbatim, so the client
-            # can in principle supply any name the callable declares. The set is
-            # dynamic and cannot be validated statically, so every required
-            # param counts as satisfiable.
-            sources.update(required_params)
+            # can in principle supply any name the callable declares, other than
+            # the reserved seeds dispatch strips from that spread.
+            sources.update(required_params - pool_seeds.reserved)
     missing: set[str] = set(required_params) - sources
     if missing:
         sources_human = ", ".join(sorted(sources)) or "(none)"
@@ -382,6 +495,7 @@ def _validate_required_params_have_sources(
             "``spec_kwargs_provides=(...)`` at registration to acknowledge that "
             "contract. (``spec.kwargs`` output is not assumed because its "
             "behaviour can differ between DRF API-view and MCP transports.)"
+            f"{_DATA_HINT if 'data' in missing else ''}"
         )
 
 
@@ -488,6 +602,7 @@ __all__ = [
     "merge_tool_annotations",
     "validate_input_serializer_against_callable",
     "validate_query_params",
+    "validate_selector_parameter_names",
     "validate_serializer_shapes",
     "validate_url_kwargs",
 ]

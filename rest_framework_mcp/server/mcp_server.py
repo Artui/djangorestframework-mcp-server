@@ -28,7 +28,7 @@ from rest_framework_mcp.adapters.selector_to_resource import selector_to_resourc
 from rest_framework_mcp.adapters.selector_to_tool import selector_spec_to_tool
 from rest_framework_mcp.adapters.service_to_tool import service_spec_to_tool
 from rest_framework_mcp.adapters.ui_to_resource import ui_view_to_resource
-from rest_framework_mcp.adapters.utils import merge_meta
+from rest_framework_mcp.adapters.utils import merge_meta, validate_selector_parameter_names
 from rest_framework_mcp.auth.backends.django_oauth_toolkit_backend import (
     DjangoOAuthToolkitBackend,
 )
@@ -540,6 +540,14 @@ class MCPServer:
             dispatch_timeout=dispatch_timeout,
             max_page_size=max_page_size,
             pool_seeds=self._pool_seeds,
+        )
+        # On the binding rather than the arguments, so the ``query_params`` it
+        # reads are the effective ones -- an ``agent_contract``'s included
+        # (``test_a_query_param_from_the_agent_contract_shadows_too``).
+        validate_selector_parameter_names(
+            label=f"selector tool {binding.name!r}",
+            selector=binding.selector,
+            query_params=binding.query_params,
         )
         check_tool_permissions_declared(
             binding.name, binding.permissions, require=self._config.require_tool_permissions

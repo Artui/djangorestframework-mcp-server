@@ -104,6 +104,9 @@ def selector_spec_to_tool(
         callable_=spec.selector,
         argument_binding=argument_binding,
         spec_kwargs_provides=frozenset(spec_kwargs_provides),
+        # A selector's pool takes the ``view.kwargs`` spread, so a URL kwarg
+        # every dispatched call carries fills a parameter of the same name.
+        selector_url_kwargs=url_kwargs,
         pool_seeds=pool_seeds,
     )
     validate_url_kwargs(

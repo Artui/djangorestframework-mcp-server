@@ -104,13 +104,18 @@ def service_spec_to_tool(
     # Only the lookup dispatch calls seeds ``instance`` or ``collection``. An
     # instance lookup beside a collection lookup, or on ``many=True``, is never
     # called, so a service requiring ``instance`` there is refused here rather
-    # than raising on every call, except in trust mode (no ``input_serializer``,
-    # a spreading binding), where every required name counts as the caller's.
-    # Held by
+    # than raising on every call. Trust mode (no ``input_serializer``, a
+    # spreading binding) is no exception: the caller supplies the names it
+    # sends, and drf-services strips both seeds from what it sends. Held under
+    # every binding by
     # ``test_an_instance_lookup_beside_a_collection_lookup_seeds_no_instance``,
-    # ``test_an_instance_lookup_on_a_list_payload_seeds_no_instance``,
     # ``test_an_instance_lookup_seeds_no_collection`` and
-    # ``test_a_lookup_without_a_selector_seeds_nothing``.
+    # ``test_a_lookup_without_a_selector_seeds_nothing``, and under ``BUNDLE``,
+    # the one binding a list payload takes, by
+    # ``test_an_instance_lookup_on_a_list_payload_seeds_no_instance``. No
+    # ``url_kwargs`` are passed: drf-services spreads them into the target
+    # lookup's pool, never into the service's
+    # (``test_a_url_kwarg_is_no_source_for_a_service_parameter``).
     target = target_lookup(spec)
     resolves: bool = target is not None and target.selector is not None
     validate_input_serializer_against_callable(

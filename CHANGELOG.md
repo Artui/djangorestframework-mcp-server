@@ -7,6 +7,67 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+Each of these refuses at registration a tool that registers today and then
+fails every call, or every call that does not happen to carry an argument. A
+project registering one now gets `ImproperlyConfigured` at startup, naming the
+tool and the parameter, in place of a `TypeError` or a wrong answer per call.
+
+- **`data` is the source of a required parameter only beside an
+  `input_serializer`.** drf-services seeds `data` from a validated serializer, or
+  from the extras an `UnknownArguments.PASSTHROUGH` policy forwards. A service
+  tool with no `input_serializer` on the default `BUNDLE` binding forwards none,
+  so a service declaring `def create_note(*, data)` registered and then raised
+  `TypeError` on every call, whatever the arguments and whatever
+  `unknown_arguments` said. Under a spreading binding with no serializer, `data`
+  held only the arguments a call happened to carry, so a call with none raised
+  the same error. Registration now refuses both, and the message names the
+  remedies: declare an `input_serializer`, give `data` a default, or take the
+  arguments as individual parameters under a spreading binding.
+- **Trust mode no longer counts a reserved pool seed as the caller's.** With no
+  `input_serializer` and a spreading `argument_binding`, registration counts every
+  required parameter as one the caller supplies, because the arguments are
+  spread verbatim. drf-services strips every reserved name (`instance`,
+  `collection`, `serializer`, `data` and the rest) from that spread, so a caller
+  cannot supply one, even by sending it. A service requiring `instance` with no
+  target lookup to resolve it, or a selector tool's selector requiring
+  `instance`, `collection` or `serializer`, registered in trust mode and raised
+  `TypeError` on every call; it is now refused, as the same callable beside an
+  `input_serializer` already was. A seed something does fill still counts:
+  `request`, `user` and `progress` always, `instance` or `collection` where the
+  target lookup dispatch calls resolves one, and every name the server's
+  `pool_seeds=` registers.
+- **A selector parameter named `page` or `limit`, or named by one of the tool's
+  `QueryParam`s, is refused.** `register_selector_tool` already refused a
+  `QueryParam` or `UrlKwarg` with one of those names, and did not check the
+  selector against the same collision. `page` and `limit` are stripped from the
+  arguments the selector receives, whether or not the tool paginates, and a
+  `QueryParam`'s value is routed to `request.query_params` and split out of
+  them. So the parameter was advertised and never received the caller's value:
+  a required one was answered `This field is required.` for an argument the call
+  carried, and a defaulted one ran on its default, so `recent_entries(*, page=1)`
+  served page 1 when asked for page 2. The check reads the tool's effective
+  `query_params`, an `agent_contract`'s included. A `UrlKwarg` sharing a
+  parameter's name stays allowed, since its value reaches the selector through
+  `view.kwargs`, and a `**kwargs` catch-all names nothing to refuse.
+
+### Fixed
+
+- **A `UrlKwarg` that every call carries is the source of a selector
+  parameter.** `register_selector_tool` refused a selector whose required
+  parameter had a `UrlKwarg(required=True)` as its only source whenever an
+  `input_serializer` was set, saying the parameter had no static source, though
+  a call omitting the kwarg is refused before dispatch and a call carrying it
+  delivers it to the selector through `view.kwargs`. The only way to register
+  the tool was to claim the name through `spec_kwargs_provides=`, which says a
+  `kwargs=` provider fills it. A `UrlKwarg` that is `required=True`, or that
+  declares a default, now counts as the source; one with neither, or one whose
+  default is `None` (which the transport does not seed), reaches the selector
+  only when the caller sends it and is still no source. A service tool is
+  unchanged: drf-services spreads `view.kwargs` into its target lookup's pool,
+  not the service's.
+
 ## [0.51.0] — 2026-10-06
 
 ### Added
