@@ -1,12 +1,15 @@
 from __future__ import annotations
 
 import json
+from typing import Any
 
+import pytest
 from django.test import Client, override_settings
 
 from rest_framework_mcp.config.build_mcp_config import build_mcp_config
 from tests.testapp.mcp import build_server
 from tests.testapp.urlconf_for import urlconf_for
+from tests.utils import nested_past_the_decoders_limit_here, on_a_bounded_stack
 
 # Scalars are resolved once, in ``MCPServer.__init__`` — so a test that needs
 # non-default scalars mounts its own server rather than mutating settings around
@@ -30,6 +33,78 @@ def test_post_with_invalid_json(client: Client) -> None:
     )
     body = response.json()
     assert body["error"]["code"] == -32700
+
+
+def test_a_decode_error_keeps_the_decoders_detail(client: Client) -> None:
+    """A ``JSONDecodeError`` names what it expected, and the refusal carries it."""
+    response = client.post(
+        "/mcp/",
+        data="not json",
+        content_type="application/json",
+        HTTP_MCP_PROTOCOL_VERSION="2025-11-25",
+    )
+    assert response.json()["error"]["message"] == "Invalid JSON: Expecting value"
+
+
+@pytest.mark.parametrize(
+    ("body", "raises"),
+    [
+        # Nested past the decoder's recursion limit. No fixed depth is past it
+        # on every run, so ``None`` stands for a body found on the thread that
+        # decodes it, under the 1 MiB default cap: see ``tests.utils``.
+        pytest.param(None, RecursionError, id="nested-past-the-recursion-limit"),
+        # Over the 4300-digit cap on int conversion: a plain ``ValueError``.
+        pytest.param(
+            b'{"jsonrpc": "2.0", "id": 1, "method": "ping", "params": {"n": ' + b"9" * 5000 + b"}}",
+            ValueError,
+            id="integer-over-the-digit-limit",
+        ),
+        # Not UTF-8: a ``UnicodeDecodeError`` from decoding the bytes.
+        pytest.param(
+            b'{"jsonrpc": "2.0", "id": 1, "method": "\xff"}',
+            UnicodeDecodeError,
+            id="invalid-utf-8",
+        ),
+    ],
+)
+def test_a_body_json_cannot_decode_is_a_parse_error(
+    client: Client, body: bytes | None, raises: type[Exception]
+) -> None:
+    """None of these is a ``JSONDecodeError``, and each escaped as a 500.
+
+    The parse runs before authentication, so anyone could send one. The id is
+    ``null`` because a body that never decoded has no id to echo. The request
+    runs on a bounded stack, which keeps the nested body small, and that body is
+    found on the same thread because the bound is a floor rather than a size.
+    """
+
+    def post() -> Any:
+        sent: bytes = body if body is not None else nested_past_the_decoders_limit_here()
+        # Checked on the thread that decodes it, because that thread's stack
+        # is what the nested body's limit depends on. A body that decoded here
+        # would be answered by a later check and pass without the fix.
+        with pytest.raises(raises) as raised:
+            json.loads(sent)
+        assert raised.type is raises
+        return client.post(
+            "/mcp/",
+            data=sent,
+            content_type="application/json",
+            HTTP_MCP_PROTOCOL_VERSION="2025-11-25",
+        )
+
+    response = on_a_bounded_stack(post)
+    payload: Any = response.json()
+    # Neither the size cap, which runs before the parse, nor the shape check
+    # a body that decoded would reach after it.
+    assert payload["error"]["message"] != "Request body too large"
+    assert payload["error"]["message"] != "JSON-RPC message must be a JSON object"
+    assert response.status_code == 400
+    assert payload == {
+        "jsonrpc": "2.0",
+        "id": None,
+        "error": {"code": -32700, "message": "Invalid JSON: body could not be decoded"},
+    }
 
 
 def test_post_with_invalid_jsonrpc_shape(client: Client) -> None:
