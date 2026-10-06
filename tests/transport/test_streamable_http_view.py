@@ -1,9 +1,6 @@
 from __future__ import annotations
 
 import json
-import threading
-from collections.abc import Callable
-from concurrent.futures import ThreadPoolExecutor
 from typing import Any
 
 import pytest
@@ -12,6 +9,7 @@ from django.test import Client, override_settings
 from rest_framework_mcp.config.build_mcp_config import build_mcp_config
 from tests.testapp.mcp import build_server
 from tests.testapp.urlconf_for import urlconf_for
+from tests.utils import nested_past_the_decoders_limit_here, on_a_bounded_stack
 
 # Scalars are resolved once, in ``MCPServer.__init__`` — so a test that needs
 # non-default scalars mounts its own server rather than mutating settings around
@@ -37,26 +35,6 @@ def test_post_with_invalid_json(client: Client) -> None:
     assert body["error"]["code"] == -32700
 
 
-# From Python 3.14 the decoder's recursion is bounded by the C stack rather than
-# a count, so how deep a body must nest to raise depends on the stack the parse
-# runs on: about 74,000 levels on an 8 MiB main thread, and about 600,000 under
-# ``make``, which raises the soft stack limit to the hard one (64 MiB on macOS)
-# for the processes it starts. A thread's stack is the size it was created with,
-# so on this one the limit is about 37,000 levels on 3.14 and the count, about
-# 1,000 or 10,000, on earlier Pythons: 100,000 is past it wherever the suite runs.
-_BOUNDED_STACK_BYTES: int = 4 * 1024 * 1024
-
-
-def _on_a_bounded_stack(call: Callable[[], Any]) -> Any:
-    """Run ``call`` on a fresh thread with a 4 MiB stack and return its result."""
-    previous: int = threading.stack_size(_BOUNDED_STACK_BYTES)
-    try:
-        with ThreadPoolExecutor(max_workers=1) as pool:
-            return pool.submit(call).result()
-    finally:
-        threading.stack_size(previous)
-
-
 def test_a_decode_error_keeps_the_decoders_detail(client: Client) -> None:
     """A ``JSONDecodeError`` names what it expected, and the refusal carries it."""
     response = client.post(
@@ -71,11 +49,10 @@ def test_a_decode_error_keeps_the_decoders_detail(client: Client) -> None:
 @pytest.mark.parametrize(
     ("body", "raises"),
     [
-        # Past the decoder's recursion limit on the bounded stack, on every
-        # supported Python. 200 KB, under the 1 MiB default cap.
-        pytest.param(
-            b"[" * 100_000 + b"]" * 100_000, RecursionError, id="nested-past-the-recursion-limit"
-        ),
+        # Nested past the decoder's recursion limit. No fixed depth is past it
+        # on every run, so ``None`` stands for a body found on the thread that
+        # decodes it, under the 1 MiB default cap: see ``tests.utils``.
+        pytest.param(None, RecursionError, id="nested-past-the-recursion-limit"),
         # Over the 4300-digit cap on int conversion: a plain ``ValueError``.
         pytest.param(
             b'{"jsonrpc": "2.0", "id": 1, "method": "ping", "params": {"n": ' + b"9" * 5000 + b"}}",
@@ -91,31 +68,32 @@ def test_a_decode_error_keeps_the_decoders_detail(client: Client) -> None:
     ],
 )
 def test_a_body_json_cannot_decode_is_a_parse_error(
-    client: Client, body: bytes, raises: type[Exception]
+    client: Client, body: bytes | None, raises: type[Exception]
 ) -> None:
     """None of these is a ``JSONDecodeError``, and each escaped as a 500.
 
     The parse runs before authentication, so anyone could send one. The id is
     ``null`` because a body that never decoded has no id to echo. The request
-    runs on a bounded stack so the nested body raises however large the stack
-    the suite was started with.
+    runs on a bounded stack, which keeps the nested body small, and that body is
+    found on the same thread because the bound is a floor rather than a size.
     """
 
     def post() -> Any:
+        sent: bytes = body if body is not None else nested_past_the_decoders_limit_here()
         # Checked on the thread that decodes it, because that thread's stack
         # is what the nested body's limit depends on. A body that decoded here
         # would be answered by a later check and pass without the fix.
         with pytest.raises(raises) as raised:
-            json.loads(body)
+            json.loads(sent)
         assert raised.type is raises
         return client.post(
             "/mcp/",
-            data=body,
+            data=sent,
             content_type="application/json",
             HTTP_MCP_PROTOCOL_VERSION="2025-11-25",
         )
 
-    response = _on_a_bounded_stack(post)
+    response = on_a_bounded_stack(post)
     payload: Any = response.json()
     # Neither the size cap, which runs before the parse, nor the shape check
     # a body that decoded would reach after it.

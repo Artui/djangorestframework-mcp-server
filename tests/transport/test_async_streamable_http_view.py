@@ -2,9 +2,6 @@ from __future__ import annotations
 
 import asyncio
 import json
-import threading
-from collections.abc import Callable
-from concurrent.futures import ThreadPoolExecutor
 from typing import Any
 
 import pytest
@@ -23,6 +20,7 @@ from rest_framework_mcp.transport.async_streamable_http_viewset import (
 from rest_framework_mcp.transport.in_memory_session_store import InMemorySessionStore
 from tests.testapp.mcp import build_server
 from tests.testapp.urlconf_for import urlconf_for
+from tests.utils import nested_past_the_decoders_limit_here, on_a_bounded_stack
 
 
 @pytest.fixture
@@ -214,23 +212,6 @@ async def test_async_invalid_json(async_urlconf) -> None:
     assert response.json()["error"]["code"] == -32700
 
 
-# A 4 MiB thread stack, for the reason ``test_streamable_http_view`` gives: from
-# Python 3.14 the decoder's recursion limit follows the stack, and ``make``
-# raises the main thread's, so 100,000 levels can decode there. On this stack
-# the limit is about 37,000 levels on 3.14 and the count on earlier Pythons.
-_BOUNDED_STACK_BYTES: int = 4 * 1024 * 1024
-
-
-def _on_a_bounded_stack(call: Callable[[], Any]) -> Any:
-    """Run ``call`` on a fresh thread with a 4 MiB stack and return its result."""
-    previous: int = threading.stack_size(_BOUNDED_STACK_BYTES)
-    try:
-        with ThreadPoolExecutor(max_workers=1) as pool:
-            return pool.submit(call).result()
-    finally:
-        threading.stack_size(previous)
-
-
 async def test_async_decode_error_keeps_the_decoders_detail(async_urlconf) -> None:
     """A ``JSONDecodeError`` names what it expected, and the refusal carries it."""
     client = AsyncClient()
@@ -246,11 +227,10 @@ async def test_async_decode_error_keeps_the_decoders_detail(async_urlconf) -> No
 @pytest.mark.parametrize(
     ("body", "raises"),
     [
-        # Past the decoder's recursion limit on the bounded stack, on every
-        # supported Python. 200 KB, under the 1 MiB default cap.
-        pytest.param(
-            b"[" * 100_000 + b"]" * 100_000, RecursionError, id="nested-past-the-recursion-limit"
-        ),
+        # Nested past the decoder's recursion limit. No fixed depth is past it
+        # on every run, so ``None`` stands for a body found on the thread that
+        # decodes it, under the 1 MiB default cap: see ``tests.utils``.
+        pytest.param(None, RecursionError, id="nested-past-the-recursion-limit"),
         # Over the 4300-digit cap on int conversion: a plain ``ValueError``.
         pytest.param(
             b'{"jsonrpc": "2.0", "id": 1, "method": "ping", "params": {"n": ' + b"9" * 5000 + b"}}",
@@ -266,34 +246,37 @@ async def test_async_decode_error_keeps_the_decoders_detail(async_urlconf) -> No
     ],
 )
 def test_async_body_json_cannot_decode_is_a_parse_error(
-    async_urlconf, body: bytes, raises: type[Exception]
+    async_urlconf, body: bytes | None, raises: type[Exception]
 ) -> None:
     """None of these is a ``JSONDecodeError``, and each escaped as a 500.
 
     The parse runs before authentication, so anyone could send one. The id is
     ``null`` because a body that never decoded has no id to echo. A sync test
     on purpose: the async view parses on the thread running its event loop, so
-    the loop is started on the bounded stack rather than on pytest's.
+    the loop is started on the bounded stack rather than on pytest's, and the
+    nested body is found on that thread because the bound is a floor rather than
+    a size.
     """
 
-    async def post() -> Any:
+    async def post(sent: bytes) -> Any:
         return await AsyncClient().post(
             "/mcp/",
-            data=body,
+            data=sent,
             content_type="application/json",
             headers={"Mcp-Protocol-Version": "2025-11-25"},
         )
 
     def run() -> Any:
+        sent: bytes = body if body is not None else nested_past_the_decoders_limit_here()
         # Checked on the thread that decodes it, because that thread's stack
         # is what the nested body's limit depends on. A body that decoded here
         # would be answered by a later check and pass without the fix.
         with pytest.raises(raises) as raised:
-            json.loads(body)
+            json.loads(sent)
         assert raised.type is raises
-        return asyncio.run(post())
+        return asyncio.run(post(sent))
 
-    response = _on_a_bounded_stack(run)
+    response = on_a_bounded_stack(run)
     payload: Any = response.json()
     # Neither the size cap, which runs before the parse, nor the shape check
     # a body that decoded would reach after it.
