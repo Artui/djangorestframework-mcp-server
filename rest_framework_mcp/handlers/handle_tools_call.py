@@ -15,6 +15,7 @@ from rest_framework_services.exceptions.service_error import ServiceError
 from rest_framework_services.exceptions.service_validation_error import ServiceValidationError
 
 from rest_framework_mcp._compat.tracing import span
+from rest_framework_mcp.auth.permissions.drf_permission_adapter import DRFPermissionAdapter
 from rest_framework_mcp.constants import JsonRpcErrorCode, OutputFormat
 from rest_framework_mcp.elicitation.types.resolved_input import ResolvedInput
 from rest_framework_mcp.handlers.chain_tool_dispatch import dispatch_chain_tool
@@ -146,8 +147,27 @@ def _dispatch_tool_call(
         if isinstance(binding, SelectorToolBinding):
             return dispatch_selector_tool(binding, params, arguments_raw, context, otel_span)
 
+        # The spec's permission classes judge the route the call names, so the
+        # URL kwargs it delivered are split out first, as ``call_spec_tool``
+        # splits them: a permission scoping by ``view.kwargs["project_pk"]``
+        # was judged against ``{}`` and denied a caller it admits
+        # (``test_a_spec_permission_sees_the_url_kwargs_the_call_delivers``).
+        # ``refuse_missing=False`` because this split cannot be the one that
+        # refuses: the permission answers before a missing argument does
+        # (``test_a_permission_denying_the_delivered_route_answers_before_the_missing_argument``),
+        # and the strict split below still refuses it after.
+        # The arguments as sent, before a retry's answers are merged in below,
+        # since a denied caller is told so before its answers are read; an
+        # answer naming another route is judged again by the target guard
+        # against the view the service runs with
+        # (``test_an_answer_that_changes_the_route_is_judged_again_before_the_service_runs``).
+        _, delivered_url_kwargs = split_url_kwargs(
+            arguments_raw, binding.url_kwargs, refuse_missing=False
+        )
         allowed, required_scopes = check_permissions(
-            binding.permissions, context.http_request, context.token
+            DRFPermissionAdapter.bind_view_kwargs(binding.permissions, delivered_url_kwargs),
+            context.http_request,
+            context.token,
         )
         if not allowed:
             return JsonRpcError(

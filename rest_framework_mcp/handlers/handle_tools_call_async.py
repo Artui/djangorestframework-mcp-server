@@ -13,6 +13,7 @@ from rest_framework_services.exceptions.service_validation_error import ServiceV
 
 from rest_framework_mcp._compat.acall import acall
 from rest_framework_mcp._compat.tracing import span
+from rest_framework_mcp.auth.permissions.drf_permission_adapter import DRFPermissionAdapter
 from rest_framework_mcp.constants import JsonRpcErrorCode, OutputFormat
 from rest_framework_mcp.elicitation.types.resolved_input import ResolvedInput
 from rest_framework_mcp.handlers.chain_tool_dispatch import dispatch_chain_tool_async
@@ -154,8 +155,17 @@ async def _dispatch_tool_call_async(
                 binding, params, arguments_raw, context, otel_span
             )
 
+        # See the sync sibling: the spec's permission classes judge the route
+        # the call names, split from the arguments as sent and without refusing
+        # a missing one, which the strict split below still does after them.
+        _, delivered_url_kwargs = split_url_kwargs(
+            arguments_raw, binding.url_kwargs, refuse_missing=False
+        )
         allowed, required_scopes = await acall(
-            check_permissions, binding.permissions, context.http_request, context.token
+            check_permissions,
+            DRFPermissionAdapter.bind_view_kwargs(binding.permissions, delivered_url_kwargs),
+            context.http_request,
+            context.token,
         )
         if not allowed:
             return JsonRpcError(

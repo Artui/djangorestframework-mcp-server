@@ -42,6 +42,7 @@ from rest_framework_services.types.dispatch_result import DispatchResult
 from rest_framework_services.types.selector_kind import SelectorKind
 
 from rest_framework_mcp._compat.acall import acall
+from rest_framework_mcp.auth.permissions.drf_permission_adapter import DRFPermissionAdapter
 from rest_framework_mcp.config.types.mcp_config import MCPConfig
 from rest_framework_mcp.constants import (
     RESERVED_POST_FETCH_KEYS,
@@ -81,7 +82,7 @@ def dispatch_selector_tool(
     otel_span: Any,
 ) -> dict[str, Any] | JsonRpcError:
     """Sync dispatch through the selector-tool pipeline."""
-    early = _check_auth_and_rate_limits(binding, context)
+    early = _check_auth_and_rate_limits(binding, arguments_raw, context)
     if early is not None:
         return early
 
@@ -170,7 +171,7 @@ async def dispatch_selector_tool_async(
     otel_span: Any,
 ) -> dict[str, Any] | JsonRpcError:
     """Async sibling — bridges sync collaborators via ``acall``."""
-    early = await acall(_check_auth_and_rate_limits, binding, context)
+    early = await acall(_check_auth_and_rate_limits, binding, arguments_raw, context)
     if early is not None:
         return early
 
@@ -222,10 +223,27 @@ async def dispatch_selector_tool_async(
 
 
 def _check_auth_and_rate_limits(
-    binding: SelectorToolBinding, context: MCPCallContext
+    binding: SelectorToolBinding, arguments_raw: dict[str, Any], context: MCPCallContext
 ) -> JsonRpcError | None:
+    """Answer a call its permissions deny or its rate limits refuse, else ``None``.
+
+    The spec's permission classes judge the route the call names: the URL
+    kwargs it delivered are split out for them first, as ``call_spec_tool``
+    splits them, where a permission reading ``view.kwargs`` was judged against
+    ``{}`` (``test_a_spec_permission_sees_the_url_kwargs_the_call_delivers``).
+    ``refuse_missing=False`` keeps this split from being the one that refuses:
+    ``_build_request_and_validate`` still answers a missing required kwarg, and
+    after the permission, so a caller it denies is not told which argument it
+    left out
+    (``test_a_permission_denying_the_delivered_route_answers_before_the_missing_argument``).
+    """
+    _, delivered_url_kwargs = split_url_kwargs(
+        arguments_raw, binding.url_kwargs, refuse_missing=False
+    )
     allowed, required_scopes = check_permissions(
-        binding.permissions, context.http_request, context.token
+        DRFPermissionAdapter.bind_view_kwargs(binding.permissions, delivered_url_kwargs),
+        context.http_request,
+        context.token,
     )
     if not allowed:
         return JsonRpcError(
