@@ -210,8 +210,8 @@ pre-flight of a streamed call, a task's creation, `resources/read` and a
 resource subscription alike), so a class scoping by `view.kwargs["project_pk"]`
 reads the route the request names, as it does over HTTP. A `tools/call` retry
 whose `inputResponses` name a different URL kwarg, or fill one the call left
-out, is judged again on the route the answer produces, before the target is
-looked up or the service runs. Two checks name no route and judge `{}`:
+out, is judged again on the route the answer produces, before a rate limit is
+charged, the target is looked up or the service runs. Two checks name no route and judge `{}`:
 `completion/complete` on a resource template, which names the template rather
 than a URI, so a template whose permission scopes by a URI variable completes
 for nobody; and the listings filter described

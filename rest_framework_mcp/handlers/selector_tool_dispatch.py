@@ -50,6 +50,7 @@ from rest_framework_mcp.constants import (
 )
 from rest_framework_mcp.handlers.types.context import MCPCallContext
 from rest_framework_mcp.handlers.utils import (
+    build_validated_input_serializer,
     check_permissions,
     consume_rate_limits,
     effective_rate_limits,
@@ -60,7 +61,6 @@ from rest_framework_mcp.handlers.utils import (
     services_dispatch_policies,
     split_query_params,
     split_url_kwargs,
-    validate_input_against_serializer,
     validation_error_result,
 )
 from rest_framework_mcp.observability import get_logger
@@ -85,7 +85,7 @@ def dispatch_selector_tool(
     if early is not None:
         return early
 
-    drf_request, view, validated, error = _build_request_and_validate(
+    drf_request, view, validated, serializer, error = _build_request_and_validate(
         binding, arguments_raw, context
     )
     if error is not None:
@@ -94,7 +94,9 @@ def dispatch_selector_tool(
     try:
         result = dispatch_spec(
             binding.spec,
-            **_dispatch_kwargs(binding, validated, drf_request, view, arguments_raw, context),
+            **_dispatch_kwargs(
+                binding, validated, serializer, drf_request, view, arguments_raw, context
+            ),
             # A task worker runs the sync path and its reporter writes to the
             # task record, so progress is live here too, not only in the async
             # sibling. ``None`` on an ordinary request.
@@ -174,7 +176,7 @@ async def dispatch_selector_tool_async(
     if early is not None:
         return early
 
-    drf_request, view, validated, error = _build_request_and_validate(
+    drf_request, view, validated, serializer, error = _build_request_and_validate(
         binding, arguments_raw, context
     )
     if error is not None:
@@ -183,7 +185,9 @@ async def dispatch_selector_tool_async(
     try:
         result = await adispatch_spec(
             binding.spec,
-            **_dispatch_kwargs(binding, validated, drf_request, view, arguments_raw, context),
+            **_dispatch_kwargs(
+                binding, validated, serializer, drf_request, view, arguments_raw, context
+            ),
             # Passed explicitly rather than through ``_dispatch_kwargs``, which
             # is shared between the two siblings.
             progress=context.progress,
@@ -267,11 +271,13 @@ def _build_request_and_validate(
     binding: SelectorToolBinding,
     arguments_raw: dict[str, Any],
     context: MCPCallContext,
-) -> tuple[Any, Any, Any, dict[str, Any] | None]:
+) -> tuple[Any, Any, Any, Any, dict[str, Any] | None]:
     """Build the synthesised request + view, and validate the ``input_serializer``.
 
-    Returns ``(drf_request, view, validated, error)``; ``error`` is non-``None``
-    when the call is already answered — a ``validation_error`` tool result, for a
+    Returns ``(drf_request, view, validated, serializer, error)``, ``serializer``
+    being the bound one that validated, whose fields say which URL kwarg names
+    the overlay may lay back (``_route_kwargs_a_namesake_owns``); ``error`` is
+    non-``None`` when the call is already answered — a ``validation_error`` tool result, for a
     serializer rejection, an unexpected argument under ``REJECT`` or a missing
     required URL kwarg alike.
 
@@ -308,13 +314,14 @@ def _build_request_and_validate(
             drf_request,
             None,
             None,
+            None,
             validation_error_result(
                 exc, arguments_raw, config=context.config, conventions=context.conventions
             ).to_dict(),
         )
     view = OfflineServiceView(request=drf_request, action=binding.name, kwargs=url_kwarg_values)
     try:
-        validated = validate_input_against_serializer(
+        validated, serializer = build_validated_input_serializer(
             arguments_raw,
             binding.input_serializer,
             unknown_arguments=binding.unknown_arguments,
@@ -328,11 +335,12 @@ def _build_request_and_validate(
             drf_request,
             view,
             None,
+            None,
             validation_error_result(
                 exc, arguments_raw, config=context.config, conventions=context.conventions
             ).to_dict(),
         )
-    return drf_request, view, validated, None
+    return drf_request, view, validated, serializer, None
 
 
 def _selector_tool_additional_known_keys(binding: SelectorToolBinding) -> frozenset[str]:
@@ -563,6 +571,7 @@ def _render_over_row_ceiling(binding: SelectorToolBinding, max_rows: int) -> dic
 def _dispatch_kwargs(
     binding: SelectorToolBinding,
     validated: Any,
+    serializer: Any,
     drf_request: Any,
     view: Any,
     arguments_raw: dict[str, Any],
@@ -585,11 +594,13 @@ def _dispatch_kwargs(
     # and under either spreading binding it stood in for a kwarg the call left
     # out, on a route judged as naming none
     # (``test_a_serializer_field_sourcing_a_url_kwarg_left_out_does_not_fill_the_route``).
+    # Kept where the value can only be the route's own namesake field's.
     route_names = {url_kwarg.name for url_kwarg in binding.url_kwargs}
+    dropped = route_names - _route_kwargs_a_namesake_owns(serializer, route_names)
     params = {
         name: value
         for name, value in _selector_dispatch_params(spec_params, validated).items()
-        if name not in route_names
+        if name not in dropped
     }
     # Evaluated inside both siblings' dispatch ``try``, after the permission and
     # rate-limit answers and the ``input_serializer``: a missing argument is the
@@ -630,6 +641,57 @@ def _dispatch_kwargs(
         # client-controlled.
         "pool_seeds": context.pool_seeds,
     }
+
+
+def _route_kwargs_a_namesake_owns(serializer: Any, route_names: set[str]) -> frozenset[str]:
+    """The URL kwargs whose laid-back value only a field of the kwarg's own name writes.
+
+    Such a field reads the argument under the kwarg's name, which is the value
+    the split routed into ``view.kwargs`` and the permission judged, so what it
+    lays back is that value as the author's field coerced it, or the author's
+    default for a route that left an optional kwarg out. Neither is a value the
+    caller chose apart from the route, so the name stays in the selector's
+    params: under ``SPREAD_CALLER_WINS`` the selector reads ``7`` for the
+    route's ``"7"``
+    (``test_a_field_named_after_a_url_kwarg_lays_back_its_coercion_of_the_route``),
+    and a selector requiring the name gets the default rather than raising
+    ``TypeError`` (``test_a_field_named_after_a_url_kwarg_defaults_a_route_left_out``).
+
+    Owned only when the namesake is the name's sole writer among the declared
+    fields. A writable field writes the name its ``source`` starts with, and a
+    ``source="*"`` field merges a mapping into the top level, which can carry
+    any name. The chain is one branch arc, so each condition is held by a case
+    of ``test_a_value_only_a_namesake_did_not_write_does_not_move_the_route``,
+    or of the coercion test above:
+
+    - a field of the kwarg's name, where none means whatever sits under the
+      name came from an alias or from the serializer's own ``validate``
+      (``[validate-without-namesake]``, and
+      ``test_a_serializer_field_sourcing_a_url_kwarg_does_not_move_the_route``);
+    - no other field whose ``source`` names it (``[alias-beside-namesake]``);
+    - no ``source="*"`` field (``[star-beside-namesake]``);
+    - read-only fields set aside, since they write nothing into the validated
+      values, ``SerializerMethodField`` among them with its ``source="*"``
+      (``[namesake-beside-read-only-caller-wins]`` of the coercion test).
+
+    A ``validate`` or ``to_internal_value`` override can still write the name
+    beside its namesake. That is the author's own code choosing the value, which
+    no declaration shows, and it is what a field's ``validate_<name>`` hook is
+    for in any case.
+    """
+    if serializer is None:
+        return frozenset()
+    fields = serializer.fields
+    owned: set[str] = set()
+    for name in route_names:
+        writers = [
+            field
+            for field in fields.values()
+            if not field.read_only and field.source_attrs[:1] in ([name], [])
+        ]
+        if writers == [fields.get(name)]:
+            owned.add(name)
+    return frozenset(owned)
 
 
 def _selector_dispatch_params(

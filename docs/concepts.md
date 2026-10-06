@@ -354,8 +354,13 @@ values are laid back over the arguments, and a field bound with
 `source="project_pk"` would put a `project_pk` back, so every name a `UrlKwarg`
 declares is dropped from them again: the selector reads the value
 `view.kwargs` carries, the one the permission judged, under every
-`argument_binding`. A call leaving the kwarg out leaves it out for the selector
-too, whatever a field sourced or defaulted under that name.
+`argument_binding`, and a call leaving the kwarg out leaves it out for the
+selector too. One field keeps its value: a field declared under the kwarg's own
+name, such as `project_pk = serializers.IntegerField(default=5)`, when no other
+field writes `project_pk` through its `source` or a `source="*"`. It reads the
+argument the permission judged, so what it lays back is that value as the field
+coerced it, which the selector reads under `SPREAD_CALLER_WINS`, or its default
+when the call leaves an optional kwarg out.
 
 A capture the spec genuinely cannot run without takes `required=True`:
 
