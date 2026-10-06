@@ -1,6 +1,8 @@
 from __future__ import annotations
 
+import asyncio
 import json
+from typing import Any
 
 import pytest
 from django import VERSION as DJANGO_VERSION
@@ -18,6 +20,7 @@ from rest_framework_mcp.transport.async_streamable_http_viewset import (
 from rest_framework_mcp.transport.in_memory_session_store import InMemorySessionStore
 from tests.testapp.mcp import build_server
 from tests.testapp.urlconf_for import urlconf_for
+from tests.utils import nested_past_the_decoders_limit_here, on_a_bounded_stack
 
 
 @pytest.fixture
@@ -207,6 +210,84 @@ async def test_async_invalid_json(async_urlconf) -> None:
         headers={"Mcp-Protocol-Version": "2025-11-25"},
     )
     assert response.json()["error"]["code"] == -32700
+
+
+async def test_async_decode_error_keeps_the_decoders_detail(async_urlconf) -> None:
+    """A ``JSONDecodeError`` names what it expected, and the refusal carries it."""
+    client = AsyncClient()
+    response = await client.post(
+        "/mcp/",
+        data="not json",
+        content_type="application/json",
+        headers={"Mcp-Protocol-Version": "2025-11-25"},
+    )
+    assert response.json()["error"]["message"] == "Invalid JSON: Expecting value"
+
+
+@pytest.mark.parametrize(
+    ("body", "raises"),
+    [
+        # Nested past the decoder's recursion limit. No fixed depth is past it
+        # on every run, so ``None`` stands for a body found on the thread that
+        # decodes it, under the 1 MiB default cap: see ``tests.utils``.
+        pytest.param(None, RecursionError, id="nested-past-the-recursion-limit"),
+        # Over the 4300-digit cap on int conversion: a plain ``ValueError``.
+        pytest.param(
+            b'{"jsonrpc": "2.0", "id": 1, "method": "ping", "params": {"n": ' + b"9" * 5000 + b"}}",
+            ValueError,
+            id="integer-over-the-digit-limit",
+        ),
+        # Not UTF-8: a ``UnicodeDecodeError`` from decoding the bytes.
+        pytest.param(
+            b'{"jsonrpc": "2.0", "id": 1, "method": "\xff"}',
+            UnicodeDecodeError,
+            id="invalid-utf-8",
+        ),
+    ],
+)
+def test_async_body_json_cannot_decode_is_a_parse_error(
+    async_urlconf, body: bytes | None, raises: type[Exception]
+) -> None:
+    """None of these is a ``JSONDecodeError``, and each escaped as a 500.
+
+    The parse runs before authentication, so anyone could send one. The id is
+    ``null`` because a body that never decoded has no id to echo. A sync test
+    on purpose: the async view parses on the thread running its event loop, so
+    the loop is started on the bounded stack rather than on pytest's, and the
+    nested body is found on that thread because the bound is a floor rather than
+    a size.
+    """
+
+    async def post(sent: bytes) -> Any:
+        return await AsyncClient().post(
+            "/mcp/",
+            data=sent,
+            content_type="application/json",
+            headers={"Mcp-Protocol-Version": "2025-11-25"},
+        )
+
+    def run() -> Any:
+        sent: bytes = body if body is not None else nested_past_the_decoders_limit_here()
+        # Checked on the thread that decodes it, because that thread's stack
+        # is what the nested body's limit depends on. A body that decoded here
+        # would be answered by a later check and pass without the fix.
+        with pytest.raises(raises) as raised:
+            json.loads(sent)
+        assert raised.type is raises
+        return asyncio.run(post(sent))
+
+    response = on_a_bounded_stack(run)
+    payload: Any = response.json()
+    # Neither the size cap, which runs before the parse, nor the shape check
+    # a body that decoded would reach after it.
+    assert payload["error"]["message"] != "Request body too large"
+    assert payload["error"]["message"] != "JSON-RPC message must be a JSON object"
+    assert response.status_code == 400
+    assert payload == {
+        "jsonrpc": "2.0",
+        "id": None,
+        "error": {"code": -32700, "message": "Invalid JSON: body could not be decoded"},
+    }
 
 
 async def test_async_invalid_request_shape(async_urlconf) -> None:

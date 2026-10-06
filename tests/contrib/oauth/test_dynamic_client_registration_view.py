@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import secrets
+from typing import Any
 
 import pytest
 from django.test import RequestFactory, override_settings
@@ -11,6 +12,7 @@ from django.test import RequestFactory, override_settings
 from rest_framework_mcp.contrib.oauth.dynamic_client_registration_viewset import (
     DynamicClientRegistrationViewSet,
 )
+from tests.utils import nested_past_the_decoders_limit_here, on_a_bounded_stack
 
 
 def _post(
@@ -69,6 +71,55 @@ def test_invalid_json_returns_400() -> None:
     response = _post("not-json")
     assert response.status_code == 400
     assert response.data["error"] == "invalid_request"
+
+
+@pytest.mark.parametrize(
+    ("body", "raises"),
+    [
+        # Nested past the decoder's recursion limit. No fixed depth is past it
+        # on every run, so ``None`` stands for a body found on the thread that
+        # decodes it: see ``tests.utils``.
+        pytest.param(None, RecursionError, id="nested-past-the-recursion-limit"),
+        # Over the 4300-digit cap on int conversion: a plain ``ValueError``.
+        pytest.param(
+            b'{"redirect_uris": ["https://x/cb"], "n": ' + b"9" * 5000 + b"}",
+            ValueError,
+            id="integer-over-the-digit-limit",
+        ),
+        # Not UTF-8: a ``UnicodeDecodeError`` from decoding the bytes.
+        pytest.param(
+            b'{"redirect_uris": ["https://x/\xff"]}', UnicodeDecodeError, id="invalid-utf-8"
+        ),
+    ],
+)
+def test_a_body_json_cannot_decode_is_invalid_request(
+    body: bytes | None, raises: type[Exception]
+) -> None:
+    """None of these is a ``JSONDecodeError``, and each escaped ``create`` as a 500.
+
+    With registration open and no initial access token, anyone reaches the parse.
+    The view runs on a bounded stack, which keeps the nested body small, and that
+    body is found on the same thread because the bound is a floor rather than a
+    size.
+    """
+
+    def post() -> Any:
+        sent: bytes = body if body is not None else nested_past_the_decoders_limit_here()
+        # Checked on the thread that decodes it, because that thread's stack
+        # is what the nested body's limit depends on. A body that decoded here
+        # would be answered by the metadata validation and pass without the fix.
+        with pytest.raises(raises) as raised:
+            json.loads(sent)
+        assert raised.type is raises
+        return _post(sent)
+
+    response: Any = on_a_bounded_stack(post)
+    assert response.data["error"] != "invalid_client_metadata"
+    assert response.status_code == 400
+    assert response.data == {
+        "error": "invalid_request",
+        "error_description": "Request body is not valid JSON",
+    }
 
 
 def test_invalid_schema_returns_400_with_detail() -> None:

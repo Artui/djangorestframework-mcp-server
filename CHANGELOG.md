@@ -76,6 +76,26 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `AgentConventions` fields. `HANDLE_DESCRIPTION` holds the new sentence, and
   `PAGED_QUERY_PARAM_SCOPE` is unchanged.
 
+## [0.50.1] — 2026-10-06
+
+### Fixed
+
+- **A request body that is JSON in form but cannot be decoded is refused, not a
+  500.** The transport and the dynamic client registration endpoint caught only
+  `json.JSONDecodeError`, and `json.loads` raises three other things on such a
+  body: `RecursionError` for one nested past the decoder's recursion limit,
+  `ValueError` for an integer longer than the 4300 digits Python converts, and
+  `UnicodeDecodeError` for bytes that are not UTF-8. Each escaped the view, so
+  the request ended in Django's 500 page and an unhandled exception in the
+  host's error log. On the transport the parse runs before authentication, so
+  anyone could send one. Both transports, sync and async, now answer each with
+  the JSON-RPC parse error, `-32700` with `id: null`; a `JSONDecodeError` still
+  carries the decoder's own detail (`Invalid JSON: Expecting value`) and the
+  other three read `Invalid JSON: body could not be decoded`, rather than an
+  interpreter message advising the client to raise a server-side limit.
+  Registration answers them `400 invalid_request`, as it already did for any
+  other body that is not JSON.
+
 ### Documentation
 
 - **`RedisSSEReplayBuffer` keeps less than one stream node more than
@@ -5411,7 +5431,8 @@ Pinned to `djangorestframework-services==0.6.0`.
   release).
 
 [Unreleased]: https://github.com/Artui/djangorestframework-mcp-server/compare/v0.51.0...HEAD
-[0.51.0]: https://github.com/Artui/djangorestframework-mcp-server/compare/v0.50.0...v0.51.0
+[0.51.0]: https://github.com/Artui/djangorestframework-mcp-server/compare/v0.50.1...v0.51.0
+[0.50.1]: https://github.com/Artui/djangorestframework-mcp-server/compare/v0.50.0...v0.50.1
 [0.50.0]: https://github.com/Artui/djangorestframework-mcp-server/compare/v0.49.0...v0.50.0
 [0.49.0]: https://github.com/Artui/djangorestframework-mcp-server/compare/v0.48.0...v0.49.0
 [0.48.0]: https://github.com/Artui/djangorestframework-mcp-server/compare/v0.47.0...v0.48.0

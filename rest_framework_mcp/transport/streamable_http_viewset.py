@@ -249,11 +249,28 @@ class StreamableHttpViewSet(ViewSet):
                 status=413,
             )
 
+        # ``JSONDecodeError`` is not all ``json.loads`` raises on a body it
+        # cannot decode: nesting past the decoder's recursion is a
+        # ``RecursionError``, an integer over the 4300-digit conversion cap a
+        # plain ``ValueError``, and bytes that are not UTF-8 a
+        # ``UnicodeDecodeError``. Each escaped as a 500, and this parse runs
+        # before authentication, so anyone could produce one. Held by
+        # ``test_a_body_json_cannot_decode_is_a_parse_error``: its nested case
+        # fails without ``RecursionError``, the other two without widening
+        # ``JSONDecodeError`` to ``ValueError``.
         try:
             payload: Any = json.loads(http_request.body or b"null")
-        except json.JSONDecodeError as exc:
+        except (ValueError, RecursionError) as exc:
+            # Only ``JSONDecodeError`` carries ``msg`` - what the decoder
+            # expected, without the body echoed back. The others' text is
+            # either an interpreter internal or advice to raise a server-side
+            # limit, so they get a fixed message instead. The kept detail is
+            # held by ``test_a_decode_error_keeps_the_decoders_detail``.
+            detail: str = (
+                exc.msg if isinstance(exc, json.JSONDecodeError) else "body could not be decoded"
+            )
             return _error_response(
-                code=JsonRpcErrorCode.PARSE_ERROR, message=f"Invalid JSON: {exc.msg}"
+                code=JsonRpcErrorCode.PARSE_ERROR, message=f"Invalid JSON: {detail}"
             )
 
         try:

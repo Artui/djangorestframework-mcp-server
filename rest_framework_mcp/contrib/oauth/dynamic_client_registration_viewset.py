@@ -107,9 +107,17 @@ class DynamicClientRegistrationViewSet(ViewSet):
                     status=401,
                 )
 
+        # ``JSONDecodeError`` is not all ``json.loads`` raises on a body it
+        # cannot decode: nesting past the decoder's recursion is a
+        # ``RecursionError``, an integer over the 4300-digit conversion cap a
+        # plain ``ValueError``, and bytes that are not UTF-8 a
+        # ``UnicodeDecodeError``. Each escaped ``create`` as a 500. Held by
+        # ``test_a_body_json_cannot_decode_is_invalid_request``: its nested case
+        # fails without ``RecursionError``, the other two without widening
+        # ``JSONDecodeError`` to ``ValueError``.
         try:
             payload: Any = json.loads(request.body)
-        except json.JSONDecodeError:
+        except (ValueError, RecursionError):
             return Response(
                 {"error": "invalid_request", "error_description": "Request body is not valid JSON"},
                 status=400,
