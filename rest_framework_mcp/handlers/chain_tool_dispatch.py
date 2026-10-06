@@ -162,7 +162,9 @@ def dispatch_chain_tool(
         # ``validation_error`` result every tool kind answers with, carrying no
         # ``failedStep`` because no step ran. Not ``-32602``: the MCP spec keeps
         # that for an unknown tool and a malformed request.
-        return validation_error_result(exc, arguments_raw, config=context.config).to_dict()
+        return validation_error_result(
+            exc, arguments_raw, config=context.config, conventions=context.conventions
+        ).to_dict()
 
     ctx = ChainContext(
         args=validated if serializer is not None else arguments_raw,

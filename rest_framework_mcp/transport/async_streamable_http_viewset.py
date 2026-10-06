@@ -44,6 +44,7 @@ from rest_framework_mcp.protocol.types.json_rpc_response import JsonRpcResponse
 from rest_framework_mcp.registry.prompt_registry import PromptRegistry
 from rest_framework_mcp.registry.resource_registry import ResourceRegistry
 from rest_framework_mcp.registry.tool_registry import ToolRegistry
+from rest_framework_mcp.schema.types.agent_conventions import AgentConventions
 from rest_framework_mcp.subscriptions.grant_subscription import grant_subscription
 from rest_framework_mcp.subscriptions.in_memory_subscription_broker import (
     InMemorySubscriptionBroker,
@@ -163,6 +164,10 @@ class AsyncStreamableHttpViewSet(ViewSet):
     # builds. drf-services' default for a hand-wired viewset, which is exactly
     # the seeds dispatch would use with none passed.
     pool_seeds: PoolSeeds = DEFAULT_POOL_SEEDS
+    # The owning server's ``conventions=``, read into every context this view
+    # builds, so the wording it serves is that server's. The defaults for a
+    # hand-wired viewset, which is what a server given none would say.
+    conventions: AgentConventions = AgentConventions()
 
     @classonlymethod
     def as_view(cls, actions: Any = None, **initkwargs: Any) -> Any:
@@ -355,6 +360,7 @@ class AsyncStreamableHttpViewSet(ViewSet):
             subscriptions=self.subscription_broker,
             config=self._require_config(),
             pool_seeds=self.pool_seeds,
+            conventions=self.conventions,
         )
 
         if isinstance(message, JsonRpcNotification):
@@ -452,6 +458,7 @@ class AsyncStreamableHttpViewSet(ViewSet):
             subscriptions=self.subscription_broker,
             config=config,
             pool_seeds=self.pool_seeds,
+            conventions=self.conventions,
         )
 
         if isinstance(message, JsonRpcNotification):

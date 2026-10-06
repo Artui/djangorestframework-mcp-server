@@ -34,6 +34,7 @@ from rest_framework_mcp.registry.types.selector_tool_binding import SelectorTool
 from rest_framework_mcp.registry.types.tool_binding import ToolBinding
 from rest_framework_mcp.schema.selector_tool_schema import build_selector_tool_input_schema
 from rest_framework_mcp.schema.service_tool_schema import build_service_tool_input_schema
+from tests.utils import tool_error
 
 
 def _ctx(*, tools: ToolRegistry) -> MCPCallContext:
@@ -429,6 +430,28 @@ def test_in_process_call_tool_maps_a_missing_required_url_kwarg() -> None:
     result = server.call_tool("t", {}, user="alice")
     assert result.is_error is True
     assert "project_pk" in result.content[0].text
+
+
+def test_missing_required_url_kwargs_are_named_sorted_in_the_message() -> None:
+    # A required ``UrlKwarg`` is asked for before anything runs, as a
+    # selector's argument is, so it earns the same message. Declared out of
+    # order, so the names read sorted, as the Pydantic-AI toolset writes them,
+    # rather than in the order the binding declares them.
+    server = MCPServer(auth_backend=AllowAnyBackend())
+    server.register_service_tool(
+        name="t",
+        spec=ServiceSpec(service=_echo_scope_service, atomic=False, kwargs=_scope_provider),
+        url_kwargs=(UrlKwarg("project_pk", required=True), UrlKwarg("org", required=True)),
+        permissions=[],
+    )
+
+    error = tool_error(server.call_tool("t", {}, user="alice").to_dict())
+
+    assert error["message"] == "Missing required argument(s): `org`, `project_pk`."
+    assert error["detail"] == {
+        "org": ["This field is required."],
+        "project_pk": ["This field is required."],
+    }
 
 
 def test_in_process_call_tool_succeeds_when_supplied() -> None:

@@ -30,7 +30,13 @@ from invoices.serializers import (
     SetAmountInputSerializer,
 )
 from invoices.services import create_invoice, mark_invoice_sent, set_invoice_amount
-from rest_framework_mcp import MCPServer, PromptArgument, PromptMessage, QueryParam
+from rest_framework_mcp import (
+    AgentConventions,
+    MCPServer,
+    PromptArgument,
+    PromptMessage,
+    QueryParam,
+)
 from rest_framework_mcp.auth.backends.allow_any_backend import AllowAnyBackend
 from rest_framework_mcp.auth.permissions.drf_permission_adapter import DRFPermissionAdapter
 from rest_framework_mcp.transport.in_memory_session_store import InMemorySessionStore
@@ -54,6 +60,16 @@ def build_server() -> MCPServer:
         # ``currency=lambda *, user: user.organisation.currency``. A
         # registered name is reserved, so a client cannot send its own.
         pool_seeds=DEFAULT_POOL_SEEDS.extend(currency=lambda: "EUR"),
+        # The sentences this server writes for the model, rather than any one
+        # tool. Each field left alone keeps the package's wording; this one
+        # tells a model that left out an invoice's number where to find it,
+        # so ``invoices.set_amount`` called without ``number`` says so.
+        conventions=AgentConventions(
+            missing_arguments=(
+                "Missing required argument(s): {names}. "
+                "Look the invoice up with `invoices.list` if you do not have it."
+            ),
+        ),
     )
 
     # Permissions are **required** since 0.25.0: registering a tool without

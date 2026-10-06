@@ -275,13 +275,19 @@ hints are resolved at runtime, where that name does not exist. Import such a
 type at runtime, or the provider is read as though it returned a plain `dict`.
 
 **A call that leaves out a required parameter is refused before the selector
-runs**, with the `validation_error` result a serializer gives a missing field,
-on every route (both transports and eras, `call_tool` and `acall_tool`):
+runs**, with a `validation_error` result naming what is missing, keyed in
+`detail` the way a serializer keys a missing field, on every route (both
+transports and eras, `call_tool` and `acall_tool`):
 
 ```json
-{"error": {"type": "validation_error", "message": "Invalid arguments",
+{"error": {"type": "validation_error", "message": "Missing required argument(s): `pk`.",
            "detail": {"pk": ["This field is required."]}}}
 ```
+
+The message is the server's
+[`conventions.missing_arguments`](#agent-conventions), and the same one the
+Pydantic-AI toolset gives the same call. An input serializer's own refusal,
+a missing field of its own included, keeps `"Invalid arguments"`.
 
 It used to reach the selector as a `TypeError`, which answered HTTP 500 with
 JSON-RPC `-32603` "Internal error" on the wire and raised from `call_tool`. The
@@ -352,7 +358,7 @@ UrlKwarg("project_pk", type="integer", required=True)
 The name joins the tool's `inputSchema` `required` list, so the model is told up
 front — and, because a schema hint is only a hint, a call that omits it comes back
 as an `isError` validation result naming the missing argument rather than failing
-somewhere less legible: `"Invalid arguments"` with
+somewhere less legible: ``"Missing required argument(s): `project_pk`."`` with
 `{"project_pk": ["This field is required."]}` under `detail`, the answer a
 missing selector parameter gets, after the permission answer on every route.
 `required` can't be combined with a `default` (a default
@@ -477,6 +483,9 @@ each query param's description in the `inputSchema` ends with:
 > envelope (`items`, `page`, `totalPages`, `hasNext`).
 
 A service tool and an unpaginated list have no envelope, and get no sentence.
+The words are the server's [`conventions.query_param_on_pages`](#agent-conventions),
+which can change them or drop them; whether the sentence appears stays the
+server's call.
 
 The package does not rewrite a selection written the other way. `QueryParam` is
 opaque on purpose — `query`, `fields=id,name` and `expand=true` are the same
@@ -1121,6 +1130,68 @@ back to the tool description until that gap is closed upstream.
 Duplicated prose is where descriptions get longest and go stale, so an argument
 whose name doesn't match the entity it identifies belongs in `help_text` or
 `UrlKwarg(description=…)`, written once.
+
+### What the server writes for you: `conventions=` { #agent-conventions }
+
+A few sentences a model reads are not in any registration, because they explain
+how this server behaves rather than what one tool does. The server writes them,
+and `MCPServer(conventions=...)` changes the words. It takes an
+[`AgentConventions`][rest_framework_mcp.schema.types.agent_conventions.AgentConventions],
+per server, so two servers in one project can speak to different readers:
+
+```python
+from rest_framework_mcp import AgentConventions, MCPServer
+
+server = MCPServer(
+    name="invoicing",
+    conventions=AgentConventions(
+        handle_line="Pass ids to other tools; never show them to the user.",
+    ),
+)
+```
+
+Each field is one sentence, and lands in exactly these places:
+
+| Field | Where it appears | `None` |
+| --- | --- | --- |
+| `handle_field_description` | The `outputSchema` description of a handle field that declares none of its own ([Hide plumbing from the model](recipes/agent-audience.md)). | The field is left undescribed. |
+| `handle_line` | The line appended to the description of a tool whose output carries a handle. | The line is dropped, with its ``Identify records by `<label>`.`` prefix. |
+| `query_param_on_pages` | The end of a read-shaping query param's description on a paged tool, and the end of the `isError` message when a value it supplied is refused while rendering ([On a paged tool](#query-param-per-item)). | Dropped from both. |
+| `missing_arguments` | The message of a call refused for leaving out an argument the selectors require, or a `UrlKwarg(required=True)` ([Which selector parameters a client is asked for](#selector-requiredness)). | Refused with `ImproperlyConfigured`, as is an empty or whitespace-only string: it is the result's whole message. |
+
+`AgentConventions()` is the default, and a server given none uses it. Change one
+field and the others keep the package's wording, so a later correction to a
+sentence you did not override still reaches you.
+
+The server still decides **whether** a sentence appears: a tool with no handle
+gets no handle line, and an unpaginated tool gets no scope sentence, whatever the
+conventions say. A field changes **what it says**. The wording reaches every
+route a server answers on: both transports in both eras, `call_tool`,
+`acall_tool`, `list_tools`, and a task's worker.
+
+Every field is a `str.format` template, rendered wherever it lands whether or
+not it has a placeholder, so a literal brace is written twice, `{{` or `}}`, in
+every field alike: `handle_line="Ids look like {{this}}."` reaches the model as
+`Ids look like {this}.`. Only `missing_arguments` has a placeholder, `{names}`,
+filled with the missing names sorted, each in backticks, joined with `", "`;
+the default reads ``Missing required argument(s): `pk`.``. A field the server
+could not render raises `ImproperlyConfigured` naming it when the conventions
+are built, rather than inside the first call that reaches it: a placeholder
+the field does not accept, a single brace, a format spec or conversion its
+value cannot take (`{names:q}`, `{names!z}`), or a value that is neither a
+string nor `None`. This is the rule the Pydantic-AI toolset applies to its own
+`AgentConventions`, so a template one transport accepts reads the same on the
+other.
+
+Two of these sentences state facts: that a selection applies to each item and
+never to the envelope, and that the envelope's keys are `items`, `page`,
+`totalPages` and `hasNext`. Wording you supply owns keeping those facts true.
+
+The default handle description and missing-argument message are word for word
+the ones the Pydantic-AI toolset in `djangorestframework-pydantic-ai` writes for
+the same specs, and the handle line gives the same advice as its instructions,
+so a spec served both ways tells the model the same thing on both routes until
+one side overrides it.
 
 ## Tools vs resources
 
@@ -2078,6 +2149,10 @@ The MCP package owns its own dispatch flow. It does **not** import
    "detail": ...}}` payload in `content[0]` (and no `structuredContent`,
    which is tied to the success schema). A serializer's refusal carries the
    message `"Invalid arguments"` and its field-keyed errors under `detail`.
+   A missing argument refused before the serializer ran (step 3) carries
+   ``"Missing required argument(s): `pk`."`` instead, the server's
+   [`conventions.missing_arguments`](#agent-conventions), over the same keyed
+   `detail`.
    The MCP spec files input validation under tool execution errors in every
    protocol version this server serves, and keeps JSON-RPC `-32602` for an
    unknown tool and a request that fails the `CallToolRequest` schema (a

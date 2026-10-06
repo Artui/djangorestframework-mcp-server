@@ -14,6 +14,7 @@ from rest_framework_mcp.protocol.types.implementation import Implementation
 from rest_framework_mcp.registry.prompt_registry import PromptRegistry
 from rest_framework_mcp.registry.resource_registry import ResourceRegistry
 from rest_framework_mcp.registry.tool_registry import ToolRegistry
+from rest_framework_mcp.schema.types.agent_conventions import AgentConventions
 from rest_framework_mcp.subscriptions.types.subscription_broker import SubscriptionBroker
 from rest_framework_mcp.tasks.types.task_executor import TaskExecutor
 from rest_framework_mcp.tasks.types.task_store import TaskStore
@@ -115,6 +116,15 @@ class MCPCallContext:
     availability check ``tools/list`` runs -- so a condition is asked with the
     same seeds the call that enforces it resolves. drf-services' own default, so
     a context built without a server behaves exactly as before."""
+
+    conventions: AgentConventions = field(default_factory=AgentConventions)
+    """The owning server's ``conventions=``: the sentences it writes for a model.
+
+    Read where each one is written -- ``tools/list`` for the handle wording and
+    a paged tool's scope sentence, the argument-validation and render-time
+    ``isError`` results for the rest -- so two servers in one project can say
+    different things. The defaults for a context built without a server, which
+    is exactly what a server given no ``conventions=`` says."""
 
 
 __all__ = ["MCPCallContext"]

@@ -230,7 +230,9 @@ async def _dispatch_tool_call_async(
             return JsonRpcError(JsonRpcErrorCode.FORBIDDEN, "Insufficient permission")
         except (drf_serializers.ValidationError, ServiceValidationError) as exc:
             # Refused input is an ``isError`` result; see the sync sibling.
-            return validation_error_result(exc, arguments_raw, config=context.config).to_dict()
+            return validation_error_result(
+                exc, arguments_raw, config=context.config, conventions=context.conventions
+            ).to_dict()
         except AdditionalInputRequired as exc:
             # Must precede the ``ServiceError`` arm — see the sync sibling.
             return ask_for_input(exc, prior, context)
@@ -256,6 +258,7 @@ async def _dispatch_tool_call_async(
                 arguments=arguments_raw,
                 paginated=False,
                 config=context.config,
+                conventions=context.conventions,
             ).to_dict()
         output_format: OutputFormat = OutputFormat.coerce(
             params.get("outputFormat") or binding.output_format

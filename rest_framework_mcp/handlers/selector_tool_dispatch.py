@@ -112,7 +112,9 @@ def dispatch_selector_tool(
         # DRF's error arrives here from queryset shaping: a value the spec's
         # ``FilterSet`` refuses (an ``ordering`` outside its choices, say),
         # which escaped every arm and was served as an HTTP 500 / ``-32603``.
-        return validation_error_result(exc, arguments_raw, config=context.config).to_dict()
+        return validation_error_result(
+            exc, arguments_raw, config=context.config, conventions=context.conventions
+        ).to_dict()
     except ServiceError as exc:
         if context.config.record_service_exceptions:
             otel_span.record_exception(exc)
@@ -137,6 +139,7 @@ def dispatch_selector_tool(
             arguments=arguments_raw,
             paginated=binding.paginate,
             config=context.config,
+            conventions=context.conventions,
         ).to_dict()
 
 
@@ -190,7 +193,9 @@ async def dispatch_selector_tool_async(
         return JsonRpcError(JsonRpcErrorCode.FORBIDDEN, "Insufficient permission")
     except (drf_serializers.ValidationError, ServiceValidationError) as exc:
         # See the sync sibling for the protocol-vs-tool error boundary.
-        return validation_error_result(exc, arguments_raw, config=context.config).to_dict()
+        return validation_error_result(
+            exc, arguments_raw, config=context.config, conventions=context.conventions
+        ).to_dict()
     except ServiceError as exc:
         if context.config.record_service_exceptions:
             otel_span.record_exception(exc)
@@ -209,6 +214,7 @@ async def dispatch_selector_tool_async(
             arguments=arguments_raw,
             paginated=binding.paginate,
             config=context.config,
+            conventions=context.conventions,
         ).to_dict()
 
 
@@ -284,7 +290,9 @@ def _build_request_and_validate(
             drf_request,
             None,
             None,
-            validation_error_result(exc, arguments_raw, config=context.config).to_dict(),
+            validation_error_result(
+                exc, arguments_raw, config=context.config, conventions=context.conventions
+            ).to_dict(),
         )
     view = OfflineServiceView(request=drf_request, action=binding.name, kwargs=url_kwarg_values)
     try:
@@ -302,7 +310,9 @@ def _build_request_and_validate(
             drf_request,
             view,
             None,
-            validation_error_result(exc, arguments_raw, config=context.config).to_dict(),
+            validation_error_result(
+                exc, arguments_raw, config=context.config, conventions=context.conventions
+            ).to_dict(),
         )
     return drf_request, view, validated, None
 

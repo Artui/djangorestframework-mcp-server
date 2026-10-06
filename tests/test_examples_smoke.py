@@ -205,7 +205,7 @@ def test_invoicing_demonstrates_lookup_empty_result_idempotency_and_seeds() -> N
     ``invoices.set_amount`` advertises its target lookup, requires it because
     the lookup has no default, refuses a call without it, lists
     ``idempotentHint``, and keeps a strict ``outputSchema`` because it has no
-    output re-read; ``invoices.find`` answers a miss with ``{}`` under a
+    output re-read, its refusal worded by the server's ``conventions=``; ``invoices.find`` answers a miss with ``{}`` under a
     schema that admits it; ``invoices.outstanding`` reads the mount's
     ``currency`` seed, does not advertise it, and a client ``currency`` does
     not replace it; and ``invoices.create`` answers refused arguments with a
@@ -228,16 +228,26 @@ def test_invoicing_demonstrates_lookup_empty_result_idempotency_and_seeds() -> N
     assert set_amount["annotations"]["idempotentHint"] is True
     assert replies["set_amount"]["structuredContent"]["amount_cents"] == 250
     # The lookup's ``number`` has no default, so a call leaving it out is
-    # refused the way the serializer refuses a missing field, before the lookup
-    # would have raised ``TypeError``.
+    # refused before the lookup would have raised ``TypeError``: named in the
+    # message, and keyed in the detail the way a serializer keys a missing field.
+    # The message is the example's ``conventions=``, served over the wire.
     no_number = replies["no_number"]
     assert no_number["isError"] is True
     assert json.loads(no_number["content"][0]["text"])["error"] == {
         "type": "validation_error",
-        "message": "Invalid arguments",
+        "message": (
+            "Missing required argument(s): `number`. "
+            "Look the invoice up with `invoices.list` if you do not have it."
+        ),
         "detail": {"number": ["This field is required."]},
     }
     assert tools["invoices.find"]["inputSchema"]["required"] == ["number"]
+    # A convention the example does not override keeps the package's words.
+    assert tools["invoices.list"]["inputSchema"]["properties"]["fields"]["description"] == (
+        "Comma-separated invoice fields to return, e.g. id,number. On a paged result it "
+        "applies to each item in `items`, never to the page envelope (`items`, `page`, "
+        "`totalPages`, `hasNext`)."
+    )
 
     find_schema = tools["invoices.find"]["outputSchema"]
     assert {"maxProperties": 0} in find_schema["anyOf"]

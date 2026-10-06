@@ -1,8 +1,15 @@
-"""Agent-facing wording for a tool's handles — the description and the line.
+"""The default agent-facing wording, and the helper that appends the handle line.
 
-Both are prompts, so both live in the transport that knows a model is reading.
-drf-services supplies the markings and no wording at all: what a reader should
-*do* with an identifier depends on the reader.
+Every sentence here is a prompt, so it lives in the transport that knows a model
+is reading. drf-services supplies the markings and no wording at all: what a
+reader should *do* with an identifier depends on the reader.
+
+These are the defaults
+[`AgentConventions`][rest_framework_mcp.schema.types.agent_conventions.AgentConventions]
+carries, and what a server says unless it was given other wording with
+``MCPServer(conventions=...)``. The functions that write each sentence take it
+as text, defaulting to the constant, so a caller outside a server gets exactly
+what a server with default conventions serves.
 """
 
 from __future__ import annotations
@@ -11,13 +18,19 @@ from rest_framework_services.types.audience_projection import AudienceProjection
 from rest_framework_services.types.field_audience import FieldAudience
 
 HANDLE_DESCRIPTION = (
-    "Opaque identifier. Pass it to other tools that ask for one; do not read it out."
+    "An opaque identifier. Pass it to other tools that ask for one; refer to the record "
+    "by its name in anything you say, never by this value."
 )
 """Fallback ``outputSchema`` wording for a handle that declares none of its own.
 
-Per field, beside the field it describes, which is where a model reads it. The
-sentence below is the one that has nowhere else to go and rides the tool
-description instead."""
+Per field, beside the field it describes, which is where a model reads it.
+``HANDLE_LINE`` is the sentence that has nowhere else to go and rides the tool
+description instead.
+
+The Pydantic-AI toolset's sentence, word for word, so a spec served by both
+transports describes its handles one way. It tells the model what to do instead
+of reading the value out (name the record), where an instruction that only
+forbids leaves it to guess."""
 
 PAGED_QUERY_PARAM_SCOPE = (
     "On a paged result it applies to each item in `items`, never to the page "
@@ -41,13 +54,31 @@ sees. Written here rather than supplied by drf-services for the reason the modul
 docstring gives: it is a prompt, and the wording belongs to the transport that
 knows a model is reading."""
 
-_HANDLE_LINE = (
+HANDLE_LINE = (
     "Fields described as opaque identifiers are for other tool calls, not for the "
-    "reader: pass them on where a tool asks for one, and never read them out."
+    "reader: pass them to other tools that ask for one; refer to records by their "
+    "name in anything you say, never by the identifier."
 )
+"""The line a tool's description gains when its output carries a handle.
+
+Framed for a reader of one tool's description ("fields described as opaque
+identifiers"), and carrying the advice the Pydantic-AI toolset's instructions
+give, so both transports tell a model the same thing about the same field."""
+
+MISSING_ARGUMENTS = "Missing required argument(s): {names}."
+"""The message of a call refused for leaving out arguments its selectors need.
+
+``{names}`` is the missing names, sorted, each in backticks, joined with
+``", "``: the Pydantic-AI toolset's sentence for the same omission, so one call
+reads the same on both transports."""
 
 
-def append_agent_conventions(description: str | None, projection: AudienceProjection) -> str | None:
+def append_agent_conventions(
+    description: str | None,
+    projection: AudienceProjection,
+    *,
+    handle_line: str | None = HANDLE_LINE,
+) -> str | None:
     """Add the handle convention to a tool's description, when it has handles.
 
     Conditional on something being able to act on it. A tool whose output
@@ -58,7 +89,16 @@ def append_agent_conventions(description: str | None, projection: AudienceProjec
     The per-field wording lives in ``outputSchema``, where a model reads it
     beside the field it describes; this is the one sentence that has nowhere
     else to go.
+
+    ``handle_line`` is the server's ``AgentConventions.handle_line``, already
+    rendered, so it is written as given. ``None``
+    drops the line and the ``Identify records by`` prefix with it, which is
+    framing for that line and says nothing on its own. Whether the line appears
+    is still decided here, so a consumer changes the text and never the
+    condition.
     """
+    if handle_line is None:
+        return description
     handles = [
         name
         for name, marking in projection.fields.items()
@@ -66,7 +106,7 @@ def append_agent_conventions(description: str | None, projection: AudienceProjec
     ]
     if not handles:
         return description
-    line = _HANDLE_LINE
+    line = handle_line
     if projection.label:
         line = f"Identify records by `{projection.label}`. {line}"
     return f"{description}\n\n{line}" if description else line

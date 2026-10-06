@@ -134,6 +134,28 @@ def test_the_sentence_stands_alone_when_nothing_was_declared() -> None:
     assert schema["properties"]["fields"]["description"] == PAGED_QUERY_PARAM_SCOPE
 
 
+def test_the_scope_sentence_is_the_one_passed() -> None:
+    """A server's ``AgentConventions.query_param_on_pages`` arrives here as text."""
+    binding = _list_binding(paginate=True, query_params=(_QUERY, QueryParam("fields")))
+
+    schema = build_selector_tool_input_schema(binding, query_param_on_pages="Per row.")
+
+    assert schema["properties"]["query"]["description"] == (
+        "django-restql fieldset, e.g. {id, name}. Per row."
+    )
+    assert schema["properties"]["fields"]["description"] == "Per row."
+
+
+def test_none_advertises_a_paged_tools_param_as_declared() -> None:
+    binding = _list_binding(paginate=True, query_params=(_QUERY, QueryParam("fields")))
+
+    schema = build_selector_tool_input_schema(binding, query_param_on_pages=None)
+
+    assert schema["properties"]["query"] == _QUERY.json_schema()
+    assert schema["properties"]["fields"] == QueryParam("fields").json_schema()
+    assert "description" not in schema["properties"]["fields"]
+
+
 def test_an_unpaginated_list_advertises_the_param_as_declared() -> None:
     schema = build_selector_tool_input_schema(_list_binding(query_params=(_QUERY,)))
 
