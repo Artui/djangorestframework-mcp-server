@@ -1275,6 +1275,17 @@
 </li>
         
           <li class="md-nav__item">
+  <a href="#rest_framework_mcp.server.mcp_server.MCPServer.conventions" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        conventions
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
   <a href="#rest_framework_mcp.server.mcp_server.MCPServer.urls" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -1521,6 +1532,67 @@
     <span class="md-ellipsis">
       
         notify
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#rest_framework_mcp.schema.types.agent_conventions.AgentConventions" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        AgentConventions
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="AgentConventions">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#rest_framework_mcp.schema.types.agent_conventions.AgentConventions.handle_field_description" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        handle_field_description
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#rest_framework_mcp.schema.types.agent_conventions.AgentConventions.handle_line" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        handle_line
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#rest_framework_mcp.schema.types.agent_conventions.AgentConventions.query_param_on_pages" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        query_param_on_pages
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#rest_framework_mcp.schema.types.agent_conventions.AgentConventions.missing_arguments" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        missing_arguments
       
     </span>
   </a>
@@ -1777,6 +1849,17 @@
 </li>
         
           <li class="md-nav__item">
+  <a href="#rest_framework_mcp.server.mcp_server.MCPServer.conventions" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        conventions
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
   <a href="#rest_framework_mcp.server.mcp_server.MCPServer.urls" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -2034,6 +2117,67 @@
   
 </li>
       
+        <li class="md-nav__item">
+  <a href="#rest_framework_mcp.schema.types.agent_conventions.AgentConventions" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        AgentConventions
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="AgentConventions">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#rest_framework_mcp.schema.types.agent_conventions.AgentConventions.handle_field_description" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        handle_field_description
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#rest_framework_mcp.schema.types.agent_conventions.AgentConventions.handle_line" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        handle_line
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#rest_framework_mcp.schema.types.agent_conventions.AgentConventions.query_param_on_pages" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        query_param_on_pages
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#rest_framework_mcp.schema.types.agent_conventions.AgentConventions.missing_arguments" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        missing_arguments
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
     </ul>
   
 </nav>
@@ -2119,6 +2263,22 @@ resource reads), every operation condition it asks is asked with them,
 <code>tools/list</code> availability included, and a registered name is reserved: a
 client argument cannot occupy it, and a <code>UrlKwarg</code>, <code>QueryParam</code> or
 URI-template variable naming it is refused at registration.</p>
+<p>What the server tells a model in its own words -- the handle description and
+line, a paged tool's scope sentence, the missing-argument message -- is
+<code>conventions=</code>, an
+<a class="autorefs autorefs-internal" title="AgentConventions
+
+
+  
+      dataclass
+  " href="#rest_framework_mcp.schema.types.agent_conventions.AgentConventions"><code>AgentConventions</code></a>.
+Change one sentence and keep the rest:</p>
+<div class="language-text highlight"><pre><span></span><code>server = MCPServer(
+    conventions=AgentConventions(handle_line=&quot;Pass ids to other tools; never show them.&quot;),
+)
+</code></pre></div>
+<p>The server still decides where each sentence appears; the conventions
+decide what it says, on every route the seeds above reach.</p>
 
 
 
@@ -2181,6 +2341,30 @@ URI-template variable naming it is refused at registration.</p>
     <div class="doc doc-contents ">
 
         <p>The <code>pool_seeds=</code> every dispatch and condition on this server receives.</p>
+
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-attribute">
+
+
+
+<h3 id="rest_framework_mcp.server.mcp_server.MCPServer.conventions" class="doc doc-heading">
+            <span class="doc doc-object-name doc-attribute-name">conventions</span>
+
+
+  <span class="doc doc-labels">
+      <small class="doc doc-label doc-label-property"><code>property</code></small>
+  </span>
+
+<a href="#rest_framework_mcp.server.mcp_server.MCPServer.conventions" class="headerlink" title="Permanent link">&para;</a></h3>
+<div class="language-python doc-signature highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="n">conventions</span><span class="p">:</span> <span class="n">AgentConventions</span>
+</span></code></pre></div>
+
+    <div class="doc doc-contents ">
+
+        <p>The <code>conventions=</code> every listing and refusal on this server is worded with.</p>
 
     </div>
 
@@ -3351,6 +3535,221 @@ across workers; the in-process broker only sees its own.</p>
     </div>
 
 </div>
+
+
+
+  </div>
+
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-class">
+
+
+
+<h2 id="rest_framework_mcp.schema.types.agent_conventions.AgentConventions" class="doc doc-heading">
+            <span class="doc doc-object-name doc-class-name">AgentConventions</span>
+
+
+  <span class="doc doc-labels">
+      <small class="doc doc-label doc-label-dataclass"><code>dataclass</code></small>
+  </span>
+
+<a href="#rest_framework_mcp.schema.types.agent_conventions.AgentConventions" class="headerlink" title="Permanent link">&para;</a></h2>
+
+
+    <div class="doc doc-contents first">
+
+
+
+        <p>The sentences this server writes for a model, one field per sentence.</p>
+<p>Passed as <code>MCPServer(conventions=...)</code>, per server, because two servers in
+one project can be talking to different readers. <code>AgentConventions()</code> is
+the default, and its fields carry the wording a server uses when it is given
+none; change one field and every other sentence stays the package's, so a
+later correction to a line you did not override still reaches you.</p>
+<p>The server still decides <strong>whether</strong> each sentence appears: a tool with no
+handle gets no handle line, a tool that returns no page no scope sentence.
+A field changes <strong>what it says</strong>, never when. <code>None</code> drops a sentence where
+dropping one leaves a well-formed answer.</p>
+<p><strong>Every field is a <code>str.format</code> template</strong>, rendered wherever it lands
+whether or not it has a placeholder, so a literal brace is written twice,
+<code>{{</code> or <code>}}</code>, in every field alike. The placeholders a field accepts are
+the ones listed on it, and only <code>missing_arguments</code> accepts one. Anything
+the server could not render raises <code>ImproperlyConfigured</code> naming the field
+when the conventions are built, so a typo fails when the server is, rather
+than inside the first call that reaches it. This is the Pydantic-AI
+toolset's rule for its <code>AgentConventions</code>, so one template reads the same
+on both transports.</p>
+<p>Some of these sentences state facts about how the server behaves: that a
+selection applies to each item and never to the envelope, that the
+envelope's keys are <code>items</code>, <code>page</code>, <code>totalPages</code> and <code>hasNext</code>.
+Wording you supply owns keeping those facts true.</p>
+
+
+<p><span class="doc-section-title">Raises:</span></p>
+    <table>
+      <thead>
+        <tr>
+          <th>Type</th>
+          <th>Description</th>
+        </tr>
+      </thead>
+      <tbody>
+          <tr class="doc-section-item">
+            <td>
+                  <code><span title="django.core.exceptions.ImproperlyConfigured">ImproperlyConfigured</span></code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>A field uses a placeholder it does not accept, is
+not a valid format string, cannot be rendered with the values it
+will be given (<code>{names:q}</code>), is neither a string nor <code>None</code>, or
+is <code>missing_arguments</code> set to <code>None</code> or to an empty or
+whitespace-only string.</p>
+              </div>
+            </td>
+          </tr>
+      </tbody>
+    </table>
+
+
+
+
+
+
+
+
+
+
+
+<div class="doc doc-children">
+
+
+
+
+
+
+
+<div class="doc doc-object doc-attribute">
+
+
+
+<h3 id="rest_framework_mcp.schema.types.agent_conventions.AgentConventions.handle_field_description" class="doc doc-heading">
+            <span class="doc doc-object-name doc-attribute-name">handle_field_description</span>
+
+
+  <span class="doc doc-labels">
+      <small class="doc doc-label doc-label-class-attribute"><code>class-attribute</code></small>
+      <small class="doc doc-label doc-label-instance-attribute"><code>instance-attribute</code></small>
+  </span>
+
+<a href="#rest_framework_mcp.schema.types.agent_conventions.AgentConventions.handle_field_description" class="headerlink" title="Permanent link">&para;</a></h3>
+<div class="language-python doc-signature highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="n">handle_field_description</span><span class="p">:</span> <span class="nb">str</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="n">HANDLE_DESCRIPTION</span>
+</span></code></pre></div>
+
+    <div class="doc doc-contents ">
+
+        <p>The <code>outputSchema</code> description of a handle field that declares none of
+its own, beside the field in every tool's output schema. <code>None</code> leaves
+such a field undescribed. A <code>FieldMarking.handle("...")</code> keeps its own
+words whatever this says. No placeholders.</p>
+
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-attribute">
+
+
+
+<h3 id="rest_framework_mcp.schema.types.agent_conventions.AgentConventions.handle_line" class="doc doc-heading">
+            <span class="doc doc-object-name doc-attribute-name">handle_line</span>
+
+
+  <span class="doc doc-labels">
+      <small class="doc doc-label doc-label-class-attribute"><code>class-attribute</code></small>
+      <small class="doc doc-label doc-label-instance-attribute"><code>instance-attribute</code></small>
+  </span>
+
+<a href="#rest_framework_mcp.schema.types.agent_conventions.AgentConventions.handle_line" class="headerlink" title="Permanent link">&para;</a></h3>
+<div class="language-python doc-signature highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="n">handle_line</span><span class="p">:</span> <span class="nb">str</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="n">HANDLE_LINE</span>
+</span></code></pre></div>
+
+    <div class="doc doc-contents ">
+
+        <p>The line appended to the description of a tool whose output carries a
+handle, after <code>Identify records by `&lt;label&gt;`.</code> when the output serializer
+declares a label. <code>None</code> drops the line and that prefix with it. No
+placeholders.</p>
+
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-attribute">
+
+
+
+<h3 id="rest_framework_mcp.schema.types.agent_conventions.AgentConventions.query_param_on_pages" class="doc doc-heading">
+            <span class="doc doc-object-name doc-attribute-name">query_param_on_pages</span>
+
+
+  <span class="doc doc-labels">
+      <small class="doc doc-label doc-label-class-attribute"><code>class-attribute</code></small>
+      <small class="doc doc-label doc-label-instance-attribute"><code>instance-attribute</code></small>
+  </span>
+
+<a href="#rest_framework_mcp.schema.types.agent_conventions.AgentConventions.query_param_on_pages" class="headerlink" title="Permanent link">&para;</a></h3>
+<div class="language-python doc-signature highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="n">query_param_on_pages</span><span class="p">:</span> <span class="nb">str</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="n">PAGED_QUERY_PARAM_SCOPE</span>
+</span></code></pre></div>
+
+    <div class="doc doc-contents ">
+
+        <p>What a read-shaping <code>QueryParam</code> applies to on a tool that returns a
+page. Appended to the param's description in the tool's <code>inputSchema</code>, and
+to the <code>isError</code> message when a value it supplied is refused while that
+tool's result is rendered. <code>None</code> drops it from both. No placeholders.</p>
+
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-attribute">
+
+
+
+<h3 id="rest_framework_mcp.schema.types.agent_conventions.AgentConventions.missing_arguments" class="doc doc-heading">
+            <span class="doc doc-object-name doc-attribute-name">missing_arguments</span>
+
+
+  <span class="doc doc-labels">
+      <small class="doc doc-label doc-label-class-attribute"><code>class-attribute</code></small>
+      <small class="doc doc-label doc-label-instance-attribute"><code>instance-attribute</code></small>
+  </span>
+
+<a href="#rest_framework_mcp.schema.types.agent_conventions.AgentConventions.missing_arguments" class="headerlink" title="Permanent link">&para;</a></h3>
+<div class="language-python doc-signature highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="n">missing_arguments</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="n">MISSING_ARGUMENTS</span>
+</span></code></pre></div>
+
+    <div class="doc doc-contents ">
+
+        <p>The message of a <code>validation_error</code> result for a call that left out
+arguments the tool's selectors cannot run without: a selector parameter
+with no default, a service tool's target lookup, a
+<code>UrlKwarg(required=True)</code>. <code>{names}</code> is the missing names, sorted, each
+in backticks, joined with <code>", "</code>; the <code>detail</code> stays keyed by each name.
+An input serializer's own refusal, a missing field included, keeps
+<code>"Invalid arguments"</code>. Never <code>None</code>, empty or only whitespace: it is
+the result's whole message.</p>
+
+    </div>
+
+</div>
+
+
+
 
 
 

@@ -1608,9 +1608,15 @@ a handle is another tool's input, so its value is never re-spelled — and its
 has a handle to explain:</p>
 <blockquote>
 <p>Identify records by <code>number</code>. Fields described as opaque identifiers are for
-other tool calls, not for the reader: pass them on where a tool asks for one,
-and never read them out.</p>
+other tool calls, not for the reader: pass them to other tools that ask for
+one; refer to records by their name in anything you say, never by the
+identifier.</p>
 </blockquote>
+<p>A handle that declares no wording of its own is described as "An opaque
+identifier. Pass it to other tools that ask for one; refer to the record by its
+name in anything you say, never by this value." Both sentences are the server's
+to change, per server, through
+<a href="../../concepts/#agent-conventions"><code>MCPServer(conventions=...)</code></a>.</p>
 <h2 id="why-the-payload-and-not-just-the-description">Why the payload and not just the description<a class="headerlink" href="#why-the-payload-and-not-just-the-description" title="Permanent link">&para;</a></h2>
 <p>Both. The description is read once per listing and the schema sits next to the
 field it describes, so that is where the wording belongs. But a field the model
