@@ -8,7 +8,7 @@ from rest_framework_services.types.progress_reporter import ProgressReporter
 
 from rest_framework_mcp.constants import PROGRESS_TOKEN_META_KEY, JsonRpcErrorCode
 from rest_framework_mcp.handlers.types.context import MCPCallContext
-from rest_framework_mcp.handlers.utils import check_permissions
+from rest_framework_mcp.handlers.utils import judge_tool_permissions
 from rest_framework_mcp.protocol.types.json_rpc_error import JsonRpcError
 from rest_framework_mcp.registry.types.chain_tool_binding import ChainToolBinding
 from rest_framework_mcp.transport.response_stream import build_response_stream
@@ -65,7 +65,8 @@ def preflight_permissions(method: str, params: Any, context: MCPCallContext) -> 
     a denial discovered inside the handler could only ride as an in-stream
     error inside a ``200`` — losing the ``403`` the MCP authorization spec
     makes normative and the ``WWW-Authenticate`` challenge. Safe to run twice:
-    a permission check is a pure predicate over ``(request, token)``.
+    a permission check is a pure predicate over the request, the token and the
+    route the call names, and both checks are shown the same route.
 
     **Permissions only, never rate limits.** Consuming a rate limit is not
     idempotent, so pre-flighting one would charge every streamed request twice,
@@ -82,8 +83,26 @@ def preflight_permissions(method: str, params: Any, context: MCPCallContext) -> 
     binding = _tool_binding(params, context)
     if binding is None:
         return None
-    allowed, required_scopes = check_permissions(
-        binding.permissions, context.http_request, context.token
+    # The call as the handler's own check judges it, through the same helper:
+    # a spec permission scoping by ``view.kwargs["project_pk"]`` refused here
+    # with a ``403`` the call it was about to admit
+    # (``test_the_preflight_sees_the_url_kwargs_the_call_delivers``), and one
+    # reading ``request.data`` raised
+    # (``test_a_streamed_call_is_judged_on_its_arguments``). Not refusing a
+    # missing kwarg, which the handler still names after the permission has
+    # answered
+    # (``test_a_denied_caller_missing_a_url_kwarg_is_refused_by_the_preflight``).
+    # This runs before the handler validates ``arguments``, so one that is not
+    # an object delivers nothing here, as an absent one does there, and the
+    # handler is left to name the fault
+    # (``test_a_call_with_no_arguments_object_is_judged_on_the_route_defaults``).
+    # ``url_kwargs`` is read bare because only a service or a selector binding
+    # gets here: a chain declares none, and ``can_report_progress`` refuses to
+    # stream one, so the transport never pre-flights it
+    # (``test_a_chain_tool_is_not_given_a_stream_it_cannot_use``).
+    arguments: Any = params.get("arguments")
+    allowed, required_scopes = judge_tool_permissions(
+        binding, arguments if isinstance(arguments, dict) else {}, context
     )
     if allowed:
         return None

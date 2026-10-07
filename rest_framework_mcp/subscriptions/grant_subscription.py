@@ -4,7 +4,7 @@ from typing import Any
 
 from rest_framework_mcp.constants import NotificationKind
 from rest_framework_mcp.handlers.types.context import MCPCallContext
-from rest_framework_mcp.handlers.utils import check_permissions
+from rest_framework_mcp.handlers.utils import check_permissions, resource_shape
 from rest_framework_mcp.subscriptions.types.subscription_filter import SubscriptionFilter
 from rest_framework_mcp.subscriptions.utils import (
     topic_for_kind,
@@ -96,8 +96,19 @@ def _may_watch_resource(uri: str, context: MCPCallContext) -> bool:
     resolved: Any = context.resources.resolve(uri)
     if resolved is None:
         return False
-    binding: Any = resolved[0]
-    allowed, _ = check_permissions(binding.permissions, context.http_request, context.token)
+    binding, vars_ = resolved
+    # Judged on the request the read of it is, from the same shape, so a
+    # permission scoping by ``view.kwargs["project_pk"]`` grants a watch on
+    # exactly the URIs it would let this caller read
+    # (``test_a_subscription_is_granted_the_uris_the_read_would_admit``), and
+    # one reading ``view.action`` or the query string grants what the read
+    # admits (``test_a_subscription_reads_the_request_the_read_does``).
+    allowed, _ = check_permissions(
+        binding.permissions,
+        context.http_request,
+        context.token,
+        shape=resource_shape(binding, vars_),
+    )
     return bool(allowed)
 
 

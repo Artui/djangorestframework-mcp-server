@@ -69,9 +69,22 @@ def test_a_service_rendering_its_own_return_keeps_its_schema_strict() -> None:
 
 
 def test_a_service_with_no_output_spec_at_all_cannot_present_nothing() -> None:
-    # Holds the ``nested is not None`` conjunct: without it this raises
-    # ``AttributeError`` on ``None.selector``.
     assert can_present_nothing(_spec()) is False
+
+
+@pytest.mark.parametrize(
+    "output",
+    [
+        pytest.param(None, id="no-output-spec"),
+        pytest.param(_out(kind=SelectorKind.RETRIEVE), id="no-re-read"),
+    ],
+)
+def test_a_service_declaring_allow_none_can_present_nothing(output: Any) -> None:
+    # Its own return is what it presents, and ``allow_none=True`` says that
+    # return may be ``None``. The same spec undeclared is the two tests above.
+    spec = _spec(allow_none=True, output_selector_spec=output)
+
+    assert can_present_nothing(spec) is True
 
 
 @pytest.mark.parametrize(
@@ -94,12 +107,16 @@ def test_a_service_with_no_output_spec_at_all_cannot_present_nothing() -> None:
             ),
             id="service-rereading-a-list",
         ),
+        pytest.param(
+            _spec(allow_none=True, output_selector_spec=_out(kind=SelectorKind.LIST)),
+            id="allow-none-service-presenting-its-return-as-a-list",
+        ),
     ],
 )
 def test_a_list_result_never_presents_nothing(spec: Any) -> None:
-    # Holds the ``LIST`` check: each spec here would answer ``True`` from the
-    # branch below it, an ``allow_none`` selector and a service with a re-read
-    # selector, and a list result is a list, empty at worst.
+    # Each spec here would answer ``True`` were its result one row: an
+    # ``allow_none`` selector, a service with a re-read selector and a service
+    # declaring ``allow_none``. A list result is a list, empty at worst.
     assert can_present_nothing(spec) is False
 
 

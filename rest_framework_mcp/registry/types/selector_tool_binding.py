@@ -71,9 +71,20 @@ class SelectorToolBinding(Generic[ResultT, ExtraT]):
     ``inputSchema``, so one declaration serves the HTTP transport and every
     agent transport alike. Prefer the filter where there is one — it validates
     the value against published choices before it reaches the ORM, while a bare
-    parameter is only as safe as what the selector does with it — and do not
-    name that parameter ``ordering`` / ``page`` / ``limit``, which
-    ``RESERVED_POST_FETCH_KEYS`` strips from the selector's pool.
+    parameter is only as safe as what the selector does with it. On a ``LIST``
+    tool a selector parameter named ``page`` or ``limit`` is refused at
+    registration: ``RESERVED_POST_FETCH_KEYS`` strips both from a ``LIST``
+    selector's arguments on every route, whether or not the tool paginates, so
+    the parameter would never receive the caller's value. A ``RETRIEVE`` tool
+    cannot paginate, so nothing strips either name from its selector, which may
+    declare them, as on the Pydantic-AI route. The exception on a ``LIST`` tool
+    is a name the ``input_serializer`` lays back: a field of that name that is not ``read_only`` and is bound to
+    its own name (no ``source`` elsewhere, no ``source="*"``), on a plain
+    ``Serializer``, a ``DataclassSerializer`` or a bare ``@dataclass`` alike.
+    Dispatch overlays the validated values on the stripped arguments, so the
+    selector receives the caller's value under that name, coerced; ``call_tool``,
+    which runs no ``input_serializer``, keeps the name rather than stripping it,
+    so the selector receives it as sent.
 
     ``annotations`` and ``meta`` are emitted verbatim on this tool's
     ``tools/list`` entry, under ``annotations`` and ``_meta`` respectively.
@@ -150,7 +161,7 @@ class SelectorToolBinding(Generic[ResultT, ExtraT]):
     """How MCP ``arguments`` flow into the kwarg pool. ``SPREAD_AUTHOR_WINS``
     for selector tools, because a selector typically declares its query
     parameters as individual function arguments
-    (``def list_drafts(*, project_id, page=1, limit=10)``)."""
+    (``def list_drafts(*, project_id, status="draft")``)."""
 
     unknown_arguments: UnknownArguments = UnknownArguments.REJECT
     """How unknown ``arguments`` keys are handled relative to the merged
@@ -170,13 +181,22 @@ class SelectorToolBinding(Generic[ResultT, ExtraT]):
     Popped from the caller's arguments like a URL kwarg, but landing in the
     synthetic request's ``GET`` rather than ``view.kwargs`` — the channel a
     serializer reads when it branches on the query string. A ``filter_set``
-    field is **not** one of these."""
+    field is **not** one of these. Nor is a selector parameter: the value is split
+    out of the arguments the selector receives, so registration refuses a
+    selector declaring a parameter of the same name, unless the
+    ``input_serializer`` lays the name back, on the terms the class docstring
+    gives for ``page`` / ``limit``. The wire and ``acall_tool`` then hand the
+    selector the validated value; ``call_tool`` runs no ``input_serializer``, so
+    the name reaches only ``request.query_params`` there."""
 
     url_kwargs: tuple[UrlKwarg, ...] = ()
     """URL-derived values the model supplies as tool args, seeded into the off-HTTP
     view's ``kwargs`` instead of reaching the selector as ordinary params. Advertised in
     the ``inputSchema``, exempt from the unknown-argument check, and stripped from the
-    dispatched params. See
+    dispatched params. Dispatch spreads ``view.kwargs`` into the selector's pool,
+    so one that is ``required`` or declares a default is there on every call that
+    dispatches, and registration counts it as the source of a selector parameter
+    of the same name. See
     [`UrlKwarg`][rest_framework_services.types.url_kwarg.UrlKwarg]."""
 
     spec_kwargs_provides: tuple[str, ...] = ()

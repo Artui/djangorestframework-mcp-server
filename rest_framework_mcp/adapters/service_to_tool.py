@@ -17,8 +17,10 @@ from rest_framework_mcp.adapters.utils import (
     merge_meta,
     merge_tool_annotations,
     validate_input_serializer_against_callable,
+    validate_query_param_inputs,
     validate_query_params,
     validate_serializer_shapes,
+    validate_url_kwarg_inputs,
     validate_url_kwargs,
 )
 from rest_framework_mcp.auth.permissions.wrap_spec_permissions import wrap_spec_permissions
@@ -101,16 +103,15 @@ def service_spec_to_tool(
             spec.output_selector_spec.output_serializer if spec.output_selector_spec else None
         ),
     )
-    # Only the lookup dispatch calls seeds ``instance`` or ``collection``. An
-    # instance lookup beside a collection lookup, or on ``many=True``, is never
-    # called, so a service requiring ``instance`` there is refused here rather
-    # than raising on every call, except in trust mode (no ``input_serializer``,
-    # a spreading binding), where every required name counts as the caller's.
-    # Held by
-    # ``test_an_instance_lookup_beside_a_collection_lookup_seeds_no_instance``,
-    # ``test_an_instance_lookup_on_a_list_payload_seeds_no_instance``,
+    # Only the lookup dispatch calls seeds ``instance`` or ``collection``. Trust
+    # mode (no ``input_serializer``, a spreading binding) is no exception: the
+    # caller supplies the names it sends, and drf-services strips both seeds from
+    # what it sends. Held under every binding by
     # ``test_an_instance_lookup_seeds_no_collection`` and
-    # ``test_a_lookup_without_a_selector_seeds_nothing``.
+    # ``test_a_lookup_without_a_selector_seeds_nothing``. No ``url_kwargs`` are
+    # passed: drf-services spreads them into the target lookup's pool, never
+    # into the service's (``test_a_url_kwarg_is_no_source_for_a_service_parameter``),
+    # and ``validate_url_kwarg_inputs`` refuses a service input a ``UrlKwarg`` takes.
     target = target_lookup(spec)
     resolves: bool = target is not None and target.selector is not None
     validate_input_serializer_against_callable(
@@ -134,7 +135,7 @@ def service_spec_to_tool(
     )
     spec_perms: tuple[Any, ...] = wrap_spec_permissions(spec.permission_classes, label=name)
     effective_perms: tuple[Any, ...] = spec_perms + tuple(permissions)
-    return ToolBinding(
+    binding = ToolBinding(
         name=name,
         field_audiences=field_audiences,
         description=description,
@@ -164,6 +165,15 @@ def service_spec_to_tool(
         max_result_bytes=max_result_bytes,
         dispatch_timeout=dispatch_timeout,
     )
+    # On the built binding, because both checks read the schema the binding
+    # advertises, and before the binding is returned to be registered.
+    validate_query_param_inputs(
+        binding, spec_kwargs_provides=frozenset(spec_kwargs_provides), pool_seeds=pool_seeds
+    )
+    validate_url_kwarg_inputs(
+        binding, spec_kwargs_provides=frozenset(spec_kwargs_provides), pool_seeds=pool_seeds
+    )
+    return binding
 
 
 def _validate_list_payload(
@@ -178,7 +188,7 @@ def _validate_list_payload(
 
     MCP ``arguments`` is always an object, so the list travels under the one
     argument ``spec.many_argument`` names, and every dispatch passes drf-services
-    ``many_as_argument=True`` to read it from there. Three declarations beside it
+    ``many_as_argument=True`` to read it from there. Two declarations beside it
     would fail every call rather than any one of them:
 
     - A ``UrlKwarg`` or ``QueryParam`` of the same name. Both channels pop their
@@ -188,10 +198,6 @@ def _validate_list_payload(
     - A ``SPREAD_*`` argument binding. The service receives the whole list as one
       ``data``, so drf-services raises ``ValueError`` on each dispatch rather than
       at registration.
-    - A ``collection_selector_spec``. The list-payload dispatch never resolves a
-      target, so the selector would be declared and never run. drf-services' own
-      views refuse the pair in ``validate_service_spec`` for the same reason; this
-      transport mounts no view, so the check is made here.
     """
     if not spec.many:
         return
@@ -217,13 +223,6 @@ def _validate_list_payload(
             "apply to a spec declaring many=True, whose service receives the whole "
             "list as one `data` argument, so there is nothing to spread. Leave "
             "argument_binding at its BUNDLE default."
-        )
-    if spec.collection_selector_spec is not None:
-        raise ImproperlyConfigured(
-            f"Service tool {name!r}: the spec declares both many=True and a "
-            "collection_selector_spec. A list payload and a collection target are "
-            "different bulk shapes, and the list-payload dispatch never resolves the "
-            "collection. Declare one of them."
         )
 
 

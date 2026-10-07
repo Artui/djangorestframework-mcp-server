@@ -82,10 +82,11 @@ def handle_tools_list(
     tools: list[dict[str, Any]] = []
     for binding in page:
         # Chain tools advertise their resolved input serializer; selector tools
-        # merge filter / ordering / pagination args in; service tools expose the
-        # input serializer's schema plus their target lookup. Both selector
-        # reflections are given the server's seeds, which fill a parameter of
-        # the same name, so it is never asked of the client.
+        # merge filter / ordering / pagination args in; service tools expose
+        # what drf-services' dispatch declares for them: the input serializer's
+        # schema, or without one a spread service's own parameters, plus their
+        # target lookup. Every reflection is given the server's seeds, which
+        # fill a parameter of the same name, so it is never asked of the client.
         if isinstance(binding, ChainToolBinding):
             input_schema = build_chain_tool_input_schema(binding)
         elif isinstance(binding, SelectorToolBinding):
@@ -97,8 +98,9 @@ def handle_tools_list(
             )
         else:
             input_schema = build_service_tool_input_schema(binding, pool_seeds=context.pool_seeds)
-        # Stamped to match what the runtime actually enforces; every builder
-        # returns a ``"type": "object"`` shape, so this reaches every schema.
+        # Stamped to match what the runtime actually enforces, read from the
+        # policy and the declared set dispatch reads; every builder returns a
+        # ``"type": "object"`` shape, so this reaches every schema.
         input_schema = dict(input_schema)
         input_schema["additionalProperties"] = not advertises_closed_schema(binding)
         if takes_list_payload(binding):

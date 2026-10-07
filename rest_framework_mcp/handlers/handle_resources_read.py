@@ -6,12 +6,12 @@ from rest_framework.exceptions import PermissionDenied
 from rest_framework_services import (
     UNSET,
     base_pool,
-    build_offline_context,
     resolve_callable_kwargs,
     run_selector,
 )
 
 from rest_framework_mcp._compat.tracing import span
+from rest_framework_mcp.auth.permissions.utils import DispatchShape
 from rest_framework_mcp.constants import JsonRpcErrorCode
 from rest_framework_mcp.handlers.guard_resource_object import guard_resource_object
 from rest_framework_mcp.handlers.handle_tools_call import _span_attrs
@@ -22,6 +22,7 @@ from rest_framework_mcp.handlers.utils import (
     resolve_bound,
     resource_cache_hints,
     resource_not_found_code,
+    resource_shape,
 )
 from rest_framework_mcp.output.build_resource_contents import build_resource_contents
 from rest_framework_mcp.output.enforce_result_bytes import enforce_result_bytes
@@ -77,8 +78,16 @@ def handle_resources_read(
         "mcp.resources.read",
         attributes={**_span_attrs(binding.name, context), "mcp.resource.uri": uri},
     ):
+        # The check and the view the read dispatches with are built from one
+        # shape, so they judge one request: the URI's variables in
+        # ``view.kwargs``, which a permission scoping by
+        # ``view.kwargs["project_pk"]`` once saw as ``{}``
+        # (``test_a_resource_permission_sees_the_uri_variables_of_the_read``),
+        # the resource's name in ``view.action`` and an empty query string
+        # (``test_a_resource_permission_reads_one_request_in_both_checks``).
+        shape: DispatchShape = resource_shape(binding, vars_)
         allowed, required_scopes = check_permissions(
-            binding.permissions, context.http_request, context.token
+            binding.permissions, context.http_request, context.token, shape=shape
         )
         if not allowed:
             return JsonRpcError(
@@ -97,19 +106,14 @@ def handle_resources_read(
                 data={"retryAfter": retry_after},
             )
 
-        offline = build_offline_context(
-            context.token.user,
-            None,
-            http_request=context.http_request,
-            action=binding.name,
-            # URI-template variables ride on ``view.kwargs`` so a provider (and
-            # the output serializer's context) reads them without re-parsing
-            # the URI.
-            kwargs=dict(vars_),
-            # Resources close the undeclared channel and take nothing more: a
-            # resource URI *is* a locator, so per-call read-shaping belongs in
-            # its URI template, whose variables already route to ``view.kwargs``.
-            query_params={},
+        # URI-template variables ride on ``view.kwargs`` so a provider (and
+        # the output serializer's context) reads them without re-parsing the
+        # URI. ``auth`` beside ``user``, as on a tool's dispatch view: reading
+        # ``request.auth`` on a view without it reset the caller to
+        # ``AnonymousUser``, so a ``TokenHasScope``-style permission the check
+        # admitted refused every caller at the guard.
+        offline = shape.build(
+            user=context.token.user, auth=context.token.raw, http_request=context.http_request
         )
         drf_request = offline.request
         view = offline.view

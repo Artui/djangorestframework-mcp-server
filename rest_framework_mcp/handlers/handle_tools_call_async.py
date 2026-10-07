@@ -6,7 +6,7 @@ from typing import Any
 from asgiref.sync import sync_to_async
 from rest_framework import serializers as drf_serializers
 from rest_framework.exceptions import PermissionDenied
-from rest_framework_services import adispatch_spec, build_offline_context, enforce_permissions
+from rest_framework_services import adispatch_spec, enforce_permissions
 from rest_framework_services.exceptions.additional_input_required import AdditionalInputRequired
 from rest_framework_services.exceptions.service_error import ServiceError
 from rest_framework_services.exceptions.service_validation_error import ServiceValidationError
@@ -16,28 +16,32 @@ from rest_framework_mcp._compat.tracing import span
 from rest_framework_mcp.constants import JsonRpcErrorCode, OutputFormat
 from rest_framework_mcp.elicitation.types.resolved_input import ResolvedInput
 from rest_framework_mcp.handlers.chain_tool_dispatch import dispatch_chain_tool_async
-from rest_framework_mcp.handlers.handle_tools_call import _render, _span_attrs
+from rest_framework_mcp.handlers.handle_tools_call import _forbidden, _render, _span_attrs
 from rest_framework_mcp.handlers.input_dispatch import (
     ask_for_input,
     refusal_result,
     resolve_prior_input,
 )
 from rest_framework_mcp.handlers.invalidation_dispatch import announce_invalidations_async
-from rest_framework_mcp.handlers.selector_tool_dispatch import dispatch_selector_tool_async
+from rest_framework_mcp.handlers.selector_tool_dispatch import (
+    dispatch_selector_tool_async,
+    enforce_object_permissions,
+)
 from rest_framework_mcp.handlers.task_dispatch import maybe_create_task
 from rest_framework_mcp.handlers.types.context import MCPCallContext
 from rest_framework_mcp.handlers.utils import (
-    check_permissions,
     consume_rate_limits,
+    dispatch_shape,
     effective_rate_limits,
     enforce_result_ceiling,
+    judge_tool_permissions,
     read_shaping_error_result,
     refuse_missing_arguments,
     resolve_bound,
     run_with_deadline,
+    same_arguments,
     service_error_result,
     services_dispatch_policies,
-    split_query_params,
     split_url_kwargs,
     validate_output_format,
     validation_error_result,
@@ -105,7 +109,7 @@ async def handle_tools_call_async(
         return as_task
 
     try:
-        result: dict[str, Any] | JsonRpcError = await run_with_deadline(
+        dispatched, ran_with = await run_with_deadline(
             _dispatch_tool_call_async(binding, params, arguments_raw, context),
             resolve_bound(binding.dispatch_timeout, context.config.dispatch_timeout),
         )
@@ -120,13 +124,14 @@ async def handle_tools_call_async(
             error_type="timeout",
         ).to_dict()
     bounded: dict[str, Any] | JsonRpcError = enforce_result_ceiling(
-        result,
+        dispatched,
         max_result_bytes=resolve_bound(binding.max_result_bytes, context.config.max_result_bytes),
         label=f"Tool {binding.name!r}",
     )
     # See the sync sibling: after the ceiling, so an oversized result does not
-    # announce a change the client cannot read back.
-    await announce_invalidations_async(binding, bounded, arguments_raw, context)
+    # announce a change the client cannot read back, and with the arguments the
+    # tool ran with, a retry's answers merged in.
+    await announce_invalidations_async(binding, bounded, ran_with, context)
     return bounded
 
 
@@ -135,35 +140,60 @@ async def _dispatch_tool_call_async(
     params: dict[str, Any],
     arguments_raw: dict[str, Any],
     context: MCPCallContext,
-) -> dict[str, Any] | JsonRpcError:
-    """Route a resolved binding to its async dispatch path.
+) -> tuple[dict[str, Any] | JsonRpcError, dict[str, Any]]:
+    """Route a resolved binding to its async dispatch path; return the result and its arguments.
 
     Split out of ``handle_tools_call_async`` so one deadline covers the
     whole dispatch — permissions, rate limits, the spec run and rendering — and
-    one size check sees the finished result, whichever path produced it.
+    one size check sees the finished result, whichever path produced it. The
+    arguments returned are the ones the tool ran with, as in the sync sibling.
     """
     with span("mcp.tools.call", attributes=_span_attrs(binding.name, context)) as otel_span:
         # Chain and selector tools have their own dispatch helpers; service
-        # tools fall through to the mutation-shaped path below.
+        # tools fall through to the mutation-shaped path below. See the sync
+        # sibling: neither merges a retry's answers.
         if isinstance(binding, ChainToolBinding):
-            return await dispatch_chain_tool_async(
-                binding, params, arguments_raw, context, otel_span
+            return (
+                await dispatch_chain_tool_async(binding, params, arguments_raw, context, otel_span),
+                arguments_raw,
             )
         if isinstance(binding, SelectorToolBinding):
-            return await dispatch_selector_tool_async(
-                binding, params, arguments_raw, context, otel_span
+            return (
+                await dispatch_selector_tool_async(
+                    binding, params, arguments_raw, context, otel_span
+                ),
+                arguments_raw,
             )
 
+        # See the sync sibling: the spec's permission classes judge the call as
+        # its dispatch view will carry it, from the arguments as sent and
+        # without refusing a missing URL kwarg, which the strict split in
+        # ``_run_service_tool_async`` still does after them.
         allowed, required_scopes = await acall(
-            check_permissions, binding.permissions, context.http_request, context.token
+            judge_tool_permissions, binding, arguments_raw, context
         )
         if not allowed:
-            return JsonRpcError(
-                JsonRpcErrorCode.FORBIDDEN,
-                "Insufficient permission",
-                data={"requiredScopes": required_scopes} if required_scopes else None,
-            )
+            return _forbidden(required_scopes), arguments_raw
 
+        # See the sync sibling: a retry's answers become ordinary arguments
+        # before anything else looks at them, and a declined one is answered
+        # after the rate limit.
+        prior: ResolvedInput = resolve_prior_input(params, binding.name, arguments_raw, context)
+
+        # See the sync sibling: answers that changed the arguments, by
+        # ``same_arguments`` rather than ``==``, are judged again on the
+        # arguments they produced, before the target is looked up. The same
+        # tests hold the condition here, each parametrized over this handler.
+        if not same_arguments(prior.arguments, arguments_raw):
+            allowed, required_scopes = await acall(
+                judge_tool_permissions, binding, prior.arguments, context
+            )
+            if not allowed:
+                return _forbidden(required_scopes), prior.arguments
+        arguments_raw = prior.arguments
+
+        # See the sync sibling: after both checks, so a caller either one
+        # denies is never charged.
         retry_after: int | None = await acall(
             consume_rate_limits,
             effective_rate_limits(binding, context),
@@ -171,113 +201,124 @@ async def _dispatch_tool_call_async(
             context.token,
         )
         if retry_after is not None:
-            return JsonRpcError(
-                JsonRpcErrorCode.RATE_LIMITED,
-                "Rate limit exceeded",
-                data={"retryAfter": retry_after},
+            return (
+                JsonRpcError(
+                    JsonRpcErrorCode.RATE_LIMITED,
+                    "Rate limit exceeded",
+                    data={"retryAfter": retry_after},
+                ),
+                arguments_raw,
             )
 
-        # See the sync sibling: a retry's answers become ordinary arguments
-        # before anything else looks at them.
-        prior: ResolvedInput = resolve_prior_input(params, binding.name, arguments_raw, context)
         if prior.refused_with is not None:
-            return refusal_result(prior.refused_with)
-        arguments_raw = prior.arguments
+            return refusal_result(prior.refused_with), arguments_raw
 
-        # See the sync sibling: URL kwargs route through the view, not the params,
-        # and the split runs inside the ``try`` so a missing ``required=True``
-        # kwarg reaches the ``isError`` mapping instead of escaping.
-        argument_binding, unknown_arguments = services_dispatch_policies(binding)
-        try:
-            spec_params, url_kwarg_values = split_url_kwargs(arguments_raw, binding.url_kwargs)
-            # ``query_params`` is always passed — an empty mapping still
-            # *replaces* whatever query string the client hung off the MCP
-            # endpoint URL.
-            spec_params, query_param_values = split_query_params(spec_params, binding.query_params)
-            # After the permission and rate-limit answers above, so a caller the
-            # listing hides the tool from never learns it exists from this one;
-            # inside the ``try``, so it maps to the same ``isError`` result.
-            refuse_missing_arguments(
-                binding, (*spec_params, *url_kwarg_values), pool_seeds=context.pool_seeds
-            )
-            offline = build_offline_context(
-                context.token.user,
-                spec_params,
-                http_request=context.http_request,
-                action=binding.name,
-                kwargs=url_kwarg_values or None,
-                query_params=query_param_values,
-            )
-            result = await adispatch_spec(
-                binding.spec,
-                user=context.token.user,
-                params=spec_params,
-                request=offline.request,
-                view=offline.view,
-                argument_binding=argument_binding,
-                unknown_arguments=unknown_arguments,
-                on_target_resolved=enforce_permissions,
-                # ``None`` unless the client asked for progress; drf-services
-                # substitutes its no-op, so the service body is unchanged.
-                progress=context.progress,
-                # The server's ``pool_seeds=``; see the sync sibling.
-                pool_seeds=context.pool_seeds,
-                # ``arguments`` is always an object, so a ``many=True`` spec's list
-                # travels under ``spec.many_argument``; a no-op for any other spec.
-                many_as_argument=True,
-            )
-        except PermissionDenied:
-            return JsonRpcError(JsonRpcErrorCode.FORBIDDEN, "Insufficient permission")
-        except (drf_serializers.ValidationError, ServiceValidationError) as exc:
-            # Refused input is an ``isError`` result; see the sync sibling.
-            return validation_error_result(
-                exc, arguments_raw, config=context.config, conventions=context.conventions
-            ).to_dict()
-        except AdditionalInputRequired as exc:
-            # Must precede the ``ServiceError`` arm — see the sync sibling.
-            return ask_for_input(exc, prior, context)
-        except ServiceError as exc:
-            if context.config.record_service_exceptions:
-                otel_span.record_exception(exc)
-            return service_error_result(exc).to_dict()
-
-        if result.kind == "not_found":
-            return build_error_tool_result(
-                f"{binding.name}: no matching instance found", error_type="not_found"
-            ).to_dict()
-
-        # Rendering may evaluate a lazy list queryset → run it off the event loop.
-        # Wrapped as in the sync handler, which says why it sits outside the
-        # dispatch ``try``.
-        try:
-            payload: Any = await acall(_render, binding, result, offline)
-        except (drf_serializers.ValidationError, ServiceValidationError) as exc:
-            return read_shaping_error_result(
-                exc,
-                query_params=binding.query_params,
-                arguments=arguments_raw,
-                paginated=False,
-                config=context.config,
-                conventions=context.conventions,
-            ).to_dict()
-        output_format: OutputFormat = OutputFormat.coerce(
-            params.get("outputFormat") or binding.output_format
+        result = await _run_service_tool_async(
+            binding, params, arguments_raw, prior, context, otel_span
         )
-        _emit_output_schema, emit_structured_content = resolve_structured_output(
-            include_output_schema_override=binding.include_output_schema,
-            include_structured_content_override=binding.include_structured_content,
-            binding_name=binding.name,
-            default_output_schema=context.config.include_output_schema,
-            default_structured_content=context.config.include_structured_content,
+        return result, arguments_raw
+
+
+async def _run_service_tool_async(
+    binding: Any,
+    params: dict[str, Any],
+    arguments_raw: dict[str, Any],
+    prior: ResolvedInput,
+    context: MCPCallContext,
+    otel_span: Any,
+) -> dict[str, Any] | JsonRpcError:
+    """Async sibling of ``handle_tools_call._run_service_tool``."""
+    # See the sync sibling: URL kwargs route through the view, not the params,
+    # and the split runs inside the ``try`` so a missing ``required=True``
+    # kwarg reaches the ``isError`` mapping instead of escaping.
+    argument_binding, unknown_arguments = services_dispatch_policies(binding)
+    try:
+        # See the sync sibling: built from the shape the stand-in was, and not
+        # refusing a missing kwarg until the spec has judged the route.
+        shape = dispatch_shape(binding, arguments_raw)
+        spec_params, url_kwarg_values = shape.data, shape.kwargs
+        offline = shape.build(
+            user=context.token.user, auth=context.token.raw, http_request=context.http_request
         )
-        return build_tool_result(
-            payload,
-            output_format=output_format,
-            include_structured_content=emit_structured_content,
-            content_kind=binding.content_kind,
-            content_mime_type=binding.content_mime_type,
-            binding_name=binding.name,
+        # See the sync sibling: the spec's class-level check, before the lookup
+        # and before a missing argument is named. Off the event loop, as the
+        # target guard is, since a ``has_permission`` may query.
+        await acall(enforce_permissions, binding.spec, offline)
+        split_url_kwargs(arguments_raw, binding.url_kwargs)
+        refuse_missing_arguments(
+            binding, (*spec_params, *url_kwarg_values), pool_seeds=context.pool_seeds
+        )
+        result = await adispatch_spec(
+            binding.spec,
+            user=context.token.user,
+            params=spec_params,
+            request=offline.request,
+            view=offline.view,
+            argument_binding=argument_binding,
+            unknown_arguments=unknown_arguments,
+            # Object-level only; see the sync sibling.
+            on_target_resolved=enforce_object_permissions,
+            # ``None`` unless the client asked for progress; drf-services
+            # substitutes its no-op, so the service body is unchanged.
+            progress=context.progress,
+            # The server's ``pool_seeds=``; see the sync sibling.
+            pool_seeds=context.pool_seeds,
+            # ``arguments`` is always an object, so a ``many=True`` spec's list
+            # travels under ``spec.many_argument``; a no-op for any other spec.
+            many_as_argument=True,
+        )
+    except PermissionDenied:
+        return JsonRpcError(JsonRpcErrorCode.FORBIDDEN, "Insufficient permission")
+    except (drf_serializers.ValidationError, ServiceValidationError) as exc:
+        # Refused input is an ``isError`` result; see the sync sibling.
+        return validation_error_result(
+            exc, arguments_raw, config=context.config, conventions=context.conventions
         ).to_dict()
+    except AdditionalInputRequired as exc:
+        # Must precede the ``ServiceError`` arm — see the sync sibling.
+        return ask_for_input(exc, prior, context)
+    except ServiceError as exc:
+        if context.config.record_service_exceptions:
+            otel_span.record_exception(exc)
+        return service_error_result(exc).to_dict()
+
+    if result.kind == "not_found":
+        return build_error_tool_result(
+            f"{binding.name}: no matching instance found", error_type="not_found"
+        ).to_dict()
+
+    # Rendering may evaluate a lazy list queryset → run it off the event loop.
+    # Wrapped as in the sync handler, which says why it sits outside the
+    # dispatch ``try``.
+    try:
+        payload: Any = await acall(_render, binding, result, offline)
+    except (drf_serializers.ValidationError, ServiceValidationError) as exc:
+        return read_shaping_error_result(
+            exc,
+            query_params=binding.query_params,
+            arguments=arguments_raw,
+            paginated=False,
+            config=context.config,
+            conventions=context.conventions,
+        ).to_dict()
+    output_format: OutputFormat = OutputFormat.coerce(
+        params.get("outputFormat") or binding.output_format
+    )
+    _emit_output_schema, emit_structured_content = resolve_structured_output(
+        include_output_schema_override=binding.include_output_schema,
+        include_structured_content_override=binding.include_structured_content,
+        binding_name=binding.name,
+        default_output_schema=context.config.include_output_schema,
+        default_structured_content=context.config.include_structured_content,
+    )
+    return build_tool_result(
+        payload,
+        output_format=output_format,
+        include_structured_content=emit_structured_content,
+        content_kind=binding.content_kind,
+        content_mime_type=binding.content_mime_type,
+        binding_name=binding.name,
+    ).to_dict()
 
 
 __all__ = ["handle_tools_call_async"]

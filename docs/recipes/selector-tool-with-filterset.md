@@ -168,12 +168,12 @@ declaration serves the HTTP transport and every agent transport.
 
 !!! warning "Do not name that parameter `page` or `limit`"
 
-    Those two names belong to the selector-tool read pipeline and are
-    stripped from the arguments the selector is called with, so that a
+    Those two names belong to a `LIST` selector tool's read pipeline and
+    are stripped from the arguments the selector is called with, so that a
     `**kwargs` selector never receives them. The strip goes by name, so a
-    selector declaring `page` as a parameter of its own gets it advertised
-    in the schema and then dropped at dispatch, with its default running
-    instead — silently.
+    `LIST` selector declaring `page` as a parameter of its own would never
+    receive the caller's value, and registration refuses it. A `RETRIEVE`
+    tool cannot paginate, so its selector may take either name.
 
     **`ordering` is not reserved.** It was, while `ordering_fields`
     existed and the pipeline sorted the queryset itself. Sorting now

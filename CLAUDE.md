@@ -112,6 +112,16 @@ Import these — do not parallel them:
 - `run_selector` / `arun_selector` — selector dispatch with sync/async transparency.
 - `run_service` / `arun_service` — service dispatch with optional `transaction.atomic()`.
 - `is_async`, `is_queryset`, `apply_queryset_shaping` — the remaining dispatch leaves.
+- `spec_to_json_schema`, `provider_keys`, `server_owned_keys`, `declared_input_keys`
+  and `can_present_nothing` — the readers of what a spec admits and presents: the
+  input schema under a given `argument_binding`, which keys a `kwargs=` provider fills
+  and which it may decline, which keys the server owns (`NotClientInput`) so a caller
+  never sends them, whether the input set is closed, and whether the output can be
+  nothing at all. The schema and the registry read these rather than deriving their
+  own answer, because every local copy here drifted from what dispatch does: a
+  provider annotated `list[str | UnsetType]`, one whose types exist only under
+  `TYPE_CHECKING`, and a service declaring `allow_none` each got an answer dispatch
+  did not give.
 - `paginate_output` + `OutputPage.envelope` — the page a `LIST` selector tool serves and
   the `{items, page, totalPages, hasNext}` envelope around it. Only the coercion of the
   untyped `page` / `limit` arguments into ints stays here (`_coerce_int`), because
@@ -135,6 +145,17 @@ Import these — do not parallel them:
 The dispatch leaves are **top-level exports** of `rest_framework_services` (its
 documented "stable dispatch surface", 0.17+) — import them from the package root,
 never from internal `utils` / `_compat` paths.
+
+**Two readers are the exception, because the root does not export them.**
+`declared_input_keys` (in `handlers/utils.py`) and `resolve_unknown_arguments`
+(in `registry/types/tool_binding.py`) are imported from
+`rest_framework_services.dispatch.utils`, the module dispatch itself calls them
+from: the first is the set `REJECT` admits, which decides whether a schema is
+closed, and the second is the check registration asks to refuse a `REJECT` it
+cannot enforce. A local copy of either is the drift this section exists to
+prevent, so the internal import is the lesser cost. Move each to the root
+import when drf-services exports it, and add nothing else to that module's
+list.
 
 Validation, output-serializer rendering, and kwarg-pool construction are **not**
 reproduced locally. The `handlers/` layer delegates to the sister repo's
@@ -163,7 +184,9 @@ The three direct paths are direct for structural reasons, not by neglect:
   binding, and the pool each step receives — `inputs(ctx)` returns the callable's
   kwargs, which is not the flat client `params` mapping `dispatch_spec` takes. What
   `dispatch_spec` would have contributed is therefore run explicitly per step:
-  `enforce_permissions` against the resolved target, a service's `affordances`
+  the class-level half of `permission_classes` through `enforce_permissions`
+  before `inputs(ctx)` and the lookup, the object-level half through
+  `enforce_object_permissions` on the resolved target, a service's `affordances`
   through `enforce_affordances`, and the spec's `preconditions`, in that order. The
   affordances were once the missing one: a service refused as a tool of its own ran
   and succeeded as a chain step. What a chain does **not** reproduce is computing the

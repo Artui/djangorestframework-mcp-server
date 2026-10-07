@@ -28,7 +28,13 @@ from django.test import Client
 from rest_framework import serializers
 from rest_framework.exceptions import PermissionDenied
 from rest_framework.permissions import BasePermission, IsAuthenticated
-from rest_framework_services import DEFAULT_POOL_SEEDS, UNSET, InputRequired, UnsetType
+from rest_framework_services import (
+    DEFAULT_POOL_SEEDS,
+    UNSET,
+    InputRequired,
+    NotClientInput,
+    UnsetType,
+)
 from rest_framework_services.types.pool_seeds import PoolSeeds
 from rest_framework_services.types.selector_kind import SelectorKind
 from rest_framework_services.types.selector_spec import SelectorSpec
@@ -136,10 +142,6 @@ def _rename_all(*, collection: Any, data: dict[str, Any]) -> dict[str, int]:
 
 def _echo(*, data: Any) -> Any:
     return {"count": len(data)}
-
-
-def _bulk(*, data: list[dict[str, Any]]) -> list[dict[str, Any]]:
-    return data
 
 
 def _first_invoice_pk() -> dict[str, Any]:
@@ -750,6 +752,82 @@ async def test_a_null_url_kwarg_is_a_missing_argument(is_async: bool) -> None:
     assert _missing(out) == {"pk": _REQUIRED}
 
 
+def _by_pk_in_tenant(*, pk: int, tenant: str) -> Any:
+    # Names ``tenant`` plainly and with no default, so the lookup alone would
+    # require it of the caller.
+    return Invoice.objects.filter(pk=pk)
+
+
+def _same_tenant(*, tenant: Annotated[str, NotClientInput] = "acme") -> None:
+    # Owns ``tenant`` for the whole call (``server_owned_keys``).
+    return None
+
+
+class _NumberAndTenantInput(_NumberInput):
+    # Optional, so the serializer does not refuse a call leaving it out.
+    tenant = serializers.CharField(required=False)
+
+
+def _owned_tenant_server(input_serializer: type[serializers.Serializer]) -> MCPServer:
+    """A service tool whose lookup requires ``tenant``, which its precondition owns."""
+    server = MCPServer(name="t", auth_backend=AllowAnyBackend(), session_store=None)
+    server.register_service_tool(
+        name="rename",
+        spec=ServiceSpec(
+            service=_rename,
+            atomic=False,
+            input_serializer=input_serializer,
+            instance_selector_spec=SelectorSpec(
+                kind=SelectorKind.RETRIEVE, selector=_by_pk_in_tenant
+            ),
+            preconditions=[_same_tenant],
+            output_selector_spec=_out(),
+        ),
+    )
+    return server
+
+
+def _rename_schema(server: MCPServer) -> dict[str, Any]:
+    listed: Any = server.list_tools(user=None)
+    return next(tool for tool in listed["tools"] if tool["name"] == "rename")["inputSchema"]
+
+
+@pytest.mark.django_db(transaction=True)
+@pytest.mark.parametrize("route", _ROUTES)
+async def test_a_lookup_key_the_server_owns_is_not_asked_of_the_caller(route: str) -> None:
+    # The precondition marks ``tenant`` ``NotClientInput``, so drf-services drops
+    # the caller's value before the lookup reads it, and the tool's schema does
+    # not advertise it. Nothing the server supplies fills it either, which is the
+    # author's gap: no resend could deliver it, so the call is not refused
+    # naming it, and fails as the lookup's own ``TypeError``, as drf-services
+    # answers a server-side gap. It was refused as
+    # "Missing required argument(s): `tenant`.", for a key the caller cannot send.
+    invoice = await Invoice.objects.acreate(number="INV-1")
+    server = _owned_tenant_server(_NumberInput)
+
+    assert "tenant" not in _rename_schema(server)["properties"]
+    with pytest.raises(TypeError, match="tenant"):
+        await _via(server, route, "rename", {"pk": invoice.pk, "number": "INV-2"})
+
+
+@pytest.mark.django_db(transaction=True)
+@pytest.mark.parametrize("route", _ROUTES)
+async def test_an_owned_lookup_key_a_field_declares_is_still_asked_of_the_caller(
+    route: str,
+) -> None:
+    # A field of the owned name is the caller's input, so the schema keeps the
+    # lookup's ``tenant`` required, and the call is refused for it as the
+    # schema says. Holds the subtraction's limit to the names the
+    # ``input_serializer`` does not list.
+    invoice = await Invoice.objects.acreate(number="INV-1")
+    server = _owned_tenant_server(_NumberAndTenantInput)
+
+    assert "tenant" in _rename_schema(server)["required"]
+    out = await _via(server, route, "rename", {"pk": invoice.pk, "number": "INV-2"})
+
+    assert _missing(out) == {"tenant": _REQUIRED}
+
+
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.parametrize("is_async", [False, True])
 async def test_a_value_the_input_serializer_defaults_satisfies_it(is_async: bool) -> None:
@@ -822,28 +900,6 @@ async def test_a_value_the_provider_fills_satisfies_it(provider: Any, is_async: 
 
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.parametrize("is_async", [False, True])
-async def test_a_list_payload_service_reads_no_lookup_so_requires_none(is_async: bool) -> None:
-    # ``many=True`` dispatch resolves no target, so a lookup it declares is
-    # never called and asks nothing of the caller.
-    server = MCPServer(name="t", auth_backend=AllowAnyBackend(), session_store=None)
-    server.register_service_tool(
-        name="bulk",
-        spec=ServiceSpec(
-            service=_bulk,
-            atomic=False,
-            many=True,
-            input_serializer=_NumberInput,
-            instance_selector_spec=SelectorSpec(kind=SelectorKind.RETRIEVE, selector=_by_pk),
-        ),
-    )
-
-    out = await _call(server, "bulk", {"items": [{"number": "A"}]}, is_async=is_async)
-
-    assert out["structuredContent"] == [{"number": "A"}]
-
-
-@pytest.mark.django_db(transaction=True)
-@pytest.mark.parametrize("is_async", [False, True])
 async def test_a_seed_the_client_sends_anyway_is_admitted_and_outranked(is_async: bool) -> None:
     # ``tenant`` is not advertised, because the server fills it, but the
     # unknown-argument check still knows it: a client sending one is not refused
@@ -871,62 +927,6 @@ async def test_a_seed_the_client_sends_anyway_is_admitted_and_outranked(is_async
 
     assert sent["structuredContent"]["number"] == "acme-1"
     assert omitted["structuredContent"]["number"] == "acme-1"
-
-
-@pytest.mark.django_db(transaction=True)
-@pytest.mark.parametrize("route", _ROUTES)
-async def test_beside_a_collection_lookup_the_instance_lookups_parameter_is_not_refused(
-    route: str,
-) -> None:
-    # drf-services resolves the target through the collection lookup when one is
-    # declared and never calls the instance one beside it, so ``pk``, which only
-    # the instance lookup reads, is not the caller's to send.
-    invoice = await Invoice.objects.acreate(number="INV-1")
-
-    out = await _via(
-        _both_lookups_server(), route, "rename_all", {"ids": [invoice.pk], "number": "INV-2"}
-    )
-
-    assert not out.get("isError"), out
-    assert out["structuredContent"] == {"renamed": 1}
-
-
-@pytest.mark.django_db(transaction=True)
-@pytest.mark.parametrize("route", _ROUTES)
-async def test_under_reject_the_instance_lookups_parameter_beside_a_collection_lookup_is_refused(
-    route: str,
-) -> None:
-    # drf-services admits only the keys of the lookup dispatch calls, so ``pk``,
-    # which only the uncalled instance lookup reads, is an unknown argument; the
-    # schema does not offer it either. Refused before the service runs.
-    invoice = await Invoice.objects.acreate(number="INV-1")
-    server = _both_lookups_server(unknown_arguments=UnknownArguments.REJECT)
-    arguments = {"ids": [invoice.pk], "number": "INV-2", "pk": invoice.pk}
-
-    out = await _via(server, route, "rename_all", arguments)
-
-    error = tool_error(out)
-    assert error["type"] == "validation_error"
-    assert error["detail"] == {"non_field_errors": ["Unexpected argument(s): 'pk'."]}
-    await invoice.arefresh_from_db()
-    assert invoice.number == "INV-1"
-
-
-def _both_lookups_server(**registration: Any) -> MCPServer:
-    """``rename_all``, declaring a collection lookup and an instance lookup beside it."""
-    server = MCPServer(name="t", auth_backend=AllowAnyBackend(), session_store=None)
-    server.register_service_tool(
-        name="rename_all",
-        spec=ServiceSpec(
-            service=_rename_all,
-            atomic=False,
-            input_serializer=_NumberInput,
-            instance_selector_spec=SelectorSpec(kind=SelectorKind.RETRIEVE, selector=_by_pk),
-            collection_selector_spec=SelectorSpec(kind=SelectorKind.LIST, selector=_by_ids),
-        ),
-        **registration,
-    )
-    return server
 
 
 def _tenant_server(
@@ -1100,6 +1100,24 @@ async def test_a_key_the_provider_declines_is_the_callers_to_send(route: str) ->
     )
 
     assert out["structuredContent"]["number"] == "beta-1"
+
+
+@pytest.mark.django_db(transaction=True)
+@pytest.mark.parametrize("route", _ROUTES)
+async def test_a_key_the_provider_declines_and_the_caller_leaves_out_is_refused_in_dispatch(
+    route: str,
+) -> None:
+    # This server does not refuse the call, because only the assembled pool can
+    # say whether ``tenant`` arrived. drf-services can, once the provider has
+    # declined: the caller could have sent it, so dispatch refuses the call
+    # before the selector runs, in its own shape, where the selector used to
+    # raise ``TypeError`` and the call failed as a server fault.
+    out = await _via(_tenant_server(_declining_scope), route, "get", {"pk": 1})
+
+    error = tool_error(out)
+    assert error["type"] == "validation_error"
+    assert error["message"] == "Service validation error."
+    assert error["detail"] == {"non_field_errors": ["Missing required argument(s): 'tenant'."]}
 
 
 # ---------- in the server's own words ----------

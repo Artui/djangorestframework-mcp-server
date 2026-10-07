@@ -6,6 +6,7 @@ from typing import Any
 
 import pytest
 from django.core.exceptions import ImproperlyConfigured
+from rest_framework import serializers
 from rest_framework.permissions import IsAuthenticated
 from rest_framework_services.registry.spec_registry import SpecRegistry
 from rest_framework_services.types.selector_kind import SelectorKind
@@ -29,12 +30,19 @@ def _make() -> MCPServer:
     )
 
 
+class _Payload(serializers.Serializer):
+    text = serializers.CharField()
+
+
 def _service_spec(*, guarded: bool = True) -> ServiceSpec:
     def svc(*, data: dict) -> dict:
         return data
 
+    # The serializer is what fills ``data``: without one, registration refuses
+    # a service requiring it, since nothing would.
     return ServiceSpec(
         service=svc,
+        input_serializer=_Payload,
         permission_classes=[IsAuthenticated] if guarded else None,
     )
 

@@ -28,7 +28,7 @@ from rest_framework_mcp.adapters.selector_to_resource import selector_to_resourc
 from rest_framework_mcp.adapters.selector_to_tool import selector_spec_to_tool
 from rest_framework_mcp.adapters.service_to_tool import service_spec_to_tool
 from rest_framework_mcp.adapters.ui_to_resource import ui_view_to_resource
-from rest_framework_mcp.adapters.utils import merge_meta
+from rest_framework_mcp.adapters.utils import merge_meta, validate_selector_parameter_names
 from rest_framework_mcp.auth.backends.django_oauth_toolkit_backend import (
     DjangoOAuthToolkitBackend,
 )
@@ -541,6 +541,15 @@ class MCPServer:
             max_page_size=max_page_size,
             pool_seeds=self._pool_seeds,
         )
+        # A ``QueryParam`` named like an input the tool offers is refused by
+        # the adapter that builds the binding, for both tool kinds
+        # (``validate_query_param_inputs``).
+        validate_selector_parameter_names(
+            label=f"selector tool {binding.name!r}",
+            selector=binding.selector,
+            input_serializer=binding.input_serializer,
+            kind=binding.kind,
+        )
         check_tool_permissions_declared(
             binding.name, binding.permissions, require=self._config.require_tool_permissions
         )
@@ -698,8 +707,12 @@ class MCPServer:
         ``output_all=True``.
 
         Each step's ``spec.permission_classes`` are AND-combined with the
-        chain-level ``permissions`` and evaluated up front — a failing step
-        permission blocks the whole chain before any step runs.
+        chain-level ``permissions`` and judged up front, each step's against a
+        stand-in carrying its alias, so a step permission refusing on the
+        chain's arguments blocks the whole chain before any step runs. Each
+        step judges them again against its own view before its ``inputs`` run
+        and its target is looked up, and only the object-level half on the
+        target it resolves.
 
         Chains deliberately do not run the selector post-fetch pipeline
         (filter / order / paginate); for that, expose the selector as its

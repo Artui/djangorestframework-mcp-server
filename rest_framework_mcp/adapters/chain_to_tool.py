@@ -62,8 +62,13 @@ def chain_steps_to_tool(
 
     Each step's ``spec.permission_classes`` is wrapped via
     ``wrap_spec_permissions`` and AND-combined with the chain-level
-    ``permissions``. They are all evaluated up front, which is what makes a
-    failing step permission block the whole chain without running any step.
+    ``permissions``. They are all judged up front, each step's classes against
+    a stand-in carrying the step's alias and the chain's arguments, so a step
+    permission refusing on those blocks the chain before any step runs. Each
+    step then judges its class-level permissions again against its own view,
+    before its ``inputs`` run and its target is looked up, and only the
+    object-level half on the target it resolves
+    (``handlers/chain_tool_dispatch.py``).
     Structural validation (non-empty, unique aliases, known ``output_alias``,
     spec types) happens in ``ChainToolBinding.__post_init__``.
 

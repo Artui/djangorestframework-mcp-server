@@ -21,6 +21,7 @@ from __future__ import annotations
 from typing import Any
 
 import pytest
+from django.core.exceptions import ImproperlyConfigured
 from rest_framework import serializers
 from rest_framework_services.types.selector_kind import SelectorKind
 from rest_framework_services.types.service_spec import ServiceSpec
@@ -107,15 +108,16 @@ async def test_output_all_renders_a_service_step_s_list_as_a_list() -> None:
 
 
 @pytest.mark.parametrize("shape", ["service_tool", "chain_service_step"])
-async def test_a_list_output_spec_with_no_selector_renders_and_advertises_one_object(
+async def test_a_list_output_spec_with_no_selector_renders_and_advertises_a_list(
     shape: str,
 ) -> None:
-    """The nested ``kind`` alone does not make a list: with no selector there is no
-    re-fetch, and drf-services renders the service's own return value as one object.
-    Holds the selector conjunct in ``rendered_kind``, which a kind-only check would
-    drop without any other test noticing."""
+    """The nested ``kind`` alone makes a list: with no selector there is no re-fetch,
+    and drf-services presents the service's own return as the set the declaration
+    says it is, which a service tool serves and a chain renders ``many``. Both used
+    to read the return as one object, which a service tool can no longer serve:
+    drf-services refuses a ``LIST`` declaration whose service returns a mapping."""
     spec = ServiceSpec(
-        service=lambda **_: dict(_ROW),
+        service=lambda **_: [dict(_ROW)],
         atomic=False,
         output_selector_spec=order_selector_spec(
             SelectorKind.LIST, selector=None, affordances=None
@@ -132,9 +134,47 @@ async def test_a_list_output_spec_with_no_selector_renders_and_advertises_one_ob
     tool: Any = next(entry for entry in listing["tools"] if entry["name"] == "orders")
     result: Any = await server.acall_tool("orders", user=None)
 
-    assert result["structuredContent"] == _ROW
-    assert tool["outputSchema"]["type"] == "object"
+    assert result["structuredContent"] == [_ROW]
+    assert tool["outputSchema"]["type"] == "array"
     assert_tool_result_conforms(tool, result)
+
+
+@pytest.mark.parametrize("shape", ["service_tool", "chain_service_step"])
+@pytest.mark.parametrize(
+    "returned",
+    [
+        pytest.param(dict(_ROW), id="mapping"),
+        pytest.param("A-1", id="str"),
+        pytest.param(b"A-1", id="bytes"),
+        pytest.param(1, id="non-iterable"),
+        pytest.param(None, id="none"),
+    ],
+)
+async def test_a_list_output_spec_with_no_selector_refuses_a_return_that_is_no_set(
+    shape: str, returned: Any
+) -> None:
+    """drf-services refuses the declaration's author rather than presenting a mapping
+    as a list: the service has run, so this is a server fault and not a tool error a
+    caller could act on. A chain step refuses it alike, where it once failed while
+    rendering, with an ``AttributeError`` naming neither the declaration nor the fix."""
+    spec = ServiceSpec(
+        service=lambda **_: returned,
+        atomic=False,
+        output_selector_spec=order_selector_spec(
+            SelectorKind.LIST, selector=None, affordances=None
+        ),
+    )
+    server = fresh_server()
+    if shape == "service_tool":
+        server.register_service_tool(name="orders", spec=spec, permissions=[])
+    else:
+        server.register_chain_tool(
+            name="orders", steps=[ChainStep("out", spec)], atomic=False, permissions=[]
+        )
+
+    with pytest.raises(ImproperlyConfigured, match="kind=LIST with no selector") as caught:
+        await server.acall_tool("orders", user=None)
+    assert f"returned {type(returned).__name__}," in str(caught.value)
 
 
 class _Order(serializers.Serializer):

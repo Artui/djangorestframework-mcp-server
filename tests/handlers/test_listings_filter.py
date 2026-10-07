@@ -14,6 +14,7 @@ from django.http import HttpRequest
 from rest_framework_services.types.selector_kind import SelectorKind
 from rest_framework_services.types.service_spec import ServiceSpec
 
+from rest_framework_mcp import DRFPermissionAdapter, UrlKwarg
 from rest_framework_mcp.auth.types.token_info import TokenInfo
 from rest_framework_mcp.handlers.handle_prompts_list import handle_prompts_list
 from rest_framework_mcp.handlers.handle_resources_list import handle_resources_list
@@ -28,6 +29,7 @@ from rest_framework_mcp.registry.tool_registry import ToolRegistry
 from rest_framework_mcp.registry.types.prompt_binding import PromptBinding
 from rest_framework_mcp.registry.types.resource_binding import ResourceBinding
 from rest_framework_mcp.registry.types.tool_binding import ToolBinding
+from tests.utils import granting_route
 
 
 class _DenyAll:
@@ -113,6 +115,28 @@ def test_tools_list_always_listed_overrides_denial(settings) -> None:
     out = handle_tools_list(None, _ctx(tools=tools))
     assert isinstance(out, dict)
     assert {t["name"] for t in out["tools"]} == {"a", "b"}
+
+
+def test_tools_list_judges_a_route_scoped_permission_on_no_route(settings) -> None:
+    # A listing names no route, so a permission scoping by a URL kwarg is shown
+    # ``{}`` and hides the tool even from a caller it admits on a call naming
+    # project 7, as ``docs/auth.md`` states; ``always_listed`` is the way back.
+    settings.REST_FRAMEWORK_MCP = {"FILTER_LISTINGS_BY_PERMISSIONS": True}
+    seen: list[dict[str, Any]] = []
+    tools = _registry_with(
+        _tool("a"),
+        ToolBinding(
+            name="b",
+            description=None,
+            spec=ServiceSpec(service=_svc, atomic=False),
+            permissions=(DRFPermissionAdapter(granting_route("project_pk", 7, seen)),),
+            url_kwargs=(UrlKwarg("project_pk", type="integer", required=True),),
+        ),
+    )
+    out = handle_tools_list(None, _ctx(tools=tools))
+    assert isinstance(out, dict)
+    assert {t["name"] for t in out["tools"]} == {"a"}
+    assert seen == [{}]
 
 
 def test_tools_list_filter_runs_before_pagination(settings) -> None:

@@ -166,7 +166,9 @@ async def test_async_input_serializer_rejects_invalid() -> None:
 
     server = _server()
 
-    def selector(*, data: Any) -> list[Any]:  # noqa: ARG001
+    # Takes the field: a selector is never handed ``data``, so one requiring it
+    # is refused at registration.
+    def selector(*, flag: bool) -> list[Any]:  # noqa: ARG001
         return []
 
     server.register_selector_tool(

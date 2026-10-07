@@ -82,7 +82,7 @@ dependencies = [
     # They answer a condition against the names drf-services itself enforces it
     # with at the call, which is why the listing asks them rather than restating
     # that rule.
-    # 0.55.0 is the floor, and it is a hard one: ``spec_to_json_schema`` takes
+    # 0.55.0: ``spec_to_json_schema`` takes
     # ``supplied=`` there, the names this server fills for a selector, which is
     # what makes a parameter without a default required in the ``inputSchema``
     # and a call without it a ``validation_error`` rather than a ``TypeError``.
@@ -92,7 +92,14 @@ dependencies = [
     # which is the one lookup a service tool advertises: below it the bind admits
     # the other lookup's keys too, and under ``REJECT`` the closed ``inputSchema``
     # refuses a key the server would accept.
-    "djangorestframework-services>=0.55.0",
+    # 0.56.0 is the floor, and it is a hard one: ``provider_keys``,
+    # ``can_present_nothing`` and ``server_owned_keys`` first exist there, and
+    # the schema readers import them at module level, so below it the server
+    # does not import. It is also where ``spec_to_json_schema(argument_binding=)``
+    # lists a spreading service's own parameters, the set a closed service-tool
+    # ``inputSchema`` advertises, and where a missing argument is refused only
+    # where the caller could have sent it.
+    "djangorestframework-services>=0.56.0",
     "djangorestframework-dataclasses>=1.3.1",
     # ``typing_extensions.Unpack`` is used at runtime by the strict service /
     # selector Protocols (PEP 692) we re-export from the sister package.
@@ -303,7 +310,7 @@ root = ["./rest_framework_mcp"]
 # block under a new dated heading. Run via `uvx bump-my-version` (no
 # permanent dependency added to the project).
 [tool.bumpversion]
-current_version = "0.51.0"
+current_version = "0.52.0"
 allow_dirty = false
 commit = false
 tag = false

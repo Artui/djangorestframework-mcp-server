@@ -7,10 +7,11 @@ from typing import Any
 import pytest
 from django.core.exceptions import ImproperlyConfigured
 from django.http import HttpRequest
+from rest_framework.permissions import BasePermission
 from rest_framework_services.types.selector_kind import SelectorKind
 from rest_framework_services.types.selector_spec import SelectorSpec
 
-from rest_framework_mcp import MCPServer, PromptArgument
+from rest_framework_mcp import DRFPermissionAdapter, MCPServer, PromptArgument
 from rest_framework_mcp.auth.backends.allow_any_backend import AllowAnyBackend
 from rest_framework_mcp.auth.permissions.types.mcp_permission import MCPPermission
 from rest_framework_mcp.auth.types.token_info import TokenInfo
@@ -19,6 +20,7 @@ from rest_framework_mcp.handlers.handle_initialize import handle_initialize
 from rest_framework_mcp.handlers.types.context import MCPCallContext
 from rest_framework_mcp.protocol.types.json_rpc_error import JsonRpcError
 from rest_framework_mcp.transport.in_memory_session_store import InMemorySessionStore
+from tests.utils import granting_route
 
 LANGUAGES = ["python", "pytorch", "pyside", "ruby"]
 
@@ -258,6 +260,68 @@ def test_completion_runs_the_bindings_permissions() -> None:
     )
     assert isinstance(result, JsonRpcError)
     assert result.code == -32006
+
+
+def test_a_prompt_completion_judges_no_arguments_and_no_action() -> None:
+    """Unlike ``prompts/get``, which judges the prompt's arguments under its name.
+
+    A completion names one argument being typed, not a call, so a permission
+    reading ``request.data`` sees ``{}`` and one reading ``view.action`` sees
+    ``None``, even when the request carries the sibling arguments already
+    filled in.
+    """
+    seen: list[tuple[Any, ...]] = []
+
+    class _Recording(BasePermission):
+        def has_permission(self, request: Any, view: Any) -> bool:
+            seen.append((dict(request.data), view.action))
+            return True
+
+    result = _complete(
+        _prompt_server(permissions=[DRFPermissionAdapter(_Recording)]),
+        {
+            "ref": {"type": "ref/prompt", "name": "code_review"},
+            "argument": {"name": "language", "value": "py"},
+            "context": {"arguments": {"framework": "django"}},
+        },
+    )
+
+    assert not isinstance(result, JsonRpcError), result
+    assert seen == [({}, None)]
+
+
+def test_a_route_scoped_templates_completion_is_judged_on_no_route() -> None:
+    """Fails closed: a permission reading a URI variable sees ``{}`` and refuses.
+
+    A completion names a template, not a URI, so there is no route to judge,
+    and ``context.arguments`` is a partial route no read produces; a completer
+    ignoring it would offer one project's caller the ids of every project. So a
+    template whose permission scopes by ``view.kwargs`` completes for nobody,
+    including a caller ``resources/read`` admits, as ``docs/auth.md`` states.
+    """
+    seen: list[dict[str, Any]] = []
+    server = _server()
+    server.register_resource(
+        name="project-invoices",
+        uri_template="projects://{project_pk}/invoices",
+        selector=SelectorSpec(
+            kind=SelectorKind.LIST,
+            selector=lambda **_: [],
+            permission_classes=[granting_route("project_pk", "7", seen)],
+        ),
+        completions={"project_pk": lambda: ["7", "8"]},
+    )
+    result = _complete(
+        server,
+        {
+            "ref": {"type": "ref/resource", "uri": "projects://{project_pk}/invoices"},
+            "argument": {"name": "project_pk", "value": ""},
+            "context": {"arguments": {"project_pk": "7"}},
+        },
+    )
+    assert isinstance(result, JsonRpcError)
+    assert result.code == -32006
+    assert seen == [{}]
 
 
 class _AlwaysLimited:

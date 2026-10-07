@@ -1,8 +1,10 @@
 """Selector-tool dispatch — sync + async paths to the read pipeline.
 
-Both shapes run permission check, rate limit, ``input_serializer`` validation
-and then ``dispatch_spec`` (the selector plus queryset shaping and
-``filter_set``), before diverging on ``binding.kind``:
+Both shapes run the binding's permission check, rate limit, the spec's own
+class-level permission check, ``input_serializer`` validation and then
+``dispatch_spec`` (the selector plus queryset shaping and ``filter_set``, with
+the object-level check on a resolved row), before diverging on
+``binding.kind``:
 
 - ``LIST`` paginates when ``paginate=True`` and renders ``many=True``. The
   effective page ceiling bounds the rows either way: a page clamps to it and
@@ -18,17 +20,18 @@ owned by the tool layer, not the selector: selectors return raw, unscoped data.
 
 from __future__ import annotations
 
+import dataclasses
 from itertools import islice
 from typing import Any
 
+from django.db.models import Model
 from rest_framework import serializers as drf_serializers
 from rest_framework.exceptions import PermissionDenied
 from rest_framework_services import (
     DEFAULT_PAGE_SIZE,
-    OfflineServiceView,
+    OfflineContext,
     adispatch_spec,
     base_serializer_context,
-    build_offline_context,
     dispatch_spec,
     enforce_permissions,
     is_queryset,
@@ -40,6 +43,8 @@ from rest_framework_services.exceptions.service_error import ServiceError
 from rest_framework_services.exceptions.service_validation_error import ServiceValidationError
 from rest_framework_services.types.dispatch_result import DispatchResult
 from rest_framework_services.types.selector_kind import SelectorKind
+from rest_framework_services.types.selector_spec import SelectorSpec
+from rest_framework_services.types.service_spec import ServiceSpec
 
 from rest_framework_mcp._compat.acall import acall
 from rest_framework_mcp.config.types.mcp_config import MCPConfig
@@ -50,9 +55,11 @@ from rest_framework_mcp.constants import (
 )
 from rest_framework_mcp.handlers.types.context import MCPCallContext
 from rest_framework_mcp.handlers.utils import (
-    check_permissions,
+    build_validated_input_serializer,
     consume_rate_limits,
+    dispatch_shape,
     effective_rate_limits,
+    judge_tool_permissions,
     read_shaping_error_result,
     refuse_missing_arguments,
     resolve_bound,
@@ -60,7 +67,6 @@ from rest_framework_mcp.handlers.utils import (
     services_dispatch_policies,
     split_query_params,
     split_url_kwargs,
-    validate_input_against_serializer,
     validation_error_result,
 )
 from rest_framework_mcp.observability import get_logger
@@ -69,6 +75,7 @@ from rest_framework_mcp.output.resolve_structured_output import resolve_structur
 from rest_framework_mcp.output.tool_result import build_tool_result
 from rest_framework_mcp.protocol.types.json_rpc_error import JsonRpcError
 from rest_framework_mcp.registry.types.selector_tool_binding import SelectorToolBinding
+from rest_framework_mcp.schema.utils import laid_back_inputs
 
 logger = get_logger(__name__)
 
@@ -81,11 +88,11 @@ def dispatch_selector_tool(
     otel_span: Any,
 ) -> dict[str, Any] | JsonRpcError:
     """Sync dispatch through the selector-tool pipeline."""
-    early = _check_auth_and_rate_limits(binding, context)
+    early = _check_auth_and_rate_limits(binding, arguments_raw, context)
     if early is not None:
         return early
 
-    drf_request, view, validated, error = _build_request_and_validate(
+    drf_request, view, validated, serializer, error = _build_request_and_validate(
         binding, arguments_raw, context
     )
     if error is not None:
@@ -94,7 +101,9 @@ def dispatch_selector_tool(
     try:
         result = dispatch_spec(
             binding.spec,
-            **_dispatch_kwargs(binding, validated, drf_request, view, arguments_raw, context),
+            **_dispatch_kwargs(
+                binding, validated, serializer, drf_request, view, arguments_raw, context
+            ),
             # A task worker runs the sync path and its reporter writes to the
             # task record, so progress is live here too, not only in the async
             # sibling. ``None`` on an ordinary request.
@@ -170,20 +179,39 @@ async def dispatch_selector_tool_async(
     otel_span: Any,
 ) -> dict[str, Any] | JsonRpcError:
     """Async sibling — bridges sync collaborators via ``acall``."""
-    early = await acall(_check_auth_and_rate_limits, binding, context)
+    early = await acall(_check_auth_and_rate_limits, binding, arguments_raw, context)
     if early is not None:
         return early
 
-    drf_request, view, validated, error = _build_request_and_validate(
-        binding, arguments_raw, context
+    # Off the event loop as a whole: it judges the spec's ``permission_classes``,
+    # and a ``has_permission`` that queries raises ``SynchronousOnlyOperation``
+    # on the loop.
+    drf_request, view, validated, serializer, error = await acall(
+        _build_request_and_validate, binding, arguments_raw, context
     )
     if error is not None:
         return error
 
     try:
+        # Off the event loop, as the serializer's own validation is: building
+        # them calls the default of a field named for a URL kwarg the call
+        # left out, and a default that queries raised
+        # ``SynchronousOnlyOperation`` on the loop
+        # (``test_a_namesake_default_that_queries_fills_the_route_on_every_route``).
+        # The dispatch itself stays on the loop, which ``adispatch_spec`` bridges.
+        dispatch_kwargs: dict[str, Any] = await acall(
+            _dispatch_kwargs,
+            binding,
+            validated,
+            serializer,
+            drf_request,
+            view,
+            arguments_raw,
+            context,
+        )
         result = await adispatch_spec(
             binding.spec,
-            **_dispatch_kwargs(binding, validated, drf_request, view, arguments_raw, context),
+            **dispatch_kwargs,
             # Passed explicitly rather than through ``_dispatch_kwargs``, which
             # is shared between the two siblings.
             progress=context.progress,
@@ -222,11 +250,26 @@ async def dispatch_selector_tool_async(
 
 
 def _check_auth_and_rate_limits(
-    binding: SelectorToolBinding, context: MCPCallContext
+    binding: SelectorToolBinding, arguments_raw: dict[str, Any], context: MCPCallContext
 ) -> JsonRpcError | None:
-    allowed, required_scopes = check_permissions(
-        binding.permissions, context.http_request, context.token
-    )
+    """Answer a call its permissions deny or its rate limits refuse, else ``None``.
+
+    The spec's permission classes judge the call as the dispatch view
+    ``_build_request_and_validate`` builds will carry it, from the same
+    ``dispatch_shape``: a permission reading ``view.kwargs`` was judged against
+    ``{}`` (``test_a_spec_permission_sees_the_url_kwargs_the_call_delivers``),
+    and one reading ``request.data`` raised
+    (``test_the_stand_in_sees_what_the_dispatch_view_sees``). The shape does
+    not refuse a missing URL kwarg: ``_build_request_and_validate`` still
+    answers a missing required kwarg, and after the permission, so a caller it
+    denies is not told which argument it left out
+    (``test_a_permission_denying_the_delivered_route_answers_before_the_missing_argument``).
+    Before the rate limits, so a caller it denies is not charged: each
+    admit-and-deny test in ``test_the_stand_in_sees_what_the_dispatch_view_sees.py``
+    asserts the limiter was charged for the admitted call alone
+    (``test_a_permission_reading_request_data_admits_and_denies_by_the_arguments``).
+    """
+    allowed, required_scopes = judge_tool_permissions(binding, arguments_raw, context)
     if not allowed:
         return JsonRpcError(
             JsonRpcErrorCode.FORBIDDEN,
@@ -249,54 +292,80 @@ def _build_request_and_validate(
     binding: SelectorToolBinding,
     arguments_raw: dict[str, Any],
     context: MCPCallContext,
-) -> tuple[Any, Any, Any, dict[str, Any] | None]:
-    """Build the synthesised request + view, and validate the ``input_serializer``.
+) -> tuple[Any, Any, Any, Any, dict[str, Any] | JsonRpcError | None]:
+    """Build the synthesised request + view, judge the spec, validate the ``input_serializer``.
 
-    Returns ``(drf_request, view, validated, error)``; ``error`` is non-``None``
-    when the call is already answered — a ``validation_error`` tool result, for a
-    serializer rejection, an unexpected argument under ``REJECT`` or a missing
+    Returns ``(drf_request, view, validated, serializer, error)``, ``serializer``
+    being the bound one that validated, whose fields supply the defaults for URL
+    kwargs the call left out (``_url_kwarg_defaults``); ``error`` is non-``None``
+    when the call is already answered — ``FORBIDDEN`` for a caller the spec's
+    ``permission_classes`` deny, else a ``validation_error`` tool result, for
+    a serializer rejection, an unexpected argument under ``REJECT`` or a missing
     required URL kwarg alike.
+
+    The spec's class-level check runs here, against the request and view the
+    selector will run with, before the lookup and before anything names a
+    missing argument. The binding's wrapped copy of those classes has judged a
+    stand-in built from the same shape, and this check is kept beside it: a
+    ``has_permission`` whose answer changes between the two was judged on this
+    request only by the target guard, after the lookup, and a denied caller was
+    answered ``-32006`` for a row that exists and ``not_found`` for one that
+    does not, and told which argument it left out
+    (``test_the_dispatch_view_judges_before_the_lookup_when_the_stand_in_admits``,
+    ``test_a_denied_caller_is_not_told_which_argument_it_left_out``). The guard
+    is ``enforce_object_permissions`` for that reason.
 
     The ``view`` is built **once**, here, and threaded through dispatch and
     rendering: on HTTP a single view instance serves the whole request, so the
     ``view.kwargs`` a spec callable reads must be the ones a context provider
-    sees too.
+    sees too. Built from the URL kwargs as delivered, which are the ones the
+    call runs with whenever it is not refused for a missing one.
 
     Filter (ordering included) / pagination args bypass ``input_serializer``
     validation — they are shape-checked by the FilterSet and by ``int(...)``
     coercion respectively — so their names go in as ``additional_known_keys``.
     The serializer gets DRF's baseline context, as it has over HTTP.
     """
-    # Split first: the value has to be in hand before the request is built, and
-    # unlike the URL-kwarg split this one cannot fail.
-    _qp_params, query_param_values = split_query_params(arguments_raw, binding.query_params)
-    drf_request = build_offline_context(
-        context.token.user,
-        arguments_raw,
-        http_request=context.http_request,
-        # Always passed, empty or not: this *replaces* the wrapped request's
-        # ``GET``, so the MCP endpoint's own query string can never reach a
-        # serializer reading ``request.query_params``.
-        query_params=query_param_values,
-    ).request
+    # From the shape the binding's stand-in was built from, so the two checks
+    # judge one request. DRF's layout: URL kwargs route through ``view.kwargs``
+    # (from where drf-services spreads them, authoritative over params) and
+    # query params through ``request.query_params``, whose mapping *replaces*
+    # the wrapped request's ``GET``, so the MCP endpoint's own query string can
+    # never reach a serializer reading it; neither is in ``request.data``,
+    # which they once were here alone
+    # (``test_request_data_holds_no_route_or_query_value``). Not refusing a
+    # missing URL kwarg, so the spec judges the route first.
+    offline: OfflineContext = dispatch_shape(binding, arguments_raw).build(
+        user=context.token.user, auth=context.token.raw, http_request=context.http_request
+    )
+    drf_request, view = offline.request, offline.view
     try:
-        # URL kwargs route through ``view.kwargs`` (from where drf-services
-        # spreads them, authoritative over params), never as selector params.
-        _spec_params, url_kwarg_values = split_url_kwargs(arguments_raw, binding.url_kwargs)
+        enforce_permissions(binding.spec, offline)
+    except PermissionDenied:
+        return (
+            drf_request,
+            view,
+            None,
+            None,
+            JsonRpcError(JsonRpcErrorCode.FORBIDDEN, "Insufficient permission"),
+        )
+    try:
+        # Only for its refusal: the values are the ones split above.
+        split_url_kwargs(arguments_raw, binding.url_kwargs)
     except drf_serializers.ValidationError as exc:
         # A missing ``required=True`` URL kwarg, refused in the shape a missing
         # selector parameter is.
         return (
             drf_request,
+            view,
             None,
             None,
             validation_error_result(
                 exc, arguments_raw, config=context.config, conventions=context.conventions
             ).to_dict(),
         )
-    view = OfflineServiceView(request=drf_request, action=binding.name, kwargs=url_kwarg_values)
     try:
-        validated = validate_input_against_serializer(
+        validated, serializer = build_validated_input_serializer(
             arguments_raw,
             binding.input_serializer,
             unknown_arguments=binding.unknown_arguments,
@@ -310,11 +379,12 @@ def _build_request_and_validate(
             drf_request,
             view,
             None,
+            None,
             validation_error_result(
                 exc, arguments_raw, config=context.config, conventions=context.conventions
             ).to_dict(),
         )
-    return drf_request, view, validated, None
+    return drf_request, view, validated, serializer, None
 
 
 def _selector_tool_additional_known_keys(binding: SelectorToolBinding) -> frozenset[str]:
@@ -545,6 +615,7 @@ def _render_over_row_ceiling(binding: SelectorToolBinding, max_rows: int) -> dic
 def _dispatch_kwargs(
     binding: SelectorToolBinding,
     validated: Any,
+    serializer: Any,
     drf_request: Any,
     view: Any,
     arguments_raw: dict[str, Any],
@@ -558,18 +629,42 @@ def _dispatch_kwargs(
     # ``_build_request_and_validate`` ran it first.
     spec_params, url_kwarg_values = split_url_kwargs(arguments_raw, binding.url_kwargs)
     spec_params, _query_param_values = split_query_params(spec_params, binding.query_params)
-    params = _selector_dispatch_params(spec_params, validated)
+    # The overlay can put a URL kwarg's name back: a field bound with
+    # ``source="project_pk"`` validates the argument ``project`` into
+    # ``project_pk``, and a ``source="*"`` field, a ``validate`` or the
+    # namesake's own coercion write there too. Every such value is dropped, so
+    # the selector reads the route the permission judged. Left in,
+    # ``SPREAD_CALLER_WINS`` ranked it above a kwarg the call sent, which then
+    # reached the selector other than as sent
+    # (``test_a_url_kwarg_the_call_sent_reaches_the_selector_as_sent``), and
+    # under either spreading binding it stood in for a kwarg the call left out,
+    # on a route judged as naming none
+    # (``test_a_url_kwarg_the_call_left_out_reaches_the_selector_only_as_a_namesake_default``).
+    # A sent kwarg reaches the selector through ``view.kwargs``; a left-out
+    # one, only as the default a field of its name declares.
+    route_names = {url_kwarg.name for url_kwarg in binding.url_kwargs}
+    # ``page`` / ``limit`` are the read pipeline's on a ``LIST`` tool only: a
+    # ``RETRIEVE`` tool cannot paginate, so its selector receives them as sent
+    # (``test_a_retrieve_selector_receives_page_and_limit_on_every_route``).
+    params = {
+        name: value
+        for name, value in _selector_dispatch_params(
+            spec_params, validated, strip_post_fetch_keys=binding.kind is SelectorKind.LIST
+        ).items()
+        if name not in route_names
+    }
+    params.update(_url_kwarg_defaults(serializer, route_names - url_kwarg_values.keys()))
     # Evaluated inside both siblings' dispatch ``try``, after the permission and
     # rate-limit answers and the ``input_serializer``: a missing argument is the
     # same ``validation_error`` result a refused one is. Checked against what
     # reaches the selector -- the params with the validated values laid over
     # them, plus the ``UrlKwarg`` values -- so a null ``UrlKwarg``, which the
     # split drops, counts as missing (``test_a_null_url_kwarg_is_a_missing_argument``).
-    # The overlay agrees with the raw params on every binding registration
-    # admits, since a name the serializer defaults is never required in the
-    # first place (``schema.utils._serializer_fills``, which this route counts
-    # because it runs the serializer, unlike ``call_tool``); it is read anyway so the
-    # check describes the call the selector receives.
+    # A name the input fills when the caller sends nothing, a dataclass
+    # default included, is never required in the first place
+    # (``schema.utils.laid_back_inputs``, which this route counts because it
+    # runs the serializer, unlike ``call_tool``), and the overlay that fills it
+    # is what the check reads: it describes the call the selector receives.
     refuse_missing_arguments(binding, (*params, *url_kwarg_values), pool_seeds=context.pool_seeds)
     return {
         "user": context.token.user,
@@ -586,11 +681,12 @@ def _dispatch_kwargs(
         "unknown_arguments": unknown_arguments,
         # The object-permission hook, as on the service-tool path. Without it a
         # spec whose ownership test lives in ``has_object_permission`` is
-        # enforced over HTTP and not here: the class-level check the binding's
-        # wrapped permissions run says nothing about the *row* a RETRIEVE
-        # resolved. The guard runs class-level only for a LIST, whose target is
-        # a queryset rather than a model.
-        "on_target_resolved": enforce_permissions,
+        # enforced over HTTP and not here: the class-level check says nothing
+        # about the *row* a RETRIEVE resolved. Only the object-level half, since
+        # ``_build_request_and_validate`` already ran the class-level one
+        # against this request and view; nothing for a LIST, whose target is a
+        # queryset rather than a model.
+        "on_target_resolved": enforce_object_permissions,
         # The server's registered seeds: resolved into the selector's pool, and
         # reserved, so a client argument of the same name is stripped from the
         # spread rather than outranking the project's value. A selector has no
@@ -600,30 +696,132 @@ def _dispatch_kwargs(
     }
 
 
+def _url_kwarg_defaults(serializer: Any, left_out: set[str]) -> dict[str, Any]:
+    """The defaults the ``input_serializer`` declares for URL kwargs the call left out.
+
+    Left out as the split counts it, a null included. The route the permission
+    judged names none of them, so the selector gets nothing under those names
+    from the overlay, whatever it holds; the default declared under the name
+    supplies it, which is the author's value rather than the caller's. Those
+    are the names ``schema.utils.laid_back_inputs`` says the input fills when
+    the caller sends nothing, read through it with the bound ``serializer``, so
+    the route the selector reads agrees with what registration counted and the
+    schema did not require, and a selector requiring the name runs rather than
+    raising ``TypeError`` (``[namesake-default]``, ``[default-beside-alias]``
+    and ``[dataclass-default]`` of
+    ``test_a_url_kwarg_the_call_left_out_reaches_the_selector_only_as_a_namesake_default``).
+    A dataclass input's own default counts as well as its serializer's
+    (``test_a_dataclass_inputs_route_is_the_kwarg_sent_or_the_namesake_default``,
+    whose alias case validates the caller's 8 onto the left-out name, which the
+    selector never reads). A default reading the serializer's context reads
+    this call's, since the fields are the bound ones.
+
+    The reader decides which names are filled; each of its conditions is held
+    by a test named on it. A name it does not fill stays out:
+    ``test_a_serializer_field_sourcing_a_url_kwarg_left_out_does_not_fill_the_route``
+    (no field of the name), ``[read-only-default]`` and
+    ``[no-default-then-validate-moves]``, where ``validate`` moved 8 onto it.
+    ``serializer`` is ``None`` for a tool with no ``input_serializer``, which
+    fills nothing.
+    """
+    _overlaid, fills = laid_back_inputs(serializer)
+    return {name: fills[name]() for name in left_out if name in fills}
+
+
 def _selector_dispatch_params(
     arguments_raw: dict[str, Any], validated: Any, *, strip_post_fetch_keys: bool = True
 ) -> dict[str, Any]:
     """Build a params mapping ``dispatch_spec`` receives for a selector.
 
     Called twice, for the two pools ``dispatch_spec`` keeps separate: ``params``
-    (the selector's kwarg spread) with the strip on, ``filter_data`` (the
-    ``FilterSet``'s input) with it off. The strip is about the *callable* —
-    ``ordering`` / ``page`` / ``limit`` belong to the MCP read pipeline, so a
-    selector taking ``**kwargs`` must not receive them, whereas a ``FilterSet``
-    reads only the fields it declares, as it does on HTTP.
+    (the selector's kwarg spread) with the strip on for a ``LIST`` tool,
+    ``filter_data`` (the ``FilterSet``'s input) with it off. The strip is about
+    the *callable*: ``page`` / ``limit`` (``RESERVED_POST_FETCH_KEYS``) belong to
+    the MCP read pipeline's pagination, so a ``LIST`` selector taking
+    ``**kwargs`` must not receive them, whereas a ``FilterSet`` reads only the fields it declares, as it does
+    on HTTP. Ordering is not stripped: an ``OrderingFilter`` on the
+    ``filter_set`` reads it, and a selector may declare a sort parameter of its
+    own.
 
     The validated ``input_serializer`` values overlay the raw args either way, so
     a typed selector arg reaches the callable coerced while filter-set args
     (which bypass the serializer) keep the raw form the ``FilterSet`` wants.
+    Validated values arrive in two shapes, and both are laid back: a plain DRF
+    ``Serializer``'s ``dict``, and the dataclass instance a bare ``@dataclass``
+    or a ``DataclassSerializer`` validates into, whose every field is laid back
+    under its own name. The second was once skipped, so such an input coerced
+    and defaulted for nothing and ``page=3`` reached the selector as its default
+    (``test_a_dataclass_inputs_validated_values_reach_the_selector``).
     """
     core: dict[str, Any] = {
         k: v
         for k, v in arguments_raw.items()
         if not strip_post_fetch_keys or k not in RESERVED_POST_FETCH_KEYS
     }
-    if isinstance(validated, dict):
-        core.update(validated)
+    core.update(_validated_values(validated))
     return core
+
+
+def _validated_values(validated: Any) -> dict[str, Any]:
+    """The values an ``input_serializer`` validated, by name, whatever their shape.
+
+    A ``dict`` as it is; a dataclass instance as its fields, shallowly, so a
+    nested dataclass reaches the selector as the instance it validated into;
+    nothing for ``None``, a tool with no ``input_serializer``.
+    """
+    if isinstance(validated, dict):
+        return validated
+    if dataclasses.is_dataclass(validated):
+        return {
+            field.name: getattr(validated, field.name) for field in dataclasses.fields(validated)
+        }
+    return {}
+
+
+def enforce_object_permissions(
+    spec: ServiceSpec[Any, Any, Any] | SelectorSpec[Any, Any],
+    context: OfflineContext,
+    *,
+    instance: Any = None,
+) -> None:
+    """The target guard for a call whose class-level check has already run.
+
+    A ``TargetGuard`` for ``on_target_resolved``. drf-services' own
+    ``enforce_permissions`` runs every class's ``has_permission`` before its
+    ``has_object_permission``, so as the guard of a call that judged the classes
+    up front it ran ``has_permission`` once more per call
+    (``test_the_class_level_check_is_not_run_again_on_the_resolved_row``). This
+    is its object-level half, re-implemented because drf-services exports no
+    such half: the same classes, instantiated per check; the same rule that
+    only a ``Model`` is judged, so a LIST's queryset, a create's ``None`` and a
+    non-model value pass untouched; and the same ``PermissionDenied`` carrying
+    the class's ``message`` / ``code``. It leaves out ``enforce_permissions``'
+    translation of a missing request, since every caller of this hands it the
+    request the call built.
+
+    Used by the selector tools here, the service-tool handlers and
+    ``call_spec_tool``, each of which runs ``enforce_permissions`` first; it
+    lives in this module rather than ``handlers.utils`` only for ownership of
+    the change that introduced it. The two conditions are one branch arc, so
+    each is held by a test: ``permission_classes=None`` (no permission
+    configured) by ``test_a_spec_with_no_permission_classes_is_guarded_by_nothing``,
+    which raises ``TypeError`` without it, and the ``Model`` test by
+    ``test_a_list_target_is_not_judged_row_by_row``. drf-services' translation of
+    a permission reading a missing request is not mirrored: every route here
+    dispatches with the request it built, so the context always carries one.
+    """
+    if spec.permission_classes is None or not isinstance(instance, Model):
+        return
+    # DRF types ``view`` as ``APIView``; ``OfflineServiceView`` is the structural
+    # stand-in, as drf-services' own check treats it.
+    view: Any = context.view
+    for permission_class in spec.permission_classes:
+        permission = permission_class()
+        if not permission.has_object_permission(context.request, view, instance):
+            raise PermissionDenied(
+                detail=getattr(permission, "message", None),
+                code=getattr(permission, "code", None),
+            )
 
 
 def _coerce_int(value: Any, *, default: int) -> int:
@@ -651,4 +849,8 @@ def _coerce_int(value: Any, *, default: int) -> int:
     return default
 
 
-__all__ = ["dispatch_selector_tool", "dispatch_selector_tool_async"]
+__all__ = [
+    "dispatch_selector_tool",
+    "dispatch_selector_tool_async",
+    "enforce_object_permissions",
+]

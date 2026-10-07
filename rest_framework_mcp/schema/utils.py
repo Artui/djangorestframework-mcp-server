@@ -1,12 +1,13 @@
 from __future__ import annotations
 
-from collections.abc import Iterable
-from typing import Any, get_args, get_origin, get_type_hints
+import dataclasses
+from collections.abc import Callable, Iterable
+from typing import Any
 
 from rest_framework import serializers as drf_serializers
 from rest_framework.fields import empty
 from rest_framework_dataclasses.serializers import DataclassSerializer
-from rest_framework_services import UNSET, UnsetType, spec_to_json_schema
+from rest_framework_services import UNSET, provider_keys, server_owned_keys, spec_to_json_schema
 from rest_framework_services.types.pool_seeds import DEFAULT_POOL_SEEDS, PoolSeeds
 from rest_framework_services.types.selector_spec import SelectorSpec
 from rest_framework_services.types.service_spec import ServiceSpec
@@ -15,6 +16,7 @@ from rest_framework_mcp.constants import ArgumentBinding
 from rest_framework_mcp.registry.types.selector_tool_binding import SelectorToolBinding
 from rest_framework_mcp.registry.types.tool_binding import ToolBinding
 from rest_framework_mcp.registry.types.url_kwarg import UrlKwarg
+from rest_framework_mcp.schema.input_schema import build_input_schema
 
 _SENTENCE_ENDINGS: tuple[str, ...] = (".", "!", "?")
 
@@ -81,8 +83,8 @@ def selector_inputs(
       selector's signature still says whether it must;
       ``test_a_url_kwarg_with_no_default_leaves_the_selector_to_require_it``
       holds that filter.
-    - the keys the spec's ``kwargs=`` provider always fills, as
-      ``_provider_keys`` reads them (not the ones it may decline, below). Held
+    - the keys the spec's ``kwargs=`` provider always fills, as drf-services'
+      ``provider_keys`` reads them (not the ones it may decline, below). Held
       by ``test_a_name_a_typed_provider_returns_is_not_asked_for``.
     - ``provides``: what the caller knows fills a name and the spec cannot say
       -- a selector tool's ``spec_kwargs_provides=`` and the names its
@@ -92,7 +94,7 @@ def selector_inputs(
 
     **A name the provider may fill, without saying it will, is advertised and
     not required for lacking a default**: every name, beside a provider whose
-    keys cannot be read, and a key the provider may decline (``_provider_keys``
+    keys cannot be read, and a key the provider may decline (``provider_keys``
     returns it apart), which drf-services removes from the pool when it comes
     back ``UNSET``, so it does not satisfy the parameter. ``required`` keeps such
     a name only where the reflection requires it without ``supplied`` (an
@@ -141,7 +143,17 @@ def selector_inputs(
     ``required`` less every name a provider may fill, so the call and the
     schema cannot disagree.
     """
-    keys = _provider_keys(spec)
+    # The reader is drf-services', the static half of the ``kwargs=`` contract
+    # whose runtime half dispatch owns, so both spec transports read a provider
+    # the same way: a key holding ``UnsetType`` only inside a container is
+    # filled, one annotation that does not resolve costs only what it names,
+    # and a generic ``TypedDict`` is read with its arguments bound. Each is held
+    # here by a test of the schema a tool advertises:
+    # ``test_a_key_holding_unset_inside_a_container_is_filled``,
+    # ``test_a_parameter_type_imported_only_for_type_checking_leaves_the_keys_readable``,
+    # ``test_a_value_type_that_does_not_resolve_makes_only_its_key_optional`` and
+    # ``test_a_generic_typed_dicts_argument_decides_which_keys_may_be_declined``.
+    keys = provider_keys(spec.kwargs)
     filled, declinable = keys if keys is not None else (frozenset(), frozenset())
     defaulted = frozenset(uk.name for uk in url_kwargs if declares_default(uk.default))
     supplied = pool_seeds.reserved | defaulted
@@ -164,93 +176,18 @@ def selector_inputs(
     return {**schema, "required": kept}, checked
 
 
-def _provider_keys(
-    spec: SelectorSpec[Any, Any],
-) -> tuple[frozenset[str], frozenset[str]] | None:
-    """The names ``spec``'s ``kwargs=`` provider fills and those it may decline, or ``None``.
-
-    drf-services types the provider ``Callable[..., ExtraT]`` and documents
-    ``ExtraT`` as a ``TypedDict`` of the keys it returns, so a provider annotated
-    that way says, before it runs, which names it fills: all of its keys,
-    ``NotRequired`` ones included, since the provider owns them. Anything else
-    (no annotation, a plain ``dict``, a lambda) says nothing, and ``None`` keeps
-    that apart from a spec with no provider, which fills nothing.
-
-    **A provider whose annotations do not resolve counts as untyped**, whichever
-    annotation it is: the return, a parameter's (``get_type_hints`` resolves
-    them all, so one naming a type imported only under ``TYPE_CHECKING`` is
-    enough), or a field of the returned ``TypedDict``, which is read to find the
-    keys that may be declined. Held by
-    ``test_a_provider_whose_annotation_does_not_resolve_is_untyped`` and
-    ``test_a_provider_whose_typed_dict_does_not_resolve_is_untyped``.
-
-    The keys come back as two sets: the ones filled, and the ones whose value
-    admits drf-services' ``UNSET`` (``_admits_unset``), which the provider may
-    decline. A declined key is removed from the pool and does not satisfy the
-    parameter, so ``selector_inputs`` does not count it as filled. The values
-    are read with the standard library's hints, as the Pydantic-AI
-    ``SpecToolset`` reads them, so the two agree on which keys may be declined.
-
-    Duck-typed on the keys a ``TypedDict`` class carries rather than
-    ``is_typeddict``, because the standard library's answers ``False`` for a
-    ``typing_extensions.TypedDict`` on the older Pythons this package supports.
-    A parameterised alias (``Scope[User]``) does not relay them, so they are read
-    off its origin. The optional keys are held by
-    ``test_a_name_a_typed_provider_returns_is_not_asked_for``, the origin by
-    ``test_a_parameterised_typed_dict_is_read_off_its_origin``.
-    """
-    provider = spec.kwargs
-    if provider is None:
-        return frozenset(), frozenset()
-    try:
-        returned: Any = get_type_hints(provider).get("return")
-        declared: Any = get_origin(returned) or returned
-        if getattr(declared, "__required_keys__", None) is None:
-            return None
-        values: dict[str, Any] = get_type_hints(declared)
-    except Exception:
-        # A forward reference that does not resolve, or a callable the hints
-        # cannot be read off: either way the provider declared nothing usable.
-        return None
-    names = frozenset(declared.__required_keys__) | frozenset(declared.__optional_keys__)
-    declinable = frozenset(name for name in names if _admits_unset(values.get(name)))
-    return names - declinable, declinable
-
-
-def _admits_unset(annotation: Any) -> bool:
-    """Whether a ``TypedDict`` value annotated ``annotation`` may be drf-services' ``UNSET``.
-
-    ``UnsetType`` itself, or an annotation naming it among its arguments, at
-    any depth: a union (``str | UnsetType``, ``Union[str, UnsetType]``), and a
-    wrapper the hints leave in place, such as a ``typing_extensions.NotRequired``
-    on a Python whose ``typing`` predates it. The same walk as the Pydantic-AI
-    ``SpecToolset``'s. Held by
-    ``test_a_key_the_provider_may_decline_is_offered_but_not_required``, once
-    per spelling (a union reaches ``UnsetType`` only through the walk, and the
-    ``NotRequired`` one on 3.10 only through two levels of it), and
-    ``test_a_union_that_does_not_admit_unset_is_still_filled``, because having
-    arguments is not enough.
-    """
-    return annotation is UnsetType or any(_admits_unset(arg) for arg in get_args(annotation))
-
-
 def target_lookup(spec: ServiceSpec[Any, Any, Any]) -> SelectorSpec[Any, Any] | None:
     """The selector spec a service resolves its target through, as dispatch calls it.
 
-    The collection lookup when one is declared, else the instance lookup:
-    drf-services' ``_resolve_target`` gives ``collection_selector_spec``
-    precedence and never calls an ``instance_selector_spec`` beside it, so a
-    parameter only the instance lookup reads asks nothing of the caller, and
-    drf-services' ``declared_input_keys`` picks the same lookup, so it is the
-    only one advertised. Held by
-    ``test_beside_a_collection_lookup_only_the_collection_lookup_is_required``
-    and ``test_beside_a_collection_lookup_the_instance_lookups_parameter_is_not_refused``.
-    None for a ``many=True`` service, whose dispatch resolves no target, so a
-    lookup it declares is never called: held by
-    ``test_a_list_payload_service_reads_no_lookup_so_requires_none``.
+    The one target lookup the spec declares, or ``None``. drf-services refuses
+    at construction every spec that would declare a lookup dispatch never
+    calls: an ``instance_selector_spec`` beside a ``collection_selector_spec``,
+    and either beside ``many=True``, whose dispatch resolves no target. So
+    whichever lookup is declared is the one dispatch calls, and the one
+    drf-services' ``declared_input_keys`` admits the keys of, and a ``many=True``
+    spec has none. ``test_a_spec_declaring_a_lookup_dispatch_never_calls_is_refused``
+    holds the construction refusal this reading rests on.
     """
-    if spec.many:
-        return None
     if spec.collection_selector_spec is not None:
         return spec.collection_selector_spec
     return spec.instance_selector_spec
@@ -275,6 +212,16 @@ def required_arguments(
     though the schema, which describes the routes that run it, does not ask for
     it. Held by
     ``test_call_tool_refuses_a_name_only_the_input_serializer_it_skips_would_fill``.
+
+    **A service tool's lookup key the server owns is not required of the
+    caller**, as the service tool's schema does not advertise it: a key the
+    service or one of its preconditions marks ``NotClientInput``
+    (``server_owned_keys``), less the names the ``input_serializer``'s schema
+    lists, which stay the caller's input. drf-services drops the caller's value
+    for such a key before the lookup reads it, so refusing a call for leaving
+    it out named a key no resend could deliver; one nothing on the server
+    fills is the author's gap, which drf-services answers as the lookup's own
+    error. Held by ``test_a_lookup_key_the_server_owns_is_not_asked_of_the_caller``.
     """
     if isinstance(binding, SelectorToolBinding):
         return selector_tool_inputs(
@@ -285,7 +232,12 @@ def required_arguments(
         return ()
     # Read author-wins whatever the binding says: dispatch lays a lookup's
     # provider over the arguments in every mode.
-    return selector_inputs(lookup, url_kwargs=binding.url_kwargs, pool_seeds=pool_seeds)[1]
+    required = selector_inputs(lookup, url_kwargs=binding.url_kwargs, pool_seeds=pool_seeds)[1]
+    # The subtraction ``service_tool_schema`` applies to what it advertises,
+    # read off the same serializer schema, so the two cannot drift apart.
+    fields: dict[str, Any] = build_input_schema(binding.spec.input_serializer).get("properties", {})
+    owned = server_owned_keys(binding.spec) - frozenset(fields)
+    return tuple(name for name in required if name not in owned)
 
 
 def selector_tool_inputs(
@@ -301,12 +253,14 @@ def selector_tool_inputs(
 
     - ``spec_kwargs_provides=``, the opt-in drf-mcp already counts as a
       parameter's source at registration.
-    - the fields of the tool's ``input_serializer`` that fill a value when the
-      client sends none (``_serializer_fills``), because the validated values
-      overlay the selector's params. Without them a selector parameter its
-      serializer defaults would be advertised as required beside a property
-      carrying the default. Left out when ``input_serializer_runs`` is false,
-      for the route that does not run the serializer (``required_arguments``).
+    - the names the tool's ``input_serializer`` fills when the client sends
+      none (``laid_back_inputs``), because the validated values are laid back
+      over the selector's params, a dataclass instance's as well as a
+      ``dict``. Without them a selector parameter its serializer or its
+      dataclass defaults would be advertised as required, though a call
+      leaving it out is served. Left out when ``input_serializer_runs`` is
+      false, for the route that does not run the serializer
+      (``required_arguments``).
 
     The binding's ``argument_binding`` says whether the caller's spread outranks
     the provider (``SPREAD_CALLER_WINS``), which decides whether those names
@@ -314,7 +268,7 @@ def selector_tool_inputs(
     """
     provides = frozenset(binding.spec_kwargs_provides)
     if input_serializer_runs:
-        provides |= _serializer_fills(binding.input_serializer)
+        provides |= frozenset(laid_back_inputs(binding.input_serializer)[1])
     return selector_inputs(
         binding.spec,
         url_kwargs=binding.url_kwargs,
@@ -324,42 +278,119 @@ def selector_tool_inputs(
     )
 
 
-def _serializer_fills(input_serializer: type | None) -> frozenset[str]:
-    """The fields ``input_serializer`` puts in its validated values when the client omits them.
+def laid_back_inputs(
+    input_serializer: type | drf_serializers.Serializer | None,
+) -> tuple[frozenset[str], dict[str, Callable[[], Any]]]:
+    """What a selector tool's ``input_serializer`` lays back over the selector's params.
 
-    A writable field with a ``default`` (a ``HiddenField`` included): DRF puts
-    its default in ``validated_data``, which a selector tool overlays on the
-    selector's params. Each condition is held by a test of its own, because the
-    chain is one branch arc:
+    The one reader of it, so the three places that need it cannot drift:
+    registration's source count for a selector
+    (``adapters.utils._validate_required_params_have_sources``) and its
+    pagination exemption (``validate_selector_parameter_names``), the names a
+    selector tool's schema does not require (``selector_tool_inputs``), and the
+    defaults dispatch supplies for a URL kwarg the call left out
+    (``handlers.selector_tool_dispatch._url_kwarg_defaults``). Their agreement
+    is held by
+    ``test_registration_the_schema_and_dispatch_agree_on_what_an_input_lays_back``,
+    over a bare ``@dataclass``, a ``DataclassSerializer`` and a plain
+    ``Serializer``.
 
-    - a DRF ``Serializer`` class: a bare ``@dataclass`` validates into a
-      dataclass instance, which is not overlaid, so its defaults fill nothing
-      (``test_a_dataclass_inputs_default_does_not_fill_the_parameter``; the
-      ``isinstance`` arm is the ``None`` every serializer-less tool passes);
-    - not a ``DataclassSerializer``, for the same reason, though a field it
-      declares can carry a default
-      (``test_a_dataclass_serializers_default_does_not_fill_the_parameter``);
-    - not ``read_only``: DRF keeps a read-only field's default out of
-      ``validated_data`` (``test_a_read_only_default_does_not_fill_the_parameter``);
-    - a ``default`` (``test_a_name_the_input_serializer_defaults_is_not_required``
-      and ``test_an_optional_field_without_a_default_leaves_the_selector_to_require_it``).
+    Dispatch lays the validated values back in both shapes they arrive in
+    (``handlers.selector_tool_dispatch._validated_values``): a plain
+    ``Serializer``'s ``dict``, and the dataclass instance a bare ``@dataclass``
+    or a ``DataclassSerializer`` validates into, every field under its own
+    name. Read off the serializer's fields as built for the call, a bare
+    dataclass wrapped in a ``DataclassSerializer`` as dispatch wraps it, or off
+    the bound serializer dispatch validated with, whose fields' defaults read
+    that call's context. Two answers:
+
+    - **the names laid back with the caller's value**: a field that is not
+      ``read_only``, since DRF keeps a read-only field out of the validated
+      values and a dataclass field so declared is laid back as its default,
+      and bound to its own name, since ``source="number"`` puts the value
+      under ``number`` and ``source="*"`` merges it. A ``DataclassSerializer``'s
+      generated fields are among them, which its ``_declared_fields`` alone
+      left out.
+    - **the names it fills when the caller sends nothing**, each with what
+      produces the value, which is always the author's default and never
+      anything the caller sent. One of the names above whose field declares a
+      ``default`` (a ``HiddenField`` included), in either shape, because DRF
+      puts the default in the validated values. In the dataclass shape, also
+      every field of the dataclass that declares a default of its own,
+      whether its serializer field is generated, read-only or absent, because
+      the instance is built with it; the serializer field's default comes
+      first, since DRF builds the instance with that one. A field the
+      serializer requires is counted too, and harmlessly: its own schema keeps
+      the name required, and it refuses a call without it before any default
+      is read.
+
+    Each condition is held by a test, since a chain of them is one branch arc:
+
+    - ``None`` (no ``input_serializer``): every serializer-less registration,
+      which fails at collection without it;
+    - a class rather than the bound serializer dispatch passes:
+      ``test_a_url_kwarg_the_call_left_out_reaches_the_selector_only_as_a_namesake_default``;
+    - a bare dataclass, wrapped:
+      ``test_a_pagination_named_parameter_a_dataclass_input_declares_is_allowed``;
+    - not ``read_only``: ``read-only-field`` and ``read-only-dataclass-field`` of
+      ``test_a_field_whose_value_is_not_laid_back_exempts_nothing``, and
+      ``test_a_read_only_default_does_not_fill_the_parameter``;
+    - bound to its own name: ``source-elsewhere`` of the same test;
+    - a ``default``: ``test_an_optional_field_without_a_default_leaves_the_selector_to_require_it``;
+    - the dataclass shape: ``test_a_dataclass_inputs_default_fills_the_parameter``
+      and the agreement test's dataclass cases;
+    - a dataclass default at all:
+      ``test_an_optional_field_over_no_dataclass_default_leaves_the_selector_to_require_it``;
+    - the serializer field's default first: ``declared-default`` of
+      ``test_a_dataclass_inputs_route_is_the_kwarg_sent_or_the_namesake_default``.
+
+    ``None`` is a tool with no ``input_serializer``. Any other shape was
+    refused at registration (``adapters.utils.validate_serializer_shapes``).
     """
-    if (
-        not isinstance(input_serializer, type)
-        or not issubclass(input_serializer, drf_serializers.Serializer)
-        or issubclass(input_serializer, DataclassSerializer)
-    ):
-        return frozenset()
-    return frozenset(
-        name
-        for name, field in input_serializer().fields.items()
-        if not field.read_only and field.default is not empty
+    if input_serializer is None:
+        return frozenset(), {}
+    serializer: Any = input_serializer
+    if isinstance(input_serializer, type):
+        serializer = (
+            DataclassSerializer(dataclass=input_serializer)
+            if dataclasses.is_dataclass(input_serializer)
+            else input_serializer()
+        )
+    fields = serializer.fields
+    overlaid = frozenset(
+        name for name, field in fields.items() if not field.read_only and field.source == name
     )
+    fills: dict[str, Callable[[], Any]] = {
+        name: fields[name].get_default for name in overlaid if fields[name].default is not empty
+    }
+    if isinstance(serializer, DataclassSerializer):
+        for field in dataclasses.fields(serializer.dataclass_definition.dataclass_type):
+            default = _dataclass_default(field)
+            if default is not None:
+                fills.setdefault(field.name, default)
+    return overlaid, fills
+
+
+def _dataclass_default(field: dataclasses.Field[Any]) -> Callable[[], Any] | None:
+    """What produces ``field``'s default when the dataclass is built without it, if anything.
+
+    A ``default_factory`` is called per instance, as the dataclass calls it
+    (``test_a_dataclass_default_factory_fills_the_parameter``); a field with
+    neither produces nothing
+    (``test_an_optional_field_over_no_dataclass_default_leaves_the_selector_to_require_it``).
+    """
+    if field.default_factory is not dataclasses.MISSING:
+        return field.default_factory
+    if field.default is not dataclasses.MISSING:
+        value = field.default
+        return lambda: value
+    return None
 
 
 __all__ = [
     "declares_default",
     "end_sentence",
+    "laid_back_inputs",
     "required_arguments",
     "selector_inputs",
     "selector_tool_inputs",

@@ -9,9 +9,9 @@ from rest_framework_mcp.handlers.tasks_utils import (
 )
 from rest_framework_mcp.handlers.types.context import MCPCallContext
 from rest_framework_mcp.handlers.utils import (
-    check_permissions,
     consume_rate_limits,
     effective_rate_limits,
+    judge_tool_permissions,
 )
 from rest_framework_mcp.protocol.types.json_rpc_error import JsonRpcError
 from rest_framework_mcp.protocol.types.task import Task
@@ -76,9 +76,19 @@ def maybe_create_task(
             return missing_capability_error()
         return None
 
-    allowed, required_scopes = check_permissions(
-        binding.permissions, context.http_request, context.token
-    )
+    # The call as the inline check judges it, through the same helper: a spec
+    # permission scoping by ``view.kwargs["project_pk"]`` refused a task to a
+    # caller it admits inline
+    # (``test_a_task_is_created_for_a_route_the_permission_grants``), and one
+    # reading ``request.data`` raised
+    # (``test_a_task_is_judged_on_the_arguments_it_would_run_with``). Not
+    # refusing a missing kwarg, so a caller the permission denies is told
+    # that, and the worker's replay of an admitted call still names a missing
+    # one
+    # (``test_a_denied_caller_missing_a_url_kwarg_is_refused_before_any_task_exists``).
+    # A chain declares no URL kwargs and is judged step by step
+    # (``test_a_chain_tool_has_no_route_and_is_still_judged``).
+    allowed, required_scopes = judge_tool_permissions(binding, arguments, context)
     if not allowed:
         return JsonRpcError(
             JsonRpcErrorCode.FORBIDDEN,

@@ -5,7 +5,6 @@ from typing import Any
 from rest_framework import serializers as drf_serializers
 from rest_framework.exceptions import PermissionDenied
 from rest_framework_services import (
-    build_offline_context,
     dispatch_spec,
     enforce_permissions,
     render_for_audience,
@@ -24,20 +23,24 @@ from rest_framework_mcp.handlers.input_dispatch import (
     resolve_prior_input,
 )
 from rest_framework_mcp.handlers.invalidation_dispatch import announce_invalidations
-from rest_framework_mcp.handlers.selector_tool_dispatch import dispatch_selector_tool
+from rest_framework_mcp.handlers.selector_tool_dispatch import (
+    dispatch_selector_tool,
+    enforce_object_permissions,
+)
 from rest_framework_mcp.handlers.task_dispatch import maybe_create_task
 from rest_framework_mcp.handlers.types.context import MCPCallContext
 from rest_framework_mcp.handlers.utils import (
-    check_permissions,
     consume_rate_limits,
+    dispatch_shape,
     effective_rate_limits,
     enforce_result_ceiling,
+    judge_tool_permissions,
     read_shaping_error_result,
     refuse_missing_arguments,
     resolve_bound,
+    same_arguments,
     service_error_result,
     services_dispatch_policies,
-    split_query_params,
     split_url_kwargs,
     validate_output_format,
     validation_error_result,
@@ -109,14 +112,18 @@ def handle_tools_call(
     # The ceiling is applied once, here, rather than at the three dispatch
     # paths' several ``build_tool_result`` sites, so it measures the finished
     # result (both copies of the payload) rather than a renderer's intermediate.
+    dispatched, ran_with = _dispatch_tool_call(binding, params, arguments_raw, context)
     result: dict[str, Any] | JsonRpcError = enforce_result_ceiling(
-        _dispatch_tool_call(binding, params, arguments_raw, context),
+        dispatched,
         max_result_bytes=resolve_bound(binding.max_result_bytes, context.config.max_result_bytes),
         label=f"Tool {binding.name!r}",
     )
     # After the ceiling, so a result too large to return does not announce a
-    # change the client cannot then read back.
-    announce_invalidations(binding, result, arguments_raw, context)
+    # change the client cannot then read back. With the arguments the tool ran
+    # with, a retry's answers merged in: announced with the arguments as sent,
+    # an answer moving the route named the route it moved from
+    # (``test_the_invalidation_names_the_route_an_answer_moved_to``).
+    announce_invalidations(binding, result, ran_with, context)
     return result
 
 
@@ -125,12 +132,17 @@ def _dispatch_tool_call(
     params: dict[str, Any],
     arguments_raw: dict[str, Any],
     context: MCPCallContext,
-) -> dict[str, Any] | JsonRpcError:
-    """Route a resolved binding to its dispatch path and return the raw result.
+) -> tuple[dict[str, Any] | JsonRpcError, dict[str, Any]]:
+    """Route a resolved binding to its dispatch path; return the raw result and its arguments.
 
     Split out of ``handle_tools_call`` so the size ceiling wraps every
     return — including the ones the chain and selector helpers make — at a
     single point. The async sibling splits the same way, plus the deadline.
+
+    The arguments returned are the ones the tool ran with, which on a service
+    tool's retry carry the answers merged over the arguments as sent, for the
+    invalidation the caller announces. The chain and selector paths merge no
+    answers, so theirs are the arguments as sent.
     """
     # Scoped to the dispatch portion, after binding resolution, so cheap
     # validation rejections don't generate noise. A no-op without
@@ -140,157 +152,266 @@ def _dispatch_tool_call(
         attributes=_span_attrs(binding.name, context),
     ) as otel_span:
         # Chain and selector tools have their own dispatch helpers; service
-        # tools fall through to the mutation-shaped path below.
+        # tools fall through to the mutation-shaped path below. Neither merges
+        # a retry's answers, so each ran with the arguments as sent.
         if isinstance(binding, ChainToolBinding):
-            return dispatch_chain_tool(binding, params, arguments_raw, context, otel_span)
+            return (
+                dispatch_chain_tool(binding, params, arguments_raw, context, otel_span),
+                arguments_raw,
+            )
         if isinstance(binding, SelectorToolBinding):
-            return dispatch_selector_tool(binding, params, arguments_raw, context, otel_span)
-
-        allowed, required_scopes = check_permissions(
-            binding.permissions, context.http_request, context.token
-        )
-        if not allowed:
-            return JsonRpcError(
-                JsonRpcErrorCode.FORBIDDEN,
-                "Insufficient permission",
-                data={"requiredScopes": required_scopes} if required_scopes else None,
+            return (
+                dispatch_selector_tool(binding, params, arguments_raw, context, otel_span),
+                arguments_raw,
             )
 
+        # The spec's permission classes judge the call as its dispatch view
+        # will carry it: the route in ``view.kwargs``, the routed query values
+        # in ``request.query_params``, the rest of the arguments in
+        # ``request.data`` and the tool's name in ``view.action``
+        # (``test_the_stand_in_sees_what_the_dispatch_view_sees``). A
+        # permission scoping by ``view.kwargs["project_pk"]`` was judged against
+        # ``{}`` and denied a caller it admits
+        # (``test_a_spec_permission_sees_the_url_kwargs_the_call_delivers``),
+        # and one reading ``request.data`` raised and made the call a 500. The
+        # permission answers before a missing argument does
+        # (``test_a_permission_denying_the_delivered_route_answers_before_the_missing_argument``),
+        # and the strict split in ``_run_service_tool`` still refuses it after.
+        # The arguments as sent, before a retry's answers are merged in below,
+        # since a denied caller is told so before its answers are read.
+        allowed, required_scopes = judge_tool_permissions(binding, arguments_raw, context)
+        if not allowed:
+            return _forbidden(required_scopes), arguments_raw
+
+        # On a retry of a call that asked the user something, the answer arrives
+        # as ``inputResponses`` and becomes an ordinary argument here — the
+        # whole of what the service ever sees of the exchange. A declined or
+        # cancelled answer merges nothing, and is answered after the rate
+        # limit below, as any call the service does not run is. Merged with no
+        # ``requestState`` too, so a first call can carry one.
+        prior: ResolvedInput = resolve_prior_input(params, binding.name, arguments_raw, context)
+
+        # An answer is merged over the arguments with no limit on its keys, so
+        # it can change any value the stand-in above was built from: the route
+        # in ``view.kwargs``, a ``QueryParam`` value or ``request.data``. So the
+        # arguments the answers produced are judged again, before the target
+        # is looked up. A per-binding adapter is judged by nothing else: one
+        # admitting only project 7 ran the service on project 8 sent as 7 and
+        # answered as 8
+        # (``test_an_answer_changing_a_value_the_permission_reads_is_refused``),
+        # or answered with another ``project_pk``
+        # (``test_an_answer_naming_another_route_is_refused_by_a_per_binding_permission``).
+        # A spec class judged again only by the dispatch view or the target
+        # guard told an existing target from a missing one
+        # (``test_an_answer_cannot_tell_an_existing_target_from_a_missing_one``),
+        # after the rate limit had charged the call.
+        # Only when the answers changed the arguments, so a retry answering
+        # what the call already sent is judged once
+        # (``test_an_answer_leaving_the_arguments_unchanged_is_not_judged_again``),
+        # while one adding any key is judged again
+        # (``test_an_answer_adding_an_argument_is_judged_again``). Changed means
+        # not ``same_arguments``, which ``==`` is not: an answer of ``True`` or
+        # ``1.0`` for ``1`` is equal and names another row
+        # (``test_an_answer_equal_to_the_route_but_naming_another_row_is_judged_again``).
+        # Since the stand-in is built from the arguments and the context alone,
+        # and the context is the one judged above, arguments ``same_arguments``
+        # calls unchanged build the request judged above. An answer filling a
+        # route kwarg the call left out is a change
+        # (``test_an_answer_filling_a_route_kwarg_left_out_is_judged_on_the_filled_route``),
+        # as is one clearing a kwarg it sent
+        # (``test_an_answer_clearing_a_route_kwarg_is_judged_on_the_route_it_leaves``).
+        # Not refusing a missing kwarg, as the stand-in above does not, since
+        # the strict split in ``_run_service_tool`` is where that is answered
+        # (``test_an_answer_leaving_a_required_route_kwarg_missing_is_told_which``).
+        if not same_arguments(prior.arguments, arguments_raw):
+            allowed, required_scopes = judge_tool_permissions(binding, prior.arguments, context)
+            if not allowed:
+                return _forbidden(required_scopes), prior.arguments
+        arguments_raw = prior.arguments
+
+        # After both checks, so a caller either one denies is never charged:
+        # charged between them, a caller refused on the route its answer names
+        # had spent a unit, and against a spent quota was told ``RATE_LIMITED``
+        # rather than that the route is not its to name
+        # (``test_a_caller_refused_on_the_route_an_answer_names_is_not_charged``),
+        # and one answering a value only a spec class reads was refused by the
+        # dispatch view after the charge
+        # (``test_a_caller_refused_on_an_answered_value_is_not_charged``).
         retry_after: int | None = consume_rate_limits(
             effective_rate_limits(binding, context), context.http_request, context.token
         )
         if retry_after is not None:
-            return JsonRpcError(
-                JsonRpcErrorCode.RATE_LIMITED,
-                "Rate limit exceeded",
-                data={"retryAfter": retry_after},
+            return (
+                JsonRpcError(
+                    JsonRpcErrorCode.RATE_LIMITED,
+                    "Rate limit exceeded",
+                    data={"retryAfter": retry_after},
+                ),
+                arguments_raw,
             )
 
-        # On a retry of a call that asked the user something, the answer arrives
-        # as ``inputResponses`` and becomes an ordinary argument here — the
-        # whole of what the service ever sees of the exchange.
-        prior: ResolvedInput = resolve_prior_input(params, binding.name, arguments_raw, context)
+        # Charged, as before: a declined answer is a call the client made
+        # (``test_a_caller_admitted_on_the_answered_route_is_charged_once``).
         if prior.refused_with is not None:
-            return refusal_result(prior.refused_with)
-        arguments_raw = prior.arguments
+            return refusal_result(prior.refused_with), arguments_raw
 
-        # ``enforce_permissions`` is the object-permission hook: it runs
-        # ``spec.permission_classes`` against the resolved target.
-        argument_binding, unknown_arguments = services_dispatch_policies(binding)
-        # The split stays inside the ``try``: ``split_url_kwargs`` raises DRF's
-        # ``ValidationError`` for an omitted ``required=True`` kwarg, and that
-        # must reach the same ``isError`` mapping as any other dispatch-time
-        # validation failure rather than escaping as a 500. Still after the
-        # permission and rate-limit answers above, as the check below is.
-        try:
-            spec_params, url_kwarg_values = split_url_kwargs(arguments_raw, binding.url_kwargs)
-            # ``query_params`` is always passed — an empty mapping still
-            # *replaces* whatever query string the client hung off the MCP
-            # endpoint URL, so ``request.query_params`` is this package's value
-            # rather than the caller's.
-            spec_params, query_param_values = split_query_params(spec_params, binding.query_params)
-            # After the permission and rate-limit answers above, so a caller the
-            # listing hides the tool from never learns it exists from this one;
-            # inside the ``try``, so it maps to the same ``isError`` result.
-            refuse_missing_arguments(
-                binding, (*spec_params, *url_kwarg_values), pool_seeds=context.pool_seeds
-            )
-            offline = build_offline_context(
-                context.token.user,
-                spec_params,
-                http_request=context.http_request,
-                action=binding.name,
-                kwargs=url_kwarg_values or None,
-                query_params=query_param_values,
-            )
-            result = dispatch_spec(
-                binding.spec,
-                user=context.token.user,
-                params=spec_params,
-                request=offline.request,
-                view=offline.view,
-                argument_binding=argument_binding,
-                unknown_arguments=unknown_arguments,
-                on_target_resolved=enforce_permissions,
-                # Not dead on the sync path despite there being no stream: a
-                # task worker runs *this* function and its reporter writes to
-                # the task record. ``None`` for an ordinary sync request.
-                progress=context.progress,
-                # The server's ``pool_seeds=``, resolved into the pool and
-                # reserved against client input, as ``dispatch_spec`` defines.
-                pool_seeds=context.pool_seeds,
-                # ``arguments`` is always an object, so a ``many=True`` spec's list
-                # travels under ``spec.many_argument``; a no-op for any other spec.
-                many_as_argument=True,
-            )
-        except PermissionDenied:
-            return JsonRpcError(JsonRpcErrorCode.FORBIDDEN, "Insufficient permission")
-        except (drf_serializers.ValidationError, ServiceValidationError) as exc:
-            # Refused input -- an unexpected argument, a serializer rejection, a
-            # service's own validation -- is a *tool-level* failure per the MCP
-            # spec: an ``isError`` result the model can correct from, not a
-            # protocol error. Before the ``ServiceError`` arm, which would
-            # otherwise take ``ServiceValidationError`` as a plain failure.
-            return validation_error_result(
-                exc, arguments_raw, config=context.config, conventions=context.conventions
-            ).to_dict()
-        except AdditionalInputRequired as exc:
-            # **Must precede the ``ServiceError`` arm below** — this is a
-            # subclass of it, so the generic handler would otherwise swallow the
-            # request for input and report it as a plain failure.
-            return ask_for_input(exc, prior, context)
-        except ServiceError as exc:
-            # The real-failure channel, recorded on the span when the consumer
-            # opted in. ``ServiceValidationError`` deliberately is not — that is
-            # input-shape feedback, not a server fault.
-            if context.config.record_service_exceptions:
-                otel_span.record_exception(exc)
-            return service_error_result(exc).to_dict()
+        result = _run_service_tool(binding, params, arguments_raw, prior, context, otel_span)
+        return result, arguments_raw
 
-        if result.kind == "not_found":
-            return build_error_tool_result(
-                f"{binding.name}: no matching instance found", error_type="not_found"
-            ).to_dict()
 
-        # Outside the ``try`` above on purpose: its ``ValidationError`` arm
-        # treats every refusal as the caller's to fix, and a render-time
-        # refusal is the caller's only when they supplied a value that shaped
-        # the render. A read-shaping ``QueryParam`` is read here, by the
-        # output serializer, so a bad value fails after dispatch succeeded;
-        # ``read_shaping_error_result`` makes that the caller's ``isError`` when
-        # they supplied one and re-raises it otherwise. The async handler shares
-        # ``_render`` and wraps it the same way, and a task worker reaches this
-        # line through ``handle_tools_call``, so a task stores the result.
-        try:
-            payload = _render(binding, result, offline)
-        except (drf_serializers.ValidationError, ServiceValidationError) as exc:
-            # A service tool's result is never a page, so no envelope to explain.
-            return read_shaping_error_result(
-                exc,
-                query_params=binding.query_params,
-                arguments=arguments_raw,
-                paginated=False,
-                config=context.config,
-                conventions=context.conventions,
-            ).to_dict()
-        output_format: OutputFormat = OutputFormat.coerce(
-            params.get("outputFormat") or binding.output_format
+def _forbidden(required_scopes: list[str]) -> JsonRpcError:
+    """The answer to a caller the binding's permissions deny, on either route.
+
+    Shared by the check on the route as sent and the one on the route a retry's
+    answers produce, which answer alike; the async sibling uses it too.
+    """
+    return JsonRpcError(
+        JsonRpcErrorCode.FORBIDDEN,
+        "Insufficient permission",
+        data={"requiredScopes": required_scopes} if required_scopes else None,
+    )
+
+
+def _run_service_tool(
+    binding: Any,
+    params: dict[str, Any],
+    arguments_raw: dict[str, Any],
+    prior: ResolvedInput,
+    context: MCPCallContext,
+    otel_span: Any,
+) -> dict[str, Any] | JsonRpcError:
+    """Dispatch an admitted service-tool call and render its result.
+
+    Split out of ``_dispatch_tool_call`` once both permission checks and the
+    rate limit have answered, so that function can return the arguments the
+    tool ran with beside every result. ``arguments_raw`` carries a retry's
+    answers; ``prior`` is what ``ask_for_input`` needs to carry them into a
+    further round.
+    """
+    argument_binding, unknown_arguments = services_dispatch_policies(binding)
+    # Inside the ``try``: the strict ``split_url_kwargs`` raises DRF's
+    # ``ValidationError`` for an omitted ``required=True`` kwarg, and that
+    # must reach the same ``isError`` mapping as any other dispatch-time
+    # validation failure rather than escaping as a 500, while the spec's
+    # ``PermissionDenied`` reaches the ``FORBIDDEN`` arm. Still after the
+    # permission and rate-limit answers ``_dispatch_tool_call`` gave.
+    try:
+        # Built from the same shape the binding's stand-in was, so the two
+        # checks judge one request. Not refusing a missing kwarg yet: the spec
+        # judges the route first.
+        shape = dispatch_shape(binding, arguments_raw)
+        spec_params, url_kwarg_values = shape.data, shape.kwargs
+        offline = shape.build(
+            user=context.token.user, auth=context.token.raw, http_request=context.http_request
         )
-        _emit_output_schema, emit_structured_content = resolve_structured_output(
-            include_output_schema_override=binding.include_output_schema,
-            include_structured_content_override=binding.include_structured_content,
-            binding_name=binding.name,
-            default_output_schema=context.config.include_output_schema,
-            default_structured_content=context.config.include_structured_content,
+        # The spec's class-level check, against the request and view the call
+        # runs with, before the target is looked up and before a missing
+        # argument is named, as ``call_spec_tool`` judges it. Kept beside the
+        # stand-in's, which judges the same shape: a ``has_permission`` whose
+        # answer changes between the two is still answered before the lookup,
+        # not by the target guard after it, which told a denied caller
+        # ``-32006`` for a row that exists and ``not_found`` for one that does
+        # not
+        # (``test_the_dispatch_view_judges_before_the_lookup_when_the_stand_in_admits``),
+        # and the name of an argument left out
+        # (``test_a_denied_caller_is_not_told_which_argument_it_left_out``).
+        enforce_permissions(binding.spec, offline)
+        # Only for its refusal of a missing ``required=True`` kwarg: the values
+        # are the ones split above.
+        split_url_kwargs(arguments_raw, binding.url_kwargs)
+        refuse_missing_arguments(
+            binding, (*spec_params, *url_kwarg_values), pool_seeds=context.pool_seeds
         )
-        return build_tool_result(
-            payload,
-            output_format=output_format,
-            include_structured_content=emit_structured_content,
-            content_kind=binding.content_kind,
-            content_mime_type=binding.content_mime_type,
-            binding_name=binding.name,
+        result = dispatch_spec(
+            binding.spec,
+            user=context.token.user,
+            params=spec_params,
+            request=offline.request,
+            view=offline.view,
+            argument_binding=argument_binding,
+            unknown_arguments=unknown_arguments,
+            # Object-level only: the class-level half ran above, against the
+            # same request and view.
+            on_target_resolved=enforce_object_permissions,
+            # Not dead on the sync path despite there being no stream: a
+            # task worker runs *this* function and its reporter writes to
+            # the task record. ``None`` for an ordinary sync request.
+            progress=context.progress,
+            # The server's ``pool_seeds=``, resolved into the pool and
+            # reserved against client input, as ``dispatch_spec`` defines.
+            pool_seeds=context.pool_seeds,
+            # ``arguments`` is always an object, so a ``many=True`` spec's list
+            # travels under ``spec.many_argument``; a no-op for any other spec.
+            many_as_argument=True,
+        )
+    except PermissionDenied:
+        return JsonRpcError(JsonRpcErrorCode.FORBIDDEN, "Insufficient permission")
+    except (drf_serializers.ValidationError, ServiceValidationError) as exc:
+        # Refused input -- an unexpected argument, a serializer rejection, a
+        # service's own validation -- is a *tool-level* failure per the MCP
+        # spec: an ``isError`` result the model can correct from, not a
+        # protocol error. Before the ``ServiceError`` arm, which would
+        # otherwise take ``ServiceValidationError`` as a plain failure.
+        return validation_error_result(
+            exc, arguments_raw, config=context.config, conventions=context.conventions
         ).to_dict()
+    except AdditionalInputRequired as exc:
+        # **Must precede the ``ServiceError`` arm below** — this is a
+        # subclass of it, so the generic handler would otherwise swallow the
+        # request for input and report it as a plain failure.
+        return ask_for_input(exc, prior, context)
+    except ServiceError as exc:
+        # The real-failure channel, recorded on the span when the consumer
+        # opted in. ``ServiceValidationError`` deliberately is not — that is
+        # input-shape feedback, not a server fault.
+        if context.config.record_service_exceptions:
+            otel_span.record_exception(exc)
+        return service_error_result(exc).to_dict()
+
+    if result.kind == "not_found":
+        return build_error_tool_result(
+            f"{binding.name}: no matching instance found", error_type="not_found"
+        ).to_dict()
+
+    # Outside the ``try`` above on purpose: its ``ValidationError`` arm
+    # treats every refusal as the caller's to fix, and a render-time
+    # refusal is the caller's only when they supplied a value that shaped
+    # the render. A read-shaping ``QueryParam`` is read here, by the
+    # output serializer, so a bad value fails after dispatch succeeded;
+    # ``read_shaping_error_result`` makes that the caller's ``isError`` when
+    # they supplied one and re-raises it otherwise. The async handler shares
+    # ``_render`` and wraps it the same way, and a task worker reaches this
+    # line through ``handle_tools_call``, so a task stores the result.
+    try:
+        payload = _render(binding, result, offline)
+    except (drf_serializers.ValidationError, ServiceValidationError) as exc:
+        # A service tool's result is never a page, so no envelope to explain.
+        return read_shaping_error_result(
+            exc,
+            query_params=binding.query_params,
+            arguments=arguments_raw,
+            paginated=False,
+            config=context.config,
+            conventions=context.conventions,
+        ).to_dict()
+    output_format: OutputFormat = OutputFormat.coerce(
+        params.get("outputFormat") or binding.output_format
+    )
+    _emit_output_schema, emit_structured_content = resolve_structured_output(
+        include_output_schema_override=binding.include_output_schema,
+        include_structured_content_override=binding.include_structured_content,
+        binding_name=binding.name,
+        default_output_schema=context.config.include_output_schema,
+        default_structured_content=context.config.include_structured_content,
+    )
+    return build_tool_result(
+        payload,
+        output_format=output_format,
+        include_structured_content=emit_structured_content,
+        content_kind=binding.content_kind,
+        content_mime_type=binding.content_mime_type,
+        binding_name=binding.name,
+    ).to_dict()
 
 
 def _render(binding: Any, result: Any, offline: Any) -> Any:

@@ -6,6 +6,7 @@ from typing import Any
 
 import pytest
 from django.http import HttpRequest
+from rest_framework import serializers
 from rest_framework.permissions import IsAuthenticated
 from rest_framework_services.types.selector_kind import SelectorKind
 from rest_framework_services.types.selector_spec import SelectorSpec
@@ -46,11 +47,17 @@ def _selector_spec() -> SelectorSpec:
     )
 
 
+class _Payload(serializers.Serializer):
+    text = serializers.CharField()
+
+
 def _service_spec() -> ServiceSpec:
     def svc(*, data: dict) -> dict:
         return data
 
-    return ServiceSpec(service=svc, permission_classes=[IsAuthenticated])
+    # The serializer is what fills ``data``; registration refuses the service
+    # without one.
+    return ServiceSpec(service=svc, input_serializer=_Payload, permission_classes=[IsAuthenticated])
 
 
 def _link(server: MCPServer, **overrides: Any) -> Any:

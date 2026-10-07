@@ -25,7 +25,7 @@ import dataclasses
 import inspect
 import pathlib
 from types import SimpleNamespace
-from typing import Annotated, Any, Generic, TypeVar, Union
+from typing import TYPE_CHECKING, Annotated, Any, Generic, TypeVar, Union
 
 import pytest
 from rest_framework import serializers
@@ -40,6 +40,11 @@ from rest_framework_mcp.auth.backends.allow_any_backend import AllowAnyBackend
 from rest_framework_mcp.constants import ArgumentBinding
 from tests.testapp.models import Invoice
 from tests.testapp.serializers import InvoiceOutputSerializer
+
+if TYPE_CHECKING:
+    # Imported for annotations only, where flake8-type-checking rules move such
+    # imports, so the name does not exist when the hints are resolved at runtime.
+    from django.http import HttpRequest
 
 _T = TypeVar("_T")
 
@@ -122,8 +127,10 @@ _unresolvable_provider.__annotations__ = {"return": "NoSuchScope"}
 
 
 class _UnresolvableFieldScope(TypedDict):
-    # The return annotation resolves; the class's own field does not.
+    # The return annotation resolves; one of the class's own fields does not,
+    # and the other does.
     tenant: NoSuchType  # noqa: F821
+    region: str
 
 
 def _unresolvable_field_provider() -> _UnresolvableFieldScope:
@@ -183,6 +190,31 @@ def _noneable_provider() -> _NoneableScope:
 
 def _by_pk_tenant_region(*, pk: int, tenant: str, region: str) -> Any:
     return Invoice.objects.filter(pk=pk, number__startswith=tenant + region)
+
+
+class _ContainerScope(TypedDict):
+    # ``UnsetType`` inside a container: the key is always a list or a dict, and
+    # only an item or a value of it may be ``UNSET``.
+    tenant: str
+    regions: list[str | UnsetType]
+    labels: dict[str, str | UnsetType]
+
+
+def _container_provider() -> _ContainerScope:
+    return {"tenant": "acme", "regions": ["eu"], "labels": {}}
+
+
+def _by_pk_tenant_regions_labels(*, pk: int, tenant: str, regions: list, labels: dict) -> Any:
+    return Invoice.objects.filter(pk=pk)
+
+
+def _hidden_parameter_provider(*, request: HttpRequest) -> _MaybeScope:
+    # The return annotation resolves at runtime; the parameter's does not.
+    return {"tenant": "acme", "region": "eu"}
+
+
+def _generic_declining_provider() -> _GenericScope[str | UnsetType]:
+    return {"tenant": "acme"}
 
 
 def test_a_parameter_without_a_default_is_required() -> None:
@@ -293,16 +325,36 @@ def test_a_provider_whose_annotation_does_not_resolve_is_untyped() -> None:
     assert "required" not in schema
 
 
-def test_a_provider_whose_typed_dict_does_not_resolve_is_untyped() -> None:
-    # Its return annotation names a ``TypedDict``, but the dict's own fields
-    # cannot be read, so whether a key may be declined cannot be either.
+def test_a_value_type_that_does_not_resolve_makes_only_its_key_optional() -> None:
+    # Its return annotation names a ``TypedDict`` whose ``tenant`` value cannot
+    # be read, so whether the provider may decline that key cannot be either:
+    # it is offered and not required, as a declinable key is. ``region``
+    # resolves, so it is filled and hidden, and ``pk`` stays required. The
+    # whole provider used to read as untyped, which offered ``region`` and
+    # required nothing.
     server = _server()
-    _register(server, _by_pk_and_tenant, provider=_unresolvable_field_provider)
+    _register(server, _by_pk_tenant_region, provider=_unresolvable_field_provider)
 
     schema = _schema(server)
 
     assert set(schema["properties"]) == {"pk", "tenant"}
-    assert "required" not in schema
+    assert schema["required"] == ["pk"]
+
+
+def test_a_parameter_type_imported_only_for_type_checking_leaves_the_keys_readable() -> None:
+    # Only the return annotation says which keys the provider fills, so a
+    # parameter typed with a name that does not exist at runtime costs nothing:
+    # ``region`` is filled and hidden, ``tenant`` may be declined and is
+    # offered, and ``pk`` stays required. Resolving every annotation together
+    # read the provider as untyped, which offered ``region`` and required
+    # nothing.
+    server = _server()
+    _register(server, _by_pk_tenant_region, provider=_hidden_parameter_provider)
+
+    schema = _schema(server)
+
+    assert set(schema["properties"]) == {"pk", "tenant"}
+    assert schema["required"] == ["pk"]
 
 
 @pytest.mark.parametrize(
@@ -346,6 +398,36 @@ def test_a_union_that_does_not_admit_unset_is_still_filled() -> None:
     schema = _schema(server)
 
     assert set(schema["properties"]) == {"pk"}
+    assert schema["required"] == ["pk"]
+
+
+def test_a_key_holding_unset_inside_a_container_is_filled() -> None:
+    # The provider cannot decline ``regions`` or ``labels``: each comes back as
+    # a list or a dict, and only a value that is ``UNSET`` itself is dropped
+    # from the pool. So both are filled and hidden, as ``tenant`` is, and a
+    # client's value for either is not offered to be overwritten. Walking every
+    # argument of every generic found ``UnsetType`` inside them and offered both.
+    server = _server()
+    _register(server, _by_pk_tenant_regions_labels, provider=_container_provider)
+
+    schema = _schema(server)
+
+    assert set(schema["properties"]) == {"pk"}
+    assert schema["required"] == ["pk"]
+
+
+def test_a_generic_typed_dicts_argument_decides_which_keys_may_be_declined() -> None:
+    # ``_GenericScope[str | UnsetType]`` binds ``tenant: _T`` to a value the
+    # provider may decline, so ``tenant`` is offered and not required, as the
+    # same key written out (``tenant: str | UnsetType``) is. Read off the
+    # unparameterised origin, ``tenant`` was the bare type variable, counted as
+    # filled and hidden, and a declining provider left the call short of it.
+    server = _server()
+    _register(server, _by_pk_and_tenant, provider=_generic_declining_provider)
+
+    schema = _schema(server)
+
+    assert set(schema["properties"]) == {"pk", "tenant"}
     assert schema["required"] == ["pk"]
 
 
@@ -455,12 +537,31 @@ class _PkInput:
 
 
 class _PkInputSerializer(DataclassSerializer):
-    # Declared rather than generated, so the field carries a default (a
-    # generated one leaves it to the dataclass) and registration sees ``pk``.
+    # Declared rather than generated, so the field carries a default of its
+    # own, which DRF puts in the values the instance is built from.
     pk = serializers.IntegerField(default=1)
 
     class Meta:
         dataclass = _PkInput
+
+
+@dataclasses.dataclass
+class _NoDefaultPk:
+    pk: int
+
+
+class _OptionalNoDefaultPk(DataclassSerializer):
+    # Optional, so omitting ``pk`` is not refused by the serializer, over a
+    # dataclass field with no default to build the instance with.
+    pk = serializers.IntegerField(required=False)
+
+    class Meta:
+        dataclass = _NoDefaultPk
+
+
+@dataclasses.dataclass
+class _FactoryPk:
+    pk: int = dataclasses.field(default_factory=lambda: 1)
 
 
 def test_a_name_the_input_serializer_defaults_is_not_required() -> None:
@@ -501,18 +602,36 @@ def test_a_read_only_default_does_not_fill_the_parameter() -> None:
     assert _schema(server)["required"] == ["pk"]
 
 
-def test_a_dataclass_inputs_default_does_not_fill_the_parameter() -> None:
-    # A dataclass validates into an instance, which is not overlaid on the
-    # selector's params.
+def test_a_dataclass_inputs_default_fills_the_parameter() -> None:
+    # Dispatch lays the dataclass instance back, default included, so a call
+    # omitting the name is served. This once asserted ``["pk"]``, when the
+    # schema counted only a plain ``Serializer``'s defaults as filling a name.
     server = _server()
     _register(server, _by_pk, input_serializer=_PkInput)
 
-    assert _schema(server)["required"] == ["pk"]
+    assert "required" not in _schema(server)
 
 
-def test_a_dataclass_serializers_default_does_not_fill_the_parameter() -> None:
+def test_a_dataclass_serializers_default_fills_the_parameter() -> None:
+    # As above, and it once asserted ``["pk"]`` for the same reason.
     server = _server()
     _register(server, _by_pk, input_serializer=_PkInputSerializer)
+
+    assert "required" not in _schema(server)
+
+
+def test_a_dataclass_default_factory_fills_the_parameter() -> None:
+    server = _server()
+    _register(server, _by_pk, input_serializer=_FactoryPk)
+
+    assert "required" not in _schema(server)
+
+
+def test_an_optional_field_over_no_dataclass_default_leaves_the_selector_to_require_it() -> None:
+    # The serializer lets the caller omit ``pk``, but nothing builds the
+    # instance with it then, so it fills nothing and the selector requires it.
+    server = _server()
+    _register(server, _by_pk, input_serializer=_OptionalNoDefaultPk)
 
     assert _schema(server)["required"] == ["pk"]
 
