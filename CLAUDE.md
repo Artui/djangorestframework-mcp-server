@@ -112,6 +112,16 @@ Import these — do not parallel them:
 - `run_selector` / `arun_selector` — selector dispatch with sync/async transparency.
 - `run_service` / `arun_service` — service dispatch with optional `transaction.atomic()`.
 - `is_async`, `is_queryset`, `apply_queryset_shaping` — the remaining dispatch leaves.
+- `spec_to_json_schema`, `provider_keys`, `server_owned_keys`, `declared_input_keys`
+  and `can_present_nothing` — the readers of what a spec admits and presents: the
+  input schema under a given `argument_binding`, which keys a `kwargs=` provider fills
+  and which it may decline, which keys the server owns (`NotClientInput`) so a caller
+  never sends them, whether the input set is closed, and whether the output can be
+  nothing at all. The schema and the registry read these rather than deriving their
+  own answer, because every local copy here drifted from what dispatch does: a
+  provider annotated `list[str | UnsetType]`, one whose types exist only under
+  `TYPE_CHECKING`, and a service declaring `allow_none` each got an answer dispatch
+  did not give.
 - `paginate_output` + `OutputPage.envelope` — the page a `LIST` selector tool serves and
   the `{items, page, totalPages, hasNext}` envelope around it. Only the coercion of the
   untyped `page` / `limit` arguments into ints stays here (`_coerce_int`), because
