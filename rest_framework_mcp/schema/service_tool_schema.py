@@ -6,6 +6,7 @@ from rest_framework_services import provider_keys, server_owned_keys, spec_to_js
 from rest_framework_services.types.pool_seeds import DEFAULT_POOL_SEEDS, PoolSeeds
 from rest_framework_services.types.service_spec import ServiceSpec
 
+from rest_framework_mcp.constants import ArgumentBinding
 from rest_framework_mcp.registry.types.tool_binding import ToolBinding
 from rest_framework_mcp.registry.types.url_kwarg import UrlKwarg
 from rest_framework_mcp.schema.input_schema import build_input_schema
@@ -28,11 +29,12 @@ def build_service_tool_input_schema(
       ``BUNDLE`` nothing reads the caller's input but the target lookup, so the
       service adds no property; under a ``SPREAD_*`` binding the service's own
       parameters are its input and are listed, less every name the server
-      fills: drf-services' seeds, the ones this server registers, and every
-      key a callable in the call marks ``NotClientInput``. A parameter without a
-      default is required, unless the spec's ``kwargs=`` provider may fill it,
-      as drf-services' ``provider_keys`` reads the provider; one whose keys
-      cannot be read may fill any. A bare ``**kwargs`` lists what the service
+      fills: drf-services' seeds, the ones this server registers, every key a
+      callable in the call marks ``NotClientInput``, and, under
+      ``SPREAD_AUTHOR_WINS``, every key the spec's ``kwargs=`` provider says it
+      fills, as drf-services' ``provider_keys`` reads the provider. A parameter
+      without a default is required, unless that provider may fill it; one
+      whose keys cannot be read may fill any. A bare ``**kwargs`` lists what the service
       names, and the set it opens is left to ``additionalProperties``. That
       reflection merges ``metadata["json_schema"]["input"]`` on top, as the
       ``many=True`` shape below does; the serializer's shape above does not
@@ -132,25 +134,43 @@ def _declared_input(binding: ToolBinding, *, pool_seeds: PoolSeeds) -> dict[str,
     parameter without a default required (``supplied=None`` would leave every
     parameter optional: ``test_a_spread_service_lists_its_own_parameters``;
     the built-in seeds alone would list a registered one:
-    ``test_a_registered_seed_is_not_listed_as_a_service_parameter``). A name
-    the spec's provider fills, or may decline, stays listed, since dispatch
-    admits it, and is only not required; an untyped provider may fill any
-    name, so none is. Each of the three readings is a row of
-    ``test_a_name_the_services_provider_fills_is_offered_but_not_required``.
+    ``test_a_registered_seed_is_not_listed_as_a_service_parameter``).
+
+    **A name the spec's provider says it fills is listed only where the
+    caller's value is the one served.** Under ``SPREAD_AUTHOR_WINS`` drf-services
+    applies the provider over the caller's spread, so the caller's value for
+    such a name is admitted and then replaced: it is supplied, as a selector
+    tool's is (``schema.utils.selector_inputs``) and as a target lookup's own
+    provider's keys are. Under ``SPREAD_CALLER_WINS`` the spread is applied last,
+    so the name is listed and only not required. A key the provider may decline
+    stays listed under both, because on a call where it comes back ``UNSET`` the
+    caller's value is the only one, and an untyped provider fills nothing for
+    certain, so it hides none and every name is optional. Each reading is a row
+    of ``test_a_name_the_services_provider_fills_is_offered_where_the_callers_value_is_served``,
+    and the binding's condition is held by its ``typed-caller-wins`` row; that
+    ``REJECT`` still admits the hidden name, and serves the provider's value, by
+    ``test_a_spread_services_provider_filled_name_is_offered_where_the_callers_value_is_served``.
     """
     spec = binding.spec
     if spec.input_serializer is not None:
         return build_input_schema(spec.input_serializer, partial=spec.partial is True)
+    keys = provider_keys(spec.kwargs)
+    # ``None`` is a provider whose keys cannot be read, which says it fills
+    # nothing, so it hides nothing.
+    filled: frozenset[str] = (
+        keys.filled
+        if keys is not None and binding.argument_binding is ArgumentBinding.SPREAD_AUTHOR_WINS
+        else frozenset()
+    )
     schema: dict[str, Any] = (
         spec_to_json_schema(
             spec,
             phase="input",
             argument_binding=binding.argument_binding,
-            supplied=pool_seeds.reserved,
+            supplied=pool_seeds.reserved | filled,
         )
         or {}
     )
-    keys = provider_keys(spec.kwargs)
     required: list[str] = (
         []
         if keys is None

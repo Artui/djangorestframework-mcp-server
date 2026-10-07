@@ -19,6 +19,7 @@ from rest_framework import serializers as drf_serializers
 from rest_framework_dataclasses.serializers import DataclassSerializer
 from rest_framework_services import provider_keys
 from rest_framework_services.types.pool_seeds import DEFAULT_POOL_SEEDS, PoolSeeds
+from rest_framework_services.types.selector_kind import SelectorKind
 from rest_framework_services.types.validate_channel_names import validate_channel_names
 
 from rest_framework_mcp.constants import (
@@ -131,9 +132,11 @@ def validate_url_kwargs(
     spec params, so its name must not collide with a reserved transport key —
     the post-fetch pagination knobs (``ordering`` / ``page`` / ``limit``) or the
     dispatcher's pool seeds — nor be declared twice, nor claim to be ``required``
-    while carrying a ``default``. Colliding with an ordinary spec input is
-    *allowed*: that is the intended way to route a route-capture the spec also
-    reads.
+    while carrying a ``default``. Colliding with an input is not refused here:
+    a selector's parameter and a target lookup's receive the value through
+    ``view.kwargs``, so the name is how a route capture reaches the callable
+    that reads it. A service tool's input of the same name never receives it,
+    which ``validate_url_kwarg_inputs`` refuses.
 
     The checks live in drf-services' ``validate_channel_names``, which folds in
     the pool seeds it owns; the pagination names and the server's own
@@ -196,20 +199,29 @@ def validate_selector_parameter_names(
     label: str,
     selector: Any,
     input_serializer: type | None,
+    kind: SelectorKind,
 ) -> None:
     """Fail-fast on a ``page`` / ``limit`` selector parameter the transport takes away.
 
     The sibling of ``validate_url_kwargs`` / ``validate_query_params``, from the
     selector's side of the same collision. Those refuse a *channel* named after
     a name the read pipeline owns; this refuses a *selector parameter* named
-    ``page`` or ``limit`` (``RESERVED_POST_FETCH_KEYS``), which the dispatch
-    strips from the selector's arguments whether or not the tool paginates. The
-    parameter registers, is advertised, and then never receives what the caller
-    sent: a required one is answered "This field is required." for an argument
-    the call carried, and a defaulted one runs on its default whatever the call
-    asked for, so it is refused with a default or without. A selector parameter
-    named like a ``QueryParam`` is the same collision on another name, refused
-    for both tool kinds by ``validate_query_param_inputs``.
+    ``page`` or ``limit`` (``RESERVED_POST_FETCH_KEYS``) on a ``LIST`` selector
+    tool, whose dispatch strips both from the selector's arguments whether or
+    not the tool paginates. The parameter registers, is advertised, and then
+    never receives what the caller sent: a required one is answered "This field
+    is required." for an argument the call carried, and a defaulted one runs on
+    its default whatever the call asked for, so it is refused with a default or
+    without. A selector parameter named like a ``QueryParam`` is the same
+    collision on another name, refused for both tool kinds by
+    ``validate_query_param_inputs``.
+
+    **Only on a ``LIST`` tool.** A ``RETRIEVE`` tool cannot pair with
+    ``paginate``, so nothing on any route takes either name from its selector,
+    which receives the caller's value as it receives any other; the Pydantic-AI
+    ``SpecToolset`` reserves the names on a list tool alone, so one spec is a
+    tool on both routes. The kind is held by
+    ``test_a_retrieve_selectors_pagination_named_parameter_registers``.
 
     Not refused for a name the ``input_serializer`` lays back with the caller's
     value (``_overlaid_field_names``): dispatch overlays the validated values on
@@ -222,6 +234,8 @@ def validate_selector_parameter_names(
 
     A ``**kwargs`` catch-all names nothing, so there is nothing to refuse.
     """
+    if kind is not SelectorKind.LIST:
+        return
     parameters: frozenset[str] = frozenset(
         parameter.name for parameter in _keyword_parameters(selector)
     ) - _overlaid_field_names(input_serializer)
@@ -264,9 +278,11 @@ def validate_query_param_inputs(
       (``test_a_filter_set_field_a_query_param_shadows_is_refused``): the
       FilterSet reads the stripped arguments, so it never applied the value.
     - **a service tool**: everything ``build_service_tool_input_schema``
-      advertises, built without the ``QueryParam`` declarations, because each is
-      advertised under its own name and would hide the input it shadows. That
-      is the ``input_serializer``'s fields, which validate the arguments left
+      advertises, built without the ``QueryParam`` and ``UrlKwarg``
+      declarations, because each is advertised under its own name and would
+      hide the input it shadows (``_service_tool_inputs``, whose sets
+      ``validate_url_kwarg_inputs`` reads too). That is the
+      ``input_serializer``'s fields, which validate the arguments left
       once the split has run; the service's own parameters, where a spreading
       binding with no serializer advertises them; and the target lookup's
       parameters, which the schema merges in beside them
@@ -277,9 +293,9 @@ def validate_query_param_inputs(
       the call, so the serializer's fields count only where the schema lists
       them at the top (``test_a_list_items_field_is_no_argument_a_query_param_takes``).
 
-    A ``UrlKwarg``'s name is advertised too, but ``validate_query_params`` has
-    already refused a ``QueryParam`` sharing it, so no test can hold excluding
-    it here. Read off the binding, so the ``query_params`` are the tool's
+    A ``UrlKwarg``'s name cannot be a ``QueryParam``'s, which
+    ``validate_query_params`` has already refused, so leaving the ``UrlKwarg``
+    declarations out of the read changes nothing here. Read off the binding, so the ``query_params`` are the tool's
     effective ones, an ``agent_contract``'s included
     (``test_a_query_param_from_the_agent_contract_shadows_too``).
 
@@ -287,16 +303,17 @@ def validate_query_param_inputs(
     the server keeps from the call (``server_owned_keys``), which a service
     tool's schema leaves out of its target lookup's names
     (``test_a_server_owned_lookup_key_is_not_refused_but_a_plain_one_is``),
-    and, under ``SPREAD_AUTHOR_WINS``, a name the selector's ``kwargs=``
-    provider fills. Three exemptions are made here, because the schema still
-    offers the name while the caller's value reaches the reader by another way:
+    and, under ``SPREAD_AUTHOR_WINS``, a name the selector's or a spread
+    service's ``kwargs=`` provider fills. Three exemptions are made here,
+    because the schema still offers the name while the caller's value reaches
+    the reader by another way:
 
     - **a name the ``kwargs=`` provider declares it fills**, its
       ``provider_keys`` ``filled`` set, or that ``spec_kwargs_provides=``
       claims. The provider owns the parameter, and one reading
       ``request.query_params`` is the ordinary way to route a query parameter
       to a callable, so the caller's value is served. The schema still offers
-      such a name for a selector under ``SPREAD_CALLER_WINS``
+      such a name under ``SPREAD_CALLER_WINS``, for a selector
       (``test_a_parameter_a_typed_provider_fills_is_served``) and for a spread
       service (``test_a_spread_service_parameter_its_provider_fills_is_served``),
       so a call is what each asserts. **Only for the callable that provider feeds**: a
@@ -328,12 +345,7 @@ def validate_query_param_inputs(
     # spares reading the schema at registration for the tools declaring none.
     if not declared:
         return
-    keys = provider_keys(binding.spec.kwargs)
-    # ``None`` is a provider whose keys cannot be read, which fills nothing for
-    # certain; ``declinable`` stays out on purpose.
-    filled: frozenset[str] = (keys.filled if keys is not None else frozenset()) | (
-        spec_kwargs_provides
-    )
+    filled = _provider_filled(binding, spec_kwargs_provides)
     groups: tuple[tuple[str, frozenset[str]], ...]
     if isinstance(binding, SelectorToolBinding):
         offered = frozenset(
@@ -349,29 +361,7 @@ def validate_query_param_inputs(
             ("the selector's filter_set declares field(s)", filtering),
         )
     else:
-        advertised = frozenset(
-            build_service_tool_input_schema(
-                dataclasses.replace(binding, query_params=()), pool_seeds=pool_seeds
-            ).get("properties", {})
-        )
-        # The two reads the schema builder merges, made as it makes them. Each
-        # is narrowed to what the builder advertised, so they only say whose a
-        # name is: a ``many=True`` item's fields travel inside the list, and a
-        # lookup key the server owns is left out of the schema. A name both the
-        # serializer and the lookup take is the serializer's, as its property is.
-        fields = advertised & frozenset(
-            build_input_schema(binding.spec.input_serializer).get("properties", {})
-        )
-        lookup = target_lookup(binding.spec)
-        reflected: dict[str, Any] = (
-            selector_inputs(lookup, url_kwargs=binding.url_kwargs, pool_seeds=pool_seeds)[0]
-            if lookup is not None
-            else {}
-        )
-        looked_up = (advertised & frozenset(reflected.get("properties", {}))) - fields
-        # What is left is a spreading service's own parameters, the only names
-        # its ``kwargs=`` provider feeds.
-        own = advertised - fields - looked_up - filled
+        fields, own, looked_up = _service_tool_inputs(binding, filled=filled, pool_seeds=pool_seeds)
         kind, target = "service tool", "the spec"
         reader = (
             "the input_serializer validates them and the service and its target lookup are called"
@@ -393,6 +383,136 @@ def validate_query_param_inputs(
             f"callable and drop the input, or drop the QueryParam so the argument reaches "
             f"{target}."
         )
+
+
+def validate_url_kwarg_inputs(
+    binding: ToolBinding,
+    *,
+    spec_kwargs_provides: frozenset[str] = frozenset(),
+    pool_seeds: PoolSeeds = DEFAULT_POOL_SEEDS,
+) -> None:
+    """Refuse a ``UrlKwarg`` named like a service tool's input that never receives it.
+
+    A ``UrlKwarg``'s value is popped from the arguments and seeded into
+    ``view.kwargs``. drf-services hands ``view.kwargs`` to the spec's target
+    lookup and to its ``kwargs=`` provider, and never to the service, which is
+    handed neither ``view`` nor the route. So two inputs of the same name
+    register, are advertised, and never receive the caller's value:
+
+    - **a spread service's own parameter**, where a spreading binding with no
+      ``input_serializer`` advertises it: a required one was answered
+      "Missing required argument(s): 'project_pk'" on every call, and a
+      defaulted one ran on its default, so the call archived row 0
+      (``test_a_spread_service_parameter_a_url_kwarg_takes_is_refused``);
+    - **an ``input_serializer`` field**, which validates the arguments left once
+      the split has run, so a required one was answered "This field is
+      required." for an argument the call carried
+      (``test_a_serializer_field_a_url_kwarg_takes_is_refused``).
+
+    The names are the ``QueryParam`` refusal's own sets
+    (``_service_tool_inputs``), so the two refusals read the schema the same way.
+    What does receive the value is not refused: **a target lookup's parameter**,
+    since drf-services spreads ``view.kwargs`` into the lookup's pool
+    (``test_a_target_lookup_parameter_a_url_kwarg_takes_is_served``), and **a
+    parameter the service's own ``kwargs=`` provider declares it fills**, the
+    ``own`` set's subtraction of ``filled``, because a provider is handed
+    ``view`` and fills the parameter from the route
+    (``test_a_parameter_the_services_provider_fills_from_the_route_is_served``,
+    whose ``SPREAD_CALLER_WINS`` row holds the subtraction: under
+    ``SPREAD_AUTHOR_WINS`` the schema does not offer such a name at all). A
+    selector tool's parameter is served too, through the selector's pool, so a
+    selector tool is not checked here. A ``UrlKwarg`` no input of the service
+    takes registers, since the sets are read with the declarations left out
+    (``test_a_url_kwarg_no_input_takes_registers``).
+    """
+    declared: frozenset[str] = frozenset(url_kwarg.name for url_kwarg in binding.url_kwargs)
+    # Not a condition of the rule, which intersects with ``declared`` anyway: it
+    # spares reading the schema at registration for the tools declaring none.
+    if not declared:
+        return
+    fields, own, _looked_up = _service_tool_inputs(
+        binding, filled=_provider_filled(binding, spec_kwargs_provides), pool_seeds=pool_seeds
+    )
+    groups = (
+        ("the service's input_serializer declares field(s)", fields & declared),
+        ("the service declares parameter(s)", own & declared),
+    )
+    parts = [f"{subject} {sorted(names)!r}" for subject, names in groups if names]
+    if parts:
+        raise ImproperlyConfigured(
+            f"service tool {binding.name!r}: {' and '.join(parts)} that the tool also "
+            "declares as a UrlKwarg. A UrlKwarg's value is routed to view.kwargs and "
+            "removed from the arguments before the input_serializer validates them and "
+            "the service is called, and drf-services hands view.kwargs to the spec's "
+            "target lookup and kwargs= provider, never to the service, so the input "
+            "would never receive the caller's value. Fill the parameter from view.kwargs "
+            "with a kwargs= provider whose TypedDict declares it, or take the value as a "
+            "parameter of the spec's target lookup and drop the input, or drop the "
+            "UrlKwarg so the argument reaches the spec."
+        )
+
+
+def _provider_filled(
+    binding: ToolBinding | SelectorToolBinding, spec_kwargs_provides: frozenset[str]
+) -> frozenset[str]:
+    """The names the spec's ``kwargs=`` provider fills for certain, and the ones claimed for it.
+
+    ``None`` from ``provider_keys`` is a provider whose keys cannot be read,
+    which fills nothing for certain; ``declinable`` stays out on purpose, since
+    on a call where such a key is not filled the caller's value is the only one.
+    """
+    keys = provider_keys(binding.spec.kwargs)
+    return (keys.filled if keys is not None else frozenset()) | spec_kwargs_provides
+
+
+def _service_tool_inputs(
+    binding: ToolBinding, *, filled: frozenset[str], pool_seeds: PoolSeeds
+) -> tuple[frozenset[str], frozenset[str], frozenset[str]]:
+    """Whose each name a service tool's ``inputSchema`` offers is: its fields, its own, its lookup's.
+
+    Read off everything ``build_service_tool_input_schema`` advertises, built
+    without the ``QueryParam`` and ``UrlKwarg`` declarations, because each is
+    advertised under its own name and would hide the input it shadows, or, for a
+    ``UrlKwarg`` no input takes, count its own name as the service's
+    (``test_a_url_kwarg_no_input_takes_registers``). Leaving the ``UrlKwarg``
+    declarations out also keeps a lookup parameter one of them defaults in the
+    lookup's group, since the reflection would otherwise drop it as filled and
+    the name would fall to the service's own (the ``defaulted`` rows of
+    ``test_a_target_lookup_parameter_a_url_kwarg_takes_is_served``).
+
+    The three groups are the ``input_serializer``'s fields, which validate the
+    arguments left once the split has run; the service's own parameters, where
+    a spreading binding with no serializer advertises them, less what its
+    ``kwargs=`` provider ``filled``; and the target lookup's parameters, which
+    the schema merges in beside them. Shared by ``validate_query_param_inputs``
+    and ``validate_url_kwarg_inputs``, so the two refusals cannot disagree about
+    whose a name is.
+    """
+    advertised = frozenset(
+        build_service_tool_input_schema(
+            dataclasses.replace(binding, query_params=(), url_kwargs=()), pool_seeds=pool_seeds
+        ).get("properties", {})
+    )
+    # The two reads the schema builder merges, made as it makes them. Each is
+    # narrowed to what the builder advertised, so they only say whose a name
+    # is: a ``many=True`` item's fields travel inside the list, and a lookup key
+    # the server owns is left out of the schema. A name both the serializer and
+    # the lookup take is the serializer's, as its property is
+    # (``test_a_name_the_serializer_and_the_lookup_both_take_is_named_as_the_serializers``).
+    fields = advertised & frozenset(
+        build_input_schema(binding.spec.input_serializer).get("properties", {})
+    )
+    lookup = target_lookup(binding.spec)
+    reflected: dict[str, Any] = (
+        selector_inputs(lookup, url_kwargs=(), pool_seeds=pool_seeds)[0]
+        if lookup is not None
+        else {}
+    )
+    looked_up = (advertised & frozenset(reflected.get("properties", {}))) - fields
+    # What is left is a spreading service's own parameters, the only names its
+    # ``kwargs=`` provider feeds.
+    own = advertised - fields - looked_up - filled
+    return fields, own, looked_up
 
 
 def validate_input_serializer_against_callable(
@@ -424,7 +544,8 @@ def validate_input_serializer_against_callable(
        tool's ``UrlKwarg`` that every dispatched call carries, or an explicit
        ``spec_kwargs_provides`` opt-in declaring that ``spec.kwargs(...)``
        supplies it. Post-fetch keys (``page`` / ``limit``) are *not* sources —
-       the pipeline consumes them before the callable runs.
+       on a ``LIST`` tool the pipeline consumes them before the callable runs,
+       and on any other they are arguments like the rest.
 
        The opt-in is explicit because ``spec.kwargs`` output depends on the
        transport: a spec reused across DRF views and MCP tools sees populated
@@ -927,5 +1048,6 @@ __all__ = [
     "validate_query_params",
     "validate_selector_parameter_names",
     "validate_serializer_shapes",
+    "validate_url_kwarg_inputs",
     "validate_url_kwargs",
 ]

@@ -1,8 +1,11 @@
 """``page`` and ``limit`` reach a selector alike on every route.
 
-Both belong to the read pipeline's pagination, so the wire and ``acall_tool``
-strip them from a selector's arguments, while ``call_tool`` passed them through:
-a ``**kwargs`` selector received them on one route only.
+Both belong to the read pipeline's pagination on a ``LIST`` selector tool, so
+the wire and ``acall_tool`` strip them from a ``LIST`` selector's arguments,
+while ``call_tool`` passed them through: a ``**kwargs`` selector received them
+on one route only. A ``RETRIEVE`` tool cannot paginate, so nothing takes either
+name from its selector, which receives them as sent on every route, as the
+Pydantic-AI ``SpecToolset`` hands them over.
 """
 
 from __future__ import annotations
@@ -61,11 +64,13 @@ async def _structured(server: MCPServer, route: str, arguments: dict[str, Any]) 
     return out["structuredContent"]
 
 
-def _register(server: MCPServer, selector: Any, **kwargs: Any) -> MCPServer:
+def _register(
+    server: MCPServer, selector: Any, *, kind: SelectorKind = SelectorKind.LIST, **kwargs: Any
+) -> MCPServer:
     server.register_selector_tool(
         name="read",
         description="Read.",
-        spec=SelectorSpec(kind=SelectorKind.RETRIEVE, selector=selector),
+        spec=SelectorSpec(kind=kind, selector=selector),
         **kwargs,
     )
     return server
@@ -75,12 +80,24 @@ def _server() -> MCPServer:
     return MCPServer(name="t", auth_backend=AllowAnyBackend(), session_store=None)
 
 
-def _anything(**kwargs: Any) -> dict[str, Any]:
+def _sent(kwargs: dict[str, Any]) -> dict[str, Any]:
     # The pool's seeds arrive too; only what the caller sent is compared.
     return {name: kwargs[name] for name in ("page", "limit", "status") if name in kwargs}
 
 
-def _page(*, page: int = 1) -> dict[str, Any]:
+def _anything(**kwargs: Any) -> list[dict[str, Any]]:
+    return [_sent(kwargs)]
+
+
+def _anything_one(**kwargs: Any) -> dict[str, Any]:
+    return _sent(kwargs)
+
+
+def _page(*, page: int = 1) -> list[dict[str, Any]]:
+    return [{"page": page}]
+
+
+def _entry_page(*, page: int = 1) -> dict[str, Any]:
     return {"page": page}
 
 
@@ -95,7 +112,34 @@ async def test_every_route_hands_a_selector_the_same_arguments(route: str) -> No
 
     out = await _structured(server, route, {"page": 2, "limit": 5, "status": "open"})
 
-    assert out == {"status": "open"}
+    assert out == [{"status": "open"}]
+
+
+@pytest.mark.django_db(transaction=True)
+@pytest.mark.parametrize("route", _ROUTES)
+async def test_a_retrieve_selector_receives_page_and_limit_on_every_route(route: str) -> None:
+    # Nothing paginates a ``RETRIEVE`` tool, so neither name is the pipeline's
+    # to take. Each route's strip holds a row: stripped, the selector got
+    # ``{"status": "open"}`` alone.
+    server = _register(_server(), _anything_one, kind=SelectorKind.RETRIEVE)
+
+    out = await _structured(server, route, {"page": 2, "limit": 5, "status": "open"})
+
+    assert out == {"page": 2, "limit": 5, "status": "open"}
+
+
+@pytest.mark.django_db(transaction=True)
+@pytest.mark.parametrize("route", _ROUTES)
+async def test_a_retrieve_selectors_page_parameter_registers_and_reaches_it_on_every_route(
+    route: str,
+) -> None:
+    # Refused at registration while the names were reserved on every selector
+    # tool, and before that served page 1 when asked for page 2.
+    server = _register(_server(), _entry_page, kind=SelectorKind.RETRIEVE)
+
+    out = await _structured(server, route, {"page": 2})
+
+    assert out == {"page": 2}
 
 
 @pytest.mark.django_db(transaction=True)
@@ -110,7 +154,7 @@ async def test_a_name_the_input_serializer_lays_back_reaches_the_selector_on_eve
 
     out = await _structured(server, route, {"page": 3})
 
-    assert out == {"page": 3}
+    assert out == [{"page": 3}]
 
 
 class _AmountCeiling(django_filters.FilterSet):

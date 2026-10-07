@@ -369,8 +369,20 @@ as an unknown argument (the `REJECT` policy ignores it) and never lands in the
 service's validated payload — it routes **only** through `view.kwargs`. A name
 can't collide with a reserved transport key (`page` / `limit`, or the
 `request` / `user` / `progress` / `data` / `instance` / `serializer` /
-`collection` pool seeds); colliding with an ordinary spec input is allowed and is the intended way
-to route a route-capture the spec *also* reads directly.
+`collection` pool seeds).
+
+Sharing a name with an input is how a route capture reaches a callable that
+takes it as a parameter, **where that callable is handed `view.kwargs`**: a
+selector tool's selector, and a service tool's target lookup and `kwargs=`
+provider. A service itself is handed neither `view` nor the route, so on a
+service tool registration refuses a `UrlKwarg` named like one of its inputs
+that would never receive the value: a spread service's own parameter, which
+was answered "Missing required argument(s)" on every call, or ran on its
+default, and an `input_serializer` field, which validates the arguments left
+once the URL kwarg is split out. A parameter the service's own typed
+`kwargs=` provider fills is exempt, because the provider reads `view.kwargs`;
+that is the first remedy the refusal offers, before taking the value as a
+parameter of the target lookup, and dropping the `UrlKwarg`.
 
 On a selector tool that holds for its `input_serializer` as well. The validated
 values are laid back over the arguments, and a field bound with
@@ -803,13 +815,14 @@ forms) accept three behavior knobs:
     selector → `SPREAD_AUTHOR_WINS`).
 
   Reserved transport-pool seeds (`request` / `user` / `progress` / `data` /
-  `instance` / `serializer` / `collection`) and the selector pipeline keys
-  (`page` / `limit`) are stripped from the spread regardless of mode so clients
-  can't poison transport-controlled state. So trust mode (no `input_serializer`
-  under a spreading binding) does not count a reserved seed as one the caller
-  supplies: a callable requiring a seed that nothing on the transport fills is
-  refused at registration. For the same reason, registration refuses a selector
-  parameter named `page` or `limit`, or named by one of the tool's
+  `instance` / `serializer` / `collection`) and, on a `LIST` selector tool,
+  the pipeline keys (`page` / `limit`) are stripped from the spread regardless
+  of mode so clients can't poison transport-controlled state. So trust mode (no
+  `input_serializer` under a spreading binding) does not count a reserved seed
+  as one the caller supplies: a callable requiring a seed that nothing on the
+  transport fills is refused at registration. For the same reason, registration
+  refuses a `LIST` selector's parameter named `page` or `limit`, and a selector
+  parameter named by one of the tool's
   [`QueryParam`s](#query-params-read-shaping-values-the-serializer-reads), unless
   the tool's `input_serializer` lays it back: a field of that name that is not
   `read_only` and is bound to its own name (no `source` elsewhere), on a plain
@@ -817,7 +830,10 @@ forms) accept three behavior knobs:
   validated value is laid back over the stripped arguments. A required
   positional-only parameter (`def by_status(status, /)`) is refused at
   registration as well, for service and selector alike: dispatch passes every
-  argument by keyword, so nothing can fill it.
+  argument by keyword, so nothing can fill it. A `RETRIEVE` selector tool
+  cannot paginate, so nothing takes `page` or `limit` from its selector, which
+  may declare either and receives the caller's value, as on the Pydantic-AI
+  route.
 
 - **`unknown_arguments=`** — how `arguments` keys outside the binding's
   declared field set are handled.
@@ -842,11 +858,21 @@ forms) accept three behavior knobs:
        spec's `kwargs=` provider may fill it.
 
     Less every name the server fills: the pool seeds, the ones registered with
-    [`pool_seeds=`](#pool-seeds), and every key the service, a precondition or
+    [`pool_seeds=`](#pool-seeds), every key the service, a precondition or
     the target lookup marks `NotClientInput`, which dispatch drops from the
-    caller's input. A lookup parameter a precondition hides is therefore not
-    advertised, though the lookup names it; an `input_serializer` field of the
-    same name is, because it is the caller's input to `data`.
+    caller's input, every key the target lookup's own `kwargs=` provider
+    says it fills, which dispatch lays over the arguments under every binding,
+    and,
+    under `SPREAD_AUTHOR_WINS`, every key the service's `kwargs=` provider
+    says it fills, which dispatch lays over the caller's spread. `REJECT` still
+    admits a key one of the providers fills and serves the provider's value,
+    so leaving it out only stops asking for a value the call would replace.
+    Under `SPREAD_CALLER_WINS` the service's provider's keys stay listed, not
+    required, because the caller's value is the one served; so does a key
+    either provider may decline with `UNSET`. A lookup parameter a precondition
+    hides is therefore not advertised, though the lookup names it; an
+    `input_serializer` field of the same name is, because it is the caller's
+    input to `data`.
 
     So `def archive_task(*, instance, reason)` behind a `pk` lookup, under
     `SPREAD_AUTHOR_WINS`, advertises `pk` and `reason` with
@@ -862,7 +888,11 @@ forms) accept three behavior knobs:
     failure. A `**kwargs` whose annotation does not resolve at runtime (an
     `Unpack[...]` of a `TypedDict` imported under `TYPE_CHECKING`) leaves the
     set unknown, so `REJECT` cannot be enforced against it and registration
-    raises `ImproperlyConfigured`.
+    raises `ImproperlyConfigured`. The decorator form meets the same refusal
+    for a `TypedDict` declared *below* the decorated function: the decorator
+    registers while the module is still importing, before the class exists.
+    Declare it above the function, or register the tool once the module has
+    imported.
 
     Earlier releases downgraded `REJECT` before dispatch for a service with no
     `input_serializer` and advertised its schema open to match, so an argument

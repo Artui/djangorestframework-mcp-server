@@ -38,21 +38,28 @@ tool and the parameter, in place of a `TypeError` or a wrong answer per call.
   `input_serializer` already was. A seed something does fill still counts:
   `request`, `user` and `progress` always, `instance` or `collection` where the
   target lookup dispatch calls resolves one, and every name the server's
-  `pool_seeds=` registers
+  `pool_seeds=` registers. To register such a tool, give the parameter a
+  default, declare the target lookup that resolves a service's `instance` or
+  `collection`, or register the seed through `pool_seeds=`
   ([#171](https://github.com/Artui/djangorestframework-mcp-server/issues/171)).
-- **A selector parameter named `page` or `limit`, or a tool input named by one
-  of the tool's `QueryParam`s, is refused.** `register_selector_tool` already refused a
+- **A `LIST` selector's parameter named `page` or `limit`, a tool input named by
+  one of the tool's `QueryParam`s, or a service tool input named by one of its
+  `UrlKwarg`s, is refused.** `register_selector_tool` already refused a
   `QueryParam` or `UrlKwarg` with one of those names, and did not check the
   selector against the same collision. `page` and `limit` are stripped from the
-  arguments the selector receives, whether or not the tool paginates, and a
+  arguments a `LIST` selector receives, whether or not the tool paginates, and a
   `QueryParam`'s value is routed to `request.query_params` and split out of
   them. So the parameter was advertised and never received the caller's value:
   a required one was answered `This field is required.` for an argument the call
   carried, and a defaulted one ran on its default, so `recent_entries(*, page=1)`
-  served page 1 when asked for page 2. The check reads the tool's effective
-  `query_params`, an `agent_contract`'s included. A `UrlKwarg` sharing a
-  parameter's name stays allowed, since its value reaches the selector through
-  `view.kwargs`, and a `**kwargs` catch-all names nothing to refuse. So does a
+  served page 1 when asked for page 2. A `RETRIEVE` selector tool cannot
+  paginate, so nothing takes either name from its selector: one declaring
+  `page` registers and receives the caller's value on every route, as it does on
+  the Pydantic-AI route, where it used to run on its default whatever the call
+  asked for. The check reads the tool's effective `query_params`, an
+  `agent_contract`'s included. A `UrlKwarg` sharing a selector parameter's name
+  stays allowed, since its value reaches the selector through `view.kwargs`,
+  and a `**kwargs` catch-all names nothing to refuse. So does a
   name the tool's `input_serializer` declares as a field, because the validated
   values are laid back over the stripped arguments and the selector does receive
   it: `page=1` beside a serializer `page` field reads the caller's `page=3`. The
@@ -80,7 +87,17 @@ tool and the parameter, in place of a `TypeError` or a wrong answer per call.
   name and offers three remedies in order: fill the parameter from
   `request.query_params` with a `kwargs=` provider whose `TypedDict` declares
   it, read the value there in the callable and drop the input, or drop the
-  `QueryParam`
+  `QueryParam`. On a service tool a `UrlKwarg` is refused on the same names
+  where its value never arrives, because drf-services hands `view.kwargs` to the
+  target lookup and the `kwargs=` provider and never to the service: a spread
+  service's own parameter, answered `Missing required argument(s):
+  'project_pk'.` on every call, or run on its default, and an `input_serializer`
+  field, answered `This field is required.`. A target lookup's parameter of the
+  same name, and one the service's own typed provider fills, are served and
+  stay allowed. That refusal names the callable and offers three remedies in
+  order: fill the parameter from `view.kwargs` with a `kwargs=` provider whose
+  `TypedDict` declares it, take the value as a parameter of the spec's target
+  lookup and drop the input, or drop the `UrlKwarg`
   ([#177](https://github.com/Artui/djangorestframework-mcp-server/issues/177)).
 
 - **`UnknownArguments.REJECT` against a `**kwargs` whose annotation does not
@@ -90,9 +107,14 @@ tool and the parameter, in place of a `TypeError` or a wrong answer per call.
   `TypedDict` imported under `TYPE_CHECKING`, and its dispatch raises
   `ImproperlyConfigured` under `REJECT` on every call. `tools/list` reads the same
   set to decide whether the schema is closed, so such a tool also failed every
-  listing. Registration now raises drf-services' message, naming the tool. Make
-  the annotation resolvable, or register the tool with `IGNORE` or `PASSTHROUGH`,
-  which take the surface as open.
+  listing. Registration now raises drf-services' message, naming the tool and
+  both ways an annotation fails to resolve there: a `TypedDict` imported under
+  `if TYPE_CHECKING:`, and one declared below a function registered with the
+  `@server.service_tool` decorator, which runs while the module is still
+  importing and before the class exists. Import the `TypedDict` normally, or
+  declare it above the function or register the tool once the module has
+  imported, or register the tool with `IGNORE` or `PASSTHROUGH`, which take the
+  surface as open.
 
 These follow from drf-services 0.56.0, which this release requires.
 
@@ -127,11 +149,15 @@ These follow from drf-services 0.56.0, which this release requires.
   `data`, so the payload had no way to reach the selector: a `**kwargs` selector
   ran with none of it. The rule that `BUNDLE` beside an `input_serializer` needs
   a `data`, `serializer` or `**kwargs` parameter is a service's alone now.
+  Register the tool under a spreading binding (`SPREAD_AUTHOR_WINS`, the
+  selector default, or `SPREAD_CALLER_WINS`) and take the fields as parameters,
+  or drop the `input_serializer`.
 - **A required positional-only parameter is refused.** Dispatch passes every
   argument by keyword, so `def by_status(status, /)` registered and raised
   `TypeError` on every call, on a service and a selector alike, because the
   source check looked only at keyword-capable parameters. One with a default
-  still registers, and runs on its default.
+  still registers, and runs on its default. Drop the `/` so the parameter can be
+  passed by keyword, or give it a default.
 
 - **A service tool with no `input_serializer` refuses arguments it does not
   declare, and its `inputSchema` lists the ones it does.** Calls naming an
@@ -185,6 +211,16 @@ These follow from drf-services 0.56.0, which this release requires.
   schema had not sent it. `T` is now substituted, so `tenant` is offered and not
   required, as the same key written out (`tenant: str | UnsetType`) is
   ([#176](https://github.com/Artui/djangorestframework-mcp-server/issues/176)).
+- **A spread service's parameter its `kwargs=` provider fills is not advertised
+  under `SPREAD_AUTHOR_WINS`.** With no `input_serializer`, the `inputSchema`
+  listed a key the service's typed provider says it fills, while dispatch lays
+  the provider's value over the caller's spread under that binding: a call
+  sending `reason="caller"` was served `reason="provider"`. Such a key is now
+  left out of the schema, as a selector tool's provider's keys and a target
+  lookup's own provider's keys already were. `UnknownArguments.REJECT` still
+  admits it, and the provider's value is served. Under `SPREAD_CALLER_WINS` the
+  caller's value is the one served, so the key stays listed and not required,
+  and a key the provider may decline with `UNSET` stays listed under both.
 - **A service tool declaring `ServiceSpec(allow_none=True)` advertises an
   `outputSchema` its `{}` conforms to.** A single-row service with no output
   re-read whose service returns `None` is served `"structuredContent": {}`,
@@ -382,9 +418,9 @@ These follow from drf-services 0.56.0, which this release requires.
   fields. Registration now refuses that service, and its message says to take
   `data` and read the field off the instance. A selector tool's dataclass input
   is unaffected, since it is laid back field by field.
-- **`call_tool` strips `page` and `limit` from a selector's arguments**, as the
-  wire and `acall_tool` do, so a `**kwargs` selector no longer receives them on
-  that route alone. A name the tool's `input_serializer` lays back is kept,
+- **`call_tool` strips `page` and `limit` from a `LIST` selector's arguments**,
+  as the wire and `acall_tool` do, so a `**kwargs` selector no longer receives
+  them on that route alone. A name the tool's `input_serializer` lays back is kept,
   since that route runs no `input_serializer`, and a `FilterSet` declaring
   either still reads it.
 - **A chain's `LIST` service step with no `selector` refuses a return that is

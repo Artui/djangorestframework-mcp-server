@@ -296,6 +296,14 @@ class ToolBinding(Generic[InputT, ResultT, ExtraT]):
         ``tests/registry/types/test_tool_binding_reject.py``: the policy,
         ``test_a_permissive_policy_registers_the_same_spec_open``; the binding,
         ``test_a_service_dispatch_never_reads_is_not_asked``.
+
+        drf-services' message names one cause, a ``TypedDict`` imported under
+        ``if TYPE_CHECKING:``. Registration meets a second that reads the same
+        at runtime: a decorated function whose ``TypedDict`` is declared further
+        down its module, which does not exist yet while the decorator runs, and
+        resolves once the module has imported. So the refusal names both, and
+        the remedy for each
+        (``test_a_typed_dict_declared_below_the_decorated_service_is_named_as_a_cause``).
         """
         if self.unknown_arguments is not UnknownArguments.REJECT:
             return
@@ -308,7 +316,13 @@ class ToolBinding(Generic[InputT, ResultT, ExtraT]):
                 argument_binding=self.argument_binding,
             )
         except ImproperlyConfigured as exc:
-            raise ImproperlyConfigured(f"Tool {self.name!r}: {exc}") from exc
+            raise ImproperlyConfigured(
+                f"Tool {self.name!r}: {exc} An annotation does not resolve at "
+                "registration when the name it uses is imported under 'if TYPE_CHECKING:', "
+                "or when it is a TypedDict declared below the decorated function, which "
+                "does not exist yet while the decorator runs: declare it above the "
+                "function, or register the tool once the module has imported."
+            ) from exc
 
     @property
     def service(self) -> Callable[..., ResultT]:

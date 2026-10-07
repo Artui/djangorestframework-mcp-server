@@ -1,8 +1,8 @@
 """``register_selector_tool`` refuses a selector parameter the transport takes away.
 
-``page`` and ``limit`` belong to the read pipeline, and a ``QueryParam``'s value
-is routed to ``request.query_params``; both are removed from the arguments
-before the selector is called. A selector parameter of either name registers,
+``page`` and ``limit`` belong to the read pipeline of a ``LIST`` selector tool,
+and a ``QueryParam``'s value is routed to ``request.query_params``; both are
+removed from the arguments before the selector is called. A selector parameter of either name registers,
 is advertised, and then never receives what the caller sent: a required one is
 answered "This field is required." for an argument the call carried, a
 defaulted one runs silently on its default. So registration refuses it, as it
@@ -86,11 +86,29 @@ def test_a_required_pagination_named_parameter_is_refused_in_trust_mode() -> Non
 
 
 def test_a_pagination_named_parameter_is_refused_on_an_unpaginated_tool() -> None:
-    # The names are stripped from the selector's arguments whether or not the
-    # tool paginates, so ``paginate`` is no condition of the refusal.
+    # The names are stripped from a ``LIST`` selector's arguments whether or not
+    # the tool paginates, so ``paginate`` is no condition of the refusal.
     with pytest.raises(ImproperlyConfigured, match=r"\['page'\]") as caught:
-        _register(_recent_entries_page, kind=SelectorKind.RETRIEVE)
+        _register(_recent_entries_page)
     assert _PAGINATION_WORDING in str(caught.value)
+
+
+def _entry_page(*, page: int = 1) -> dict[str, Any]:
+    return {"page": page}
+
+
+def _entry_limit(*, limit: int = 10) -> dict[str, Any]:
+    return {"limit": limit}
+
+
+@pytest.mark.parametrize("selector", [_entry_page, _entry_limit])
+def test_a_retrieve_selectors_pagination_named_parameter_registers(selector: Any) -> None:
+    # A ``RETRIEVE`` tool cannot paginate, so nothing takes either name from its
+    # selector, and the Pydantic-AI ``SpecToolset`` registers the same spec.
+    # ``test_a_retrieve_selectors_page_parameter_registers_and_reaches_it_on_every_route``
+    # calls it.
+    binding = _register(selector, kind=SelectorKind.RETRIEVE)
+    assert binding.kind is SelectorKind.RETRIEVE
 
 
 # ---------- a ``QueryParam`` of the same name ----------
