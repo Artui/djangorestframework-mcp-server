@@ -541,13 +541,12 @@ class MCPServer:
             max_page_size=max_page_size,
             pool_seeds=self._pool_seeds,
         )
-        # On the binding rather than the arguments, so the ``query_params`` it
-        # reads are the effective ones -- an ``agent_contract``'s included
-        # (``test_a_query_param_from_the_agent_contract_shadows_too``).
+        # A ``QueryParam`` named like an input the tool offers is refused by
+        # the adapter that builds the binding, for both tool kinds
+        # (``validate_query_param_inputs``).
         validate_selector_parameter_names(
             label=f"selector tool {binding.name!r}",
             selector=binding.selector,
-            query_params=binding.query_params,
             input_serializer=binding.input_serializer,
         )
         check_tool_permissions_declared(

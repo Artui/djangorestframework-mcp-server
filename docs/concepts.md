@@ -206,8 +206,12 @@ from:
 - on a selector tool, the names `spec_kwargs_provides=` declares, and the fields
   its `input_serializer` fills when the client sends nothing (a writable field
   with a `default`, a `HiddenField` included), because the validated values are
-  laid over the selector's params. `call_tool` does not run a selector tool's
-  `input_serializer`, so there such a name is the caller's to send.
+  laid over the selector's params. A dataclass input (a bare `@dataclass` or a
+  `DataclassSerializer`) validates into an instance, which is laid over them
+  field by field as a `dict` is, so a dataclass field declaring a `default` or a
+  `default_factory` fills its name too: the instance is built with it.
+  `call_tool` does not run a selector tool's `input_serializer`, so there such a
+  name is the caller's to send.
 
 A filled name is not advertised. **Every other parameter without a default is
 required**, so `get_invoice(*, pk)` asks for `pk` with no marker; a default keeps
@@ -462,7 +466,7 @@ The value is advertised in the tool's `inputSchema`, **popped** from the
 arguments, and handed to `build_offline_context(query_params=…)`. It never
 reaches the spec as an input, so the unknown-argument policy never sees it.
 
-Four rules worth knowing:
+Three rules worth knowing:
 
 - **Never required.** A read-shaping param the spec runs fine without cannot be
   required, which is why `QueryParam` has no such flag — unlike `UrlKwarg`,
@@ -470,20 +474,52 @@ Four rules worth knowing:
 - **One name, one channel.** Declaring the same name as both a `QueryParam` and a
   `UrlKwarg` raises at registration: a value is popped from the arguments once
   and routes to one place.
-- **A `filter_set` field is not a query param.** Filter fields are already
-  generated into the tool schema and flow through as ordinary arguments, which is
-  where `dispatch_spec` reads them. Declaring one as a `QueryParam` would pop it
-  out of the arguments and it would silently stop filtering.
-- **Nor is a selector parameter.** The value is popped before the selector is
-  called, so a parameter of the same name would never receive it: a required one
-  would be answered `This field is required.` for an argument the call carried,
-  a defaulted one would run on its default. `register_selector_tool` refuses
-  that selector, unless the tool's `input_serializer` declares the name as a
-  field: the validated values are laid back over the popped arguments, so the
-  selector receives the caller's value too. That takes a DRF `Serializer`; a
-  dataclass input validates into an instance, which is not laid back, so it
-  exempts nothing. `call_tool` does not run a selector tool's
-  `input_serializer`, so there the value reaches only `request.query_params`.
+- **Not a name the tool offers as the call's own input.** The value is popped
+  before the spec runs, so an input of the same name never receives it: a
+  required one is answered as missing for an argument the call carried, which a
+  model resends until it runs out of retries, and a defaulted one runs on its
+  default. So registration refuses a `QueryParam` named after any input the
+  tool's `inputSchema` offers the caller, read from the reader that builds that
+  schema: on a selector tool, a selector parameter or a `filter_set` field
+  (which would silently stop filtering); on a service tool, an
+  `input_serializer` field, one of the service's own parameters where a
+  spreading binding with no serializer advertises them, or a parameter of its
+  [target lookup](#selector-requiredness). The refusal
+  says which of them takes the name, and offers three remedies in order: fill
+  the parameter from `request.query_params` with a `kwargs=` provider whose
+  `TypedDict` declares it, read the value there in the callable and drop the
+  input, or drop the `QueryParam`.
+
+  A name the schema does not offer as the caller's, or whose reader receives the
+  caller's value another way, is exempt:
+
+  - **a name a `kwargs=` provider declares it fills**, by returning a
+    `TypedDict` whose key cannot be `UNSET`, or that `spec_kwargs_provides=`
+    claims. A provider reading `request.query_params["status"]` into the
+    selector's `status`, beside `QueryParam("status")`, is how to route the
+    value there, and the caller's value is served. Only for the callable that
+    provider feeds: a service's provider fills its own parameters, never its
+    `input_serializer`'s fields or its target lookup's parameters, which a
+    lookup's own `kwargs=` fills;
+  - **a key the server keeps from the call**, one a callable in it marks
+    `NotClientInput`, which no caller's value reaches;
+  - **on a selector tool, a field its `input_serializer` lays back**: the
+    serializer validates the arguments before the `QueryParam` takes its value,
+    and the validated values are laid back over the popped arguments, so the
+    selector receives the caller's value too. A dataclass input is laid back
+    field by field as a `dict` is, so its fields exempt their names alike; a
+    `read_only` field, or one whose `source=` names another attribute, is not
+    laid back under its name and exempts nothing. `call_tool` does not run a
+    selector tool's `input_serializer`, so there the value reaches only
+    `request.query_params`. A service tool's serializer validates the
+    arguments the `QueryParam` has already taken from, so its fields are never
+    exempt.
+
+  A key the provider may decline with `UNSET`, and any key of a provider whose
+  annotation does not say which keys it returns, is still refused: on a call
+  where the provider does not fill it, the caller's value is the only one, and
+  the `QueryParam` has taken it. A `UrlKwarg` may share a selector parameter's
+  name, since its value reaches the selector through `view.kwargs`.
 
 !!! warning "The MCP endpoint's query string is no longer a channel"
     Every dispatch path wraps the real Django `POST` to the MCP endpoint, so
@@ -2332,7 +2368,11 @@ a single-row service tool whose output re-read selector finds none
 (drf-services materializes the re-read with `.first()`, so a re-read that
 filters out the row the service just archived yields nothing, whatever the
 nested spec declares), and a single-row service with no re-read that declares
-`ServiceSpec(allow_none=True)` and returns `None`. MCP requires
+`ServiceSpec(allow_none=True)` and returns `None`. A single-row service with
+nothing to re-read that returns `None` *without* that declaration is served
+`{}` as well, but against an `outputSchema` that does not admit `{}`:
+`allow_none=True` is the declaration that admits it (see the warning below).
+MCP requires
 `structuredContent` to be an object, so all three are served as
 `"structuredContent": {}` with a text block of `{}`, on every tool kind and
 every entry point (the wire, `call_tool` / `acall_tool`, a task). And because a

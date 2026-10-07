@@ -40,8 +40,8 @@ tool and the parameter, in place of a `TypeError` or a wrong answer per call.
   target lookup dispatch calls resolves one, and every name the server's
   `pool_seeds=` registers
   ([#171](https://github.com/Artui/djangorestframework-mcp-server/issues/171)).
-- **A selector parameter named `page` or `limit`, or named by one of the tool's
-  `QueryParam`s, is refused.** `register_selector_tool` already refused a
+- **A selector parameter named `page` or `limit`, or a tool input named by one
+  of the tool's `QueryParam`s, is refused.** `register_selector_tool` already refused a
   `QueryParam` or `UrlKwarg` with one of those names, and did not check the
   selector against the same collision. `page` and `limit` are stripped from the
   arguments the selector receives, whether or not the tool paginates, and a
@@ -59,7 +59,28 @@ tool and the parameter, in place of a `TypeError` or a wrong answer per call.
   exemption covers only a field whose value is laid back under its own name, so
   it does not apply to a `read_only` field or a field whose `source=` names
   another attribute. A bare dataclass or a `DataclassSerializer` is laid back
-  too, so its fields exempt their names alike (see Fixed)
+  too, so its fields exempt their names alike (see Fixed). Service tools are
+  checked too, against every name their `inputSchema` offers the caller, read
+  by the reader that builds it: an `input_serializer` field, one of the
+  service's own parameters where a spreading binding with no serializer
+  advertises them, and a parameter of the target lookup the schema merges in. A
+  required lookup parameter was answered ``Missing required argument(s):
+  `tenant`.`` on every call, which a model resends until it runs out of
+  retries, and a defaulted one read its default while the caller sent another
+  value. A selector tool's `filter_set` field is refused alike, since its
+  filter silently stopped applying. A name a `kwargs=` provider declares it
+  fills, or that `spec_kwargs_provides=` claims, is exempt for the callable that
+  provider feeds, so a selector parameter a typed provider reads from
+  `request.query_params` beside a `QueryParam` of the same name stays allowed
+  and serves the caller's value; a service's own provider exempts none of its
+  serializer's fields or its lookup's parameters. A key the server keeps from
+  the call (`NotClientInput`) is exempt too. A key the provider may decline with
+  `UNSET`, and every key of a provider whose annotation does not say which keys
+  it returns, is still refused. The refusal names the callable that takes the
+  name and offers three remedies in order: fill the parameter from
+  `request.query_params` with a `kwargs=` provider whose `TypedDict` declares
+  it, read the value there in the callable and drop the input, or drop the
+  `QueryParam`
   ([#177](https://github.com/Artui/djangorestframework-mcp-server/issues/177)).
 
 - **`UnknownArguments.REJECT` against a `**kwargs` whose annotation does not
@@ -173,8 +194,11 @@ These follow from drf-services 0.56.0, which this release requires.
   the empty object, as an `allow_none` selector tool's does, on a service tool
   and on a chain whose output step declares it. Which tools admit `{}` is now
   drf-services' `can_present_nothing`, so this server admits it exactly where
-  drf-services' own output schema admits `null`. An undeclared `None` is still
-  served `{}` against the strict schema ([#178](https://github.com/Artui/djangorestframework-mcp-server/issues/178)).
+  drf-services' own output schema admits `null`. A single-row service with
+  nothing to re-read that returns `None` *without* that declaration is still
+  served `{}`, against an `outputSchema` that does not admit `{}`:
+  `allow_none=True` is the declaration that admits it
+  ([#178](https://github.com/Artui/djangorestframework-mcp-server/issues/178)).
 - **A selector parameter a `kwargs=` provider declines, which the call leaves
   out, is a `validation_error` result.** The selector was called without it and
   raised `TypeError`, a `-32603` on the wire and an exception out of
@@ -303,6 +327,15 @@ These follow from drf-services 0.56.0, which this release requires.
   leave out. And a URL kwarg the call leaves out reaches the selector as the
   dataclass's default for it, where it was left out, while one the call sends
   still arrives as sent.
+- **A service tool's dataclass input fills none of the service's parameters.**
+  Registration counted a bare `@dataclass` `input_serializer`'s fields, and a
+  field a `DataclassSerializer` declares, as sources of the service's required
+  parameters, so `def act(*, count)` beside a dataclass with a `count` field
+  registered and then raised `TypeError` on every call: drf-services hands a
+  service the validated instance as `data` alone and spreads none of its
+  fields. Registration now refuses that service, and its message says to take
+  `data` and read the field off the instance. A selector tool's dataclass input
+  is unaffected, since it is laid back field by field.
 - **`call_tool` strips `page` and `limit` from a selector's arguments**, as the
   wire and `acall_tool` do, so a `**kwargs` selector no longer receives them on
   that route alone. A name the tool's `input_serializer` lays back is kept,

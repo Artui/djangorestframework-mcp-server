@@ -16,6 +16,8 @@ from typing import Any
 
 from django.core.exceptions import ImproperlyConfigured
 from rest_framework import serializers as drf_serializers
+from rest_framework_dataclasses.serializers import DataclassSerializer
+from rest_framework_services import provider_keys
 from rest_framework_services.types.pool_seeds import DEFAULT_POOL_SEEDS, PoolSeeds
 from rest_framework_services.types.validate_channel_names import validate_channel_names
 
@@ -25,8 +27,18 @@ from rest_framework_mcp.constants import (
     ArgumentBinding,
 )
 from rest_framework_mcp.registry.types.query_param import QueryParam
+from rest_framework_mcp.registry.types.selector_tool_binding import SelectorToolBinding
+from rest_framework_mcp.registry.types.tool_binding import ToolBinding
 from rest_framework_mcp.registry.types.url_kwarg import UrlKwarg
-from rest_framework_mcp.schema.utils import declares_default, laid_back_inputs
+from rest_framework_mcp.schema.input_schema import build_input_schema
+from rest_framework_mcp.schema.service_tool_schema import build_service_tool_input_schema
+from rest_framework_mcp.schema.utils import (
+    declares_default,
+    laid_back_inputs,
+    selector_inputs,
+    selector_tool_inputs,
+    target_lookup,
+)
 
 
 def validate_serializer_shapes(
@@ -183,42 +195,32 @@ def validate_selector_parameter_names(
     *,
     label: str,
     selector: Any,
-    query_params: tuple[QueryParam, ...],
     input_serializer: type | None,
 ) -> None:
-    """Fail-fast on a selector parameter the selector-tool transport takes away.
+    """Fail-fast on a ``page`` / ``limit`` selector parameter the transport takes away.
 
     The sibling of ``validate_url_kwargs`` / ``validate_query_params``, from the
     selector's side of the same collision. Those refuse a *channel* named after
-    a name the read pipeline owns; this refuses a *selector parameter* that one
-    of those names would take, because the parameter registers, is advertised,
-    and then never receives what the caller sent. A required one is answered
-    "This field is required." for an argument the call carried; a defaulted one
-    runs on its default whatever the call asked for. Two cases, each refused
-    whether the parameter has a default or not:
+    a name the read pipeline owns; this refuses a *selector parameter* named
+    ``page`` or ``limit`` (``RESERVED_POST_FETCH_KEYS``), which the dispatch
+    strips from the selector's arguments whether or not the tool paginates. The
+    parameter registers, is advertised, and then never receives what the caller
+    sent: a required one is answered "This field is required." for an argument
+    the call carried, and a defaulted one runs on its default whatever the call
+    asked for, so it is refused with a default or without. A selector parameter
+    named like a ``QueryParam`` is the same collision on another name, refused
+    for both tool kinds by ``validate_query_param_inputs``.
 
-    - ``page`` / ``limit`` (``RESERVED_POST_FETCH_KEYS``), which the dispatch
-      strips from the selector's arguments whether or not the tool paginates.
-    - a name one of the tool's ``query_params`` declares, whose value is routed
-      to ``request.query_params`` and split out of the arguments.
-
-    Neither is refused for a name the ``input_serializer`` lays back with the
-    caller's value (``_overlaid_field_names``): dispatch overlays the validated
-    values on the stripped arguments, so the selector does receive the caller's
-    value under that name. The subtraction is held by
-    ``test_a_pagination_named_parameter_the_input_serializer_declares_is_allowed``,
-    ``test_a_pagination_named_parameter_a_dataclass_input_declares_is_allowed``
-    and ``test_a_parameter_a_query_param_shadows_is_allowed_when_the_input_serializer_declares_it``,
+    Not refused for a name the ``input_serializer`` lays back with the caller's
+    value (``_overlaid_field_names``): dispatch overlays the validated values on
+    the stripped arguments, so the selector does receive the caller's value
+    under that name. The subtraction is held by
+    ``test_a_pagination_named_parameter_the_input_serializer_declares_is_allowed``
+    and ``test_a_pagination_named_parameter_a_dataclass_input_declares_is_allowed``,
     and its limit to the declared names by
     ``test_a_serializer_declaring_another_name_exempts_nothing``.
 
-    A ``UrlKwarg`` sharing a parameter's name stays allowed: its value reaches
-    the selector through ``view.kwargs``, as ``validate_url_kwargs`` documents.
     A ``**kwargs`` catch-all names nothing, so there is nothing to refuse.
-
-    Run by ``MCPServer.register_selector_tool`` on the adapter's binding, so it
-    reads the tool's effective ``query_params``, including those an
-    ``agent_contract`` supplies.
     """
     parameters: frozenset[str] = frozenset(
         parameter.name for parameter in _keyword_parameters(selector)
@@ -231,15 +233,165 @@ def validate_selector_parameter_names(
             "from the arguments before the selector is called, so the parameter would "
             "never receive the caller's value. Rename the parameter."
         )
-    shadowed: list[str] = sorted(parameters & {qp.name for qp in query_params})
-    if shadowed:
+
+
+def validate_query_param_inputs(
+    binding: ToolBinding | SelectorToolBinding,
+    *,
+    spec_kwargs_provides: frozenset[str] = frozenset(),
+    pool_seeds: PoolSeeds = DEFAULT_POOL_SEEDS,
+) -> None:
+    """Refuse a ``QueryParam`` named like an input the tool offers the caller.
+
+    A ``QueryParam``'s value is popped from the arguments and routed to
+    ``request.query_params``, so an input of the same name never receives the
+    caller's value. The input registers, is advertised, and then fails or runs
+    wrong on every call: a required target-lookup parameter was answered
+    "Missing required argument(s)" for an argument the call carried, which a
+    model resends until it runs out of retries, and a defaulted one resolved the
+    row on its default whatever the caller asked for. So registration refuses
+    it, for both tool kinds, as the Pydantic-AI ``SpecToolset`` refuses it.
+
+    **The names checked are the ones the tool's ``inputSchema`` offers as the
+    call's own input**, read through the reader that builds that schema, so the
+    refusal and the schema cannot disagree about which names are the caller's:
+
+    - **a selector tool**: the selector's parameters and ``filter_set`` fields,
+      as ``selector_tool_inputs`` reflects them for the schema. Not the
+      ``input_serializer``'s fields, which validate the arguments *before* the
+      ``QueryParam`` split (``handlers.selector_tool_dispatch``), so the split
+      takes nothing from them. A ``filter_set`` field is named as one
+      (``test_a_filter_set_field_a_query_param_shadows_is_refused``): the
+      FilterSet reads the stripped arguments, so it never applied the value.
+    - **a service tool**: everything ``build_service_tool_input_schema``
+      advertises, built without the ``QueryParam`` declarations, because each is
+      advertised under its own name and would hide the input it shadows. That
+      is the ``input_serializer``'s fields, which validate the arguments left
+      once the split has run; the service's own parameters, where a spreading
+      binding with no serializer advertises them; and the target lookup's
+      parameters, which the schema merges in beside them
+      (``test_a_lookup_parameter_a_query_param_takes_is_refused`` holds the
+      lookup's names, ``test_a_serializer_field_a_query_param_shadows_is_refused``
+      the fields, and ``test_a_spread_service_parameter_a_query_param_takes_is_refused``
+      the service's own). A ``many=True`` item's fields are not arguments of
+      the call, so the serializer's fields count only where the schema lists
+      them at the top (``test_a_list_items_field_is_no_argument_a_query_param_takes``).
+
+    A ``UrlKwarg``'s name is advertised too, but ``validate_query_params`` has
+    already refused a ``QueryParam`` sharing it, so no test can hold excluding
+    it here. Read off the binding, so the ``query_params`` are the tool's
+    effective ones, an ``agent_contract``'s included
+    (``test_a_query_param_from_the_agent_contract_shadows_too``).
+
+    What the schema does not offer the caller is exempt by construction: a key
+    the server keeps from the call (``server_owned_keys``), which a service
+    tool's schema leaves out of its target lookup's names
+    (``test_a_server_owned_lookup_key_is_not_refused_but_a_plain_one_is``),
+    and, under ``SPREAD_AUTHOR_WINS``, a name the selector's ``kwargs=``
+    provider fills. Three exemptions are made here, because the schema still
+    offers the name while the caller's value reaches the reader by another way:
+
+    - **a name the ``kwargs=`` provider declares it fills**, its
+      ``provider_keys`` ``filled`` set, or that ``spec_kwargs_provides=``
+      claims. The provider owns the parameter, and one reading
+      ``request.query_params`` is the ordinary way to route a query parameter
+      to a callable, so the caller's value is served. The schema still offers
+      such a name for a selector under ``SPREAD_CALLER_WINS``
+      (``test_a_parameter_a_typed_provider_fills_is_served``) and for a spread
+      service (``test_a_spread_service_parameter_its_provider_fills_is_served``),
+      so a call is what each asserts. **Only for the callable that provider feeds**: a
+      selector's own, and a spread service's own parameters, never a
+      service's serializer fields or its target lookup's parameters, which
+      read the arguments rather than the service's pool
+      (``test_the_services_provider_exempts_no_lookup_parameter_or_field``).
+    - **keeping a key the provider may decline**, and every key of a provider
+      whose annotation does not say what it returns: on a call where it is not
+      filled the caller's value is the only one, and the ``QueryParam`` took
+      it (``test_a_key_the_provider_may_leave_to_the_caller_is_refused``).
+    - **for a selector tool, a name its ``input_serializer`` lays back with the
+      caller's value** (``_overlaid_field_names``), because the serializer read
+      the arguments before the split and dispatch lays the validated values
+      back over the stripped ones
+      (``test_a_parameter_a_query_param_shadows_is_allowed_when_the_input_serializer_declares_it``
+      on ``acall_tool``, ``test_a_name_the_input_serializer_lays_back_reaches_the_selector_on_tools_call``
+      on ``tools/call``). Not for a service tool, whose serializer reads the
+      stripped arguments (``test_a_serializer_field_a_query_param_shadows_is_refused``).
+      ``call_tool`` does not run a selector tool's ``input_serializer`` at all,
+      so on that route nothing lays the value back
+      (``test_call_tool_leaves_a_query_params_value_to_request_query_params``).
+
+    ``spec_kwargs_provides`` is passed by both adapters from the argument they
+    were given, since a ``ToolBinding`` does not keep it.
+    """
+    declared: frozenset[str] = frozenset(query_param.name for query_param in binding.query_params)
+    # Not a condition of the rule, which intersects with ``declared`` anyway: it
+    # spares reading the schema at registration for the tools declaring none.
+    if not declared:
+        return
+    keys = provider_keys(binding.spec.kwargs)
+    # ``None`` is a provider whose keys cannot be read, which fills nothing for
+    # certain; ``declinable`` stays out on purpose.
+    filled: frozenset[str] = (keys.filled if keys is not None else frozenset()) | (
+        spec_kwargs_provides
+    )
+    groups: tuple[tuple[str, frozenset[str]], ...]
+    if isinstance(binding, SelectorToolBinding):
+        offered = frozenset(
+            selector_tool_inputs(binding, pool_seeds=pool_seeds)[0].get("properties", {})
+        )
+        taken = (offered - filled - _overlaid_field_names(binding.input_serializer)) & declared
+        # The reflection lists a ``filter_set``'s fields beside the parameters,
+        # and the FilterSet reads the stripped arguments as the selector does.
+        filtering = taken & frozenset(getattr(binding.spec.filter_set, "base_filters", ()))
+        kind, reader, target = "selector tool", "the selector is called", "the selector"
+        groups = (
+            ("the selector declares parameter(s)", taken - filtering),
+            ("the selector's filter_set declares field(s)", filtering),
+        )
+    else:
+        advertised = frozenset(
+            build_service_tool_input_schema(
+                dataclasses.replace(binding, query_params=()), pool_seeds=pool_seeds
+            ).get("properties", {})
+        )
+        # The two reads the schema builder merges, made as it makes them. Each
+        # is narrowed to what the builder advertised, so they only say whose a
+        # name is: a ``many=True`` item's fields travel inside the list, and a
+        # lookup key the server owns is left out of the schema. A name both the
+        # serializer and the lookup take is the serializer's, as its property is.
+        fields = advertised & frozenset(
+            build_input_schema(binding.spec.input_serializer).get("properties", {})
+        )
+        lookup = target_lookup(binding.spec)
+        reflected: dict[str, Any] = (
+            selector_inputs(lookup, url_kwargs=binding.url_kwargs, pool_seeds=pool_seeds)[0]
+            if lookup is not None
+            else {}
+        )
+        looked_up = (advertised & frozenset(reflected.get("properties", {}))) - fields
+        # What is left is a spreading service's own parameters, the only names
+        # its ``kwargs=`` provider feeds.
+        own = advertised - fields - looked_up - filled
+        kind, target = "service tool", "the spec"
+        reader = (
+            "the input_serializer validates them and the service and its target lookup are called"
+        )
+        groups = (
+            ("the service's input_serializer declares field(s)", fields & declared),
+            ("the service declares parameter(s)", own & declared),
+            ("the service's target lookup declares parameter(s)", looked_up & declared),
+        )
+    parts = [f"{subject} {sorted(names)!r}" for subject, names in groups if names]
+    if parts:
         raise ImproperlyConfigured(
-            f"{label}: the selector declares parameter(s) {shadowed!r} that the tool "
-            "also declares as a QueryParam. A QueryParam's value is routed to "
-            "request.query_params and removed from the arguments before the selector "
-            "is called, so the parameter would never receive the caller's value. Read "
-            "the value from request.query_params and drop the parameter, or drop the "
-            "QueryParam so the argument reaches the selector."
+            f"{kind} {binding.name!r}: {' and '.join(parts)} that the tool also declares "
+            "as a QueryParam. A QueryParam's value is routed to request.query_params and "
+            f"removed from the arguments before {reader}, so the input would never "
+            "receive the caller's value. Fill the parameter from request.query_params "
+            "with a kwargs= provider whose TypedDict declares it (a target lookup's "
+            "parameter, on the lookup's own SelectorSpec), or read the value there in the "
+            f"callable and drop the input, or drop the QueryParam so the argument reaches "
+            f"{target}."
         )
 
 
@@ -494,8 +646,15 @@ def _validate_required_params_have_sources(
       own default. Its declared fields alone missed both, so a selector
       requiring one was refused although dispatch fills it on every call
       (``test_registration_the_schema_and_dispatch_agree_on_what_an_input_lays_back``).
-      Not for a service, which is never handed a dataclass input spread
-      (``test_a_service_counts_no_field_a_dataclass_serializer_generates``).
+      Not for a service, which is never handed a dataclass input spread:
+      drf-services passes the instance a bare ``@dataclass`` or a
+      ``DataclassSerializer`` validates into as ``data`` alone, so **no field of
+      a dataclass input is a service's source**, generated
+      (``test_a_service_counts_no_field_a_dataclass_serializer_generates``) or
+      declared. Counting the declared ones registered a service that raised
+      ``TypeError`` on every call; each shape is a case of
+      ``test_a_service_counts_no_field_of_a_dataclass_input``, which holds the
+      two halves of ``_validates_into_a_dataclass``.
     - **``selector_url_kwargs``** that are ``required`` or declare a default: a
       call omitting a required one is refused before dispatch, and a default is
       seeded when the call omits it, so every call that reaches the selector
@@ -591,6 +750,10 @@ def _validate_required_params_have_sources(
             if is_selector:
                 overlaid, fills = laid_back_inputs(input_serializer)
                 fields = (fields | overlaid | frozenset(fills)) - _NEVER_HANDED_TO_A_SELECTOR
+            elif _validates_into_a_dataclass(input_serializer):
+                # drf-services hands a service the instance as ``data`` alone
+                # and spreads none of its fields.
+                fields = frozenset()
             sources.update(fields)
         else:
             # Trust mode: raw ``arguments`` are spread verbatim, so the client
@@ -609,24 +772,53 @@ def _validate_required_params_have_sources(
             "``spec_kwargs_provides=(...)`` at registration to acknowledge that "
             "contract. (``spec.kwargs`` output is not assumed because its "
             "behaviour can differ between DRF API-view and MCP transports.)"
-            f"{_missing_seed_hint(missing, is_selector=is_selector)}"
+            f"{_missing_seed_hint(missing, is_selector=is_selector, input_serializer=input_serializer)}"
         )
 
 
-def _missing_seed_hint(missing: set[str], *, is_selector: bool) -> str:
-    """The remedy for a missing ``data`` / ``serializer``, which the generic one misdirects.
+def _missing_seed_hint(
+    missing: set[str], *, is_selector: bool, input_serializer: type | None
+) -> str:
+    """The remedy where the generic one misdirects: a missing seed, or a dataclass input.
 
-    A selector's when it misses either, since declaring an ``input_serializer``
-    fills neither for a selector; held on both sides by
+    A selector's when it misses ``data`` or ``serializer``, since declaring an
+    ``input_serializer`` fills neither for a selector; held on both sides by
     ``test_a_spreading_selector_requiring_data_or_serializer_is_refused`` and
-    ``test_the_selector_remedy_accompanies_only_data_or_serializer``. A service's
-    when it misses ``data``, as before.
+    ``test_the_selector_remedy_accompanies_only_data_or_serializer``. A
+    service's when it misses ``data``, as before. And a service's whose input
+    validates into a dataclass, where adding the parameter to the
+    ``input_serializer`` is the one remedy that cannot work. The service half
+    is held by ``test_a_service_counts_no_field_of_a_dataclass_input``, and
+    ``not is_selector`` by
+    ``test_a_selector_with_a_dataclass_input_is_not_told_its_fields_go_unspread``.
     """
     if is_selector and missing & _NEVER_HANDED_TO_A_SELECTOR:
         return _SELECTOR_HINT
     if "data" in missing:
         return _DATA_HINT
+    if not is_selector and _validates_into_a_dataclass(input_serializer):
+        return _DATACLASS_INPUT_HINT
     return ""
+
+
+# The remedy above names the one place a dataclass input's fields cannot help.
+_DATACLASS_INPUT_HINT = (
+    " The input_serializer validates into a dataclass instance, which drf-services "
+    "hands a service as `data` alone and never spreads into its parameters, so no "
+    "field of it fills one: take `data` and read the field off the instance."
+)
+
+
+def _validates_into_a_dataclass(input_serializer: type | None) -> bool:
+    """Whether ``input_serializer`` validates into a dataclass instance rather than a ``dict``.
+
+    A bare ``@dataclass``, which dispatch wraps in a ``DataclassSerializer``, or
+    a ``DataclassSerializer`` itself. The ``or`` is one branch arc, so each half
+    is a case of ``test_a_service_counts_no_field_of_a_dataclass_input``.
+    """
+    return _is_dataclass_type(input_serializer) or _is_class_of(
+        input_serializer, DataclassSerializer
+    )
 
 
 def merge_tool_annotations(
@@ -731,6 +923,7 @@ __all__ = [
     "merge_meta",
     "merge_tool_annotations",
     "validate_input_serializer_against_callable",
+    "validate_query_param_inputs",
     "validate_query_params",
     "validate_selector_parameter_names",
     "validate_serializer_shapes",
