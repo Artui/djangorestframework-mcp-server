@@ -1,4 +1,4 @@
-"""``check_permissions(..., view_kwargs=...)``: the route a call names, on each adapter's view."""
+"""``check_permissions(..., shape=...)``: the route a call names, on each adapter's view."""
 
 from __future__ import annotations
 
@@ -8,6 +8,7 @@ from django.http import HttpRequest
 from rest_framework.permissions import BasePermission
 
 from rest_framework_mcp.auth.permissions.drf_permission_adapter import DRFPermissionAdapter
+from rest_framework_mcp.auth.permissions.utils import DispatchShape
 from rest_framework_mcp.auth.types.token_info import TokenInfo
 from rest_framework_mcp.handlers.utils import check_permissions
 
@@ -37,8 +38,12 @@ class _Gate:
         return ["read"]
 
 
-def _check(permissions: tuple[Any, ...], **kwargs: Any) -> tuple[bool, list[str]]:
-    return check_permissions(permissions, HttpRequest(), TokenInfo(user=None), **kwargs)
+def _check(
+    permissions: tuple[Any, ...], view_kwargs: dict[str, Any] | None = None
+) -> tuple[bool, list[str]]:
+    """Judge ``permissions`` on a shape carrying ``view_kwargs`` alone, or on none."""
+    shape = None if view_kwargs is None else DispatchShape(kwargs=view_kwargs)
+    return check_permissions(permissions, HttpRequest(), TokenInfo(user=None), shape=shape)
 
 
 def test_an_unbound_adapter_judges_an_empty_route() -> None:
@@ -48,7 +53,7 @@ def test_an_unbound_adapter_judges_an_empty_route() -> None:
     assert seen == [{}]
 
 
-def test_without_view_kwargs_every_adapter_is_judged_on_an_empty_route() -> None:
+def test_without_a_shape_every_adapter_is_judged_on_an_empty_route() -> None:
     # The paths with no route to name (prompts, completion, chain steps) pass
     # none, and their adapters are judged as registered.
     seen: list[dict[str, Any]] = []
@@ -57,7 +62,7 @@ def test_without_view_kwargs_every_adapter_is_judged_on_an_empty_route() -> None
     assert seen == [{}]
 
 
-def test_view_kwargs_reach_every_adapter_and_pass_the_rest_through() -> None:
+def test_a_shape_reaches_every_adapter_and_passes_the_rest_through() -> None:
     seen: list[dict[str, Any]] = []
     judged: list[Any] = []
     first, second = DRFPermissionAdapter(_recording(seen)), DRFPermissionAdapter(_recording(seen))

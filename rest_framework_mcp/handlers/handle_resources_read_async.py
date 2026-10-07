@@ -6,13 +6,13 @@ from rest_framework.exceptions import PermissionDenied
 from rest_framework_services import (
     UNSET,
     base_pool,
-    build_offline_context,
     resolve_callable_kwargs,
 )
 
 from rest_framework_mcp._compat.acall import acall
 from rest_framework_mcp._compat.tracing import span
 from rest_framework_mcp._compat.utils import arun_selector_sync_safe
+from rest_framework_mcp.auth.permissions.utils import DispatchShape
 from rest_framework_mcp.constants import JsonRpcErrorCode
 from rest_framework_mcp.handlers.guard_resource_object import guard_resource_object
 from rest_framework_mcp.handlers.handle_tools_call import _span_attrs
@@ -23,6 +23,7 @@ from rest_framework_mcp.handlers.utils import (
     resolve_bound,
     resource_cache_hints,
     resource_not_found_code,
+    resource_shape,
 )
 from rest_framework_mcp.output.build_resource_contents import build_resource_contents
 from rest_framework_mcp.output.enforce_result_bytes import enforce_result_bytes
@@ -69,13 +70,14 @@ async def handle_resources_read_async(
         "mcp.resources.read",
         attributes={**_span_attrs(binding.name, context), "mcp.resource.uri": uri},
     ):
-        # See the sync sibling: the permissions judge the URI's variables.
+        # See the sync sibling: the check and the view are built from one shape.
+        shape: DispatchShape = resource_shape(binding, vars_)
         allowed, required_scopes = await acall(
             check_permissions,
             binding.permissions,
             context.http_request,
             context.token,
-            view_kwargs=vars_,
+            shape=shape,
         )
         if not allowed:
             return JsonRpcError(
@@ -94,17 +96,10 @@ async def handle_resources_read_async(
                 data={"retryAfter": retry_after},
             )
 
-        offline = build_offline_context(
-            context.token.user,
-            None,
-            http_request=context.http_request,
-            action=binding.name,
-            # See the sync sibling: URI-template variables ride on
-            # ``view.kwargs``.
-            kwargs=dict(vars_),
-            # See the sync sibling: a resource URI *is* a locator, so per-call
-            # read-shaping belongs in its URI template.
-            query_params={},
+        # See the sync sibling: URI-template variables ride on ``view.kwargs``,
+        # and ``auth`` beside ``user`` keeps the caller.
+        offline = shape.build(
+            user=context.token.user, auth=context.token.raw, http_request=context.http_request
         )
         drf_request = offline.request
         view = offline.view

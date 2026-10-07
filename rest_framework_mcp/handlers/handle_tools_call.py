@@ -38,7 +38,7 @@ from rest_framework_mcp.handlers.utils import (
     read_shaping_error_result,
     refuse_missing_arguments,
     resolve_bound,
-    same_route,
+    same_arguments,
     service_error_result,
     services_dispatch_policies,
     split_url_kwargs,
@@ -178,11 +178,7 @@ def _dispatch_tool_call(
         # (``test_a_permission_denying_the_delivered_route_answers_before_the_missing_argument``),
         # and the strict split in ``_run_service_tool`` still refuses it after.
         # The arguments as sent, before a retry's answers are merged in below,
-        # since a denied caller is told so before its answers are read; an
-        # answer naming another route is judged again once they are.
-        _, delivered_url_kwargs = split_url_kwargs(
-            arguments_raw, binding.url_kwargs, refuse_missing=False
-        )
+        # since a denied caller is told so before its answers are read.
         allowed, required_scopes = judge_tool_permissions(binding, arguments_raw, context)
         if not allowed:
             return _forbidden(required_scopes), arguments_raw
@@ -191,47 +187,56 @@ def _dispatch_tool_call(
         # as ``inputResponses`` and becomes an ordinary argument here — the
         # whole of what the service ever sees of the exchange. A declined or
         # cancelled answer merges nothing, and is answered after the rate
-        # limit below, as any call the service does not run is.
+        # limit below, as any call the service does not run is. Merged with no
+        # ``requestState`` too, so a first call can carry one.
         prior: ResolvedInput = resolve_prior_input(params, binding.name, arguments_raw, context)
-        arguments_raw = prior.arguments
 
         # An answer is merged over the arguments with no limit on its keys, so
-        # it can name a URL kwarg the call sent or left out, and the route the
-        # service runs with is then not the one judged above. Judged again on
-        # that route, before the target is looked up: the target guard reads
-        # only the spec's own classes, so a per-binding adapter answered with
-        # ``project_pk: 8`` ran the service on a project the caller holds no
-        # grant on
-        # (``test_an_answer_naming_another_route_is_refused_by_a_per_binding_permission``),
-        # and a spec class judged only there told an existing target from a
-        # missing one (``test_an_answer_cannot_tell_an_existing_target_from_a_missing_one``).
-        # Only when the route moved, so an ordinary retry is judged once
-        # (``test_an_answer_leaving_the_route_unchanged_is_not_judged_again``),
-        # and moved means not ``same_route``, which ``==`` is not: an answer of
-        # ``True`` or ``1.0`` for ``1`` is equal and names another row
+        # it can change any value the stand-in above was built from: the route
+        # in ``view.kwargs``, a ``QueryParam`` value or ``request.data``. So the
+        # arguments the answers produced are judged again, before the target
+        # is looked up. A per-binding adapter is judged by nothing else: one
+        # admitting only project 7 ran the service on project 8 sent as 7 and
+        # answered as 8
+        # (``test_an_answer_changing_a_value_the_permission_reads_is_refused``),
+        # or answered with another ``project_pk``
+        # (``test_an_answer_naming_another_route_is_refused_by_a_per_binding_permission``).
+        # A spec class judged again only by the dispatch view or the target
+        # guard told an existing target from a missing one
+        # (``test_an_answer_cannot_tell_an_existing_target_from_a_missing_one``),
+        # after the rate limit had charged the call.
+        # Only when the answers changed the arguments, so a retry answering
+        # what the call already sent is judged once
+        # (``test_an_answer_leaving_the_arguments_unchanged_is_not_judged_again``),
+        # while one adding any key is judged again
+        # (``test_an_answer_adding_an_argument_is_judged_again``). Changed means
+        # not ``same_arguments``, which ``==`` is not: an answer of ``True`` or
+        # ``1.0`` for ``1`` is equal and names another row
         # (``test_an_answer_equal_to_the_route_but_naming_another_row_is_judged_again``).
-        # An answer filling a kwarg the call left out is a move
+        # Since the stand-in is built from the arguments and the context alone,
+        # and the context is the one judged above, arguments ``same_arguments``
+        # calls unchanged build the request judged above. An answer filling a
+        # route kwarg the call left out is a change
         # (``test_an_answer_filling_a_route_kwarg_left_out_is_judged_on_the_filled_route``),
         # as is one clearing a kwarg it sent
         # (``test_an_answer_clearing_a_route_kwarg_is_judged_on_the_route_it_leaves``).
-        # Not refusing a missing kwarg, as the split above does not, since the
-        # strict split in ``_run_service_tool`` is where that is answered
+        # Not refusing a missing kwarg, as the stand-in above does not, since
+        # the strict split in ``_run_service_tool`` is where that is answered
         # (``test_an_answer_leaving_a_required_route_kwarg_missing_is_told_which``).
-        # Judged on the arguments the answers produced, so the stand-in
-        # carries them as the dispatch view will.
-        _, answered_url_kwargs = split_url_kwargs(
-            arguments_raw, binding.url_kwargs, refuse_missing=False
-        )
-        if not same_route(answered_url_kwargs, delivered_url_kwargs):
-            allowed, required_scopes = judge_tool_permissions(binding, arguments_raw, context)
+        if not same_arguments(prior.arguments, arguments_raw):
+            allowed, required_scopes = judge_tool_permissions(binding, prior.arguments, context)
             if not allowed:
-                return _forbidden(required_scopes), arguments_raw
+                return _forbidden(required_scopes), prior.arguments
+        arguments_raw = prior.arguments
 
         # After both checks, so a caller either one denies is never charged:
         # charged between them, a caller refused on the route its answer names
         # had spent a unit, and against a spent quota was told ``RATE_LIMITED``
         # rather than that the route is not its to name
-        # (``test_a_caller_refused_on_the_route_an_answer_names_is_not_charged``).
+        # (``test_a_caller_refused_on_the_route_an_answer_names_is_not_charged``),
+        # and one answering a value only a spec class reads was refused by the
+        # dispatch view after the charge
+        # (``test_a_caller_refused_on_an_answered_value_is_not_charged``).
         retry_after: int | None = consume_rate_limits(
             effective_rate_limits(binding, context), context.http_request, context.token
         )

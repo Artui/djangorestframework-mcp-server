@@ -6,10 +6,16 @@ from typing import Any
 
 import pytest
 from django.core.exceptions import ImproperlyConfigured
+from rest_framework.permissions import AllowAny, BasePermission, IsAuthenticated
 from rest_framework_services.types.selector_kind import SelectorKind
 from rest_framework_services.types.selector_spec import SelectorSpec
 from rest_framework_services.types.service_spec import ServiceSpec
 
+from rest_framework_mcp import DRFPermissionAdapter, MCPServer
+from rest_framework_mcp.adapters.chain_to_tool import chain_steps_to_tool
+from rest_framework_mcp.auth.backends.allow_any_backend import AllowAnyBackend
+from rest_framework_mcp.constants import JsonRpcErrorCode
+from rest_framework_mcp.protocol.types.json_rpc_error import JsonRpcError
 from rest_framework_mcp.registry.types.chain_step import ChainStep
 from rest_framework_mcp.registry.types.chain_tool_binding import ChainToolBinding
 from tests.testapp.serializers import InvoiceInputSerializer, InvoiceOutputSerializer
@@ -143,3 +149,96 @@ def test_output_serializer_from_selector_step() -> None:
     spec = _sel_spec(output_serializer=InvoiceOutputSerializer)
     b = _binding([ChainStep("a", spec)])
     assert b.output_serializer is InvoiceOutputSerializer
+
+
+# ----- ``permissions`` laid out as ``chain_steps_to_tool`` lays them -----
+
+
+class _RefusesTheChain(BasePermission):
+    def has_permission(self, request: Any, view: Any) -> bool:
+        return view.action != "c"
+
+
+def _guarded_steps() -> tuple[ChainStep, ...]:
+    return (
+        ChainStep("a", _svc_spec(permission_classes=[AllowAny])),
+        ChainStep("b", _svc_spec(permission_classes=[IsAuthenticated, AllowAny])),
+        ChainStep("c_step", _svc_spec()),
+    )
+
+
+@pytest.mark.parametrize(
+    "permissions",
+    [
+        # The chain's own permission alone: judged under step ``a``'s action,
+        # it admitted the chain it refuses.
+        (DRFPermissionAdapter(_RefusesTheChain),),
+        # Every class, in another step order.
+        (
+            DRFPermissionAdapter(IsAuthenticated),
+            DRFPermissionAdapter(AllowAny),
+            DRFPermissionAdapter(AllowAny),
+        ),
+        # A step's class missing from the end.
+        (DRFPermissionAdapter(AllowAny), DRFPermissionAdapter(IsAuthenticated)),
+        # A step's class judged by something that is no adapter of it.
+        (
+            object(),
+            DRFPermissionAdapter(IsAuthenticated),
+            DRFPermissionAdapter(AllowAny),
+        ),
+    ],
+    ids=["chain-level-only", "out-of-order", "short", "not-an-adapter"],
+)
+def test_a_chain_whose_permissions_do_not_begin_with_its_steps_classes_is_refused(
+    permissions: tuple[Any, ...],
+) -> None:
+    with pytest.raises(ImproperlyConfigured, match="must begin with each step's"):
+        _binding(list(_guarded_steps()), permissions=permissions)
+
+
+def test_a_chain_laid_out_by_the_adapter_constructs() -> None:
+    binding = chain_steps_to_tool(
+        name="c",
+        steps=_guarded_steps(),
+        permissions=(DRFPermissionAdapter(_RefusesTheChain),),
+    )
+
+    assert [type(p).__name__ for p in binding.permissions] == ["DRFPermissionAdapter"] * 4
+    # Built by hand in the same layout, it constructs as well; a subclass of
+    # a step's class is not that class.
+    _binding(list(_guarded_steps()), permissions=binding.permissions)
+    with pytest.raises(ImproperlyConfigured):
+        _binding(
+            list(_guarded_steps()),
+            permissions=(DRFPermissionAdapter(type("_Sub", (AllowAny,), {})),)
+            + binding.permissions[1:],
+        )
+
+
+@pytest.mark.django_db(transaction=True)
+async def test_a_hand_built_chain_cannot_judge_its_own_permission_under_a_steps_action() -> None:
+    # The review's shape, end to end: registered straight onto the registry,
+    # the chain-level permission was judged under step ``a``'s action and the
+    # chain ran. It is now refused where it is built.
+    server = MCPServer(name="t", auth_backend=AllowAnyBackend(), session_store=None)
+
+    with pytest.raises(ImproperlyConfigured):
+        server.tools.register(
+            ChainToolBinding(
+                name="c",
+                description="c",
+                steps=(ChainStep("a", _svc_spec(permission_classes=[AllowAny])),),
+                permissions=(DRFPermissionAdapter(_RefusesTheChain),),
+            )
+        )
+    server.register_chain_tool(
+        name="c",
+        description="c",
+        steps=[ChainStep("a", _svc_spec(permission_classes=[AllowAny]))],
+        permissions=[DRFPermissionAdapter(_RefusesTheChain)],
+    )
+
+    out = await server.acall_tool("c", {}, user=None)
+
+    assert isinstance(out, JsonRpcError) and out.code == JsonRpcErrorCode.FORBIDDEN

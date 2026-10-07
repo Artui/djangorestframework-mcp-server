@@ -11,9 +11,11 @@ again and the service ran on project 8, and a spec's ``permission_classes``
 was judged again only by the target guard, after the target was looked up, so
 an existing target answered ``FORBIDDEN`` and a missing one ``not_found``.
 The route the merge produces is now judged again whenever it differs from the
-one delivered, before anything is looked up or run.
+one delivered, before anything is looked up or run: so are the arguments as a
+whole, which ``test_an_answer_is_judged_on_the_arguments_it_changes.py`` covers
+for the values outside the route.
 
-"Differs" is ``same_route``, not ``==``: an answer of ``True`` or ``1.0`` for
+"Differs" is ``same_arguments``, not ``==``: an answer of ``True`` or ``1.0`` for
 ``1``, or ``-0.0`` for ``0.0``, is equal in Python and names another row
 through a ``CharField``, and ``!=`` waved it through unjudged. The second check
 also comes before the rate limit, so a caller it refuses is not charged, and
@@ -258,12 +260,37 @@ async def test_an_answer_cannot_tell_an_existing_target_from_a_missing_one(
 
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.parametrize("is_async", [False, True])
-@pytest.mark.parametrize("content", [{"note": "urgent"}, {"project_pk": 7}])
-async def test_an_answer_leaving_the_route_unchanged_is_not_judged_again(
-    is_async: bool, content: dict[str, Any]
+async def test_an_answer_leaving_the_arguments_unchanged_is_not_judged_again(
+    is_async: bool,
 ) -> None:
-    # An answer naming no route capture, or naming the one the call sent, has
-    # nothing new to judge; the permission is asked once, as on any call.
+    # An answer restating what the call sent builds the request already
+    # judged, so the permission is asked once, as on any call.
+    seen: list[dict[str, Any]] = []
+    ran_on: list[Any] = []
+    server = _per_binding_server(
+        granting_route("project_pk", 7, seen),
+        ran_on,
+        UrlKwarg("project_pk", type="integer", required=True),
+    )
+
+    out = await _handler(
+        server,
+        _answering("archive_project", {"project_pk": 7}, {"project_pk": 7}),
+        is_async=is_async,
+    )
+
+    assert out.get("isError") is not True, f"answered {out!r}"
+    assert ran_on == [7]
+    assert seen == [{"project_pk": 7}]
+
+
+@pytest.mark.django_db(transaction=True)
+@pytest.mark.parametrize("is_async", [False, True])
+async def test_an_answer_adding_an_argument_is_judged_again(is_async: bool) -> None:
+    # An answer naming no route capture still changes ``request.data``, which
+    # the stand-in carries, so the permission is asked again on the arguments
+    # the answer produced. Once this read "nothing new to judge", which held
+    # only while the stand-in read the route alone.
     seen: list[dict[str, Any]] = []
     ran_on: list[Any] = []
     server = _per_binding_server(
@@ -276,12 +303,14 @@ async def test_an_answer_leaving_the_route_unchanged_is_not_judged_again(
     )
 
     out = await _handler(
-        server, _answering("archive_project", {"project_pk": 7}, content), is_async=is_async
+        server,
+        _answering("archive_project", {"project_pk": 7}, {"note": "urgent"}),
+        is_async=is_async,
     )
 
     assert out.get("isError") is not True, f"answered {out!r}"
     assert ran_on == [7]
-    assert seen == [{"project_pk": 7}]
+    assert seen == [{"project_pk": 7}, {"project_pk": 7}]
 
 
 @pytest.mark.django_db(transaction=True)

@@ -13,6 +13,7 @@ from rest_framework_mcp.handlers.types.context import MCPCallContext
 from rest_framework_mcp.handlers.utils import (
     check_permissions,
     consume_rate_limits,
+    prompt_shape,
 )
 from rest_framework_mcp.output.enforce_result_bytes import enforce_result_bytes
 from rest_framework_mcp.protocol.types.get_prompt_result import GetPromptResult
@@ -65,8 +66,13 @@ async def handle_prompts_get_async(
         )
 
     with span("mcp.prompts.get", attributes=_span_attrs(binding.name, context)):
+        # See the sync sibling: judged on the prompt's arguments.
         allowed, required_scopes = await acall(
-            check_permissions, binding.permissions, context.http_request, context.token
+            check_permissions,
+            binding.permissions,
+            context.http_request,
+            context.token,
+            shape=prompt_shape(binding, arguments_raw),
         )
         if not allowed:
             return JsonRpcError(

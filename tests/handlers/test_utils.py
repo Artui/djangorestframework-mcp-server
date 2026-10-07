@@ -20,7 +20,7 @@ from rest_framework_services import UNSET
 
 from rest_framework_mcp import QueryParam, UrlKwarg
 from rest_framework_mcp.handlers.utils import (
-    same_route,
+    same_arguments,
     split_query_params,
     split_url_kwargs,
     validate_input_against_serializer,
@@ -165,7 +165,7 @@ class _Equal:
         "cleared",
     ],
 )
-def test_same_route_is_the_same_value_of_the_same_type(
+def test_same_arguments_is_the_same_value_of_the_same_type(
     answered: dict[str, Any], delivered: dict[str, Any], same: bool
 ) -> None:
-    assert same_route(answered, delivered) is same
+    assert same_arguments(answered, delivered) is same

@@ -1,13 +1,16 @@
 from __future__ import annotations
 
-from typing import Any
+from typing import Any, ClassVar
 
 import pytest
-from django.http import HttpRequest
+from asgiref.sync import sync_to_async
+from django.http import HttpRequest, QueryDict
+from rest_framework.permissions import BasePermission
 
-from rest_framework_mcp import MCPServer
+from rest_framework_mcp import DRFPermissionAdapter, MCPServer
 from rest_framework_mcp.auth.backends.allow_any_backend import AllowAnyBackend
 from rest_framework_mcp.auth.types.token_info import TokenInfo
+from rest_framework_mcp.constants import JsonRpcErrorCode
 from rest_framework_mcp.handlers.handle_prompts_get import handle_prompts_get
 from rest_framework_mcp.handlers.handle_prompts_get_async import handle_prompts_get_async
 from rest_framework_mcp.handlers.handle_prompts_list import handle_prompts_list
@@ -331,3 +334,51 @@ def test_prompt_message_text_helper() -> None:
     msg = PromptMessage.text(role="assistant", text="hi")
     assert msg.role == "assistant"
     assert msg.content == {"type": "text", "text": "hi"}
+
+
+class _RefusesDeny(BasePermission):
+    """Refuses a call whose arguments name ``deny``; records what each check carried."""
+
+    seen: ClassVar[list[tuple[Any, ...]]]
+
+    def has_permission(self, request: Any, view: Any) -> bool:
+        type(self).seen.append((dict(request.data), view.action, dict(request.query_params)))
+        return "deny" not in request.data
+
+
+@pytest.mark.django_db(transaction=True)
+@pytest.mark.parametrize("is_async", [False, True], ids=["sync", "async"])
+async def test_a_prompt_permission_reads_the_prompts_arguments(is_async: bool) -> None:
+    # Judged against ``{}``, a permission written over the prompt's arguments
+    # admitted every call: the arguments never reached ``request.data``.
+    class _Recording(_RefusesDeny):
+        seen = []
+
+    server = MCPServer(name="t", auth_backend=AllowAnyBackend(), session_store=None)
+    server.register_prompt(
+        name="p", render=lambda **_: "hello", permissions=[DRFPermissionAdapter(_Recording)]
+    )
+    # The endpoint's own query string, which no prompt check reads.
+    http_request = HttpRequest()
+    http_request.GET = QueryDict("deny=1")
+    context = MCPCallContext(
+        http_request=http_request,
+        token=TokenInfo(user=None),
+        tools=server.tools,
+        resources=server.resources,
+        prompts=server.prompts,
+        protocol_version="2025-11-25",
+    )
+
+    async def _get(arguments: dict[str, Any]) -> Any:
+        params: dict[str, Any] = {"name": "p", "arguments": arguments}
+        if is_async:
+            return await handle_prompts_get_async(params, context)
+        return await sync_to_async(handle_prompts_get)(params, context)
+
+    denied = await _get({"deny": "1"})
+    admitted = await _get({"note": "x"})
+
+    assert isinstance(denied, JsonRpcError) and denied.code == JsonRpcErrorCode.FORBIDDEN
+    assert not isinstance(admitted, JsonRpcError), admitted
+    assert _Recording.seen == [({"deny": "1"}, "p", {}), ({"note": "x"}, "p", {})]

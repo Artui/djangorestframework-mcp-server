@@ -17,6 +17,7 @@ from rest_framework_services.types.selector_kind import SelectorKind
 from rest_framework_services.types.selector_spec import SelectorSpec
 from rest_framework_services.types.service_spec import ServiceSpec
 
+from rest_framework_mcp.auth.permissions.drf_permission_adapter import DRFPermissionAdapter
 from rest_framework_mcp.constants import (
     OutputFormat,
     TaskPolicy,
@@ -64,6 +65,12 @@ class ChainToolBinding:
             ``output_all``.
         output_all: Render ``{alias: rendered}`` for every step that declares
             an output serializer.
+        permissions: Each step's ``spec.permission_classes``, each wrapped in
+            a ``DRFPermissionAdapter``, in step order, then the chain's own.
+            Position is what tells a step's class, judged under the step's
+            alias, from the chain's, judged under the tool's name, so a binding
+            laid out otherwise is refused with ``ImproperlyConfigured``.
+            ``MCPServer.register_chain_tool`` lays it out so.
     """
 
     name: str
@@ -212,6 +219,7 @@ class ChainToolBinding:
             )
         for step in self.steps if self.output_all else (self.output_step,):
             _refuse_unanswered_affordances(self.name, step)
+        _refuse_misplaced_step_permissions(self.name, self.steps, self.permissions)
         if self.include_output_schema is True and self.include_structured_content is False:
             raise ImproperlyConfigured(
                 f"Chain tool {self.name!r}: include_output_schema=True is incompatible "
@@ -315,6 +323,55 @@ class ChainToolBinding:
         if self.output_all:
             return False
         return can_present_nothing(self.output_step.spec)
+
+
+def _refuse_misplaced_step_permissions(
+    chain_name: str, steps: tuple[ChainStep, ...], permissions: tuple[Any, ...]
+) -> None:
+    """Refuse ``permissions`` not laid out as ``chain_steps_to_tool`` lays them.
+
+    A chain judges its permissions by position: ``judge_tool_permissions``
+    takes the first ``len(step.spec.permission_classes)`` entries as each
+    step's, in step order, and judges them under that step's alias as
+    ``view.action``, then the rest under the tool's name. ``chain_steps_to_tool``
+    builds exactly that layout, each step's classes wrapped in a
+    ``DRFPermissionAdapter``, then the chain's own. ``MCPServer.tools.register``
+    takes a binding built by hand, though, and one whose chain-level
+    permission sat where a step's class belongs was judged under the step's
+    action: a permission refusing the chain by ``view.action`` admitted it, and
+    the chain ran
+    (``test_a_hand_built_chain_cannot_judge_its_own_permission_under_a_steps_action``).
+    So the layout is checked here, where the binding is built, rather than
+    trusted where it is judged.
+
+    Each wrapped adapter is compared to the step's class by identity, so a
+    subclass of it, which may judge otherwise, is not that class
+    (``test_a_chain_laid_out_by_the_adapter_constructs``). The guard is one
+    branch arc, so each condition is held by a case of
+    ``test_a_chain_whose_permissions_do_not_begin_with_its_steps_classes_is_refused``:
+    the length by ``short``, since ``zip`` stops at the shorter; the
+    ``isinstance`` by ``not-an-adapter``, which without it raises
+    ``AttributeError`` instead; the class by ``out-of-order``, and by the
+    hand-built test above, whose one entry is as long as its step's classes.
+    """
+    expected: list[type] = [
+        permission_class
+        for step in steps
+        for permission_class in (step.spec.permission_classes or ())
+    ]
+    leading: tuple[Any, ...] = permissions[: len(expected)]
+    if len(leading) == len(expected) and all(
+        isinstance(entry, DRFPermissionAdapter) and entry.permission_class is permission_class
+        for entry, permission_class in zip(leading, expected, strict=False)
+    ):
+        return
+    raise ImproperlyConfigured(
+        f"Chain tool {chain_name!r}: permissions must begin with each step's "
+        "spec.permission_classes, each wrapped in DRFPermissionAdapter, in step "
+        "order, then the chain's own, because each step's classes are judged "
+        "under that step's name and the rest under the tool's. Register the "
+        "chain with MCPServer.register_chain_tool, which lays them out so."
+    )
 
 
 def _refuse_unanswered_affordances(chain_name: str, step: ChainStep) -> None:
