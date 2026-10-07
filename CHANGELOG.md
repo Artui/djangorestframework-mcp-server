@@ -24,7 +24,8 @@ tool and the parameter, in place of a `TypeError` or a wrong answer per call.
   held only the arguments a call happened to carry, so a call with none raised
   the same error. Registration now refuses both, and the message names the
   remedies: declare an `input_serializer`, give `data` a default, or take the
-  arguments as individual parameters under a spreading binding.
+  arguments as individual parameters under a spreading binding
+  ([#180](https://github.com/Artui/djangorestframework-mcp-server/issues/180)).
 - **Trust mode no longer counts a reserved pool seed as the caller's.** With no
   `input_serializer` and a spreading `argument_binding`, registration counts every
   required parameter as one the caller supplies, because the arguments are
@@ -37,7 +38,8 @@ tool and the parameter, in place of a `TypeError` or a wrong answer per call.
   `input_serializer` already was. A seed something does fill still counts:
   `request`, `user` and `progress` always, `instance` or `collection` where the
   target lookup dispatch calls resolves one, and every name the server's
-  `pool_seeds=` registers.
+  `pool_seeds=` registers
+  ([#171](https://github.com/Artui/djangorestframework-mcp-server/issues/171)).
 - **A selector parameter named `page` or `limit`, or named by one of the tool's
   `QueryParam`s, is refused.** `register_selector_tool` already refused a
   `QueryParam` or `UrlKwarg` with one of those names, and did not check the
@@ -57,7 +59,8 @@ tool and the parameter, in place of a `TypeError` or a wrong answer per call.
   exemption covers only a field whose value is laid back under its own name, so
   it does not apply to a bare dataclass or a `DataclassSerializer` (whose
   validated value is a dataclass instance, which is not laid back), a
-  `read_only` field, or a field whose `source=` names another attribute.
+  `read_only` field, or a field whose `source=` names another attribute
+  ([#177](https://github.com/Artui/djangorestframework-mcp-server/issues/177)).
 
 - **`UnknownArguments.REJECT` against a `**kwargs` whose annotation does not
   resolve is refused.** drf-services cannot read the declared set of a target
@@ -191,13 +194,15 @@ These follow from drf-services 0.56.0, which this release requires.
   default is `None` (which the transport does not seed), reaches the selector
   only when the caller sends it and is still no source. A service tool is
   unchanged: drf-services spreads `view.kwargs` into its target lookup's pool,
-  not the service's.
+  not the service's
+  ([#172](https://github.com/Artui/djangorestframework-mcp-server/issues/172)).
 
 - **A spec permission reading `view.kwargs` judges the route a request
   names, wherever it is judged.** A service or selector tool's, or a
   resource's, `permission_classes` were judged against a stand-in view whose
   `kwargs` were always `{}`, so a permission scoping by a route capture,
-  `view.kwargs["project_pk"]`, denied a caller it admits. Each check now sees
+  `view.kwargs["project_pk"]`, denied a caller it admits
+  ([#173](https://github.com/Artui/djangorestframework-mcp-server/issues/173)). Each check now sees
   the values the dispatch puts in `view.kwargs`:
   - on `tools/call`, through the sync and async handlers and so `acall_tool`,
     the URL kwargs the call delivered, split out of its arguments first, as
@@ -263,7 +268,8 @@ These follow from drf-services 0.56.0, which this release requires.
   service tool does, an `isError` result with `type: "validation_error"`, the
   message `Invalid arguments` and DRF's `detail` as raised, with `failedStep`
   naming the step, from a service step and a selector step alike. An atomic
-  chain rolls back the steps before it, as for any mapped step error.
+  chain rolls back the steps before it, as for any mapped step error
+  ([#170](https://github.com/Artui/djangorestframework-mcp-server/issues/170)).
 - **A caller a spec's permission denies learns nothing about the target it
   names.** A spec's `has_permission` reading what only the dispatch view
   carries, such as `request.data`, `request.query_params` or `view.action`, was
