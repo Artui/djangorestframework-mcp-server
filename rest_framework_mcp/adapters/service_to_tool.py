@@ -17,6 +17,7 @@ from rest_framework_mcp.adapters.utils import (
     merge_meta,
     merge_tool_annotations,
     validate_input_serializer_against_callable,
+    validate_query_param_inputs,
     validate_query_params,
     validate_serializer_shapes,
     validate_url_kwargs,
@@ -132,7 +133,7 @@ def service_spec_to_tool(
     )
     spec_perms: tuple[Any, ...] = wrap_spec_permissions(spec.permission_classes, label=name)
     effective_perms: tuple[Any, ...] = spec_perms + tuple(permissions)
-    return ToolBinding(
+    binding = ToolBinding(
         name=name,
         field_audiences=field_audiences,
         description=description,
@@ -162,6 +163,12 @@ def service_spec_to_tool(
         max_result_bytes=max_result_bytes,
         dispatch_timeout=dispatch_timeout,
     )
+    # On the built binding, because the check reads the schema the binding
+    # advertises, and before the binding is returned to be registered.
+    validate_query_param_inputs(
+        binding, spec_kwargs_provides=frozenset(spec_kwargs_provides), pool_seeds=pool_seeds
+    )
+    return binding
 
 
 def _validate_list_payload(

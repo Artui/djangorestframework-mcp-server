@@ -414,6 +414,58 @@ def test_a_service_counts_no_field_a_dataclass_serializer_generates(
         )
 
 
+class _DeclaredCountIn(DataclassSerializer):
+    """Declares ``count`` itself, so ``_declared_fields`` names it."""
+
+    count = drf_serializers.IntegerField()
+
+    class Meta:
+        dataclass = _Count
+
+
+# The sentence the refusal adds for a service whose input validates into a dataclass.
+_DATACLASS_INPUT_HINT = "which drf-services hands a service as `data` alone"
+
+
+@pytest.mark.parametrize("binding", _SPREADING)
+@pytest.mark.parametrize(
+    "input_serializer",
+    [
+        pytest.param(_Count, id="bare-dataclass"),
+        pytest.param(_DeclaredCountIn, id="declared-dataclass-serializer-field"),
+    ],
+)
+def test_a_service_counts_no_field_of_a_dataclass_input(
+    input_serializer: type, binding: ArgumentBinding
+) -> None:
+    # A declared field is no more spread than a generated one: drf-services
+    # hands the service the instance as ``data`` alone. Counted, the tool
+    # registered and every call raised ``TypeError`` for the missing ``count``.
+    def _counts(*, count: int) -> Any: ...  # noqa: ARG001
+
+    with pytest.raises(ImproperlyConfigured, match=r"parameter\(s\) \['count'\]") as caught:
+        service_spec_to_tool(
+            name="count",
+            spec=ServiceSpec(service=_counts, input_serializer=input_serializer, atomic=False),
+            argument_binding=binding,
+        )
+    assert _DATACLASS_INPUT_HINT in str(caught.value)
+
+
+def test_a_selector_with_a_dataclass_input_is_not_told_its_fields_go_unspread() -> None:
+    # Selector dispatch does lay a dataclass instance's fields back, so a
+    # selector refused for another name is not given the service's remedy.
+    def _count_in(*, count: int, region: str) -> Any: ...  # noqa: ARG001
+
+    with pytest.raises(ImproperlyConfigured, match=r"parameter\(s\) \['region'\]") as caught:
+        selector_spec_to_tool(
+            name="count",
+            spec=SelectorSpec(kind=SelectorKind.LIST, selector=_count_in),
+            input_serializer=_Count,
+        )
+    assert _DATACLASS_INPUT_HINT not in str(caught.value)
+
+
 # ---------- a positional-only parameter is never filled ----------
 
 
