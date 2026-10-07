@@ -82,10 +82,13 @@ class DRFPermissionAdapter:
         # (``test_the_permission_is_not_instantiated_again_nor_a_subclass_state_dropped``);
         # the copies share the wrapped DRF instance, as every call already does.
         bound: DRFPermissionAdapter = copy.copy(self)
-        # Held as given: ``DispatchShape.build`` copies its ``kwargs`` into a
-        # fresh view for every check, which is the one copy that keeps a
-        # permission's writes off the caller's mapping and out of the next
-        # check.
+        # Held as given, because the copies that keep a permission's writes
+        # off the caller's mappings and out of the next check are made
+        # elsewhere: ``DispatchShape.build`` copies ``kwargs`` into a fresh view
+        # for every build, and ``dispatch_shape`` and ``chain_shape`` copy
+        # ``data`` into each shape, one per check, which a split declaring
+        # nothing once handed back as the caller's own ``arguments``
+        # (``test_a_permission_writing_request_data_reaches_neither_the_next_check_nor_the_caller``).
         bound._shape = shape
         return bound
 

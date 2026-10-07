@@ -48,7 +48,9 @@ from rest_framework_mcp.output.error_tool_result import build_error_tool_result
 from rest_framework_mcp.protocol.types.json_rpc_error import JsonRpcError
 from rest_framework_mcp.protocol.types.tool_result import ToolResult
 from rest_framework_mcp.registry.types.chain_tool_binding import ChainToolBinding
+from rest_framework_mcp.registry.types.prompt_binding import PromptBinding
 from rest_framework_mcp.registry.types.query_param import QueryParam
+from rest_framework_mcp.registry.types.resource_binding import ResourceBinding
 from rest_framework_mcp.registry.types.selector_tool_binding import SelectorToolBinding
 from rest_framework_mcp.registry.types.tool_binding import ToolBinding
 from rest_framework_mcp.registry.types.url_kwarg import UrlKwarg
@@ -109,15 +111,23 @@ def split_url_kwargs(
     return params, values
 
 
-def same_route(answered: Mapping[str, Any], delivered: Mapping[str, Any]) -> bool:
-    """Whether a retry's answers left the URL kwargs exactly as the call delivered them.
+def same_arguments(answered: Mapping[str, Any], delivered: Mapping[str, Any]) -> bool:
+    """Whether a retry's answers left the arguments exactly as the call delivered them.
 
     ``tools/call`` judges the permission again only when this is ``False``, so
-    a route it calls the same is one nothing judges. Not ``==``: ``1``, ``1.0``
-    and ``True`` are equal in Python, while a target lookup through a
-    ``CharField`` reads ``str()`` of the value, so each names another row,
-    ``"1"``, ``"1.0"`` or ``"True"``. Nor ``==`` beside a type check, because
-    ``0.0`` and ``-0.0`` are equal floats and read ``"0.0"`` and ``"-0.0"``
+    arguments it calls the same are ones nothing judges. That is sound because
+    the stand-in is built from the arguments and the call's context alone, so
+    arguments this calls the same build the request the first check judged:
+    the same route, query values and ``request.data``. The whole arguments
+    rather than the route, since the stand-in reads all three
+    (``test_an_answer_changing_a_value_the_permission_reads_is_refused``).
+
+    Not ``==``: ``1``, ``1.0`` and ``True`` are equal in Python, while a target
+    lookup through a ``CharField`` reads ``str()`` of the value, so each names
+    another row, ``"1"``, ``"1.0"`` or ``"True"``, and a permission comparing
+    ``request.data`` by type tells them apart too. Nor ``==`` beside a type
+    check, because ``0.0`` and ``-0.0`` are equal floats and read ``"0.0"`` and
+    ``"-0.0"``
     (``test_an_answer_equal_to_the_route_but_naming_another_row_is_judged_again``).
     So each value is compared by ``repr``, which for anything a JSON body
     decodes into is the same only for the same value of the same type, nested
@@ -125,18 +135,19 @@ def same_route(answered: Mapping[str, Any], delivered: Mapping[str, Any]) -> boo
 
     Where the two disagree they err toward judging again, which costs one more
     permission check: an object whose ``repr`` is its address, or a nested
-    mapping whose keys arrive in another order, is a move. An unchanged answer,
-    the ordinary retry, is still judged once
-    (``test_an_answer_leaving_the_route_unchanged_is_not_judged_again``).
+    mapping whose keys arrive in another order, is a change. An answer
+    restating what the call sent is still judged once
+    (``test_an_answer_leaving_the_arguments_unchanged_is_not_judged_again``).
 
     The two conditions are one branch arc, so each is held by a test of its
     own:
 
-    - the same names: an answer of ``null`` drops a kwarg the call sent, and a
-      comparison over the answered names alone finds nothing to differ
-      (``test_an_answer_clearing_a_route_kwarg_is_judged_on_the_route_it_leaves``);
+    - the same names: an answer adding a key, or one of ``null`` for a URL
+      kwarg the call sent, changes the names while every shared value stays
+      (``test_an_answer_adding_an_argument_is_judged_again`` and
+      ``test_an_answer_clearing_a_route_kwarg_is_judged_on_the_route_it_leaves``);
     - each value spelled the same (the equal-value test above, and
-      ``test_an_answer_naming_another_route_is_refused_by_a_per_binding_permission``).
+      ``test_an_answer_changing_a_value_the_permission_reads_is_refused``).
     """
     return answered.keys() == delivered.keys() and all(
         repr(answered[name]) == repr(delivered[name]) for name in answered
@@ -376,7 +387,6 @@ def check_permissions(
     http_request: HttpRequest,
     token: TokenInfo,
     *,
-    view_kwargs: Mapping[str, Any] | None = None,
     shape: DispatchShape | None = None,
 ) -> tuple[bool, list[str]]:
     """Return ``(allowed, required_scopes)`` after evaluating every permission.
@@ -385,44 +395,41 @@ def check_permissions(
     permission that would deny is returned so the transport can surface them in
     the ``WWW-Authenticate`` header.
 
-    **``shape`` is the call the request names**, and every
+    **``shape`` is the request the check names**, and every
     [`DRFPermissionAdapter`][rest_framework_mcp.auth.permissions.drf_permission_adapter.DRFPermissionAdapter]
     among ``permissions`` is judged against a copy whose stand-in is built from
-    it, as the call's dispatch view is: the arguments in ``request.data``, the
-    routed ``QueryParam`` values in ``request.query_params``, the URL kwargs in
-    ``view.kwargs`` and the tool's name in ``view.action``. The ``tools/call``
-    paths pass one, through ``judge_tool_permissions``. **``view_kwargs`` is the
-    route alone**, for the paths that name a route and no call: the variables
-    of the URI a ``resources/read`` names, or a subscription to it. A spec
-    permission scoping by a route capture reads ``view.kwargs["project_pk"]``,
-    as it would over HTTP, and judged against ``{}`` it denied a caller it
-    admits. Any other permission is judged as it is, since an ``MCPPermission``
-    judges the request and token and has no view. Neither judges every
-    permission as registered, for the paths that name nothing: ``prompts/get``,
-    ``completion/complete`` and a listing.
+    it, as the view the request dispatches with is. The ``tools/call`` paths
+    pass one through ``judge_tool_permissions``: the arguments in
+    ``request.data``, the routed ``QueryParam`` values in
+    ``request.query_params``, the URL kwargs in ``view.kwargs`` and the tool's
+    name in ``view.action``. ``resources/read`` and a subscription pass
+    ``resource_shape``, the one the read's own view is built from, and
+    ``prompts/get`` passes ``prompt_shape``. A spec permission scoping by a
+    route capture reads ``view.kwargs["project_pk"]``, as it would over HTTP,
+    and judged against ``{}`` it denied a caller it admits. Any other
+    permission is judged as it is, since an ``MCPPermission`` judges the
+    request and token and has no view. ``None`` judges every permission as
+    registered, for the paths that name nothing: ``completion/complete`` and a
+    listing.
 
     The registered adapters are never written to, because every concurrent
     call to the binding shares them, and the wrapped DRF permission is not
     instantiated again (``test_the_registered_adapter_is_left_unbound``,
     ``test_the_permission_is_not_instantiated_again_nor_a_subclass_state_dropped``).
     """
-    # A path passes one of the two, never both.
-    bound: DispatchShape | None = shape
-    if view_kwargs is not None:
-        bound = DispatchShape(kwargs=view_kwargs)
     required: list[str] = []
     allowed: bool = True
     for registered in permissions:
         perm: Any = registered
         # Both conjuncts hold a test: without the ``None`` check every adapter
         # on a path naming nothing is bound to ``None``
-        # (``test_without_view_kwargs_every_adapter_is_judged_on_an_empty_route``),
+        # (``test_without_a_shape_every_adapter_is_judged_on_an_empty_route``),
         # and without the ``isinstance`` an ``MCPPermission``, which has no view,
-        # is handed one (``test_view_kwargs_reach_every_adapter_and_pass_the_rest_through``).
-        if bound is not None and isinstance(registered, DRFPermissionAdapter):
+        # is handed one (``test_a_shape_reaches_every_adapter_and_passes_the_rest_through``).
+        if shape is not None and isinstance(registered, DRFPermissionAdapter):
             # The adapter's private hook, and this is its one caller: binding a
             # call is how a check is made, not something a consumer composes.
-            perm = registered._bound_to(bound)  # noqa: SLF001
+            perm = registered._bound_to(shape)  # noqa: SLF001
         # Do not gate this loop on ``isinstance(perm, MCPPermission)``: the
         # Protocol is ``runtime_checkable``, so that demands *every* member
         # including ``required_scopes``, and a gate-only permission would be
@@ -464,8 +471,16 @@ def dispatch_shape(
     """
     params, url_kwarg_values = split_url_kwargs(arguments, binding.url_kwargs, refuse_missing=False)
     params, query_param_values = split_query_params(params, binding.query_params)
+    # A copy, because both splits hand back the mapping they were given when
+    # the binding declares nothing to split, and ``request.data`` is that
+    # mapping uncopied: a permission writing into it wrote into the caller's
+    # ``arguments`` and the next check's request
+    # (``test_a_permission_writing_request_data_reaches_neither_the_next_check_nor_the_caller``).
     return DispatchShape(
-        data=params, kwargs=url_kwarg_values, query_params=query_param_values, action=binding.name
+        data=dict(params),
+        kwargs=url_kwarg_values,
+        query_params=query_param_values,
+        action=binding.name,
     )
 
 
@@ -478,7 +493,41 @@ def chain_shape(arguments: dict[str, Any], action: str) -> DispatchShape:
     the step: ``action`` is the step's alias there, and the tool's name on the
     view its ``input_serializer`` is validated with.
     """
-    return DispatchShape(data=arguments, query_params={}, action=action)
+    # A copy for the reason ``dispatch_shape`` gives: uncopied, every step's
+    # stand-in and the chain's request were the caller's own ``arguments``.
+    return DispatchShape(data=dict(arguments), query_params={}, action=action)
+
+
+def resource_shape(binding: ResourceBinding, variables: Mapping[str, Any]) -> DispatchShape:
+    """What a ``resources/read`` request and view are built from, for one URI.
+
+    The read's own view and every check made of the resource's permissions
+    are built from this, so they judge one request: the URI's variables in
+    ``view.kwargs``, the resource's name in ``view.action``, ``{}`` as
+    ``request.data`` and an empty query string, which replaces the endpoint's.
+    The check once judged ``action=None`` and the endpoint's query string,
+    and the view carried no ``request.auth``, so a permission reading any of
+    those refused every caller in one check or the other
+    (``test_a_resource_permission_reads_one_request_in_both_checks``). A
+    subscription to the URI judges the same request
+    (``test_a_subscription_reads_the_request_the_read_does``).
+
+    A resource URI *is* a locator, so per-call read-shaping belongs in its URI
+    template, whose variables already route to ``view.kwargs``: a resource
+    takes no query value.
+    """
+    return DispatchShape(kwargs=dict(variables), query_params={}, action=binding.name)
+
+
+def prompt_shape(binding: PromptBinding, arguments: Mapping[str, Any]) -> DispatchShape:
+    """What a ``prompts/get`` check's stand-in is built from.
+
+    The prompt's arguments as ``request.data``, its name as ``view.action``
+    and an empty query string. Judged against ``{}``, a permission refusing on
+    an argument admitted every call
+    (``test_a_prompt_permission_reads_the_prompts_arguments``).
+    """
+    return DispatchShape(data=dict(arguments), query_params={}, action=binding.name)
 
 
 def judge_tool_permissions(
@@ -496,10 +545,11 @@ def judge_tool_permissions(
     under that step's alias. ``chain_to_tool`` lays ``binding.permissions`` out
     as each step's wrapped ``permission_classes``, in step order, then the
     chain-level ``permissions``, which are judged under the tool's name
-    (``test_a_chain_steps_stand_in_carries_the_steps_action``). A binding laid
-    out otherwise is judged with the actions shifted, never with a permission
-    skipped, and each step's own check against its real view still runs before
-    its lookup.
+    (``test_a_chain_steps_stand_in_carries_the_steps_action``).
+    ``ChainToolBinding`` refuses a binding laid out otherwise where it is
+    built, since one judged here would be judged under another view's action,
+    and each step's own check against its real view still runs before its
+    lookup.
     """
     if not isinstance(binding, ChainToolBinding):
         return check_permissions(
@@ -1102,12 +1152,14 @@ __all__ = [
     "enforce_result_ceiling",
     "judge_tool_permissions",
     "permission_verdict",
+    "prompt_shape",
     "read_shaping_error_result",
     "refuse_missing_arguments",
     "render_convention",
     "resolve_bound",
+    "resource_shape",
     "run_with_deadline",
-    "same_route",
+    "same_arguments",
     "services_dispatch_policies",
     "split_query_params",
     "split_url_kwargs",

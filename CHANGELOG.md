@@ -291,9 +291,9 @@ These follow from drf-services 0.56.0, which this release requires.
   `permission_classes` alike, so a caller refused on that route is not charged
   either. Different means by value and by type: `true` or `1.0` answered for
   `1`, which Python's `==` calls equal, is another route, since a lookup
-  through a `CharField` reads `"True"` or `"1.0"`. An answer leaving the route
-  exactly as sent is not judged twice, and a declined or cancelled answer is
-  charged as before.
+  through a `CharField` reads `"True"` or `"1.0"`. An answer leaving the
+  arguments exactly as sent is not judged twice, and a declined or cancelled
+  answer is charged as before.
 - **A selector tool's `input_serializer` cannot put a value back under a URL
   kwarg's name.** The validated values are laid back over the arguments after
   the URL kwargs are split out of them, so a field bound with
@@ -345,9 +345,10 @@ These follow from drf-services 0.56.0, which this release requires.
   view, before its `inputs` run and its target is looked up. The target guard
   then runs only `has_object_permission`. `has_permission` is asked twice per
   call, once against the binding's stand-in and once against the dispatch view,
-  and once more in a streamed call's pre-flight; `call_tool`, which judges no
-  stand-in, asks it once. For a row that does not exist that is one call more
-  than before, where the guard after the lookup never ran.
+  once more in a streamed call's pre-flight, and once more when a retry's
+  answers change the arguments; `call_tool`, which judges no stand-in, asks it
+  once. For a row that does not exist that is one call more than before, where
+  the guard after the lookup never ran.
 - **A spec permission reading `request.data` no longer fails every wire
   `tools/call`.** A spec's `permission_classes` are judged first by the
   binding's wrapped `DRFPermissionAdapter`, against a stand-in that wrapped the
@@ -362,8 +363,28 @@ These follow from drf-services 0.56.0, which this release requires.
   handler, `acall_tool`, a streamed call's pre-flight, the check before a task
   is created, and a chain's up-front check, which judges each step's classes
   under the step's name, as the step's view carries it. The check still runs
-  before a rate limit is charged. A check that names no call, such as the
-  `FILTER_LISTINGS_BY_PERMISSIONS` filter on `tools/list`, judges `{}` as
+  before a rate limit is charged. A retry's answers are merged over the
+  arguments after the check, even on a first call with no `requestState`, and
+  any answer that changes them is judged again on the arguments it produces,
+  before the rate limit is charged. Judged again only when an answer moved the
+  route, as this stand-in was first built, a per-binding `DRFPermissionAdapter`
+  admitting only project `"7"` ran the service on the `"8"` a call sent as `"7"`
+  and answered, on either handler and over a stream, and one reading a
+  `QueryParam` value likewise; a spec class judged again by the dispatch view
+  refused, but only after the call was charged. Only this release's stand-in
+  could reach that, since it is what first let such a class read either value
+  (the same calls were a 500 and a `403` before it), and this release closes
+  it. Each check gets a `request.data` of its own, so a permission writing into
+  it reaches neither the next check nor the caller's `arguments`, which it did
+  on a tool declaring no URL kwarg or `QueryParam` and on every chain. A
+  `ChainToolBinding` built by hand must begin its `permissions` with each
+  step's `permission_classes`, wrapped as `register_chain_tool` wraps them and
+  in step order, or it is refused with `ImproperlyConfigured`: a chain-level
+  permission in a step's place was judged under that step's name. `prompts/get`
+  judges the prompt's arguments as `request.data` and its name as
+  `view.action`, where judged against `{}` a permission refusing on an argument
+  admitted every call. A check that names no call, `completion/complete` and
+  the `FILTER_LISTINGS_BY_PERMISSIONS` filter on `tools/list`, judges `{}` as
   `request.data` and `None` as `view.action`, where reading `request.data`
   there was a 500 as well.
 - **A selector tool's `request.data` holds what a service tool's does.** On the
@@ -381,7 +402,15 @@ These follow from drf-services 0.56.0, which this release requires.
   that reset `request.user` to `AnonymousUser`. A class such as
   `TokenHasScope`, which reads `request.auth` first, then saw no caller. The
   request now carries the token backend's payload as `request.auth`, and `None`
-  from `call_tool`.
+  from `call_tool` and `acall_tool`. `resources/read` did the same, sync and
+  async, and its check disagreed with its view besides: the check saw no
+  `view.action` and the endpoint's own query string, the view the resource's
+  name and an empty one. So a resource permission reading `request.auth`,
+  `view.action` or `request.query_params` refused every caller in one check or
+  the other. The check and the view, and a subscription's check of the same
+  URI, are now built from one request: the URI's variables in `view.kwargs`,
+  the resource's name in `view.action`, `{}` as `request.data`, an empty query
+  string and the backend's payload as `request.auth`.
 - **A namesake default for a URL kwarg is evaluated off the event loop.** A
   selector tool fills a URL kwarg the call leaves out from its
   `input_serializer` field of the same name. The async handler and

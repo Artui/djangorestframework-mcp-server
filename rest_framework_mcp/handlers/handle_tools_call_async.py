@@ -39,7 +39,7 @@ from rest_framework_mcp.handlers.utils import (
     refuse_missing_arguments,
     resolve_bound,
     run_with_deadline,
-    same_route,
+    same_arguments,
     service_error_result,
     services_dispatch_policies,
     split_url_kwargs,
@@ -169,9 +169,6 @@ async def _dispatch_tool_call_async(
         # its dispatch view will carry it, from the arguments as sent and
         # without refusing a missing URL kwarg, which the strict split in
         # ``_run_service_tool_async`` still does after them.
-        _, delivered_url_kwargs = split_url_kwargs(
-            arguments_raw, binding.url_kwargs, refuse_missing=False
-        )
         allowed, required_scopes = await acall(
             judge_tool_permissions, binding, arguments_raw, context
         )
@@ -182,21 +179,18 @@ async def _dispatch_tool_call_async(
         # before anything else looks at them, and a declined one is answered
         # after the rate limit.
         prior: ResolvedInput = resolve_prior_input(params, binding.name, arguments_raw, context)
-        arguments_raw = prior.arguments
 
-        # See the sync sibling: an answer that moved the route, by
-        # ``same_route`` rather than ``==``, is judged again on the route it
-        # names, before the target is looked up. The same tests hold both
-        # conditions here, each parametrized over this handler.
-        _, answered_url_kwargs = split_url_kwargs(
-            arguments_raw, binding.url_kwargs, refuse_missing=False
-        )
-        if not same_route(answered_url_kwargs, delivered_url_kwargs):
+        # See the sync sibling: answers that changed the arguments, by
+        # ``same_arguments`` rather than ``==``, are judged again on the
+        # arguments they produced, before the target is looked up. The same
+        # tests hold the condition here, each parametrized over this handler.
+        if not same_arguments(prior.arguments, arguments_raw):
             allowed, required_scopes = await acall(
-                judge_tool_permissions, binding, arguments_raw, context
+                judge_tool_permissions, binding, prior.arguments, context
             )
             if not allowed:
-                return _forbidden(required_scopes), arguments_raw
+                return _forbidden(required_scopes), prior.arguments
+        arguments_raw = prior.arguments
 
         # See the sync sibling: after both checks, so a caller either one
         # denies is never charged.

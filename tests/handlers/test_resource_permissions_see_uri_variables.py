@@ -14,7 +14,7 @@ from typing import Any
 
 import pytest
 from asgiref.sync import sync_to_async
-from django.http import HttpRequest
+from django.http import HttpRequest, QueryDict
 from rest_framework.permissions import BasePermission
 from rest_framework_services.types.selector_kind import SelectorKind
 from rest_framework_services.types.selector_spec import SelectorSpec
@@ -140,3 +140,92 @@ def test_a_subscription_is_granted_the_uris_the_read_would_admit() -> None:
 
     assert granted.resource_uris == ("projects://7/invoices",)
     assert seen == [{"project_pk": "7"}, {"project_pk": "8"}]
+
+
+# ----- the stand-in and the guard's view are one request -----
+
+
+class _User:
+    pk = 1
+    is_authenticated = True
+
+
+# What a token backend publishes as ``TokenInfo.raw``, compared by identity.
+_AUTH: object = object()
+
+
+class _ReadsAuthThenUser(BasePermission):
+    """``TokenHasScope``'s order: the backend's payload first, then the caller."""
+
+    def has_permission(self, request: Any, view: Any) -> bool:
+        return request.auth is _AUTH and bool(request.user and request.user.is_authenticated)
+
+
+class _AdmitsTheResourceAction(BasePermission):
+    def has_permission(self, request: Any, view: Any) -> bool:
+        return view.action == "project-invoices"
+
+
+class _AdmitsNoQueryValue(BasePermission):
+    """A resource takes no query value; the endpoint's own query string says ``project=99``."""
+
+    def has_permission(self, request: Any, view: Any) -> bool:
+        return "project" not in request.query_params
+
+
+class _AdmitsNoData(BasePermission):
+    """A read carries no body: ``request.data`` is ``{}`` in both checks."""
+
+    def has_permission(self, request: Any, view: Any) -> bool:
+        return request.data == {}
+
+
+_FAITHFUL = [_ReadsAuthThenUser, _AdmitsTheResourceAction, _AdmitsNoQueryValue, _AdmitsNoData]
+_FAITHFUL_IDS = ["auth", "action", "query-params", "data"]
+
+
+def _caller_ctx(server: MCPServer) -> MCPCallContext:
+    """A signed-in caller with a token payload, on an endpoint whose URL carries a query string."""
+    http_request = HttpRequest()
+    http_request.GET = QueryDict("project=99")
+    return MCPCallContext(
+        http_request=http_request,
+        token=TokenInfo(user=_User(), raw=_AUTH),
+        tools=server.tools,
+        resources=server.resources,
+        prompts=server.prompts,
+        protocol_version="2025-11-25",
+    )
+
+
+@pytest.mark.django_db(transaction=True)
+@pytest.mark.parametrize("is_async", [False, True], ids=["sync", "async"])
+@pytest.mark.parametrize("permission", _FAITHFUL, ids=_FAITHFUL_IDS)
+async def test_a_resource_permission_reads_one_request_in_both_checks(
+    permission: type[BasePermission], is_async: bool
+) -> None:
+    # The stand-in carried the endpoint's query string and no ``view.action``;
+    # the guard's view carried no ``request.auth``, so reading it reset the
+    # caller to ``AnonymousUser``. A permission reading any of the three
+    # refused every caller in one check or the other.
+    server = _server(permission)
+    params: dict[str, Any] = {"uri": "projects://7/invoices"}
+
+    if is_async:
+        out = await handle_resources_read_async(params, _caller_ctx(server))
+    else:
+        out = await sync_to_async(handle_resources_read)(params, _caller_ctx(server))
+
+    assert not isinstance(out, JsonRpcError), f"refused: {out!r}"
+    assert out["contents"]
+
+
+@pytest.mark.parametrize("permission", _FAITHFUL, ids=_FAITHFUL_IDS)
+def test_a_subscription_reads_the_request_the_read_does(permission: type[BasePermission]) -> None:
+    server = _server(permission)
+
+    granted, _ = grant_subscription(
+        SubscriptionFilter(resource_uris=("projects://7/invoices",)), _caller_ctx(server)
+    )
+
+    assert granted.resource_uris == ("projects://7/invoices",)

@@ -204,29 +204,57 @@ auto-wrapped and prepended to the per-binding `permissions` tuple —
 the same spec that backs your HTTP view governs the MCP binding
 without you restating the contract at the MCP call site.
 
-On every path that judges a tool call (`tools/call` on either handler,
-`call_tool` / `acall_tool`, the pre-flight of a streamed call, a task's
-creation and a chain's up-front check), the adapter's stand-in is built from
-the same values as the view the spec is dispatched with, so a class reads the
-same request in both checks: `request.data` is the call's arguments less its
-route and query values, `request.query_params` holds the declared `QueryParam`
+On every path that judges a tool call's adapters (`tools/call` on either
+handler, `acall_tool`, the pre-flight of a streamed call, a task's creation and
+a chain's up-front check), the adapter's stand-in is built from the same
+values as the view the spec is dispatched with, so a class reads the same
+request in both checks: `request.data` is the call's arguments less its route
+and query values, `request.query_params` holds the declared `QueryParam`
 values, `view.kwargs` the URL kwargs, `view.action` the tool's name, and the
 method is `POST`. That is DRF's own layout, and the same on a service tool, a
-selector tool and `call_tool`. A chain judges each step's wrapped classes under
-the step's alias, and its own `permissions` under the tool's name, with the
-chain's arguments as `request.data`. `request.auth` is the token backend's
-payload (`None` from `call_tool`), set beside `request.user`, so a class such
-as `TokenHasScope` that reads `request.auth` first still sees the caller.
+selector tool and the view `call_tool` dispatches with, though `call_tool`
+judges no adapter: it judges the spec's classes against that view alone. A
+chain judges each step's wrapped classes under the step's alias, and its own
+`permissions` under the tool's name, with the chain's arguments as
+`request.data`. Each check gets a `request.data` of its own, so a class
+writing into it reaches neither the next check nor the caller's `arguments`.
+`request.auth` is the token backend's payload (`None` from `call_tool` and
+`acall_tool`), set beside `request.user`, so a class such as `TokenHasScope`
+that reads `request.auth` first still sees the caller.
 
-`resources/read` and a resource subscription carry a read's URI variables in
-`view.kwargs`, so a class scoping by `view.kwargs["project_pk"]` reads the
-route the request names, as it does over HTTP. A `tools/call` retry
-whose `inputResponses` name a different URL kwarg, or fill one the call left
-out, is judged again on the route the answer produces, before a rate limit is
-charged, the target is looked up or the service runs. Two checks name no route and judge `{}`:
-`completion/complete` on a resource template, which names the template rather
-than a URI, so a template whose permission scopes by a URI variable completes
-for nobody; and the listings filter described
+A chain's `permissions` must begin with each step's `permission_classes`, each
+wrapped in a `DRFPermissionAdapter`, in step order, because that position is
+what tells a step's class from the chain's own. `register_chain_tool` lays them
+out so; a `ChainToolBinding` built by hand any other way is refused with
+`ImproperlyConfigured` when it is constructed.
+
+A `tools/call` retry whose `inputResponses` change any argument, the route, a
+query value or `request.data`, is judged again on the arguments the answers
+produce, before a rate limit is charged, the target is looked up or the service
+runs. An answer is merged even on a first call with no `requestState`, so this
+is what keeps a class admitting project 7 from running the service on project 8
+sent as 7 and answered as 8. An answer restating what the call sent is not
+judged again.
+
+`resources/read` and a resource subscription judge the request the read is
+dispatched with, built from one shape: the URI's variables in `view.kwargs`, so
+a class scoping by `view.kwargs["project_pk"]` reads the route the request
+names, as it does over HTTP; the resource's name in `view.action`; `{}` as
+`request.data`; an empty `request.query_params`, since a resource takes no
+query value; and the token backend's payload as `request.auth`.
+
+The paths that name no tool call judge these as `request.data`:
+
+| Path | `request.data` | `view.action` |
+| --- | --- | --- |
+| `prompts/get` | the prompt's arguments | the prompt's name |
+| `completion/complete` | `{}` | `None` |
+| the listings filter | `{}` | `None` |
+
+`prompts/get` also replaces the endpoint's query string with an empty one.
+`completion/complete` on a resource template names the template rather than a
+URI, so a template whose permission scopes by a URI variable completes for
+nobody. The listings filter is described
 [below](#filtering-listings-by-permissions).
 
 ### Object-level permissions
@@ -240,7 +268,9 @@ looked up, and pass `dispatch_spec` only the object-level half as
 so the target guard does not ask `has_permission` again. On `tools/call` the
 binding's wrapped copy of each class has already asked it once, against a
 stand-in that sees the same request, so a call asks `has_permission` twice per
-class, and a streamed call once more in its pre-flight. A chain step does the
+class, a streamed call once more in its pre-flight, and a retry whose answers
+change the arguments once more again, on the arguments they produce.
+`call_tool`, which judges no stand-in, asks it once. A chain step does the
 same against its own view, before its `inputs` run and its target is looked
 up, and then runs only the object-level half on the target it resolved.
 `resources/read` runs drf-services' `enforce_permissions`, both halves, on the

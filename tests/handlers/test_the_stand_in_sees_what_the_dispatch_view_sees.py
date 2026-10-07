@@ -33,8 +33,10 @@ from rest_framework_mcp.auth.backends.allow_any_backend import AllowAnyBackend
 from rest_framework_mcp.auth.types.token_info import TokenInfo
 from rest_framework_mcp.constants import TASKS_EXTENSION_ID, JsonRpcErrorCode
 from rest_framework_mcp.handlers.handle_tools_call import handle_tools_call
+from rest_framework_mcp.handlers.handle_tools_call_async import handle_tools_call_async
 from rest_framework_mcp.handlers.types.context import MCPCallContext
 from rest_framework_mcp.protocol.types.json_rpc_error import JsonRpcError
+from rest_framework_mcp.registry.types.chain_step import ChainStep
 from rest_framework_mcp.tasks.in_memory_task_store import InMemoryTaskStore
 from rest_framework_mcp.transport.in_memory_session_store import InMemorySessionStore
 from tests.tasks.conftest import RecordingExecutor
@@ -464,38 +466,87 @@ class _User:
     is_authenticated = True
 
 
-class _ReadsAuthThenUser(BasePermission):
+# What a token backend publishes as ``TokenInfo.raw``: compared by identity, so
+# a site passing ``None`` in its place cannot pass for it.
+_AUTH: object = object()
+
+
+def _reading_auth_then_user(saw: list[Any]) -> type[BasePermission]:
     """``TokenHasScope``'s order: ``request.auth`` first, then ``request.user``."""
 
-    def has_permission(self, request: Any, view: Any) -> bool:
-        _ = request.auth
-        return bool(request.user and request.user.is_authenticated)
+    class _ReadsAuthThenUser(BasePermission):
+        def has_permission(self, request: Any, view: Any) -> bool:
+            saw.append(request.auth)
+            return bool(request.user and request.user.is_authenticated)
+
+    return _ReadsAuthThenUser
+
+
+def _auth_server(kind: str, permission: type[BasePermission]) -> MCPServer:
+    """``tool`` of ``kind`` behind ``permission``; a chain's one step carries it."""
+    if kind != "chain":
+        return _server(kind, permission)
+    server = MCPServer(name="t", auth_backend=AllowAnyBackend(), session_store=None)
+    server.register_chain_tool(
+        name="tool",
+        description="Touch a project.",
+        steps=[
+            ChainStep(
+                "touch",
+                ServiceSpec(service=_touch, atomic=False, permission_classes=[permission]),
+            )
+        ],
+    )
+    return server
 
 
 @pytest.mark.django_db(transaction=True)
-@pytest.mark.parametrize("kind", _KINDS)
-@pytest.mark.parametrize("route", ["handler", "acall_tool", "call_tool"])
+@pytest.mark.parametrize("kind", [*_KINDS, "chain"])
+@pytest.mark.parametrize("route", ["sync_handler", "async_handler"])
 async def test_a_dispatch_view_reading_auth_keeps_the_caller(route: str, kind: str) -> None:
     # Reading ``request.auth`` on a request that never authenticated runs
     # DRF's empty authenticator chain, which resets ``request.user`` to
     # ``AnonymousUser``. The stand-in set ``auth`` and admitted; the dispatch
-    # view did not, and denied the same authenticated caller.
-    server = _server(kind, _ReadsAuthThenUser)
+    # view did not, and denied the same authenticated caller. Both checks see
+    # the backend's own payload, not merely something that is not a trigger:
+    # each site passing ``auth=None`` keeps the caller too, and is caught here.
+    saw: list[Any] = []
+    server = _auth_server(kind, _reading_auth_then_user(saw))
+    context = MCPCallContext(
+        http_request=HttpRequest(),
+        token=TokenInfo(user=_User(), raw=_AUTH),
+        tools=server.tools,
+        resources=server.resources,
+        prompts=server.prompts,
+        protocol_version=_MODERN,
+        conventions=server.conventions,
+    )
+    params: dict[str, Any] = {"name": "tool", "arguments": {}}
+    if route == "async_handler":
+        out: Any = await handle_tools_call_async(params, context)
+    else:
+        out = await sync_to_async(handle_tools_call)(params, context)
+
+    _assert_served(out)
+    # The binding's stand-in, then the dispatch view (a chain step's own view).
+    assert len(saw) == 2
+    assert all(auth is _AUTH for auth in saw), saw
+
+
+@pytest.mark.django_db(transaction=True)
+@pytest.mark.parametrize("kind", _KINDS)
+@pytest.mark.parametrize("route", ["acall_tool", "call_tool"])
+async def test_an_in_process_call_reading_auth_keeps_the_caller(route: str, kind: str) -> None:
+    # ``call_tool`` and ``acall_tool`` publish no token payload, so
+    # ``request.auth`` is ``None``: a value, not a trigger that resets the user.
+    saw: list[Any] = []
+    server = _server(kind, _reading_auth_then_user(saw))
     user = _User()
     if route == "acall_tool":
         out: Any = await server.acall_tool("tool", {}, user=user)
-    elif route == "call_tool":
-        out = (await sync_to_async(server.call_tool)("tool", {}, user=user)).to_dict()
     else:
-        context = MCPCallContext(
-            http_request=HttpRequest(),
-            token=TokenInfo(user=user),
-            tools=server.tools,
-            resources=server.resources,
-            prompts=server.prompts,
-            protocol_version=_MODERN,
-            conventions=server.conventions,
-        )
-        out = await sync_to_async(handle_tools_call)({"name": "tool", "arguments": {}}, context)
+        out = (await sync_to_async(server.call_tool)("tool", {}, user=user)).to_dict()
 
     _assert_served(out)
+    assert saw
+    assert all(auth is None for auth in saw), saw

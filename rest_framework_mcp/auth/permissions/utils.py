@@ -49,7 +49,9 @@ class DispatchShape:
         copy of ``http_request`` (never written to), its method is ``POST``,
         ``data`` is seeded rather than parsed, and ``view.kwargs`` is a fresh
         ``dict`` per build, which a permission writing into it cannot carry
-        into the next check.
+        into the next check. ``data`` is seeded as given, so the shape is
+        where it is copied: ``dispatch_shape`` and ``chain_shape`` each hand a
+        check a ``data`` of its own.
 
         **``auth`` is set beside ``user``, and has to be.** DRF resolves
         ``request.auth`` lazily: reading it on a request that has never
