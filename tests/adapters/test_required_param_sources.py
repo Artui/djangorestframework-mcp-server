@@ -13,11 +13,13 @@ the callable really receives.
 
 from __future__ import annotations
 
+import dataclasses
 from typing import Any
 
 import pytest
 from django.core.exceptions import ImproperlyConfigured
 from rest_framework import serializers as drf_serializers
+from rest_framework_dataclasses.serializers import DataclassSerializer
 from rest_framework_services.types.selector_kind import SelectorKind
 from rest_framework_services.types.selector_spec import SelectorSpec
 from rest_framework_services.types.service_spec import ServiceSpec
@@ -379,6 +381,37 @@ def test_the_field_check_offers_a_service_no_selector_remedy() -> None:
             argument_binding=ArgumentBinding.SPREAD_AUTHOR_WINS,
         )
     assert _NEVER_HANDED not in str(caught.value)
+
+
+@dataclasses.dataclass
+class _Count:
+    count: int
+
+
+class _CountIn(DataclassSerializer):
+    """Declares nothing, so ``count`` is a field the serializer generates."""
+
+    class Meta:
+        dataclass = _Count
+
+
+@pytest.mark.parametrize("binding", _SPREADING)
+def test_a_service_counts_no_field_a_dataclass_serializer_generates(
+    binding: ArgumentBinding,
+) -> None:
+    # A selector counts every name its input lays back, a generated field
+    # included, because selector dispatch spreads the dataclass instance. A
+    # service is never handed one spread: drf-services passes the instance as
+    # ``data`` alone, so nothing fills ``count`` and every call would raise
+    # ``TypeError``. Holds the selector-only scope of that count.
+    def _counts(*, count: int) -> Any: ...  # noqa: ARG001
+
+    with pytest.raises(ImproperlyConfigured, match=r"parameter\(s\) \['count'\]"):
+        service_spec_to_tool(
+            name="count",
+            spec=ServiceSpec(service=_counts, input_serializer=_CountIn, atomic=False),
+            argument_binding=binding,
+        )
 
 
 # ---------- a positional-only parameter is never filled ----------

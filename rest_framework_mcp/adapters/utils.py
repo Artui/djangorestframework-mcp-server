@@ -16,7 +16,6 @@ from typing import Any
 
 from django.core.exceptions import ImproperlyConfigured
 from rest_framework import serializers as drf_serializers
-from rest_framework_dataclasses.serializers import DataclassSerializer
 from rest_framework_services.types.pool_seeds import DEFAULT_POOL_SEEDS, PoolSeeds
 from rest_framework_services.types.validate_channel_names import validate_channel_names
 
@@ -27,7 +26,7 @@ from rest_framework_mcp.constants import (
 )
 from rest_framework_mcp.registry.types.query_param import QueryParam
 from rest_framework_mcp.registry.types.url_kwarg import UrlKwarg
-from rest_framework_mcp.schema.utils import declares_default
+from rest_framework_mcp.schema.utils import declares_default, laid_back_inputs
 
 
 def validate_serializer_shapes(
@@ -356,44 +355,12 @@ def _resolve_signature(callable_: Any) -> inspect.Signature | None:
 def _overlaid_field_names(input_serializer: type | None) -> frozenset[str]:
     """The names a selector tool's validated input lays back with the caller's value.
 
-    Selector dispatch overlays the validated values on the arguments in both of
-    the shapes they arrive in (``handlers.selector_tool_dispatch._validated_values``):
-    a plain DRF ``Serializer``'s ``dict``, and the dataclass instance a bare
-    ``@dataclass`` or a ``DataclassSerializer`` validates into. So every shape
-    the adapter admits can lay a name back, and the names that carry the
-    caller's value are the same for all three: the serializer's fields, as
-    built for the call (a bare dataclass is wrapped in a ``DataclassSerializer``
-    there too), that are
-
-    - not ``read_only``: DRF keeps the field out of the validated values
-      (``read-only-field`` of
-      ``test_a_field_whose_value_is_not_laid_back_exempts_nothing``), and a
-      dataclass field so declared is laid back as its default, never as what
-      the caller sent (``read-only-dataclass-field``);
-    - bound to their own name: a field with ``source="number"`` puts its value
-      under ``number``, and ``source="*"`` merges it, so neither lays back the
-      name the field is declared under (``source-elsewhere``).
-
-    The dataclass shapes were once left out, when dispatch overlaid only a
-    ``dict``; they are held by
-    ``test_a_pagination_named_parameter_a_dataclass_input_declares_is_allowed``.
-    ``None`` is a tool with no ``input_serializer``, which every such
-    registration passes through
-    (``test_a_defaulted_pagination_named_parameter_is_refused``). Anything else
-    was refused by ``validate_serializer_shapes`` before this runs.
+    The first half of ``schema.utils.laid_back_inputs``, the one reader of what
+    an input lays back, which states the rule and names the test holding each
+    of its conditions. Read here for the pagination exemption above and by
+    ``call_tool``'s strip of ``page`` / ``limit`` (``handlers.call_spec_tool``).
     """
-    if input_serializer is None:
-        return frozenset()
-    serializer: Any = (
-        DataclassSerializer(dataclass=input_serializer)
-        if dataclasses.is_dataclass(input_serializer)
-        else input_serializer()
-    )
-    return frozenset(
-        name
-        for name, field in serializer.fields.items()
-        if not field.read_only and field.source == name
-    )
+    return laid_back_inputs(input_serializer)[0]
 
 
 def _keyword_parameters(callable_: Any) -> list[inspect.Parameter]:
@@ -520,7 +487,15 @@ def _validate_required_params_have_sources(
       on every call.
     - **``input_serializer`` fields**, in the spread modes only, where the
       validated dict is spread into the pool. Under ``BUNDLE`` the fields ride
-      inside ``data`` and their names never reach the callable as kwargs.
+      inside ``data`` and their names never reach the callable as kwargs. For
+      a selector, also every name the input lays back
+      (``schema.utils.laid_back_inputs``), which the schema reads too: a field
+      a ``DataclassSerializer`` generates, and a dataclass field filled by its
+      own default. Its declared fields alone missed both, so a selector
+      requiring one was refused although dispatch fills it on every call
+      (``test_registration_the_schema_and_dispatch_agree_on_what_an_input_lays_back``).
+      Not for a service, which is never handed a dataclass input spread
+      (``test_a_service_counts_no_field_a_dataclass_serializer_generates``).
     - **``selector_url_kwargs``** that are ``required`` or declare a default: a
       call omitting a required one is refused before dispatch, and a default is
       seeded when the call omits it, so every call that reaches the selector
@@ -614,7 +589,8 @@ def _validate_required_params_have_sources(
         if input_serializer is not None:
             fields: frozenset[str] = frozenset(_serializer_field_names(input_serializer))
             if is_selector:
-                fields -= _NEVER_HANDED_TO_A_SELECTOR
+                overlaid, fills = laid_back_inputs(input_serializer)
+                fields = (fields | overlaid | frozenset(fills)) - _NEVER_HANDED_TO_A_SELECTOR
             sources.update(fields)
         else:
             # Trust mode: raw ``arguments`` are spread verbatim, so the client

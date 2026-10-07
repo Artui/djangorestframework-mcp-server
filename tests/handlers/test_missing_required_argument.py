@@ -28,7 +28,13 @@ from django.test import Client
 from rest_framework import serializers
 from rest_framework.exceptions import PermissionDenied
 from rest_framework.permissions import BasePermission, IsAuthenticated
-from rest_framework_services import DEFAULT_POOL_SEEDS, UNSET, InputRequired, UnsetType
+from rest_framework_services import (
+    DEFAULT_POOL_SEEDS,
+    UNSET,
+    InputRequired,
+    NotClientInput,
+    UnsetType,
+)
 from rest_framework_services.types.pool_seeds import PoolSeeds
 from rest_framework_services.types.selector_kind import SelectorKind
 from rest_framework_services.types.selector_spec import SelectorSpec
@@ -744,6 +750,82 @@ async def test_a_null_url_kwarg_is_a_missing_argument(is_async: bool) -> None:
     out = await _call(server, "get", {"pk": None}, is_async=is_async)
 
     assert _missing(out) == {"pk": _REQUIRED}
+
+
+def _by_pk_in_tenant(*, pk: int, tenant: str) -> Any:
+    # Names ``tenant`` plainly and with no default, so the lookup alone would
+    # require it of the caller.
+    return Invoice.objects.filter(pk=pk)
+
+
+def _same_tenant(*, tenant: Annotated[str, NotClientInput] = "acme") -> None:
+    # Owns ``tenant`` for the whole call (``server_owned_keys``).
+    return None
+
+
+class _NumberAndTenantInput(_NumberInput):
+    # Optional, so the serializer does not refuse a call leaving it out.
+    tenant = serializers.CharField(required=False)
+
+
+def _owned_tenant_server(input_serializer: type[serializers.Serializer]) -> MCPServer:
+    """A service tool whose lookup requires ``tenant``, which its precondition owns."""
+    server = MCPServer(name="t", auth_backend=AllowAnyBackend(), session_store=None)
+    server.register_service_tool(
+        name="rename",
+        spec=ServiceSpec(
+            service=_rename,
+            atomic=False,
+            input_serializer=input_serializer,
+            instance_selector_spec=SelectorSpec(
+                kind=SelectorKind.RETRIEVE, selector=_by_pk_in_tenant
+            ),
+            preconditions=[_same_tenant],
+            output_selector_spec=_out(),
+        ),
+    )
+    return server
+
+
+def _rename_schema(server: MCPServer) -> dict[str, Any]:
+    listed: Any = server.list_tools(user=None)
+    return next(tool for tool in listed["tools"] if tool["name"] == "rename")["inputSchema"]
+
+
+@pytest.mark.django_db(transaction=True)
+@pytest.mark.parametrize("route", _ROUTES)
+async def test_a_lookup_key_the_server_owns_is_not_asked_of_the_caller(route: str) -> None:
+    # The precondition marks ``tenant`` ``NotClientInput``, so drf-services drops
+    # the caller's value before the lookup reads it, and the tool's schema does
+    # not advertise it. Nothing the server supplies fills it either, which is the
+    # author's gap: no resend could deliver it, so the call is not refused
+    # naming it, and fails as the lookup's own ``TypeError``, as drf-services
+    # answers a server-side gap. It was refused as
+    # "Missing required argument(s): `tenant`.", for a key the caller cannot send.
+    invoice = await Invoice.objects.acreate(number="INV-1")
+    server = _owned_tenant_server(_NumberInput)
+
+    assert "tenant" not in _rename_schema(server)["properties"]
+    with pytest.raises(TypeError, match="tenant"):
+        await _via(server, route, "rename", {"pk": invoice.pk, "number": "INV-2"})
+
+
+@pytest.mark.django_db(transaction=True)
+@pytest.mark.parametrize("route", _ROUTES)
+async def test_an_owned_lookup_key_a_field_declares_is_still_asked_of_the_caller(
+    route: str,
+) -> None:
+    # A field of the owned name is the caller's input, so the schema keeps the
+    # lookup's ``tenant`` required, and the call is refused for it as the
+    # schema says. Holds the subtraction's limit to the names the
+    # ``input_serializer`` does not list.
+    invoice = await Invoice.objects.acreate(number="INV-1")
+    server = _owned_tenant_server(_NumberAndTenantInput)
+
+    assert "tenant" in _rename_schema(server)["required"]
+    out = await _via(server, route, "rename", {"pk": invoice.pk, "number": "INV-2"})
+
+    assert _missing(out) == {"tenant": _REQUIRED}
 
 
 @pytest.mark.django_db(transaction=True)

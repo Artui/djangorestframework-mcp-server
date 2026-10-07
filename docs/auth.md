@@ -220,11 +220,16 @@ for nobody; and the listings filter described
 ### Object-level permissions
 
 `has_object_permission` runs on every path, against the row the dispatch
-resolved: the tool paths pass `enforce_permissions` to `dispatch_spec` as
-`on_target_resolved`, `resources/read` runs it on the selector's return, and a
-chain step runs it on the target the step resolved. A `LIST` / collection result
-gets the class-level check only — object permissions are a per-row concept, and
-a set is authorized per-set.
+resolved. The tool paths (`tools/call` on a service or selector tool, and
+`call_tool` / `acall_tool`) judge the spec's class-level `has_permission` up
+front, against the request and view the call runs with, before the target is
+looked up, and pass `dispatch_spec` only the object-level half as
+`on_target_resolved`: each class's `has_object_permission` on the resolved row,
+so `has_permission` is not asked a second time. `resources/read` runs
+drf-services' `enforce_permissions`, both halves, on the selector's return, and
+a chain step runs it on the target the step resolved. A `LIST` / collection
+result gets the class-level check only — object permissions are a per-row
+concept, and a set is authorized per-set.
 
 ### Filtering listings by permissions
 

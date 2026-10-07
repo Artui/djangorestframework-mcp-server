@@ -537,12 +537,31 @@ class _PkInput:
 
 
 class _PkInputSerializer(DataclassSerializer):
-    # Declared rather than generated, so the field carries a default (a
-    # generated one leaves it to the dataclass) and registration sees ``pk``.
+    # Declared rather than generated, so the field carries a default of its
+    # own, which DRF puts in the values the instance is built from.
     pk = serializers.IntegerField(default=1)
 
     class Meta:
         dataclass = _PkInput
+
+
+@dataclasses.dataclass
+class _NoDefaultPk:
+    pk: int
+
+
+class _OptionalNoDefaultPk(DataclassSerializer):
+    # Optional, so omitting ``pk`` is not refused by the serializer, over a
+    # dataclass field with no default to build the instance with.
+    pk = serializers.IntegerField(required=False)
+
+    class Meta:
+        dataclass = _NoDefaultPk
+
+
+@dataclasses.dataclass
+class _FactoryPk:
+    pk: int = dataclasses.field(default_factory=lambda: 1)
 
 
 def test_a_name_the_input_serializer_defaults_is_not_required() -> None:
@@ -583,20 +602,36 @@ def test_a_read_only_default_does_not_fill_the_parameter() -> None:
     assert _schema(server)["required"] == ["pk"]
 
 
-def test_a_dataclass_inputs_default_does_not_fill_the_parameter() -> None:
-    # ``schema.utils._serializer_fills`` counts only a plain ``Serializer``'s
-    # defaults, so the schema keeps the name required. Dispatch lays the
-    # dataclass instance back all the same, default included, so a call
-    # omitting the name does run.
+def test_a_dataclass_inputs_default_fills_the_parameter() -> None:
+    # Dispatch lays the dataclass instance back, default included, so a call
+    # omitting the name is served. This once asserted ``["pk"]``, when the
+    # schema counted only a plain ``Serializer``'s defaults as filling a name.
     server = _server()
     _register(server, _by_pk, input_serializer=_PkInput)
 
-    assert _schema(server)["required"] == ["pk"]
+    assert "required" not in _schema(server)
 
 
-def test_a_dataclass_serializers_default_does_not_fill_the_parameter() -> None:
+def test_a_dataclass_serializers_default_fills_the_parameter() -> None:
+    # As above, and it once asserted ``["pk"]`` for the same reason.
     server = _server()
     _register(server, _by_pk, input_serializer=_PkInputSerializer)
+
+    assert "required" not in _schema(server)
+
+
+def test_a_dataclass_default_factory_fills_the_parameter() -> None:
+    server = _server()
+    _register(server, _by_pk, input_serializer=_FactoryPk)
+
+    assert "required" not in _schema(server)
+
+
+def test_an_optional_field_over_no_dataclass_default_leaves_the_selector_to_require_it() -> None:
+    # The serializer lets the caller omit ``pk``, but nothing builds the
+    # instance with it then, so it fills nothing and the selector requires it.
+    server = _server()
+    _register(server, _by_pk, input_serializer=_OptionalNoDefaultPk)
 
     assert _schema(server)["required"] == ["pk"]
 
