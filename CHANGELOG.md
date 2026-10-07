@@ -295,17 +295,63 @@ These follow from drf-services 0.56.0, which this release requires.
   chain rolls back the steps before it, as for any mapped step error
   ([#170](https://github.com/Artui/djangorestframework-mcp-server/issues/170)).
 - **A caller a spec's permission denies learns nothing about the target it
-  names.** A spec's `has_permission` reading what only the dispatch view
-  carries, such as `request.data`, `request.query_params` or `view.action`, was
-  judged on the sync and async handlers, `acall_tool` and a selector tool only
+  names.** A spec's `has_permission` that the binding's stand-in admitted, such
+  as one reading what only the dispatch view carried, was judged on the sync
+  and async handlers, `acall_tool`, a selector tool and every chain step only
   by the target guard, after the lookup. So a denied caller was answered
-  `-32006` for a row that exists and `not_found` for one that does not, and was
-  told the name of a required argument it left out. Every route now judges the
-  spec's class-level permissions against the dispatch view, with the route
-  bound, before the lookup, before a missing argument is refused and, on a
-  selector tool, before the `input_serializer` runs, as `call_tool` already
-  did. The target guard then runs only `has_object_permission`, so
-  `has_permission` is asked no more often per call than before.
+  `-32006` for a row that exists and `not_found` for one that does not, the
+  lookup ran, and a tool told the caller the name of a required argument it
+  left out. Every route now judges the spec's class-level permissions against
+  the dispatch view, with the route bound, before the lookup, before a missing
+  argument is refused and, on a selector tool, before the `input_serializer`
+  runs, as `call_tool` already did. A chain step does the same against its own
+  view, before its `inputs` run and its target is looked up. The target guard
+  then runs only `has_object_permission`. `has_permission` is asked twice per
+  call, once against the binding's stand-in and once against the dispatch view,
+  and once more in a streamed call's pre-flight; `call_tool`, which judges no
+  stand-in, asks it once. For a row that does not exist that is one call more
+  than before, where the guard after the lookup never ran.
+- **A spec permission reading `request.data` no longer fails every wire
+  `tools/call`.** A spec's `permission_classes` are judged first by the
+  binding's wrapped `DRFPermissionAdapter`, against a stand-in that wrapped the
+  endpoint's own request. Its `request.data` parsed the JSON-RPC body with no
+  parsers, so a permission reading it raised `UnsupportedMediaType` and every
+  wire `tools/call` was an HTTP 500 (`-32603`), sync and async, service and
+  selector, and through `acall_tool` the same permission refused a caller it
+  admits with `-32006`. Its `request.query_params` were the endpoint's query
+  string rather than the routed `QueryParam` values, and its `view.action` was
+  `None`. The stand-in is now built from the same values as the view the spec
+  is dispatched with, on every path that judges it: `tools/call` on either
+  handler, `acall_tool`, a streamed call's pre-flight, the check before a task
+  is created, and a chain's up-front check, which judges each step's classes
+  under the step's name, as the step's view carries it. The check still runs
+  before a rate limit is charged. A check that names no call, such as the
+  `FILTER_LISTINGS_BY_PERMISSIONS` filter on `tools/list`, judges `{}` as
+  `request.data` and `None` as `view.action`, where reading `request.data`
+  there was a 500 as well.
+- **A selector tool's `request.data` holds what a service tool's does.** On the
+  wire and through `acall_tool`, a selector tool's dispatch request carried the
+  call's URL kwargs and `QueryParam` values in `request.data` as well as in
+  `view.kwargs` and `request.query_params`. A service tool and `call_tool` left
+  them out. Every route now uses DRF's layout: a route capture in
+  `view.kwargs`, a query value in `request.query_params`, and the rest of the
+  arguments in `request.data`. Only the selector tool's route changed: a URL
+  kwarg or query value its `request.data` carried is now found only where a
+  service tool's is.
+- **A spec permission reading `request.auth` no longer makes the caller
+  anonymous.** DRF resolves `request.auth` lazily, and on the request a spec's
+  dispatch view was built with, reading it ran an empty authenticator chain
+  that reset `request.user` to `AnonymousUser`. A class such as
+  `TokenHasScope`, which reads `request.auth` first, then saw no caller. The
+  request now carries the token backend's payload as `request.auth`, and `None`
+  from `call_tool`.
+- **A namesake default for a URL kwarg is evaluated off the event loop.** A
+  selector tool fills a URL kwarg the call leaves out from its
+  `input_serializer` field of the same name. The async handler and
+  `acall_tool` called that field's default on the event loop, so a default
+  that queries the database raised `SynchronousOnlyOperation` where the sync
+  handler served. The dispatch keywords are now built in a worker thread, as
+  the serializer's validation already was.
 - **A result asking for more input announces no invalidation.** A tool's
   `invalidates=` was skipped only for an `isError` result, so an
   `input_required` answer, which ran nothing, told every subscriber the

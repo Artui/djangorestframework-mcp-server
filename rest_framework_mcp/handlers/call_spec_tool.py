@@ -27,9 +27,7 @@ from typing import Any
 from rest_framework import serializers as drf_serializers
 from rest_framework_services import (
     DEFAULT_POOL_SEEDS,
-    OfflineContext,
     PoolSeeds,
-    build_offline_context,
     dispatch_spec,
     enforce_permissions,
     render_for_audience,
@@ -42,11 +40,11 @@ from rest_framework_mcp.config.types.mcp_config import MCPConfig
 from rest_framework_mcp.constants import RESERVED_POST_FETCH_KEYS
 from rest_framework_mcp.handlers.selector_tool_dispatch import enforce_object_permissions
 from rest_framework_mcp.handlers.utils import (
+    dispatch_shape,
     read_shaping_error_result,
     refuse_missing_arguments,
     service_error_result,
     services_dispatch_policies,
-    split_query_params,
     split_url_kwargs,
     validation_error_result,
 )
@@ -100,40 +98,36 @@ def call_spec_tool(
             "over the HTTP / JSON-RPC transport instead."
         )
     spec = binding.spec
-    # Split here rather than in the ``dispatch_spec`` try below: the offline
-    # context it feeds is also what ``enforce_permissions`` needs, so moving it
-    # down would drag the permission check into a block that turns exceptions
-    # into tool results. Its own try is because a missing ``required=True`` URL
-    # kwarg must surface as an ``isError`` result here as it does over the wire.
-    try:
-        spec_params, url_kwarg_values = split_url_kwargs(arguments, binding.url_kwargs)
-    except drf_serializers.ValidationError as exc:
-        # The permission answers first, as it does on the wire and through
-        # ``acall_tool``: a caller the listing hides the tool from must not
-        # learn which argument it left out. Checked against the context the
-        # call would have run with, built from what it did deliver
-        # (``test_call_tool_refuses_a_denied_caller_before_a_missing_url_kwarg``).
-        delivered, delivered_url_kwargs = split_url_kwargs(
-            arguments, binding.url_kwargs, refuse_missing=False
-        )
-        enforce_permissions(
-            spec,
-            _offline_context(binding, delivered, delivered_url_kwargs, user=user, request=request)[
-                1
-            ],
-        )
-        return validation_error_result(exc, arguments, config=config, conventions=conventions)
-    spec_params, context = _offline_context(
-        binding, spec_params, url_kwarg_values, user=user, request=request
-    )
+    # The request and view the call runs with, from the shape the wire builds
+    # its own from, so ``request.data`` holds neither a URL kwarg nor a
+    # ``QueryParam`` value on this route either
+    # (``test_request_data_holds_no_route_or_query_value``). Not refusing a
+    # missing ``required=True`` URL kwarg yet, so the permission answers first.
+    shape = dispatch_shape(binding, arguments)
+    spec_params, url_kwarg_values = shape.data, shape.kwargs
+    # No token here, so ``auth`` is ``None``, which still keeps a permission
+    # reading ``request.auth`` from resetting the user.
+    context = shape.build(user=user, auth=None, http_request=request)
     # Class-level ``permission_classes``, enforced upfront and unconditionally:
     # ``dispatch_spec`` never consults them (authz is the caller's job) and the
     # ``on_target_resolved`` hook below runs only the *object-level* checks on
     # a resolved target, so without this a spec whose ``has_permission`` denies
     # would leak its payload through this in-process surface. Before the
     # lookup, so a denied caller is answered alike for a target that exists and
-    # one that does not; the wire handlers judge at the same point.
+    # one that does not; the wire handlers judge at the same point. Before a
+    # missing URL kwarg is named, as on the wire and through ``acall_tool``: a
+    # caller the listing hides the tool from must not learn which argument it
+    # left out
+    # (``test_call_tool_refuses_a_denied_caller_before_a_missing_url_kwarg``),
+    # and judged against the route it did deliver
+    # (``test_call_tool_checks_a_missing_url_kwargs_permission_against_the_delivered_route``).
     enforce_permissions(spec, context)
+    try:
+        # Only for its refusal of a missing ``required=True`` URL kwarg, which
+        # must surface as an ``isError`` result here as it does over the wire.
+        split_url_kwargs(arguments, binding.url_kwargs)
+    except drf_serializers.ValidationError as exc:
+        return validation_error_result(exc, arguments, config=config, conventions=conventions)
     argument_binding, unknown_arguments = services_dispatch_policies(binding)
     dispatch_params = _post_fetch_keys_stripped(binding, spec_params)
     try:
@@ -256,34 +250,6 @@ def _post_fetch_keys_stripped(
         return spec_params
     stripped = RESERVED_POST_FETCH_KEYS - _overlaid_field_names(binding.input_serializer)
     return {name: value for name, value in spec_params.items() if name not in stripped}
-
-
-def _offline_context(
-    binding: ToolBinding | SelectorToolBinding,
-    spec_params: dict[str, Any],
-    url_kwarg_values: dict[str, Any],
-    *,
-    user: Any,
-    request: Any,
-) -> tuple[dict[str, Any], OfflineContext]:
-    """The params left for dispatch, and the off-HTTP context the call runs in.
-
-    One build for both of ``call_spec_tool``'s permission checks, so the one
-    answering a call refused for a missing URL kwarg reads the same request and
-    view the call would have: the URL kwargs it delivered in ``view.kwargs`` and
-    out of ``request.data``
-    (``test_call_tool_checks_a_missing_url_kwargs_permission_against_the_delivered_route``).
-    """
-    spec_params, query_param_values = split_query_params(spec_params, binding.query_params)
-    context = build_offline_context(
-        user,
-        spec_params,
-        http_request=request,
-        action=binding.name,
-        kwargs=url_kwarg_values or None,
-        query_params=query_param_values,
-    )
-    return spec_params, context
 
 
 __all__ = ["call_spec_tool"]

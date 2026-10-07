@@ -8,7 +8,7 @@ from rest_framework_services.types.progress_reporter import ProgressReporter
 
 from rest_framework_mcp.constants import PROGRESS_TOKEN_META_KEY, JsonRpcErrorCode
 from rest_framework_mcp.handlers.types.context import MCPCallContext
-from rest_framework_mcp.handlers.utils import check_permissions, split_url_kwargs
+from rest_framework_mcp.handlers.utils import judge_tool_permissions
 from rest_framework_mcp.protocol.types.json_rpc_error import JsonRpcError
 from rest_framework_mcp.registry.types.chain_tool_binding import ChainToolBinding
 from rest_framework_mcp.transport.response_stream import build_response_stream
@@ -83,12 +83,14 @@ def preflight_permissions(method: str, params: Any, context: MCPCallContext) -> 
     binding = _tool_binding(params, context)
     if binding is None:
         return None
-    # The route the call names, as the handler's own check judges it: a spec
-    # permission scoping by ``view.kwargs["project_pk"]`` refused here with a
-    # ``403`` the call it was about to admit
-    # (``test_the_preflight_sees_the_url_kwargs_the_call_delivers``). Split
-    # without refusing a missing kwarg, which the handler still names after the
-    # permission has answered
+    # The call as the handler's own check judges it, through the same helper:
+    # a spec permission scoping by ``view.kwargs["project_pk"]`` refused here
+    # with a ``403`` the call it was about to admit
+    # (``test_the_preflight_sees_the_url_kwargs_the_call_delivers``), and one
+    # reading ``request.data`` raised
+    # (``test_a_streamed_call_is_judged_on_its_arguments``). Not refusing a
+    # missing kwarg, which the handler still names after the permission has
+    # answered
     # (``test_a_denied_caller_missing_a_url_kwarg_is_refused_by_the_preflight``).
     # This runs before the handler validates ``arguments``, so one that is not
     # an object delivers nothing here, as an absent one does there, and the
@@ -99,16 +101,8 @@ def preflight_permissions(method: str, params: Any, context: MCPCallContext) -> 
     # stream one, so the transport never pre-flights it
     # (``test_a_chain_tool_is_not_given_a_stream_it_cannot_use``).
     arguments: Any = params.get("arguments")
-    _, delivered_url_kwargs = split_url_kwargs(
-        arguments if isinstance(arguments, dict) else {},
-        binding.url_kwargs,
-        refuse_missing=False,
-    )
-    allowed, required_scopes = check_permissions(
-        binding.permissions,
-        context.http_request,
-        context.token,
-        view_kwargs=delivered_url_kwargs,
+    allowed, required_scopes = judge_tool_permissions(
+        binding, arguments if isinstance(arguments, dict) else {}, context
     )
     if allowed:
         return None

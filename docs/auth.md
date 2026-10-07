@@ -204,11 +204,23 @@ auto-wrapped and prepended to the per-binding `permissions` tuple —
 the same spec that backs your HTTP view governs the MCP binding
 without you restating the contract at the MCP call site.
 
-The adapter's stand-in view carries the call's URL kwargs, and a resource
-read's URI variables, wherever a request names a route (on `tools/call`, the
-pre-flight of a streamed call, a task's creation, `resources/read` and a
-resource subscription alike), so a class scoping by `view.kwargs["project_pk"]`
-reads the route the request names, as it does over HTTP. A `tools/call` retry
+On every path that judges a tool call (`tools/call` on either handler,
+`call_tool` / `acall_tool`, the pre-flight of a streamed call, a task's
+creation and a chain's up-front check), the adapter's stand-in is built from
+the same values as the view the spec is dispatched with, so a class reads the
+same request in both checks: `request.data` is the call's arguments less its
+route and query values, `request.query_params` holds the declared `QueryParam`
+values, `view.kwargs` the URL kwargs, `view.action` the tool's name, and the
+method is `POST`. That is DRF's own layout, and the same on a service tool, a
+selector tool and `call_tool`. A chain judges each step's wrapped classes under
+the step's alias, and its own `permissions` under the tool's name, with the
+chain's arguments as `request.data`. `request.auth` is the token backend's
+payload (`None` from `call_tool`), set beside `request.user`, so a class such
+as `TokenHasScope` that reads `request.auth` first still sees the caller.
+
+`resources/read` and a resource subscription carry a read's URI variables in
+`view.kwargs`, so a class scoping by `view.kwargs["project_pk"]` reads the
+route the request names, as it does over HTTP. A `tools/call` retry
 whose `inputResponses` name a different URL kwarg, or fill one the call left
 out, is judged again on the route the answer produces, before a rate limit is
 charged, the target is looked up or the service runs. Two checks name no route and judge `{}`:
@@ -225,9 +237,14 @@ resolved. The tool paths (`tools/call` on a service or selector tool, and
 front, against the request and view the call runs with, before the target is
 looked up, and pass `dispatch_spec` only the object-level half as
 `on_target_resolved`: each class's `has_object_permission` on the resolved row,
-so `has_permission` is not asked a second time. `resources/read` runs
-drf-services' `enforce_permissions`, both halves, on the selector's return, and
-a chain step runs it on the target the step resolved. A `LIST` / collection
+so the target guard does not ask `has_permission` again. On `tools/call` the
+binding's wrapped copy of each class has already asked it once, against a
+stand-in that sees the same request, so a call asks `has_permission` twice per
+class, and a streamed call once more in its pre-flight. A chain step does the
+same against its own view, before its `inputs` run and its target is looked
+up, and then runs only the object-level half on the target it resolved.
+`resources/read` runs drf-services' `enforce_permissions`, both halves, on the
+selector's return. A `LIST` / collection
 result gets the class-level check only — object permissions are a per-row
 concept, and a set is authorized per-set.
 
