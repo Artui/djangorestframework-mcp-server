@@ -59,7 +59,72 @@ tool and the parameter, in place of a `TypeError` or a wrong answer per call.
   validated value is a dataclass instance, which is not laid back), a
   `read_only` field, or a field whose `source=` names another attribute.
 
+These follow from drf-services 0.56.0, which this release requires.
+
+- **A service spec declaring a target lookup dispatch never calls is refused
+  when it is built.** drf-services raises `ImproperlyConfigured` from the
+  `ServiceSpec` constructor for an `instance_selector_spec` beside a
+  `collection_selector_spec`, and for either beside `many=True`, because dispatch
+  never calls that lookup. This server refused only a `collection_selector_spec`
+  beside `many=True`, at registration, in its own words; that check is gone, and
+  a spec declaring any of the three pairs now raises before it reaches
+  `register_service_tool`. Drop the lookup dispatch was not calling.
+- **A service tool whose `output_selector_spec` declares `LIST` with no
+  `selector` serves and advertises an array.** drf-services presents the
+  service's own return as the list the declaration names, so the tool's
+  `outputSchema` is the bare array schema, as for a `LIST` re-read, and the
+  served `structuredContent` is the list. It was one object before. A chain whose
+  output step declares the same reads it the same way. A service returning a
+  mapping, a `str` or `None` under that declaration now raises drf-services'
+  `ImproperlyConfigured` after it has run, a server fault; declare
+  `kind=SelectorKind.RETRIEVE` to present one value.
+
 ### Fixed
+
+- **A `kwargs=` provider key holding `UnsetType` only inside a container is
+  filled, not offered.** A key typed `list[str | UnsetType]` or
+  `dict[str, str | UnsetType]` was read as one the provider may decline, because
+  `UnsetType` was looked for at any depth, so it was advertised in the
+  `inputSchema` and a client's value for it was replaced by the provider's under
+  `SPREAD_AUTHOR_WINS`. A provider cannot decline such a key: it always comes
+  back as a list or a dict. Only a union's alternatives are read now, so the key
+  is filled and hidden. A provider's keys are now read by drf-services'
+  `provider_keys`, and this server keeps no reader of its own
+  ([#174](https://github.com/Artui/djangorestframework-mcp-server/issues/174)).
+- **One annotation that does not resolve no longer makes a `kwargs=` provider
+  untyped.** A provider's annotations were resolved together, so a parameter
+  typed with a name imported only under `TYPE_CHECKING`, or one value of the
+  returned `TypedDict` that does not resolve, read the whole provider as
+  untyped: the `inputSchema` offered every key the provider fills and required
+  no parameter for lacking a default. The return annotation is now resolved on
+  its own, so a parameter's type costs nothing, and a value that does not
+  resolve makes only its own key one the provider may decline, offered and not
+  required. A return annotation that does not resolve still leaves the provider
+  untyped ([#175](https://github.com/Artui/djangorestframework-mcp-server/issues/175)).
+- **A generic `TypedDict` provider is read with its arguments bound.**
+  `-> Scope[str | UnsetType]` was read off `Scope`, where `tenant: T` is the
+  bare type variable, so `tenant` counted as filled and was hidden from the
+  `inputSchema`, and when the provider declined it a client following the
+  schema had not sent it. `T` is now substituted, so `tenant` is offered and not
+  required, as the same key written out (`tenant: str | UnsetType`) is
+  ([#176](https://github.com/Artui/djangorestframework-mcp-server/issues/176)).
+- **A service tool declaring `ServiceSpec(allow_none=True)` advertises an
+  `outputSchema` its `{}` conforms to.** A single-row service with no output
+  re-read whose service returns `None` is served `"structuredContent": {}`,
+  against a schema that required the row's fields, and nothing the spec could
+  declare said it might return `None`. drf-services 0.56.0 adds the declaration,
+  and such a tool's `outputSchema` now moves `required` into the `anyOf` beside
+  the empty object, as an `allow_none` selector tool's does, on a service tool
+  and on a chain whose output step declares it. Which tools admit `{}` is now
+  drf-services' `can_present_nothing`, so this server admits it exactly where
+  drf-services' own output schema admits `null`. An undeclared `None` is still
+  served `{}` against the strict schema ([#178](https://github.com/Artui/djangorestframework-mcp-server/issues/178)).
+- **A selector parameter a `kwargs=` provider declines, which the call leaves
+  out, is a `validation_error` result.** The selector was called without it and
+  raised `TypeError`, a `-32603` on the wire and an exception out of
+  `call_tool`. drf-services 0.56.0 refuses the call in dispatch before the
+  selector runs, naming every such parameter in its `detail`:
+  `{"non_field_errors": ["Missing required argument(s): 'tenant'."]}`.
 
 - **A `UrlKwarg` that every call carries is the source of a selector
   parameter.** `register_selector_tool` refused a selector whose required

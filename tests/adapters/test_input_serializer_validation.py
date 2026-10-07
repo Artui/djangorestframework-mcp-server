@@ -410,27 +410,14 @@ def test_a_collection_lookup_seeds_collection(binding: ArgumentBinding) -> None:
 
 
 @_BINDINGS
-def test_an_instance_lookup_beside_a_collection_lookup_seeds_no_instance(
-    binding: ArgumentBinding,
-) -> None:
-    # drf-services resolves the target through the collection lookup and never
-    # calls the instance one beside it, so ``instance`` never reaches the service
-    # and every call would raise ``TypeError``.
+def test_a_collection_lookup_seeds_no_instance(binding: ArgumentBinding) -> None:
+    # The collection lookup resolves a set, so ``instance`` never reaches the
+    # service and every call would raise ``TypeError``. drf-services refuses an
+    # instance lookup declared beside it when the spec is built
+    # (``test_a_spec_declaring_a_lookup_dispatch_never_calls_is_refused``), so
+    # the collection lookup alone is the case left to this check.
     with pytest.raises(ImproperlyConfigured, match=r"parameter\(s\) \['instance'\]"):
-        _register(
-            _needs_instance,
-            binding,
-            instance_selector_spec=_INSTANCE_LOOKUP,
-            collection_selector_spec=_COLLECTION_LOOKUP,
-        )
-
-
-def test_an_instance_lookup_on_a_list_payload_seeds_no_instance() -> None:
-    # ``many=True`` dispatch resolves no target, so a lookup it declares is never
-    # called. ``BUNDLE`` only: a list payload refuses a spreading binding before
-    # the source check runs, so trust mode cannot arise here.
-    with pytest.raises(ImproperlyConfigured, match=r"parameter\(s\) \['instance'\]"):
-        _register(_needs_instance, many=True, instance_selector_spec=_INSTANCE_LOOKUP)
+        _register(_needs_instance, binding, collection_selector_spec=_COLLECTION_LOOKUP)
 
 
 @_BINDINGS

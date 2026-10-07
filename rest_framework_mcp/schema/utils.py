@@ -1,12 +1,12 @@
 from __future__ import annotations
 
 from collections.abc import Iterable
-from typing import Any, get_args, get_origin, get_type_hints
+from typing import Any
 
 from rest_framework import serializers as drf_serializers
 from rest_framework.fields import empty
 from rest_framework_dataclasses.serializers import DataclassSerializer
-from rest_framework_services import UNSET, UnsetType, spec_to_json_schema
+from rest_framework_services import UNSET, provider_keys, spec_to_json_schema
 from rest_framework_services.types.pool_seeds import DEFAULT_POOL_SEEDS, PoolSeeds
 from rest_framework_services.types.selector_spec import SelectorSpec
 from rest_framework_services.types.service_spec import ServiceSpec
@@ -81,8 +81,8 @@ def selector_inputs(
       selector's signature still says whether it must;
       ``test_a_url_kwarg_with_no_default_leaves_the_selector_to_require_it``
       holds that filter.
-    - the keys the spec's ``kwargs=`` provider always fills, as
-      ``_provider_keys`` reads them (not the ones it may decline, below). Held
+    - the keys the spec's ``kwargs=`` provider always fills, as drf-services'
+      ``provider_keys`` reads them (not the ones it may decline, below). Held
       by ``test_a_name_a_typed_provider_returns_is_not_asked_for``.
     - ``provides``: what the caller knows fills a name and the spec cannot say
       -- a selector tool's ``spec_kwargs_provides=`` and the names its
@@ -92,7 +92,7 @@ def selector_inputs(
 
     **A name the provider may fill, without saying it will, is advertised and
     not required for lacking a default**: every name, beside a provider whose
-    keys cannot be read, and a key the provider may decline (``_provider_keys``
+    keys cannot be read, and a key the provider may decline (``provider_keys``
     returns it apart), which drf-services removes from the pool when it comes
     back ``UNSET``, so it does not satisfy the parameter. ``required`` keeps such
     a name only where the reflection requires it without ``supplied`` (an
@@ -141,7 +141,17 @@ def selector_inputs(
     ``required`` less every name a provider may fill, so the call and the
     schema cannot disagree.
     """
-    keys = _provider_keys(spec)
+    # The reader is drf-services', the static half of the ``kwargs=`` contract
+    # whose runtime half dispatch owns, so both spec transports read a provider
+    # the same way: a key holding ``UnsetType`` only inside a container is
+    # filled, one annotation that does not resolve costs only what it names,
+    # and a generic ``TypedDict`` is read with its arguments bound. Each is held
+    # here by a test of the schema a tool advertises:
+    # ``test_a_key_holding_unset_inside_a_container_is_filled``,
+    # ``test_a_parameter_type_imported_only_for_type_checking_leaves_the_keys_readable``,
+    # ``test_a_value_type_that_does_not_resolve_makes_only_its_key_optional`` and
+    # ``test_a_generic_typed_dicts_argument_decides_which_keys_may_be_declined``.
+    keys = provider_keys(spec.kwargs)
     filled, declinable = keys if keys is not None else (frozenset(), frozenset())
     defaulted = frozenset(uk.name for uk in url_kwargs if declares_default(uk.default))
     supplied = pool_seeds.reserved | defaulted
@@ -164,93 +174,18 @@ def selector_inputs(
     return {**schema, "required": kept}, checked
 
 
-def _provider_keys(
-    spec: SelectorSpec[Any, Any],
-) -> tuple[frozenset[str], frozenset[str]] | None:
-    """The names ``spec``'s ``kwargs=`` provider fills and those it may decline, or ``None``.
-
-    drf-services types the provider ``Callable[..., ExtraT]`` and documents
-    ``ExtraT`` as a ``TypedDict`` of the keys it returns, so a provider annotated
-    that way says, before it runs, which names it fills: all of its keys,
-    ``NotRequired`` ones included, since the provider owns them. Anything else
-    (no annotation, a plain ``dict``, a lambda) says nothing, and ``None`` keeps
-    that apart from a spec with no provider, which fills nothing.
-
-    **A provider whose annotations do not resolve counts as untyped**, whichever
-    annotation it is: the return, a parameter's (``get_type_hints`` resolves
-    them all, so one naming a type imported only under ``TYPE_CHECKING`` is
-    enough), or a field of the returned ``TypedDict``, which is read to find the
-    keys that may be declined. Held by
-    ``test_a_provider_whose_annotation_does_not_resolve_is_untyped`` and
-    ``test_a_provider_whose_typed_dict_does_not_resolve_is_untyped``.
-
-    The keys come back as two sets: the ones filled, and the ones whose value
-    admits drf-services' ``UNSET`` (``_admits_unset``), which the provider may
-    decline. A declined key is removed from the pool and does not satisfy the
-    parameter, so ``selector_inputs`` does not count it as filled. The values
-    are read with the standard library's hints, as the Pydantic-AI
-    ``SpecToolset`` reads them, so the two agree on which keys may be declined.
-
-    Duck-typed on the keys a ``TypedDict`` class carries rather than
-    ``is_typeddict``, because the standard library's answers ``False`` for a
-    ``typing_extensions.TypedDict`` on the older Pythons this package supports.
-    A parameterised alias (``Scope[User]``) does not relay them, so they are read
-    off its origin. The optional keys are held by
-    ``test_a_name_a_typed_provider_returns_is_not_asked_for``, the origin by
-    ``test_a_parameterised_typed_dict_is_read_off_its_origin``.
-    """
-    provider = spec.kwargs
-    if provider is None:
-        return frozenset(), frozenset()
-    try:
-        returned: Any = get_type_hints(provider).get("return")
-        declared: Any = get_origin(returned) or returned
-        if getattr(declared, "__required_keys__", None) is None:
-            return None
-        values: dict[str, Any] = get_type_hints(declared)
-    except Exception:
-        # A forward reference that does not resolve, or a callable the hints
-        # cannot be read off: either way the provider declared nothing usable.
-        return None
-    names = frozenset(declared.__required_keys__) | frozenset(declared.__optional_keys__)
-    declinable = frozenset(name for name in names if _admits_unset(values.get(name)))
-    return names - declinable, declinable
-
-
-def _admits_unset(annotation: Any) -> bool:
-    """Whether a ``TypedDict`` value annotated ``annotation`` may be drf-services' ``UNSET``.
-
-    ``UnsetType`` itself, or an annotation naming it among its arguments, at
-    any depth: a union (``str | UnsetType``, ``Union[str, UnsetType]``), and a
-    wrapper the hints leave in place, such as a ``typing_extensions.NotRequired``
-    on a Python whose ``typing`` predates it. The same walk as the Pydantic-AI
-    ``SpecToolset``'s. Held by
-    ``test_a_key_the_provider_may_decline_is_offered_but_not_required``, once
-    per spelling (a union reaches ``UnsetType`` only through the walk, and the
-    ``NotRequired`` one on 3.10 only through two levels of it), and
-    ``test_a_union_that_does_not_admit_unset_is_still_filled``, because having
-    arguments is not enough.
-    """
-    return annotation is UnsetType or any(_admits_unset(arg) for arg in get_args(annotation))
-
-
 def target_lookup(spec: ServiceSpec[Any, Any, Any]) -> SelectorSpec[Any, Any] | None:
     """The selector spec a service resolves its target through, as dispatch calls it.
 
-    The collection lookup when one is declared, else the instance lookup:
-    drf-services' ``_resolve_target`` gives ``collection_selector_spec``
-    precedence and never calls an ``instance_selector_spec`` beside it, so a
-    parameter only the instance lookup reads asks nothing of the caller, and
-    drf-services' ``declared_input_keys`` picks the same lookup, so it is the
-    only one advertised. Held by
-    ``test_beside_a_collection_lookup_only_the_collection_lookup_is_required``
-    and ``test_beside_a_collection_lookup_the_instance_lookups_parameter_is_not_refused``.
-    None for a ``many=True`` service, whose dispatch resolves no target, so a
-    lookup it declares is never called: held by
-    ``test_a_list_payload_service_reads_no_lookup_so_requires_none``.
+    The one target lookup the spec declares, or ``None``. drf-services refuses
+    at construction every spec that would declare a lookup dispatch never
+    calls: an ``instance_selector_spec`` beside a ``collection_selector_spec``,
+    and either beside ``many=True``, whose dispatch resolves no target. So
+    whichever lookup is declared is the one dispatch calls, and the one
+    drf-services' ``declared_input_keys`` admits the keys of, and a ``many=True``
+    spec has none. ``test_a_spec_declaring_a_lookup_dispatch_never_calls_is_refused``
+    holds the construction refusal this reading rests on.
     """
-    if spec.many:
-        return None
     if spec.collection_selector_spec is not None:
         return spec.collection_selector_spec
     return spec.instance_selector_spec

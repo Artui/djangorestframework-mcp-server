@@ -73,6 +73,11 @@ def _void(*, data: dict[str, Any]) -> None:
     return None
 
 
+def _touch_tasks() -> None:
+    # A service with nothing to return, and no re-read to present instead.
+    return None
+
+
 @dataclass
 class _AddInput:
     a: int
@@ -171,6 +176,19 @@ def _server(session_store: Any = None) -> MCPServer:
             ),
         ),
     )
+    # The declaration for the same case: ``allow_none=True`` says the service
+    # may present nothing, so its schema admits ``{}`` with no re-read to lean on.
+    touch = ServiceSpec(
+        service=_touch_tasks,
+        atomic=False,
+        allow_none=True,
+        permission_classes=[AllowAny],
+        output_selector_spec=_no_reread(),
+    )
+    server.register_service_tool(name="tasks.touch", spec=touch)
+    server.register_chain_tool(
+        name="tasks.touch_chain", steps=[ChainStep("touch", touch)], permissions=[]
+    )
     # django-ag-ui's typed bridge fixture, reproduced: its code-mode stub reads
     # this schema as the tool's return type.
     server.register_service_tool(
@@ -267,6 +285,39 @@ def test_a_service_returning_none_through_a_pass_through_reread_conforms(call: A
     _assert_empty_and_conforming(_tool(server, "invoices.void_reread"), result)
 
 
+def _assert_admits_nothing(tool: dict[str, Any], result: dict[str, Any]) -> None:
+    # Named outright as well as validated: the schema keeps its root object and
+    # moves ``required`` into the ``anyOf`` beside the empty object.
+    assert "required" not in tool["outputSchema"]
+    assert tool["outputSchema"]["anyOf"][1] == {"maxProperties": 0}
+    _assert_empty_and_conforming(tool, result)
+
+
+@_ENTRY_POINTS
+@pytest.mark.django_db(transaction=True)
+def test_a_service_declaring_allow_none_serves_an_empty_object_its_schema_admits(
+    call: Any,
+) -> None:
+    # ``tasks.touch`` has no re-read, so nothing but the declaration says it
+    # may present nothing. ``invoices.void`` is a service returning ``None``
+    # undeclared, and keeps its schema strict (below).
+    server = _server()
+
+    result = call(server, "tasks.touch", {})
+
+    _assert_admits_nothing(_tool(server, "tasks.touch"), result)
+
+
+@pytest.mark.django_db
+def test_a_chain_whose_output_step_declares_allow_none_admits_an_empty_object() -> None:
+    # A chain's output step is judged as the same spec registered as a tool.
+    server = _server()
+
+    result = _wire(server, "tasks.touch_chain", {})
+
+    _assert_admits_nothing(_tool(server, "tasks.touch_chain"), result)
+
+
 @pytest.mark.django_db
 def test_a_chain_whose_output_step_presents_nothing_is_an_empty_object() -> None:
     server = _server()
@@ -317,6 +368,22 @@ def test_a_service_with_no_output_reread_keeps_its_schema_strict(name: str) -> N
     assert "anyOf" not in schema
     assert schema["required"]
     assert not Draft202012Validator(schema).is_valid({})
+
+
+@_ENTRY_POINTS
+@pytest.mark.django_db(transaction=True)
+def test_an_undeclared_none_is_still_served_empty_against_a_strict_schema(call: Any) -> None:
+    # The limit the declaration answers: drf-services presents a ``None`` the
+    # spec does not declare rather than refusing it, so the call succeeds with
+    # ``{}``, and a client validating it against the strict schema rejects it.
+    server = _server()
+
+    result = call(server, "invoices.void", {"number": "x"})
+
+    assert not result.get("isError")
+    assert result["structuredContent"] == {}
+    with pytest.raises(AssertionError):
+        assert_tool_result_conforms(_tool(server, "invoices.void"), result)
 
 
 def test_a_typed_service_with_no_reread_lists_the_exact_strict_schema() -> None:
@@ -400,6 +467,8 @@ def test_every_served_result_conforms_to_its_served_schema(era: str, is_async: b
         # service just archived: both nothing, both served ``{}``.
         ("invoices.find", {"number": "nope"}, {}),
         ("invoices.archive", {"number": "INV-1"}, {}),
+        # A service declaring ``allow_none=True`` that returns ``None``.
+        ("tasks.touch", {}, {}),
         # A service with no re-read returns the row it changed, against a
         # schema that still requires the row's fields.
         ("invoices.send", {"number": "INV-2"}, "INV-2"),

@@ -1,14 +1,14 @@
 """A service tool advertises the lookup its target selector reads.
 
 drf-services' dispatch hands a service spec's ``params`` to the one target
-lookup it calls (its ``collection_selector_spec`` when declared, else its
+lookup it declares (its ``collection_selector_spec`` or its
 ``instance_selector_spec``) as well as to the input serializer, and its
 unknown-argument check admits whatever that lookup declares
 (``declared_input_keys``). So a call carrying the lookup is served, and the
 ``inputSchema`` has to say the lookup exists, or a client that validates its
 arguments against the advertised schema can never send the one call that
-works. The lookup dispatch does not call is not advertised, because it is not
-admitted either.
+works. A spec declaring a lookup dispatch would not call, beside the other one
+or beside ``many=True``, is refused by drf-services when it is built.
 
 A lookup is reflected the way a selector tool's own parameters are, told what
 this server fills (drf-services' ``supplied=``): a name the pool fills is not
@@ -133,6 +133,7 @@ def test_the_advertised_lookups_are_the_keys_the_bind_admits() -> None:
     # serializer and the reserved seeds is a property, and nothing else is.
     spec = _rename_spec(
         service=_rename_all,
+        instance_selector_spec=None,
         collection_selector_spec=SelectorSpec(kind=SelectorKind.LIST, selector=_invoices_by_ids),
     )
     admitted = declared_input_keys(spec, serializer=None)
@@ -143,28 +144,13 @@ def test_the_advertised_lookups_are_the_keys_the_bind_admits() -> None:
     assert set(schema["properties"]) - {"number"} == admitted - RESERVED_POOL_SEEDS
 
 
-def test_beside_a_collection_lookup_only_the_collection_lookup_is_required() -> None:
-    # drf-services resolves the target through the collection lookup when one is
-    # declared and never calls the instance one beside it, so ``pk`` asks
-    # nothing of the caller. It is not a property either, because the bind
-    # admits only the keys of the lookup dispatch calls (the test above), so
-    # ``UnknownArguments.REJECT`` refuses a ``pk`` sent beside ``ids``.
-    spec = _rename_spec(
-        service=_rename_all,
-        collection_selector_spec=SelectorSpec(kind=SelectorKind.LIST, selector=_invoices_by_ids),
-    )
-
-    schema = build_service_tool_input_schema(_binding(spec))
-
-    assert set(schema["properties"]) == {"number", "ids"}
-    assert schema["required"] == ["ids", "number"]
-
-
 def test_a_list_payload_item_advertises_only_the_keys_the_bind_admits() -> None:
-    # ``many=True`` dispatch resolves no target, so drf-services admits no
-    # lookup key inside an item, and the item's schema offers none: ``pk``
-    # inside an item is refused under ``UnknownArguments.REJECT``, never served.
-    spec = _rename_spec(service=_rename_each, many=True, output_selector_spec=None)
+    # ``many=True`` dispatch resolves no target, and declares no lookup, so
+    # drf-services admits only the input serializer's keys inside an item, and
+    # the item's schema offers only those.
+    spec = _rename_spec(
+        service=_rename_each, many=True, instance_selector_spec=None, output_selector_spec=None
+    )
     admitted = declared_input_keys(spec, serializer=_RenameInput())
     assert admitted is not None
 
@@ -176,8 +162,8 @@ def test_a_list_payload_item_advertises_only_the_keys_the_bind_admits() -> None:
 
 
 def test_an_open_target_lookup_leaves_the_schema_open() -> None:
-    # The counterpart of the two below: the lookup dispatch calls still opens
-    # the set it reads, so nothing closed may be advertised.
+    # The lookup dispatch calls opens the set it reads, so nothing closed may
+    # be advertised.
     spec = _rename_spec(
         instance_selector_spec=SelectorSpec(
             kind=SelectorKind.RETRIEVE, selector=_invoices_matching
@@ -185,39 +171,6 @@ def test_an_open_target_lookup_leaves_the_schema_open() -> None:
     )
 
     assert _listed_input_schema(spec)["additionalProperties"] is True
-
-
-def test_an_open_lookup_dispatch_never_calls_leaves_the_schema_closed() -> None:
-    # drf-services reads only the collection lookup here, so the instance
-    # lookup's ``**kwargs`` no longer opens the set it enforces under
-    # ``UnknownArguments.REJECT``, and the listing says the schema is closed.
-    spec = _rename_spec(
-        service=_rename_all,
-        output_selector_spec=None,
-        instance_selector_spec=SelectorSpec(
-            kind=SelectorKind.RETRIEVE, selector=_invoices_matching
-        ),
-        collection_selector_spec=SelectorSpec(kind=SelectorKind.LIST, selector=_invoices_by_ids),
-    )
-
-    assert _listed_input_schema(spec)["additionalProperties"] is False
-
-
-def test_an_open_lookup_on_a_list_payload_leaves_each_item_closed() -> None:
-    # ``many=True`` dispatch calls neither lookup, so an open one leaves every
-    # item key outside the input serializer refused, and each item closed.
-    spec = _rename_spec(
-        service=_rename_each,
-        many=True,
-        output_selector_spec=None,
-        instance_selector_spec=SelectorSpec(
-            kind=SelectorKind.RETRIEVE, selector=_invoices_matching
-        ),
-    )
-
-    schema = _listed_input_schema(spec)
-
-    assert schema["properties"][spec.many_argument]["items"]["additionalProperties"] is False
 
 
 def test_an_input_field_of_the_same_name_wins_over_the_reflected_lookup() -> None:

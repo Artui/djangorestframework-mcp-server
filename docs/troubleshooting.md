@@ -173,11 +173,13 @@ A `many=True` service receives the whole list as one `data` argument, so a
 spread, and drf-services raises `ValueError` for it on every call. Leave
 `argument_binding` at its `BUNDLE` default.
 
-### "declares both many=True and a collection_selector_spec"
+### "ServiceSpec declares collection_selector_spec with many=True"
 
-A list payload and a collection target are two different bulk shapes, and a
-`many=True` dispatch never resolves the collection. drf-services' own views refuse
-the pair as well. Declare one of them.
+drf-services raises this when the spec is built, before any registration, and
+the same for an `instance_selector_spec` beside `many=True` or beside a
+`collection_selector_spec`. A list payload resolves no target, and beside a
+collection lookup dispatch never calls the instance one, so the lookup would be
+declared and never run. Declare one target lookup, or drop `many=True`.
 
 ### "declares many=True, so its input_serializer describes one item of a list"
 

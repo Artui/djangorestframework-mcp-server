@@ -138,10 +138,6 @@ def _echo(*, data: Any) -> Any:
     return {"count": len(data)}
 
 
-def _bulk(*, data: list[dict[str, Any]]) -> list[dict[str, Any]]:
-    return data
-
-
 def _first_invoice_pk() -> dict[str, Any]:
     # Untyped: nothing says which keys it fills.
     return {"pk": Invoice.objects.order_by("pk").values_list("pk", flat=True).first()}
@@ -822,28 +818,6 @@ async def test_a_value_the_provider_fills_satisfies_it(provider: Any, is_async: 
 
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.parametrize("is_async", [False, True])
-async def test_a_list_payload_service_reads_no_lookup_so_requires_none(is_async: bool) -> None:
-    # ``many=True`` dispatch resolves no target, so a lookup it declares is
-    # never called and asks nothing of the caller.
-    server = MCPServer(name="t", auth_backend=AllowAnyBackend(), session_store=None)
-    server.register_service_tool(
-        name="bulk",
-        spec=ServiceSpec(
-            service=_bulk,
-            atomic=False,
-            many=True,
-            input_serializer=_NumberInput,
-            instance_selector_spec=SelectorSpec(kind=SelectorKind.RETRIEVE, selector=_by_pk),
-        ),
-    )
-
-    out = await _call(server, "bulk", {"items": [{"number": "A"}]}, is_async=is_async)
-
-    assert out["structuredContent"] == [{"number": "A"}]
-
-
-@pytest.mark.django_db(transaction=True)
-@pytest.mark.parametrize("is_async", [False, True])
 async def test_a_seed_the_client_sends_anyway_is_admitted_and_outranked(is_async: bool) -> None:
     # ``tenant`` is not advertised, because the server fills it, but the
     # unknown-argument check still knows it: a client sending one is not refused
@@ -871,62 +845,6 @@ async def test_a_seed_the_client_sends_anyway_is_admitted_and_outranked(is_async
 
     assert sent["structuredContent"]["number"] == "acme-1"
     assert omitted["structuredContent"]["number"] == "acme-1"
-
-
-@pytest.mark.django_db(transaction=True)
-@pytest.mark.parametrize("route", _ROUTES)
-async def test_beside_a_collection_lookup_the_instance_lookups_parameter_is_not_refused(
-    route: str,
-) -> None:
-    # drf-services resolves the target through the collection lookup when one is
-    # declared and never calls the instance one beside it, so ``pk``, which only
-    # the instance lookup reads, is not the caller's to send.
-    invoice = await Invoice.objects.acreate(number="INV-1")
-
-    out = await _via(
-        _both_lookups_server(), route, "rename_all", {"ids": [invoice.pk], "number": "INV-2"}
-    )
-
-    assert not out.get("isError"), out
-    assert out["structuredContent"] == {"renamed": 1}
-
-
-@pytest.mark.django_db(transaction=True)
-@pytest.mark.parametrize("route", _ROUTES)
-async def test_under_reject_the_instance_lookups_parameter_beside_a_collection_lookup_is_refused(
-    route: str,
-) -> None:
-    # drf-services admits only the keys of the lookup dispatch calls, so ``pk``,
-    # which only the uncalled instance lookup reads, is an unknown argument; the
-    # schema does not offer it either. Refused before the service runs.
-    invoice = await Invoice.objects.acreate(number="INV-1")
-    server = _both_lookups_server(unknown_arguments=UnknownArguments.REJECT)
-    arguments = {"ids": [invoice.pk], "number": "INV-2", "pk": invoice.pk}
-
-    out = await _via(server, route, "rename_all", arguments)
-
-    error = tool_error(out)
-    assert error["type"] == "validation_error"
-    assert error["detail"] == {"non_field_errors": ["Unexpected argument(s): 'pk'."]}
-    await invoice.arefresh_from_db()
-    assert invoice.number == "INV-1"
-
-
-def _both_lookups_server(**registration: Any) -> MCPServer:
-    """``rename_all``, declaring a collection lookup and an instance lookup beside it."""
-    server = MCPServer(name="t", auth_backend=AllowAnyBackend(), session_store=None)
-    server.register_service_tool(
-        name="rename_all",
-        spec=ServiceSpec(
-            service=_rename_all,
-            atomic=False,
-            input_serializer=_NumberInput,
-            instance_selector_spec=SelectorSpec(kind=SelectorKind.RETRIEVE, selector=_by_pk),
-            collection_selector_spec=SelectorSpec(kind=SelectorKind.LIST, selector=_by_ids),
-        ),
-        **registration,
-    )
-    return server
 
 
 def _tenant_server(
@@ -1100,6 +1018,24 @@ async def test_a_key_the_provider_declines_is_the_callers_to_send(route: str) ->
     )
 
     assert out["structuredContent"]["number"] == "beta-1"
+
+
+@pytest.mark.django_db(transaction=True)
+@pytest.mark.parametrize("route", _ROUTES)
+async def test_a_key_the_provider_declines_and_the_caller_leaves_out_is_refused_in_dispatch(
+    route: str,
+) -> None:
+    # This server does not refuse the call, because only the assembled pool can
+    # say whether ``tenant`` arrived. drf-services can, once the provider has
+    # declined: the caller could have sent it, so dispatch refuses the call
+    # before the selector runs, in its own shape, where the selector used to
+    # raise ``TypeError`` and the call failed as a server fault.
+    out = await _via(_tenant_server(_declining_scope), route, "get", {"pk": 1})
+
+    error = tool_error(out)
+    assert error["type"] == "validation_error"
+    assert error["message"] == "Service validation error."
+    assert error["detail"] == {"non_field_errors": ["Missing required argument(s): 'tenant'."]}
 
 
 # ---------- in the server's own words ----------

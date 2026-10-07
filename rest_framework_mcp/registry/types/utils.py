@@ -10,6 +10,7 @@ from __future__ import annotations
 from typing import Any
 
 from django.core.exceptions import ImproperlyConfigured
+from rest_framework_services import can_present_nothing as spec_can_present_nothing
 from rest_framework_services.types.selector_kind import SelectorKind
 from rest_framework_services.types.selector_spec import SelectorSpec
 from rest_framework_services.types.service_spec import ServiceSpec
@@ -69,11 +70,16 @@ def rendered_kind(spec: ServiceSpec[Any, Any, Any] | SelectorSpec[Any, Any]) -> 
       ``output_selector_spec`` is ``RETRIEVE`` by convention, because that kind
       describes one row of it. drf-services' own ``spec_to_json_schema`` answers
       the output phase the same way.
-    - Any other ``ServiceSpec`` answers ``LIST`` only when its
-      ``output_selector_spec`` is a ``LIST`` *and has a selector*: the re-fetch is
-      what produces the set, and with no selector the service's own return value
-      renders as one object whatever the nested ``kind`` says. Anything else is a
-      single object.
+    - Any other ``ServiceSpec`` answers ``LIST`` when its ``output_selector_spec``
+      declares ``LIST``, with a selector or without one: the re-fetch produces
+      the set, and with no selector drf-services presents the service's own
+      return as the set the declaration names (``kind="list"``), refusing a
+      return that is not one. Anything else is a single object. The selector is
+      not read: ``test_a_list_output_spec_with_no_selector_renders_and_advertises_a_list``
+      fails for a service tool and a chain alike if it is. The guard is one
+      ``and``-chain, so each conjunct is held by a row of
+      ``test_the_rendered_kind_is_the_one_dispatch_gives``: ``no-output-spec``
+      (``nested is not None``) and ``retrieve-output-no-re-read`` (the kind).
 
     One answer read by both halves of a tool -- each binding's ``rendered_kind``,
     which picks the advertised ``outputSchema`` shape, and the chain renderer,
@@ -87,54 +93,37 @@ def rendered_kind(spec: ServiceSpec[Any, Any, Any] | SelectorSpec[Any, Any]) -> 
     if spec.many:
         return SelectorKind.LIST
     nested = spec.output_selector_spec
-    if nested is not None and nested.selector is not None and nested.kind is SelectorKind.LIST:
+    if nested is not None and nested.kind is SelectorKind.LIST:
         return SelectorKind.LIST
     return SelectorKind.RETRIEVE
 
 
 def can_present_nothing(spec: ServiceSpec[Any, Any, Any] | SelectorSpec[Any, Any]) -> bool:
-    """Whether a successful dispatch of ``spec`` can render to nothing (``None``).
+    """Whether a successful dispatch of ``spec`` can present nothing (``None``).
 
-    The question the advertised ``outputSchema`` has to answer, because a
-    result with nothing to present is served as ``{}`` and the schema must
-    admit it:
+    drf-services' ``can_present_nothing`` answers, so this server's
+    ``outputSchema`` admits ``{}`` exactly where drf-services' own output
+    schema admits ``null``: a ``RETRIEVE``
+    selector under ``allow_none``, a single-row service whose output re-read
+    has a ``selector`` (dispatch materializes it with ``.first()``), and a
+    single-row service presenting its own return that declares
+    ``ServiceSpec(allow_none=True)``. A list result never does, empty at worst.
 
-    - A ``LIST`` result is a list, empty at worst, and never ``None``.
-    - A ``SelectorSpec`` RETRIEVE presents nothing only under ``allow_none``.
-      Without it, ``dispatch_spec`` answers a miss as ``not_found``, which every
-      entry point serves as an ``isError`` result.
-    - A single-row ``ServiceSpec`` presents nothing when its
-      ``output_selector_spec`` has a re-read selector. ``dispatch_spec``
-      materializes the re-read with ``.first()`` whatever the nested spec
-      declares, so a re-read that filters the row out yields ``None``. A chain's
-      service step re-reads the same way.
-
-    A service with no re-read selector renders its own return, and answers
-    ``False`` even though that return may be ``None``: the declaration says
-    nothing about whether it can be, and admitting ``{}`` for every such
+    A service returning ``None`` without the declaration is still served
+    ``{}`` against a strict schema: drf-services presents an undeclared
+    ``None`` rather than refusing it, and admitting ``{}`` for every such
     service would turn every row field optional for each client generating
-    types from the schema. One returning ``None`` is served ``{}`` against a
-    strict schema, the documented limit.
+    types from the schema. Held by
+    ``test_a_service_declaring_allow_none_serves_an_empty_object_its_schema_admits``
+    beside ``test_a_service_with_no_output_reread_keeps_its_schema_strict``.
 
-    One answer for every binding kind, through ``rendered_kind``, so a chain's
-    output step is judged exactly as the same spec registered as a tool.
-
-    The last line is one ``and``-chain, so branch coverage cannot see a deleted
-    condition. Each is held by a test in
-    ``tests/registry/types/test_can_present_nothing.py`` that fails without it:
-    ``test_a_service_with_no_output_spec_at_all_cannot_present_nothing``
-    (``nested is not None``, without which ``None.selector`` raises) and
-    ``test_a_service_rendering_its_own_return_keeps_its_schema_strict``
-    (``nested.selector is not None``). The ``LIST`` check is held by
-    ``test_a_list_result_never_presents_nothing``, because the schema builder
-    refuses to rewrite a ``LIST`` schema too, so nothing outside can see it.
+    What stays this server's is what it does with the answer, and where it
+    asks: the schema keeps its root an object and admits ``{}`` rather than
+    ``null`` (``build_output_schema``), and a chain asks of its output step's
+    spec, and answers ``False`` under ``output_all``, whose ``{alias:
+    rendered}`` object is never ``None`` (``ChainToolBinding``).
     """
-    if rendered_kind(spec) is SelectorKind.LIST:
-        return False
-    if isinstance(spec, SelectorSpec):
-        return spec.allow_none
-    nested = spec.output_selector_spec
-    return nested is not None and nested.selector is not None
+    return spec_can_present_nothing(spec)
 
 
 __all__ = ["can_present_nothing", "rendered_kind", "validate_content_kind"]

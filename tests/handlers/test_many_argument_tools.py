@@ -318,33 +318,6 @@ def test_each_item_is_closed_exactly_when_dispatch_refuses_an_unknown_key(
         }
 
 
-def _row_by_pk(*, pk: int) -> Any:
-    return None
-
-
-def test_a_lookup_key_inside_an_item_is_refused_under_reject() -> None:
-    """A list payload resolves no target, so drf-services admits no lookup key inside
-    an item even when the spec declares a lookup, and the item schema offers none."""
-    binding = _binding(
-        _spec(
-            service=_accept,
-            output_selector_spec=None,
-            instance_selector_spec=SelectorSpec(kind=SelectorKind.RETRIEVE, selector=_row_by_pk),
-        ),
-        unknown_arguments=UnknownArguments.REJECT,
-    )
-
-    schema = _listed_input_schema(binding)
-    out: Any = handle_tools_call(
-        {"name": "bulk", "arguments": {"items": [{**_ROW, "pk": 1}]}}, _ctx(binding)
-    )
-
-    assert "pk" not in schema["properties"]["items"]["items"]["properties"]
-    assert tool_error(out)["detail"] == {
-        "items": {"0": {"non_field_errors": ["Unexpected argument(s): 'pk'."]}}
-    }
-
-
 def test_a_fragment_replacing_the_properties_is_served_as_written() -> None:
     """``metadata["json_schema"]["input"]`` replaces the reflection's keys whole, so
     one declaring its own ``properties`` leaves no item schema to stamp. The listing

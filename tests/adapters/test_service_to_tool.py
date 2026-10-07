@@ -149,18 +149,39 @@ def test_a_spreading_argument_binding_is_refused(binding: ArgumentBinding) -> No
         server.register_service_tool(name="bulk", spec=_bulk_spec(), argument_binding=binding)
 
 
-def test_a_collection_target_beside_the_list_is_refused() -> None:
-    """The list-payload dispatch never resolves a collection, so the selector would
-    be declared and never run; drf-services' own views refuse the pair too."""
-    spec = ServiceSpec(
-        service=_count,
-        atomic=False,
-        many=True,
-        collection_selector_spec=SelectorSpec(kind=SelectorKind.LIST, selector=lambda **_: []),
-    )
+_INSTANCE = SelectorSpec(kind=SelectorKind.RETRIEVE, selector=lambda **_: None)
+_COLLECTION = SelectorSpec(kind=SelectorKind.LIST, selector=lambda **_: [])
 
-    with pytest.raises(ImproperlyConfigured, match=r"'bulk'.*collection_selector_spec"):
-        _server().register_service_tool(name="bulk", spec=spec)
+
+@pytest.mark.parametrize(
+    ("declared", "named"),
+    [
+        pytest.param(
+            {"instance_selector_spec": _INSTANCE, "collection_selector_spec": _COLLECTION},
+            "both instance_selector_spec and collection_selector_spec",
+            id="instance-beside-collection",
+        ),
+        pytest.param(
+            {"many": True, "instance_selector_spec": _INSTANCE},
+            "instance_selector_spec with many=True",
+            id="instance-on-a-list-payload",
+        ),
+        pytest.param(
+            {"many": True, "collection_selector_spec": _COLLECTION},
+            "collection_selector_spec with many=True",
+            id="collection-on-a-list-payload",
+        ),
+    ],
+)
+def test_a_spec_declaring_a_lookup_dispatch_never_calls_is_refused(
+    declared: dict[str, Any], named: str
+) -> None:
+    """drf-services refuses the spec when it is built, so no such spec reaches
+    registration. This server made the last of these checks itself at registration,
+    and reads every service's target lookup (``schema.utils.target_lookup``) as the
+    one the spec declares, which only this refusal makes the lookup dispatch calls."""
+    with pytest.raises(ImproperlyConfigured, match=rf"ServiceSpec declares {named}"):
+        ServiceSpec(service=_count, atomic=False, **declared)
 
 
 # ---------- the documented alternative still works ----------

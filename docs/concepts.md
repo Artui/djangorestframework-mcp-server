@@ -218,8 +218,25 @@ whose value admits `UnsetType` (`tenant: str | UnsetType`) is one the provider
 may return as `UNSET`, which drf-services drops from the pool, so the caller's
 value is the one the selector reads. It stays advertised and is not required
 for lacking a default; an `InputRequired` marker on the parameter still makes it
-required. A call that leaves it out is never refused before the selector runs,
-because only the assembled pool can say whether it arrived.
+required. This server does not refuse a call that leaves it out, because only
+the assembled pool can say whether it arrived. drf-services can, once the
+provider has run: when the provider declines the key and the caller sent none,
+dispatch refuses the call before the selector runs, as a `validation_error`
+result in drf-services' own shape, where the selector used to raise
+`TypeError`:
+
+```json
+{"error": {"type": "validation_error", "message": "Service validation error.",
+           "detail": {"non_field_errors": ["Missing required argument(s): 'tenant'."]}}}
+```
+
+The provider's keys are read by drf-services' `provider_keys`, the static half
+of the `kwargs=` contract whose runtime half its dispatch owns. Only a union's
+alternatives are read for `UnsetType`: a key whose value holds it inside a
+container, such as `regions: list[str | UnsetType]`, always comes back as a
+list, so it is filled and hidden. A generic `TypedDict` is read with whatever
+binds its parameters, so `-> Scope[str | UnsetType]` may decline `Scope`'s
+`tenant: T`, as the same key written out does.
 
 **On a selector tool registered with
 `argument_binding=ArgumentBinding.SPREAD_CALLER_WINS` the client's value
@@ -232,13 +249,12 @@ target lookup is read author-wins under every binding**, because drf-services
 lays the lookup's provider over the arguments last whatever `argument_binding`
 says, so its keys stay hidden.
 
-**A service tool runs one target lookup**: its `collection_selector_spec` when
-it declares one, and its `instance_selector_spec` otherwise, and only that
-lookup's parameters are advertised. drf-services never runs the instance lookup
-beside a collection lookup, and its unknown-argument check admits only the keys
-of the lookup it runs, so under `UnknownArguments.REJECT` a `pk` sent beside
-`ids` is refused as an unexpected argument. A `many=True` service runs no
-lookup, so an item of its list offers only the input serializer's fields.
+**A service tool runs one target lookup**: the `collection_selector_spec` or
+the `instance_selector_spec` its spec declares, and that lookup's parameters
+are advertised. drf-services refuses, when the spec is built, an instance
+lookup beside a collection lookup and either beside `many=True`, because
+dispatch would never call it. So a `many=True` service declares no lookup, and
+an item of its list offers only the input serializer's fields.
 
 The Pydantic-AI `SpecToolset` reads seeds, `UrlKwarg` defaults, provider keys
 and target lookups by the same rules, so one spec is asked for the same
@@ -268,11 +284,14 @@ default: every parameter stays advertised and optional, and an `InputRequired`
 marker still makes one required. Annotate the provider to have the rest
 inferred.
 
-**A provider whose annotations do not resolve counts as untyped**, whichever
-annotation it is: the return, a parameter's, or a field of the returned
-`TypedDict`. A type imported only under `TYPE_CHECKING` is the usual cause: the
-hints are resolved at runtime, where that name does not exist. Import such a
-type at runtime, or the provider is read as though it returned a plain `dict`.
+**Each annotation that does not resolve costs only what it says.** A type
+imported only under `TYPE_CHECKING` is the usual cause: annotations are
+resolved at runtime, where that name does not exist. A return annotation that
+does not resolve leaves the provider untyped, read as though it returned a
+plain `dict`. A parameter's annotation is not read, so a type there costs
+nothing. A value of the returned `TypedDict` that does not resolve makes only
+its own key one the provider may decline, offered and not required, while the
+other keys stay filled and hidden.
 
 **A call that leaves out a required parameter is refused before the selector
 runs**, with a `validation_error` result naming what is missing, keyed in
@@ -294,7 +313,7 @@ JSON-RPC `-32603` "Internal error" on the wire and raised from `call_tool`. The
 names checked are the ones the `inputSchema` requires of the selectors, read
 from the same reflection, so what a call is refused for is what the client was
 told. A service tool's own input serializer still answers for its fields, and a
-`many=True` service resolves no target, so its lookup asks nothing.
+`many=True` service declares no target lookup to ask for anything.
 
 The check runs **after the permission and rate-limit answers** (and, on a
 selector tool, after its `input_serializer`), as every other argument check
@@ -612,10 +631,11 @@ What a caller should know:
   an argument, which would sit beside the list and be refused, so a `many=True`
   service raising `AdditionalInputRequired` can never receive its answer.
 
-Registration refuses three declarations that would make every call fail: a
-`UrlKwarg` or `QueryParam` named as the list's argument, a `SPREAD_*`
-`argument_binding`, and a `collection_selector_spec` beside `many=True`. A chain
-refuses to inherit a `many=True` first step's `input_serializer` as its own.
+Registration refuses two declarations that would make every call fail: a
+`UrlKwarg` or `QueryParam` named as the list's argument, and a `SPREAD_*`
+`argument_binding`. drf-services refuses a third, a target lookup beside
+`many=True`, when the spec is built. A chain refuses to inherit a `many=True`
+first step's `input_serializer` as its own.
 [Troubleshooting](troubleshooting.md#takes-the-name-the-specs-list-travels-under)
 has each message.
 
@@ -2160,9 +2180,9 @@ The MCP package owns its own dispatch flow. It does **not** import
    advertises it: the target selector's parameters (and a `filter_set`'s
    fields) are reflected the same way a selector tool's own are, so
    `task_by_pk(*, pk)` puts `pk` beside the input serializer's fields. A
-   `collection_selector_spec` is advertised the same way, and in place of the
-   instance lookup when both are declared, because it is the one dispatch
-   runs and the one whose keys the unknown-argument check admits. An input
+   `collection_selector_spec` is advertised the same way; drf-services refuses
+   a spec declaring both lookups when it is built, because dispatch would
+   never call the instance one. An input
    field or `UrlKwarg` of the same name keeps its property, and a lookup parameter is
    `required` when it has no default and the server does not fill it
    ([Which selector parameters a client is asked for](#selector-requiredness)),
@@ -2221,9 +2241,13 @@ The MCP package owns its own dispatch flow. It does **not** import
    the service's return value is passed through unchanged. A `LIST`
    re-fetch serves a bare array — a service tool never paginates — and the
    tool's `outputSchema` advertises `{type: array, items}` to match. With no
-   `selector` there is no re-fetch, so the result is one object whatever the
-   nested `kind` says. A `many=True` spec never re-fetches: the service's
-   list is rendered as a list and advertised as an array.
+   `selector` there is no re-fetch, and the nested `kind` still decides: a
+   `LIST` presents the service's own return as the list it declares, served
+   and advertised as an array, and drf-services refuses a return that is not
+   a set of rows (a mapping, a `str`, `None`) as the author's error, after the
+   service has run. A `RETRIEVE` presents it as one object. A `many=True`
+   spec never re-fetches: the service's list is rendered as a list and
+   advertised as an array.
 9. Wrap as a `ToolResult` with `OutputFormat`-driven encoding for the human-
    readable `content[0]` block. `structuredContent` is always JSON.
 
@@ -2248,25 +2272,30 @@ array schema unpaginated, the `{items, page, totalPages, hasNext}`
 envelope with `paginate=True` (enable pagination for a fully
 spec-compliant *object*-shaped `structuredContent`). The array schema is not
 special to selector tools: wherever a result renders as an unpaginated list —
-a service tool whose `output_selector_spec` re-fetches a `LIST`, or a chain
-whose output step is either kind of `LIST` — the tool advertises the same bare
-array, because that is what it serves.
+a service tool whose `output_selector_spec` declares a `LIST`, re-fetched or
+not, or a chain whose output step is either kind of `LIST` — the tool
+advertises the same bare array, because that is what it serves.
 
-**A result with nothing to present is `{}`, and the schema admits it.** Two
+**A result with nothing to present is `{}`, and the schema admits it.** Three
 successful calls render to nothing: an `allow_none` RETRIEVE that finds no row,
-and a single-row service tool whose output re-read selector finds none
+a single-row service tool whose output re-read selector finds none
 (drf-services materializes the re-read with `.first()`, so a re-read that
 filters out the row the service just archived yields nothing, whatever the
-nested spec declares). MCP requires `structuredContent` to be an object, so
-both are served as `"structuredContent": {}` with a text block of `{}`, on
-every tool kind and every entry point (the wire, `call_tool` / `acall_tool`, a
-task). And because a server advertising an `outputSchema` must return
-structured content that conforms to it, the schema of a tool that can present
-nothing keeps its object root and its `properties` while its `required` list
-moves beside the empty object. Exactly three kinds of tool advertise this
+nested spec declares), and a single-row service with no re-read that declares
+`ServiceSpec(allow_none=True)` and returns `None`. MCP requires
+`structuredContent` to be an object, so all three are served as
+`"structuredContent": {}` with a text block of `{}`, on every tool kind and
+every entry point (the wire, `call_tool` / `acall_tool`, a task). And because a
+server advertising an `outputSchema` must return structured content that
+conforms to it, the schema of a tool that can present nothing keeps its object
+root and its `properties` while its `required` list moves beside the empty
+object. Which tools can is drf-services' `can_present_nothing`, the question its
+own output schema asks before admitting `null`, so this server admits `{}`
+exactly where drf-services admits `null`. Four kinds of tool advertise this
 shape: an `allow_none` RETRIEVE selector tool, a single-row service tool whose
-`output_selector_spec` has a `selector`, and a chain whose output step is one
-of those two:
+`output_selector_spec` has a `selector`, a single-row service tool declaring
+`allow_none=True` with no `selector` to re-read, and a chain whose output step
+is one of those three:
 
 ```json
 {
@@ -2278,23 +2307,26 @@ of those two:
 
 A full row satisfies the first branch and `{}` the second, while a non-empty
 row missing a required field satisfies neither. Every other tool keeps a strict
-root `required`: a RETRIEVE without `allow_none`, a `LIST` result, a
-`many=True` service, and a service whose `output_selector_spec` names only an
-`output_serializer`, with no `selector`, so the service's own return renders.
-That last one is most service tools, and loosening their schemas would turn
-every row field optional for each client generating types from them. Leaving
+root `required`: a RETRIEVE without `allow_none`, a `LIST` result (`allow_none`
+or not, because a list is empty rather than absent), a `many=True` service, and
+a service whose `output_selector_spec` names only an `output_serializer`, with no
+`selector`, so the service's own return renders, unless it declares
+`allow_none=True`. That last one is most service tools, and loosening their
+schemas would turn every row field optional for each client generating types
+from them. Leaving
 `structuredContent` off the result instead was ruled out: a client is entitled
 to reject a successful result that has an `outputSchema` and no structured
 content, and the TypeScript SDK does.
 
-!!! warning "Known limit: a service returning `None` with no re-read"
+!!! warning "A service returning `None` with no re-read must declare it"
     A service with no re-read selector whose function returns `None` is served
-    `"structuredContent": {}`, against a schema that still requires its
-    fields, so a client validating the result rejects it. Nothing the spec
-    declares says whether its service can return `None`, so the schema cannot
-    tell this service from one that always returns a row. Return the row the
-    service acted on, or declare a re-read selector (`lambda *, result:
-    result` is enough) so the schema admits `{}`.
+    `"structuredContent": {}`. Declare `ServiceSpec(allow_none=True)` and the
+    schema admits it. Undeclared, the `{}` is still served, because
+    drf-services presents an undeclared `None` rather than refusing it, but
+    against a schema that requires the row's fields, so a client validating
+    the result rejects it: nothing else the spec declares tells this service
+    from one that always returns a row. Declare it, or return the row the
+    service acted on.
 
 `resources/read`:
 
