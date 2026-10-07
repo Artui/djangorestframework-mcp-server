@@ -819,7 +819,8 @@ forms) accept three behavior knobs:
     Earlier releases downgraded `REJECT` before dispatch for a service with no
     `input_serializer` and advertised its schema open to match, so an argument
     the service never declared was dropped without a word. That downgrade is
-    gone; `unknown_arguments=UnknownArguments.IGNORE` keeps the old behaviour.
+    gone. To keep the old behaviour, register the policy it chose:
+    `PASSTHROUGH` under a spreading binding, `IGNORE` under `BUNDLE`.
 
     **Selector and chain** bindings enforce the closed set in this package,
     against their own input serializer, so they are closed under `REJECT` with

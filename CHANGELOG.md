@@ -105,11 +105,12 @@ These follow from drf-services 0.56.0, which this release requires.
   fill them, less the pool seeds, registered ones included. It is closed
   (`additionalProperties: false`) exactly where dispatch refuses an undeclared
   name, read from the policy dispatch receives and drf-services'
-  `declared_input_keys`, so it stays open beside a lookup or a spread service
-  taking a bare `**kwargs`, which dispatch treats as open. A serializer-less
+  `declared_input_keys`, so it stays open where dispatch treats the set as
+  open: a lookup taking a bare `**kwargs` or a `filter_set`, or a spread service
+  taking a bare `**kwargs`. A serializer-less
   `many=True` tool now refuses every key inside an item and advertises its items
-  closed. Register with `unknown_arguments=UnknownArguments.IGNORE` to keep the
-  old behaviour
+  closed. To keep the old behaviour, register the policy the downgrade chose:
+  `PASSTHROUGH` under a spreading binding, `IGNORE` under `BUNDLE`
   ([#169](https://github.com/Artui/djangorestframework-mcp-server/issues/169)).
 
 ### Fixed
