@@ -2713,8 +2713,12 @@ otherwise the first step's serializer. The response is the
 <code>{alias: rendered}</code> for every serializer-bearing step when
 <code>output_all=True</code>.</p>
 <p>Each step's <code>spec.permission_classes</code> are AND-combined with the
-chain-level <code>permissions</code> and evaluated up front — a failing step
-permission blocks the whole chain before any step runs.</p>
+chain-level <code>permissions</code> and judged up front, each step's against a
+stand-in carrying its alias, so a step permission refusing on the
+chain's arguments blocks the whole chain before any step runs. Each
+step judges them again against its own view before its <code>inputs</code> run
+and its target is looked up, and only the object-level half on the
+target it resolves.</p>
 <p>Chains deliberately do not run the selector post-fetch pipeline
 (filter / order / paginate); for that, expose the selector as its
 own <code>register_selector_tool</code>.</p>

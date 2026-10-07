@@ -1977,17 +1977,22 @@ kind comes back as an <code>isError</code> result naming the binding.</p>
       </tbody>
     </table>
         <p>A <code>None</code> payload is a result with <strong>nothing to present</strong>: an
-<code>allow_none</code> RETRIEVE that found no row, or a service whose output
-re-read selector found none. It is served as <code>{}</code>, both as
-<code>structuredContent</code> and as the text block, because MCP requires
-structured content to be an object and asks the text block to carry the
-same JSON. This is the one place the rule lives, so a selector, a service
-and a chain answer it the same way on every entry point. The advertised
-<code>outputSchema</code> of those tools admits the <code>{}</code>
-(<code>build_output_schema(may_be_empty=...)</code>). A service with no re-read
-selector that returns <code>None</code> is served <code>{}</code> too, against a schema that
-still requires its fields: the documented limit, since nothing it declares
-says whether it can return <code>None</code>.</p>
+<code>allow_none</code> RETRIEVE that found no row, a service whose output re-read
+selector found none, or a service with no re-read declaring
+<code>ServiceSpec(allow_none=True)</code> that returned <code>None</code>. It is served as
+<code>{}</code>, both as <code>structuredContent</code> and as the text block, because MCP
+requires structured content to be an object and asks the text block to
+carry the same JSON. This is the one place the rule lives, so a selector, a
+service and a chain answer it the same way on every entry point. The
+advertised <code>outputSchema</code> of those tools admits the <code>{}</code>
+(<code>build_output_schema(may_be_empty=...)</code>). A service with no re-read that
+returns <code>None</code> without declaring <code>allow_none</code> is served <code>{}</code> too,
+against a schema that still requires its fields, because drf-services
+presents an undeclared <code>None</code> rather than refusing it
+(<code>test_an_undeclared_none_is_still_served_empty_against_a_strict_schema</code>);
+<code>allow_none=True</code>
+is the declaration that makes the schema admit it
+(<code>test_a_service_declaring_allow_none_serves_an_empty_object_its_schema_admits</code>).</p>
 
 
     </div>

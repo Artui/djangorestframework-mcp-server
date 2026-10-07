@@ -5231,13 +5231,18 @@ top-level kwargs would conflict with that shape.</p>
     <div class="doc doc-contents ">
 
         <p>How unknown <code>arguments</code> keys are handled relative to the binding's
-<code>inputSchema</code>.</p>
+<code>inputSchema</code>. Passed to drf-services' dispatch as registered, with or
+without an <code>input_serializer</code>.</p>
 <ul>
 <li><code>REJECT</code> (default) answers an <code>isError</code> <code>validation_error</code> result
   naming the unexpected keys, and advertises <code>additionalProperties:
-  false</code> — but <strong>only</strong> with an <code>input_serializer</code> to validate against.
-  A serializer-less binding has no declared field set, so <code>REJECT</code> cannot
-  fire and its schema stays open.</li>
+  false</code>. Without an <code>input_serializer</code> the declared set is the target
+  lookup's keys and, under a <code>SPREAD_*</code> binding, the service's own
+  parameters, which the <code>inputSchema</code> lists. Where that set is open, a
+  lookup or a spread service taking a bare <code>**kwargs</code>, or a lookup
+  carrying a <code>filter_set</code>, nothing is refused and the schema stays open.
+  One whose <code>**kwargs</code> annotation cannot be resolved cannot be enforced,
+  so registration refuses it.</li>
 <li><code>PASSTHROUGH</code> advertises an open schema and merges unknown keys into
   the validated payload.</li>
 <li><code>IGNORE</code> advertises an open schema and drops them.</li>
@@ -5598,11 +5603,15 @@ schema has to say so; it once advertised the item alone. See
     <div class="doc doc-contents ">
 
         <p>Whether a successful call can present nothing: a single-row result
-read back through an output re-read selector, which can find no row.</p>
+read back through an output re-read selector, which can find no row, or
+a single-row service declaring <code>ServiceSpec(allow_none=True)</code>.</p>
 <p>Read by <code>tools/list</code> so the <code>outputSchema</code> admits the <code>{}</code> such a
-call is served as. A service with no re-read selector answers <code>False</code>
-and keeps a strict schema. See
-<code>registry.types.utils.can_present_nothing</code>.</p>
+call is served as. A service with no re-read selector and no
+<code>allow_none</code> answers <code>False</code> and keeps a strict schema
+(<code>test_a_service_with_no_output_reread_keeps_its_schema_strict</code>), and
+one declaring it answers <code>True</code>
+(<code>test_a_service_declaring_allow_none_serves_an_empty_object_its_schema_admits</code>).
+See <code>registry.types.utils.can_present_nothing</code>.</p>
 
     </div>
 
@@ -5701,9 +5710,20 @@ parameter the selector declares for itself. Both are reflected into the
 <code>inputSchema</code>, so one declaration serves the HTTP transport and every
 agent transport alike. Prefer the filter where there is one — it validates
 the value against published choices before it reaches the ORM, while a bare
-parameter is only as safe as what the selector does with it — and do not
-name that parameter <code>ordering</code> / <code>page</code> / <code>limit</code>, which
-<code>RESERVED_POST_FETCH_KEYS</code> strips from the selector's pool.</p>
+parameter is only as safe as what the selector does with it. On a <code>LIST</code>
+tool a selector parameter named <code>page</code> or <code>limit</code> is refused at
+registration: <code>RESERVED_POST_FETCH_KEYS</code> strips both from a <code>LIST</code>
+selector's arguments on every route, whether or not the tool paginates, so
+the parameter would never receive the caller's value. A <code>RETRIEVE</code> tool
+cannot paginate, so nothing strips either name from its selector, which may
+declare them, as on the Pydantic-AI route. The exception on a <code>LIST</code> tool
+is a name the <code>input_serializer</code> lays back: a field of that name that is not <code>read_only</code> and is bound to
+its own name (no <code>source</code> elsewhere, no <code>source="*"</code>), on a plain
+<code>Serializer</code>, a <code>DataclassSerializer</code> or a bare <code>@dataclass</code> alike.
+Dispatch overlays the validated values on the stripped arguments, so the
+selector receives the caller's value under that name, coerced; <code>call_tool</code>,
+which runs no <code>input_serializer</code>, keeps the name rather than stripping it,
+so the selector receives it as sent.</p>
 <p><code>annotations</code> and <code>meta</code> are emitted verbatim on this tool's
 <code>tools/list</code> entry, under <code>annotations</code> and <code>_meta</code> respectively.</p>
 <p>The generic parameters mirror <code>SelectorSpec</code>'s and are purely
@@ -5995,7 +6015,7 @@ the payload to say so (see <code>UnboundedListWarning</code>).</p>
         <p>How MCP <code>arguments</code> flow into the kwarg pool. <code>SPREAD_AUTHOR_WINS</code>
 for selector tools, because a selector typically declares its query
 parameters as individual function arguments
-(<code>def list_drafts(*, project_id, page=1, limit=10)</code>).</p>
+(<code>def list_drafts(*, project_id, status="draft")</code>).</p>
 
     </div>
 
@@ -6086,7 +6106,13 @@ would drop it — same semantics as
 <p>Popped from the caller's arguments like a URL kwarg, but landing in the
 synthetic request's <code>GET</code> rather than <code>view.kwargs</code> — the channel a
 serializer reads when it branches on the query string. A <code>filter_set</code>
-field is <strong>not</strong> one of these.</p>
+field is <strong>not</strong> one of these. Nor is a selector parameter: the value is split
+out of the arguments the selector receives, so registration refuses a
+selector declaring a parameter of the same name, unless the
+<code>input_serializer</code> lays the name back, on the terms the class docstring
+gives for <code>page</code> / <code>limit</code>. The wire and <code>acall_tool</code> then hand the
+selector the validated value; <code>call_tool</code> runs no <code>input_serializer</code>, so
+the name reaches only <code>request.query_params</code> there.</p>
 
     </div>
 
@@ -6114,7 +6140,10 @@ field is <strong>not</strong> one of these.</p>
         <p>URL-derived values the model supplies as tool args, seeded into the off-HTTP
 view's <code>kwargs</code> instead of reaching the selector as ordinary params. Advertised in
 the <code>inputSchema</code>, exempt from the unknown-argument check, and stripped from the
-dispatched params. See
+dispatched params. Dispatch spreads <code>view.kwargs</code> into the selector's pool,
+so one that is <code>required</code> or declares a default is there on every call that
+dispatches, and registration counts it as the source of a selector parameter
+of the same name. See
 <a class="autorefs autorefs-internal" title="UrlKwarg
 
 
@@ -8981,16 +9010,23 @@ these dispatch policies); import them from <code>rest_framework_mcp.constants</c
 
 
         <p>How <code>dispatch_spec</code> treats <code>params</code> keys outside a spec's declared set.</p>
-<p>The <em>declared set</em> is derived from the spec without any transport knowledge: a
+<p>The <em>declared set</em> is derived from the spec and the dispatch's
+<code>argument_binding</code>, without any transport knowledge: a
 <a class="autorefs autorefs-external" href="https://artui.github.io/djangorestframework-services/reference/types/#rest_framework_services.types.service_spec.ServiceSpec"><code>ServiceSpec</code></a>'s
 <code>input_serializer</code> fields plus the keys of the one target lookup dispatch calls
 (its <code>collection_selector_spec</code> when declared, else its
 <code>instance_selector_spec</code>, and neither for <code>many=True</code>); a
 <a class="autorefs autorefs-external" href="https://artui.github.io/djangorestframework-services/reference/types/#rest_framework_services.types.selector_spec.SelectorSpec"><code>SelectorSpec</code></a>'s
-<code>selector</code> parameters. When the set cannot be enumerated — a callable that
-declares <code>**kwargs</code>, or a duck-typed <code>filter_set</code> whose fields are opaque to the
-core — the spec is treated as <strong>open</strong> and this policy is a no-op (there is nothing
-to call "unknown").</p>
+<code>selector</code> parameters. A <code>ServiceSpec</code> with no <code>input_serializer</code>,
+dispatched under a <code>SPREAD_*</code> binding, also declares its service's own
+parameters, since nothing else reads the caller's input there: its keyword
+parameters and <code>Unpack[TypedDict]</code> keys, less the reserved pool seeds
+(registered ones included), positional-only parameters, <code>NotClientInput</code> keys
+and <code>view</code>. <code>BUNDLE</code>, which <code>AUTO</code> resolves to for a service, leaves them
+out. When the set cannot be enumerated — a callable that declares a bare
+<code>**kwargs</code>, or a duck-typed <code>filter_set</code> whose fields are opaque to the core —
+the spec is treated as <strong>open</strong> and this policy is a no-op (there is nothing to
+call "unknown").</p>
 <p>Members (internal knob — the value never appears on a wire):</p>
 <ul>
 <li><code>IGNORE</code> — undeclared keys are dropped (DRF serializers already do this
@@ -9006,6 +9042,11 @@ to call "unknown").</p>
   policy that <em>must</em> live inside <code>dispatch_spec</code> — it needs the seam
   between validation and pool construction that a wrapper cannot reach.</li>
 </ul>
+<p>A key the callable marks
+<a class="autorefs autorefs-external" href="https://artui.github.io/djangorestframework-services/reference/types/#rest_framework_services.types.not_client_input"><code>NotClientInput</code></a> is outside
+the declared set, so <code>REJECT</code> refuses it on a closed spec. Under every other
+policy, and on an open spec, dispatch drops the caller's value for it before the
+spread: <code>IGNORE</code> drops it as it says, and <code>PASSTHROUGH</code> never forwards it.</p>
 <p>Callers strip their own transport-only keys (pagination, ordering, output
 format) before calling, so the declared-set check sees only spec inputs.</p>
 
@@ -9535,6 +9576,22 @@ under the chain transaction.</p>
               <div class="doc-md-description">
                 <p>Render <code>{alias: rendered}</code> for every step that declares
 an output serializer.</p>
+              </div>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td><code><span title="rest_framework_mcp.registry.types.chain_tool_binding.ChainToolBinding.permissions">permissions</span></code></td>
+            <td>
+                  <code><span title="tuple">tuple</span>[<span title="typing.Any">Any</span>, ...]</code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Each step's <code>spec.permission_classes</code>, each wrapped in
+a <code>DRFPermissionAdapter</code>, in step order, then the chain's own.
+Position is what tells a step's class, judged under the step's
+alias, from the chain's, judged under the tool's name, so a binding
+laid out otherwise is refused with <code>ImproperlyConfigured</code>.
+<code>MCPServer.register_chain_tool</code> lays it out so.</p>
               </div>
             </td>
           </tr>

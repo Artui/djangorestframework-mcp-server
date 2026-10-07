@@ -1730,10 +1730,16 @@ answers are computed and rendered, or drop the affordances from the step.
 An intermediate step is not rendered, so it may declare them freely.</p>
 <h2 id="permissions">Permissions<a class="headerlink" href="#permissions" title="Permanent link">&para;</a></h2>
 <p>Each step's <code>spec.permission_classes</code> are AND-combined with the
-chain-level <code>permissions=</code> and evaluated up front: a failing step
-permission blocks the whole chain before any step runs.</p>
-<p>The object-level half, <code>has_object_permission</code>, cannot run up front, because
-there is no row yet. It runs on each row as its step resolves it: a <code>RETRIEVE</code>
+chain-level <code>permissions=</code> and judged up front, each step's classes against a
+stand-in carrying the step's alias as <code>view.action</code> and the chain's arguments
+as <code>request.data</code>. A step permission refusing on those blocks the whole chain
+before any step runs.</p>
+<p>Each step then judges its class-level permissions again against its own view,
+before its <code>inputs</code> run and its target is looked up, so a caller a step's
+permission denies is answered the same whether the row exists or not, and the
+lookup does not run. The object-level half, <code>has_object_permission</code>, cannot run
+before that, because there is no row yet. It runs on each row as its step
+resolves it: a <code>RETRIEVE</code>
 selector step's row, and the instance a service step's <code>instance_selector_spec</code>
 fetches. A denial answers the whole call as a JSON-RPC permission error, not as
 a failed step, and under <code>atomic=True</code> every earlier write rolls back.</p>

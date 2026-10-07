@@ -2172,13 +2172,92 @@ attribute. Any DRF permission classes declared on the spec are
 auto-wrapped and prepended to the per-binding <code>permissions</code> tuple —
 the same spec that backs your HTTP view governs the MCP binding
 without you restating the contract at the MCP call site.</p>
+<p>On every path that judges a tool call's adapters (<code>tools/call</code> on either
+handler, <code>acall_tool</code>, the pre-flight of a streamed call, a task's creation and
+a chain's up-front check), the adapter's stand-in is built from the same
+values as the view the spec is dispatched with, so a class reads the same
+request in both checks: <code>request.data</code> is the call's arguments less its route
+and query values, <code>request.query_params</code> holds the declared <code>QueryParam</code>
+values, <code>view.kwargs</code> the URL kwargs, <code>view.action</code> the tool's name, and the
+method is <code>POST</code>. That is DRF's own layout, and the same on a service tool, a
+selector tool and the view <code>call_tool</code> dispatches with, though <code>call_tool</code>
+judges no adapter: it judges the spec's classes against that view alone. A
+chain judges each step's wrapped classes under the step's alias, and its own
+<code>permissions</code> under the tool's name, with the chain's arguments as
+<code>request.data</code>. Each check gets a <code>request.data</code> of its own, so a class
+writing into it reaches neither the next check nor the caller's <code>arguments</code>.
+<code>request.auth</code> is the token backend's payload (<code>None</code> from <code>call_tool</code> and
+<code>acall_tool</code>), set beside <code>request.user</code>, so a class such as <code>TokenHasScope</code>
+that reads <code>request.auth</code> first still sees the caller.</p>
+<p>A chain's <code>permissions</code> must begin with each step's <code>permission_classes</code>, each
+wrapped in a <code>DRFPermissionAdapter</code>, in step order, because that position is
+what tells a step's class from the chain's own. <code>register_chain_tool</code> lays them
+out so; a <code>ChainToolBinding</code> built by hand any other way is refused with
+<code>ImproperlyConfigured</code> when it is constructed.</p>
+<p>A <code>tools/call</code> retry whose <code>inputResponses</code> change any argument, the route, a
+query value or <code>request.data</code>, is judged again on the arguments the answers
+produce, before a rate limit is charged, the target is looked up or the service
+runs. An answer is merged even on a first call with no <code>requestState</code>, so this
+is what keeps a class admitting project 7 from running the service on project 8
+sent as 7 and answered as 8. An answer restating what the call sent is not
+judged again.</p>
+<p><code>resources/read</code> and a resource subscription judge the request the read is
+dispatched with, built from one shape: the URI's variables in <code>view.kwargs</code>, so
+a class scoping by <code>view.kwargs["project_pk"]</code> reads the route the request
+names, as it does over HTTP; the resource's name in <code>view.action</code>; <code>{}</code> as
+<code>request.data</code>; an empty <code>request.query_params</code>, since a resource takes no
+query value; and the token backend's payload as <code>request.auth</code>.</p>
+<p>The paths that name no tool call judge these as <code>request.data</code>:</p>
+<table>
+<thead>
+<tr>
+<th>Path</th>
+<th><code>request.data</code></th>
+<th><code>view.action</code></th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>prompts/get</code></td>
+<td>the prompt's arguments</td>
+<td>the prompt's name</td>
+</tr>
+<tr>
+<td><code>completion/complete</code></td>
+<td><code>{}</code></td>
+<td><code>None</code></td>
+</tr>
+<tr>
+<td>the listings filter</td>
+<td><code>{}</code></td>
+<td><code>None</code></td>
+</tr>
+</tbody>
+</table>
+<p><code>prompts/get</code> also replaces the endpoint's query string with an empty one.
+<code>completion/complete</code> on a resource template names the template rather than a
+URI, so a template whose permission scopes by a URI variable completes for
+nobody. The listings filter is described
+<a href="#filtering-listings-by-permissions">below</a>.</p>
 <h3 id="object-level-permissions">Object-level permissions<a class="headerlink" href="#object-level-permissions" title="Permanent link">&para;</a></h3>
 <p><code>has_object_permission</code> runs on every path, against the row the dispatch
-resolved: the tool paths pass <code>enforce_permissions</code> to <code>dispatch_spec</code> as
-<code>on_target_resolved</code>, <code>resources/read</code> runs it on the selector's return, and a
-chain step runs it on the target the step resolved. A <code>LIST</code> / collection result
-gets the class-level check only — object permissions are a per-row concept, and
-a set is authorized per-set.</p>
+resolved. The tool paths (<code>tools/call</code> on a service or selector tool, and
+<code>call_tool</code> / <code>acall_tool</code>) judge the spec's class-level <code>has_permission</code> up
+front, against the request and view the call runs with, before the target is
+looked up, and pass <code>dispatch_spec</code> only the object-level half as
+<code>on_target_resolved</code>: each class's <code>has_object_permission</code> on the resolved row,
+so the target guard does not ask <code>has_permission</code> again. On <code>tools/call</code> the
+binding's wrapped copy of each class has already asked it once, against a
+stand-in that sees the same request, so a call asks <code>has_permission</code> twice per
+class, a streamed call once more in its pre-flight, and a retry whose answers
+change the arguments once more again, on the arguments they produce.
+<code>call_tool</code>, which judges no stand-in, asks it once. A chain step does the
+same against its own view, before its <code>inputs</code> run and its target is looked
+up, and then runs only the object-level half on the target it resolved.
+<code>resources/read</code> runs drf-services' <code>enforce_permissions</code>, both halves, on the
+selector's return. A <code>LIST</code> / collection
+result gets the class-level check only — object permissions are a per-row
+concept, and a set is authorized per-set.</p>
 <h3 id="filtering-listings-by-permissions">Filtering listings by permissions<a class="headerlink" href="#filtering-listings-by-permissions" title="Permanent link">&para;</a></h3>
 <p>By default <code>tools/list</code>, <code>resources/list</code>, <code>resources/templates/list</code>,
 and <code>prompts/list</code> return every registered binding regardless of whether

@@ -3061,24 +3061,36 @@ Protocol.</p>
 <code>BasePermission</code> <em>classes</em>, and the MCP transport doesn't go through DRF
 views, so each class is wrapped here at registration time and instantiated
 once — mirroring what a DRF view's <code>get_permissions</code> does.</p>
-<p>The DRF instance receives a synthesised <code>rest_framework.request.Request</code>
-with <code>user</code> set to <code>token.user</code> and a lightweight view stand-in
-sufficient for the DRF permission contract (<code>request</code>, <code>action</code>). The
-HTTP method on the underlying <code>HttpRequest</code> is left untouched — unlike
-<code>build_offline_context</code>, which forces
-<code>POST</code> for mutation dispatch — because permission evaluation is
-method-agnostic.</p>
+<p>The DRF instance is judged against a request and view built the way the
+spec's dispatch builds its own: from an internal <code>DispatchShape</code>, through
+the same <code>DispatchShape.build</code>, with <code>user</code> set to
+<code>token.user</code> and <code>auth</code> to the backend's opaque payload. So on
+<code>tools/call</code> the stand-in's <code>request.data</code> is the call's arguments less
+its route and query values, <code>request.query_params</code> the routed
+<code>QueryParam</code> values, <code>view.kwargs</code> the route and <code>view.action</code> the
+tool's name, as on the dispatch view, and its method is <code>POST</code>, as there
+(<code>test_the_stand_in_sees_what_the_dispatch_view_sees</code>). It parsed the
+JSON-RPC body with no parsers once, so a permission reading
+<code>request.data</code> raised <code>UnsupportedMediaType</code> and every wire call it
+judged was a 500.</p>
 <p><strong><code>auth</code> is set alongside <code>user</code>, and has to be.</strong> DRF resolves
 <code>request.auth</code> lazily: reading it on a request that has never
 authenticated runs the (here empty) authenticator chain, which ends in
 <code>_not_authenticated()</code> and <em>overwrites</em> <code>request.user</code> with
-<code>UNAUTHENTICATED_USER</code> — on the wrapper and on the <code>HttpRequest</code>
-underneath it. A permission class as ordinary as
+<code>UNAUTHENTICATED_USER</code>. A permission class as ordinary as
 <code>TokenHasScope</code> reads <code>request.auth</code> first and every <code>request.user</code>
 read after it would see <code>AnonymousUser</code>, denying a properly scoped caller
-with nothing in the response explaining why. Assigning the backend's opaque
-payload — DRF's own convention for what <code>auth</code> holds — means the getter
-never reaches for the chain.</p>
+with nothing in the response explaining why. <code>DispatchShape.build</code> sets
+it, for the dispatch view as much as for this stand-in.</p>
+<p><strong>What a check is judged against is bound per call.</strong> The adapter is built
+once at registration, where no call has named anything yet, so its own
+shape is empty: <code>{}</code> for <code>request.data</code> and <code>view.kwargs</code>, the
+endpoint's own query string, and <code>None</code> for <code>view.action</code>. That is what
+a check naming no call judges, a <code>tools/list</code> filtered by permission
+among them. Every check that names one, a <code>tools/call</code>'s arguments or the
+variables of the URI a <code>resources/read</code> names, is made against a copy
+carrying it; the transport makes those copies itself, wherever it judges a
+binding's permissions.</p>
 
 
 

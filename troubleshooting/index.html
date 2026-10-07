@@ -657,10 +657,10 @@
 </li>
         
           <li class="md-nav__item">
-  <a href="#declares-both-manytrue-and-a-collection_selector_spec" class="md-nav__link">
+  <a href="#servicespec-declares-collection_selector_spec-with-manytrue" class="md-nav__link">
     <span class="md-ellipsis">
       
-        "declares both many=True and a collection_selector_spec"
+        "ServiceSpec declares collection_selector_spec with many=True"
       
     </span>
   </a>
@@ -1845,10 +1845,10 @@
 </li>
         
           <li class="md-nav__item">
-  <a href="#declares-both-manytrue-and-a-collection_selector_spec" class="md-nav__link">
+  <a href="#servicespec-declares-collection_selector_spec-with-manytrue" class="md-nav__link">
     <span class="md-ellipsis">
       
-        "declares both many=True and a collection_selector_spec"
+        "ServiceSpec declares collection_selector_spec with many=True"
       
     </span>
   </a>
@@ -2134,10 +2134,12 @@ list another name on the spec:</p>
 <code>SPREAD_AUTHOR_WINS</code> or <code>SPREAD_CALLER_WINS</code> argument binding has nothing to
 spread, and drf-services raises <code>ValueError</code> for it on every call. Leave
 <code>argument_binding</code> at its <code>BUNDLE</code> default.</p>
-<h3 id="declares-both-manytrue-and-a-collection_selector_spec">"declares both many=True and a collection_selector_spec"<a class="headerlink" href="#declares-both-manytrue-and-a-collection_selector_spec" title="Permanent link">&para;</a></h3>
-<p>A list payload and a collection target are two different bulk shapes, and a
-<code>many=True</code> dispatch never resolves the collection. drf-services' own views refuse
-the pair as well. Declare one of them.</p>
+<h3 id="servicespec-declares-collection_selector_spec-with-manytrue">"ServiceSpec declares collection_selector_spec with many=True"<a class="headerlink" href="#servicespec-declares-collection_selector_spec-with-manytrue" title="Permanent link">&para;</a></h3>
+<p>drf-services raises this when the spec is built, before any registration, and
+the same for an <code>instance_selector_spec</code> beside <code>many=True</code> or beside a
+<code>collection_selector_spec</code>. A list payload resolves no target, and beside a
+collection lookup dispatch never calls the instance one, so the lookup would be
+declared and never run. Declare one target lookup, or drop <code>many=True</code>.</p>
 <h3 id="declares-manytrue-so-its-input_serializer-describes-one-item-of-a-list">"declares many=True, so its input_serializer describes one item of a list"<a class="headerlink" href="#declares-manytrue-so-its-input_serializer-describes-one-item-of-a-list" title="Permanent link">&para;</a></h3>
 <p>A chain with no <code>input_serializer</code> of its own validates and advertises its
 arguments as its first step's. On a <code>many=True</code> step that serializer describes one

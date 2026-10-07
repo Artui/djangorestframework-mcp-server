@@ -1825,12 +1825,12 @@ constrain it there (an allowlist, or a <code>ChoiceField</code> on an
 </ol>
 <div class="admonition warning">
 <p class="admonition-title">Do not name that parameter <code>page</code> or <code>limit</code></p>
-<p>Those two names belong to the selector-tool read pipeline and are
-stripped from the arguments the selector is called with, so that a
+<p>Those two names belong to a <code>LIST</code> selector tool's read pipeline and
+are stripped from the arguments the selector is called with, so that a
 <code>**kwargs</code> selector never receives them. The strip goes by name, so a
-selector declaring <code>page</code> as a parameter of its own gets it advertised
-in the schema and then dropped at dispatch, with its default running
-instead — silently.</p>
+<code>LIST</code> selector declaring <code>page</code> as a parameter of its own would never
+receive the caller's value, and registration refuses it. A <code>RETRIEVE</code>
+tool cannot paginate, so its selector may take either name.</p>
 <p><strong><code>ordering</code> is not reserved.</strong> It was, while <code>ordering_fields</code>
 existed and the pipeline sorted the queryset itself. Sorting now
 belongs to whatever declares it, under whatever name it likes, so
