@@ -173,7 +173,9 @@ The three direct paths are direct for structural reasons, not by neglect:
   binding, and the pool each step receives — `inputs(ctx)` returns the callable's
   kwargs, which is not the flat client `params` mapping `dispatch_spec` takes. What
   `dispatch_spec` would have contributed is therefore run explicitly per step:
-  `enforce_permissions` against the resolved target, a service's `affordances`
+  the class-level half of `permission_classes` through `enforce_permissions`
+  before `inputs(ctx)` and the lookup, the object-level half through
+  `enforce_object_permissions` on the resolved target, a service's `affordances`
   through `enforce_affordances`, and the spec's `preconditions`, in that order. The
   affordances were once the missing one: a service refused as a tool of its own ran
   and succeeded as a chain step. What a chain does **not** reproduce is computing the

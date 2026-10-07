@@ -706,8 +706,12 @@ class MCPServer:
         ``output_all=True``.
 
         Each step's ``spec.permission_classes`` are AND-combined with the
-        chain-level ``permissions`` and evaluated up front — a failing step
-        permission blocks the whole chain before any step runs.
+        chain-level ``permissions`` and judged up front, each step's against a
+        stand-in carrying its alias, so a step permission refusing on the
+        chain's arguments blocks the whole chain before any step runs. Each
+        step judges them again against its own view before its ``inputs`` run
+        and its target is looked up, and only the object-level half on the
+        target it resolves.
 
         Chains deliberately do not run the selector post-fetch pipeline
         (filter / order / paginate); for that, expose the selector as its

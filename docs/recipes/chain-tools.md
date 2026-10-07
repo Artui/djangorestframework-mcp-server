@@ -136,11 +136,17 @@ An intermediate step is not rendered, so it may declare them freely.
 ## Permissions
 
 Each step's `spec.permission_classes` are AND-combined with the
-chain-level `permissions=` and evaluated up front: a failing step
-permission blocks the whole chain before any step runs.
+chain-level `permissions=` and judged up front, each step's classes against a
+stand-in carrying the step's alias as `view.action` and the chain's arguments
+as `request.data`. A step permission refusing on those blocks the whole chain
+before any step runs.
 
-The object-level half, `has_object_permission`, cannot run up front, because
-there is no row yet. It runs on each row as its step resolves it: a `RETRIEVE`
+Each step then judges its class-level permissions again against its own view,
+before its `inputs` run and its target is looked up, so a caller a step's
+permission denies is answered the same whether the row exists or not, and the
+lookup does not run. The object-level half, `has_object_permission`, cannot run
+before that, because there is no row yet. It runs on each row as its step
+resolves it: a `RETRIEVE`
 selector step's row, and the instance a service step's `instance_selector_spec`
 fetches. A denial answers the whole call as a JSON-RPC permission error, not as
 a failed step, and under `atomic=True` every earlier write rolls back.
