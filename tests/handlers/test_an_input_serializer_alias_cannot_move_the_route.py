@@ -333,11 +333,7 @@ class _ProjectInput:
 
 
 class _DataclassDefault(DataclassSerializer):
-    """A dataclass input, whose namesake default is not taken for a left-out kwarg.
-
-    The field is declared rather than generated, so it carries a default of its
-    own: a generated one leaves the default to the dataclass.
-    """
+    """A dataclass input whose namesake field declares a default of its own."""
 
     project_pk = serializers.IntegerField(default=5)
 
@@ -357,7 +353,7 @@ class _DataclassDefault(DataclassSerializer):
         (_DefaultThenValidateMoves, {"project": 8}, True, 5),
         (_SameNameThenValidateRewrites, {"project": 8}, False, None),
         (_ReadOnlyDefault, {}, False, None),
-        (_DataclassDefault, {}, False, None),
+        (_DataclassDefault, {}, True, 5),
     ],
     ids=[
         "namesake-default",
@@ -383,11 +379,12 @@ async def test_a_url_kwarg_the_call_left_out_reaches_the_selector_only_as_a_name
     # the name as filled, rather than raising ``TypeError``. Nothing else
     # does: 8, moved onto ``project_pk`` by an alias or by ``validate``, is a
     # project nobody judged, so with no default the name stays out. A
-    # read-only default never reaches the validated values, and a dataclass
-    # input's is laid back with the rest of the instance, where the route's
-    # names are dropped, but is not taken as a namesake default, because
-    # registration does not count it as one (``_serializer_fills``). So
-    # neither fills the name.
+    # read-only default never reaches the validated values, so it fills
+    # nothing. A dataclass input's namesake default does: ``[dataclass-default]``
+    # once expected ``None``, when neither registration nor the schema counted
+    # a dataclass default as filling a name, and now expects the 5 the field
+    # declares, because all three read what an input lays back through
+    # ``schema.utils.laid_back_inputs``, so the selector requiring the name runs.
     seen: list[dict[str, Any]] = []
     read: list[Any] = []
     server = _server(
@@ -404,6 +401,111 @@ async def test_a_url_kwarg_the_call_left_out_reaches_the_selector_only_as_a_name
     assert out.get("isError") is not True, f"answered {out!r}"
     assert read == [expected]
     assert seen == [{}, {}]
+
+
+@dataclass
+class _Route:
+    project_pk: int = 5
+    team_pk: int = 6
+
+
+class _RouteIn(DataclassSerializer):
+    """Generated fields only, so each default is the dataclass's."""
+
+    class Meta:
+        dataclass = _Route
+
+
+class _RouteAliasIn(DataclassSerializer):
+    """Validates ``team`` into ``team_pk``, so the instance holds the caller's 8 there."""
+
+    team = serializers.IntegerField(source="team_pk", required=False)
+
+    class Meta:
+        dataclass = _Route
+
+
+class _RouteDeclaredDefault(DataclassSerializer):
+    """A default of the field's own, which DRF builds the instance with, over the dataclass's."""
+
+    team_pk = serializers.IntegerField(default=4)
+
+    class Meta:
+        dataclass = _Route
+
+
+class _RouteReadOnlyDefault(DataclassSerializer):
+    """A read-only default, which DRF drops, so the instance takes the dataclass's."""
+
+    team_pk = serializers.IntegerField(read_only=True, default=4)
+
+    class Meta:
+        dataclass = _Route
+
+
+@pytest.mark.django_db(transaction=True)
+@pytest.mark.parametrize("is_async", [False, True])
+@_SPREADING
+@pytest.mark.parametrize(
+    ("input_serializer", "arguments", "team_pk"),
+    [
+        (_Route, {"project_pk": "7"}, 6),
+        (_RouteIn, {"project_pk": "7"}, 6),
+        (_RouteAliasIn, {"project_pk": "7", "team": 8}, 6),
+        (_RouteDeclaredDefault, {"project_pk": "7"}, 4),
+        (_RouteReadOnlyDefault, {"project_pk": "7"}, 6),
+    ],
+    ids=[
+        "bare-dataclass",
+        "dataclass-serializer",
+        "alias-onto-the-left-out-kwarg",
+        "declared-default",
+        "read-only-declared-default",
+    ],
+)
+async def test_a_dataclass_inputs_route_is_the_kwarg_sent_or_the_namesake_default(
+    is_async: bool,
+    binding: ArgumentBinding,
+    input_serializer: type[Any],
+    arguments: dict[str, Any],
+    team_pk: int,
+) -> None:
+    # Both halves of the route rule, for a dataclass input. ``project_pk`` was
+    # sent, so it reaches the selector as sent, uncoerced, though the instance
+    # holds 7. ``team_pk`` was left out, so it reaches it only as the default
+    # the instance is built with, which is the author's value: the dataclass's
+    # 6, or the field's own 4 where it declares one and is writable. Never the
+    # 8 an alias validated under its name. The selector requires both, so
+    # registration has to count ``team_pk`` as filled and the call must not
+    # be refused for it.
+    seen: list[dict[str, Any]] = []
+    read: list[Any] = []
+
+    # ``team`` only so the alias has a parameter to name; it is not read.
+    def _routed(*, project_pk: Any, team_pk: Any, team: Any = None) -> dict[str, Any]:
+        read.append((project_pk, team_pk))
+        return {"project_pk": project_pk, "team_pk": team_pk}
+
+    server = MCPServer(name="t", auth_backend=AllowAnyBackend(), session_store=None)
+    server.register_selector_tool(
+        name="read_project",
+        description="Read a project.",
+        spec=SelectorSpec(
+            kind=SelectorKind.RETRIEVE, selector=_routed, permission_classes=[_recording(seen)]
+        ),
+        url_kwargs=(
+            UrlKwarg("project_pk", type="integer"),
+            UrlKwarg("team_pk", type="integer"),
+        ),
+        input_serializer=input_serializer,
+        argument_binding=binding,
+    )
+
+    out = await _call(server, arguments, is_async=is_async)
+
+    assert out.get("isError") is not True, f"answered {out!r}"
+    assert repr(read) == repr([("7", team_pk)])
+    assert seen == [{"project_pk": "7"}, {"project_pk": "7"}]
 
 
 # ----- service tools: the documented precedence, pinned -----

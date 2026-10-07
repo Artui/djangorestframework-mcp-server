@@ -1081,9 +1081,11 @@ with the HTTP transport rather than reproduced.
 
 It honours the binding's `argument_binding` / `unknown_arguments` policies
 (mapped onto `dispatch_spec`'s) and the spec's `permission_classes` in two
-layers: an upfront `enforce_permissions` call for the class-level
-`has_permission` check, plus the `on_target_resolved=enforce_permissions` hook
-for object-level checks on the resolved target.
+layers: an upfront `enforce_permissions` call, before the target lookup, which
+judges each class's `has_permission` against the request and view the call runs
+with, and an `on_target_resolved` hook that runs only the object-level half,
+each class's `has_object_permission`, on the resolved target, so
+`has_permission` is not asked a second time.
 It does **not** layer on the read-shaped transport extras (pagination,
 ordering, a selector binding's MCP-only `input_serializer`); those stay with
 the wire handlers, as do the transport-level MCP permissions / rate limits.
@@ -2209,7 +2211,15 @@ The MCP package owns its own dispatch flow. It does **not** import
 
 1. Look up the `ToolBinding` by name; reject unknown.
 2. Evaluate per-binding `MCPPermission` classes (AND-combined). Denial → 403
-   with `WWW-Authenticate` carrying any required scopes.
+   with `WWW-Authenticate` carrying any required scopes. Then judge the spec's
+   own `permission_classes`, each class's `has_permission`, against the
+   dispatch view (the stand-in view carrying the call's URL kwargs) and the
+   request the call runs with: before the target lookup in step 3, before a
+   missing argument is named and, on a selector tool, before its
+   `input_serializer` runs. A denied caller is answered `-32006` alike for a
+   row that exists and one that does not, and is not told which argument it
+   left out. Only the object-level half, each class's `has_object_permission`,
+   runs later, on the row step 3 resolves.
 3. If `spec.instance_selector_spec` is set (sister-repo 0.16), resolve
    the mutation target first: the nested RETRIEVE selector runs against
    `{request, user}` + the raw arguments (the MCP analogue of URL kwargs)

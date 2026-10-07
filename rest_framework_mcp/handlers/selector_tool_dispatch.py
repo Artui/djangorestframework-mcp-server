@@ -27,7 +27,6 @@ from typing import Any
 from django.db.models import Model
 from rest_framework import serializers as drf_serializers
 from rest_framework.exceptions import PermissionDenied
-from rest_framework.fields import empty
 from rest_framework_services import (
     DEFAULT_PAGE_SIZE,
     OfflineContext,
@@ -77,6 +76,7 @@ from rest_framework_mcp.output.resolve_structured_output import resolve_structur
 from rest_framework_mcp.output.tool_result import build_tool_result
 from rest_framework_mcp.protocol.types.json_rpc_error import JsonRpcError
 from rest_framework_mcp.registry.types.selector_tool_binding import SelectorToolBinding
+from rest_framework_mcp.schema.utils import laid_back_inputs
 
 logger = get_logger(__name__)
 
@@ -647,19 +647,18 @@ def _dispatch_kwargs(
         for name, value in _selector_dispatch_params(spec_params, validated).items()
         if name not in route_names
     }
-    params.update(_url_kwarg_defaults(serializer, validated, route_names - url_kwarg_values.keys()))
+    params.update(_url_kwarg_defaults(serializer, route_names - url_kwarg_values.keys()))
     # Evaluated inside both siblings' dispatch ``try``, after the permission and
     # rate-limit answers and the ``input_serializer``: a missing argument is the
     # same ``validation_error`` result a refused one is. Checked against what
     # reaches the selector -- the params with the validated values laid over
     # them, plus the ``UrlKwarg`` values -- so a null ``UrlKwarg``, which the
     # split drops, counts as missing (``test_a_null_url_kwarg_is_a_missing_argument``).
-    # A name a plain ``Serializer`` defaults is never required in the first
-    # place (``schema.utils._serializer_fills``, which this route counts
-    # because it runs the serializer, unlike ``call_tool``). A dataclass
-    # input's default is not counted there, and its value is laid back all the
-    # same, so the overlay is what the check reads: it describes the call the
-    # selector receives.
+    # A name the input fills when the caller sends nothing, a dataclass
+    # default included, is never required in the first place
+    # (``schema.utils.laid_back_inputs``, which this route counts because it
+    # runs the serializer, unlike ``call_tool``), and the overlay that fills it
+    # is what the check reads: it describes the call the selector receives.
     refuse_missing_arguments(binding, (*params, *url_kwarg_values), pool_seeds=context.pool_seeds)
     return {
         "user": context.token.user,
@@ -691,45 +690,36 @@ def _dispatch_kwargs(
     }
 
 
-def _url_kwarg_defaults(serializer: Any, validated: Any, left_out: set[str]) -> dict[str, Any]:
+def _url_kwarg_defaults(serializer: Any, left_out: set[str]) -> dict[str, Any]:
     """The defaults the ``input_serializer`` declares for URL kwargs the call left out.
 
     Left out as the split counts it, a null included. The route the permission
     judged names none of them, so the selector gets nothing under those names
-    from the overlay, whatever it holds; a field declared under the name with a
-    default supplies that default, which is the author's rather than the
-    caller's. It is the name ``schema.utils._serializer_fills`` counts as filled
-    when it decides what a selector tool requires, so a selector requiring it
-    runs rather than raising ``TypeError``
-    (``[namesake-default]`` and ``[default-beside-alias]`` of
+    from the overlay, whatever it holds; the default declared under the name
+    supplies it, which is the author's value rather than the caller's. Those
+    are the names ``schema.utils.laid_back_inputs`` says the input fills when
+    the caller sends nothing, read through it with the bound ``serializer``, so
+    the route the selector reads agrees with what registration counted and the
+    schema did not require, and a selector requiring the name runs rather than
+    raising ``TypeError`` (``[namesake-default]``, ``[default-beside-alias]``
+    and ``[dataclass-default]`` of
     ``test_a_url_kwarg_the_call_left_out_reaches_the_selector_only_as_a_namesake_default``).
-    ``get_default`` runs on the bound field, so a default reading the
-    serializer's context reads this call's.
+    A dataclass input's own default counts as well as its serializer's
+    (``test_a_dataclass_inputs_route_is_the_kwarg_sent_or_the_namesake_default``,
+    whose alias case validates the caller's 8 onto the left-out name, which the
+    selector never reads). A default reading the serializer's context reads
+    this call's, since the fields are the bound ones.
 
-    The conditions mirror ``_serializer_fills``, and the chain is one branch
-    arc, so each is held by a case of that test:
-
-    - a ``dict`` of validated values: a dataclass input's values are laid back
-      over the params too (``_validated_values``), but ``_serializer_fills``
-      counts no dataclass default as filling a name, so neither does this, and
-      the route the selector reads agrees with the one the schema describes
-      (``[dataclass-default]``);
-    - a field of the name, with none meaning nothing to supply
-      (``test_a_serializer_field_sourcing_a_url_kwarg_left_out_does_not_fill_the_route``,
-      which raises ``KeyError`` without it);
-    - not read-only, since DRF keeps a read-only default out of the validated
-      values (``[read-only-default]``);
-    - a default, with none meaning the name stays out
-      (``[no-default-then-validate-moves]``, where ``validate`` moved 8 onto it).
+    The reader decides which names are filled; each of its conditions is held
+    by a test named on it. A name it does not fill stays out:
+    ``test_a_serializer_field_sourcing_a_url_kwarg_left_out_does_not_fill_the_route``
+    (no field of the name), ``[read-only-default]`` and
+    ``[no-default-then-validate-moves]``, where ``validate`` moved 8 onto it.
+    ``serializer`` is ``None`` for a tool with no ``input_serializer``, which
+    fills nothing.
     """
-    if not isinstance(validated, dict):
-        return {}
-    fields = serializer.fields
-    return {
-        name: fields[name].get_default()
-        for name in left_out
-        if name in fields and not fields[name].read_only and fields[name].default is not empty
-    }
+    _overlaid, fills = laid_back_inputs(serializer)
+    return {name: fills[name]() for name in left_out if name in fills}
 
 
 def _selector_dispatch_params(

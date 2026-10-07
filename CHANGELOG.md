@@ -55,9 +55,9 @@ tool and the parameter, in place of a `TypeError` or a wrong answer per call.
   values are laid back over the stripped arguments and the selector does receive
   it: `page=1` beside a serializer `page` field reads the caller's `page=3`. The
   exemption covers only a field whose value is laid back under its own name, so
-  it does not apply to a bare dataclass or a `DataclassSerializer` (whose
-  validated value is a dataclass instance, which is not laid back), a
-  `read_only` field, or a field whose `source=` names another attribute.
+  it does not apply to a `read_only` field or a field whose `source=` names
+  another attribute. A bare dataclass or a `DataclassSerializer` is laid back
+  too, so its fields exempt their names alike (see Fixed).
 
 - **`UnknownArguments.REJECT` against a `**kwargs` whose annotation does not
   resolve is refused.** drf-services cannot read the declared set of a target
@@ -289,6 +289,14 @@ These follow from drf-services 0.56.0, which this release requires.
   instance's fields are laid back now, and registration exempts a `page`,
   `limit` or `QueryParam` name such an input declares, as it does a plain
   serializer's: a field that is not `read_only` and is bound to its own name.
+  Registration, the `inputSchema` and dispatch read what such an input lays
+  back through one rule, so they agree on it. A field a `DataclassSerializer`
+  generates counts as filling the selector parameter it names, where
+  registration refused a selector requiring one. A dataclass field's default
+  fills its parameter too, so the schema no longer requires a name a call may
+  leave out. And a URL kwarg the call leaves out reaches the selector as the
+  dataclass's default for it, where it was left out, while one the call sends
+  still arrives as sent.
 - **`call_tool` strips `page` and `limit` from a selector's arguments**, as the
   wire and `acall_tool` do, so a `**kwargs` selector no longer receives them on
   that route alone. A name the tool's `input_serializer` lays back is kept,
@@ -307,7 +315,10 @@ These follow from drf-services 0.56.0, which this release requires.
   then threw away or refused. The merge now subtracts drf-services'
   `server_owned_keys` for the spec, less the `input_serializer`'s own fields: a
   field of the same name is the caller's input, validated into `data`, and stays
-  advertised.
+  advertised. A call leaving such a key out is no longer refused as missing it
+  either, which asked the caller for an argument it cannot send. Where nothing
+  on the server fills it, the call fails as the lookup's own `TypeError`, as
+  drf-services answers a server-side gap.
 
 ## [0.51.0] — 2026-10-06
 
