@@ -139,22 +139,42 @@ async def test_a_list_output_spec_with_no_selector_renders_and_advertises_a_list
     assert_tool_result_conforms(tool, result)
 
 
-async def test_a_list_output_spec_with_no_selector_refuses_a_return_that_is_no_set() -> None:
+@pytest.mark.parametrize("shape", ["service_tool", "chain_service_step"])
+@pytest.mark.parametrize(
+    "returned",
+    [
+        pytest.param(dict(_ROW), id="mapping"),
+        pytest.param("A-1", id="str"),
+        pytest.param(b"A-1", id="bytes"),
+        pytest.param(1, id="non-iterable"),
+        pytest.param(None, id="none"),
+    ],
+)
+async def test_a_list_output_spec_with_no_selector_refuses_a_return_that_is_no_set(
+    shape: str, returned: Any
+) -> None:
     """drf-services refuses the declaration's author rather than presenting a mapping
     as a list: the service has run, so this is a server fault and not a tool error a
-    caller could act on."""
+    caller could act on. A chain step refuses it alike, where it once failed while
+    rendering, with an ``AttributeError`` naming neither the declaration nor the fix."""
     spec = ServiceSpec(
-        service=lambda **_: dict(_ROW),
+        service=lambda **_: returned,
         atomic=False,
         output_selector_spec=order_selector_spec(
             SelectorKind.LIST, selector=None, affordances=None
         ),
     )
     server = fresh_server()
-    server.register_service_tool(name="orders", spec=spec, permissions=[])
+    if shape == "service_tool":
+        server.register_service_tool(name="orders", spec=spec, permissions=[])
+    else:
+        server.register_chain_tool(
+            name="orders", steps=[ChainStep("out", spec)], atomic=False, permissions=[]
+        )
 
-    with pytest.raises(ImproperlyConfigured, match="kind=LIST with no selector"):
+    with pytest.raises(ImproperlyConfigured, match="kind=LIST with no selector") as caught:
         await server.acall_tool("orders", user=None)
+    assert f"returned {type(returned).__name__}," in str(caught.value)
 
 
 class _Order(serializers.Serializer):

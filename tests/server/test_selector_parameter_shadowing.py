@@ -267,8 +267,38 @@ class _PageDataclassIn(DataclassSerializer):
         dataclass = _PageFields
 
 
+@pytest.mark.parametrize(
+    "input_serializer",
+    [
+        pytest.param(_PageFields, id="bare-dataclass"),
+        pytest.param(_PageDataclassIn, id="dataclass-serializer"),
+    ],
+)
+async def test_a_pagination_named_parameter_a_dataclass_input_declares_is_allowed(
+    input_serializer: type,
+) -> None:
+    # Validates into a dataclass instance, whose fields are laid back as a
+    # plain serializer's ``dict`` is, so the caller's ``page`` arrives coerced.
+    server = _server()
+    server.register_selector_tool(
+        name="read",
+        description="Read.",
+        spec=SelectorSpec(kind=SelectorKind.LIST, selector=_recent_entries_page),
+        input_serializer=input_serializer,
+    )
+    out = await server.acall_tool("read", {"page": "3"}, user=None)
+    assert isinstance(out, dict)
+    assert out["structuredContent"] == [3]
+
+
 class _ReadOnlyPageIn(drf_serializers.Serializer):
     page = drf_serializers.IntegerField(read_only=True)
+
+
+class _ReadOnlyPageDataclassIn(DataclassSerializer):
+    class Meta:
+        dataclass = _PageFields
+        read_only_fields = ("page",)
 
 
 class _PageElsewhereIn(drf_serializers.Serializer):
@@ -278,11 +308,11 @@ class _PageElsewhereIn(drf_serializers.Serializer):
 @pytest.mark.parametrize(
     "input_serializer",
     [
-        # Validates into a dataclass instance, which is not laid over the arguments.
-        pytest.param(_PageFields, id="bare-dataclass"),
-        pytest.param(_PageDataclassIn, id="dataclass-serializer"),
         # DRF keeps a read-only field out of the validated values altogether.
         pytest.param(_ReadOnlyPageIn, id="read-only-field"),
+        # A dataclass instance carries the field all the same, as its default,
+        # so what is laid back is never the caller's value.
+        pytest.param(_ReadOnlyPageDataclassIn, id="read-only-dataclass-field"),
         # The value lands under ``number``, which the selector does not take.
         pytest.param(_PageElsewhereIn, id="source-elsewhere"),
     ],

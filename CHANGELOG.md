@@ -78,6 +78,25 @@ These follow from drf-services 0.56.0, which this release requires.
   mapping, a `str` or `None` under that declaration now raises drf-services'
   `ImproperlyConfigured` after it has run, a server fault; declare
   `kind=SelectorKind.RETRIEVE` to present one value.
+- **A selector is never handed `data` or `serializer`, and registration says
+  so.** drf-services' selector dispatch seeds neither and strips both from the
+  spread under every binding, yet registration counted both as sources whenever
+  an `input_serializer` was declared, and let a selector declaring `data` skip
+  the check that every serializer field reaches a parameter. So a selector
+  requiring either registered and raised `TypeError` on every call, and one
+  taking `data=None` dropped every field it did not also take. Both are now
+  refused, and the message says a selector is never handed either: take the
+  validated fields as parameters of their own under a spreading binding.
+- **A selector tool with an `input_serializer` under `BUNDLE` is refused.** That
+  binding spreads none of the validated fields and a selector is never handed
+  `data`, so the payload had no way to reach the selector: a `**kwargs` selector
+  ran with none of it. The rule that `BUNDLE` beside an `input_serializer` needs
+  a `data`, `serializer` or `**kwargs` parameter is a service's alone now.
+- **A required positional-only parameter is refused.** Dispatch passes every
+  argument by keyword, so `def by_status(status, /)` registered and raised
+  `TypeError` on every call, on a service and a selector alike, because the
+  source check looked only at keyword-capable parameters. One with a default
+  still registers, and runs on its default.
 
 ### Fixed
 
@@ -211,6 +230,40 @@ These follow from drf-services 0.56.0, which this release requires.
   message `Invalid arguments` and DRF's `detail` as raised, with `failedStep`
   naming the step, from a service step and a selector step alike. An atomic
   chain rolls back the steps before it, as for any mapped step error.
+- **A caller a spec's permission denies learns nothing about the target it
+  names.** A spec's `has_permission` reading what only the dispatch view
+  carries, such as `request.data`, `request.query_params` or `view.action`, was
+  judged on the sync and async handlers, `acall_tool` and a selector tool only
+  by the target guard, after the lookup. So a denied caller was answered
+  `-32006` for a row that exists and `not_found` for one that does not, and was
+  told the name of a required argument it left out. Every route now judges the
+  spec's class-level permissions against the dispatch view, with the route
+  bound, before the lookup, before a missing argument is refused and, on a
+  selector tool, before the `input_serializer` runs, as `call_tool` already
+  did. The target guard then runs only `has_object_permission`, so
+  `has_permission` is asked no more often per call than before.
+- **A result asking for more input announces no invalidation.** A tool's
+  `invalidates=` was skipped only for an `isError` result, so an
+  `input_required` answer, which ran nothing, told every subscriber the
+  resource had changed. Only a completed result announces now.
+- **A dataclass-shaped `input_serializer` lays its values back.** A selector
+  tool lays the validated values over its arguments, and only a plain
+  `Serializer`'s `dict` was laid back. A bare `@dataclass` or a
+  `DataclassSerializer` validates into an instance, so the selector read the
+  caller's raw strings, a value only the dataclass defaulted never arrived, and
+  `page=3` reached a selector taking `page` as the selector's own default. The
+  instance's fields are laid back now, and registration exempts a `page`,
+  `limit` or `QueryParam` name such an input declares, as it does a plain
+  serializer's: a field that is not `read_only` and is bound to its own name.
+- **`call_tool` strips `page` and `limit` from a selector's arguments**, as the
+  wire and `acall_tool` do, so a `**kwargs` selector no longer receives them on
+  that route alone. A name the tool's `input_serializer` lays back is kept,
+  since that route runs no `input_serializer`, and a `FilterSet` declaring
+  either still reads it.
+- **A chain's `LIST` service step with no `selector` refuses a return that is
+  no set of rows** with the `ImproperlyConfigured` a service tool raises for
+  it ("kind=LIST with no selector"). A mapping failed while rendering, with a
+  DRF `AttributeError` naming neither the declaration nor the fix.
 
 ## [0.51.0] — 2026-10-06
 

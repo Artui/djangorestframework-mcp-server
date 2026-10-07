@@ -24,7 +24,10 @@ from rest_framework_mcp.handlers.input_dispatch import (
     resolve_prior_input,
 )
 from rest_framework_mcp.handlers.invalidation_dispatch import announce_invalidations
-from rest_framework_mcp.handlers.selector_tool_dispatch import dispatch_selector_tool
+from rest_framework_mcp.handlers.selector_tool_dispatch import (
+    dispatch_selector_tool,
+    enforce_object_permissions,
+)
 from rest_framework_mcp.handlers.task_dispatch import maybe_create_task
 from rest_framework_mcp.handlers.types.context import MCPCallContext
 from rest_framework_mcp.handlers.utils import (
@@ -286,28 +289,23 @@ def _run_service_tool(
     answers; ``prior`` is what ``ask_for_input`` needs to carry them into a
     further round.
     """
-    # ``enforce_permissions`` is the object-permission hook: it runs
-    # ``spec.permission_classes`` against the resolved target.
     argument_binding, unknown_arguments = services_dispatch_policies(binding)
-    # The split stays inside the ``try``: ``split_url_kwargs`` raises DRF's
+    # Inside the ``try``: the strict ``split_url_kwargs`` raises DRF's
     # ``ValidationError`` for an omitted ``required=True`` kwarg, and that
     # must reach the same ``isError`` mapping as any other dispatch-time
-    # validation failure rather than escaping as a 500. Still after the
-    # permission and rate-limit answers ``_dispatch_tool_call`` gave, as the
-    # check below is.
+    # validation failure rather than escaping as a 500, while the spec's
+    # ``PermissionDenied`` reaches the ``FORBIDDEN`` arm. Still after the
+    # permission and rate-limit answers ``_dispatch_tool_call`` gave.
     try:
-        spec_params, url_kwarg_values = split_url_kwargs(arguments_raw, binding.url_kwargs)
+        # Not refusing a missing kwarg yet: the spec judges the route first.
+        spec_params, url_kwarg_values = split_url_kwargs(
+            arguments_raw, binding.url_kwargs, refuse_missing=False
+        )
         # ``query_params`` is always passed — an empty mapping still
         # *replaces* whatever query string the client hung off the MCP
         # endpoint URL, so ``request.query_params`` is this package's value
         # rather than the caller's.
         spec_params, query_param_values = split_query_params(spec_params, binding.query_params)
-        # After the permission and rate-limit answers, so a caller the listing
-        # hides the tool from never learns it exists from this one; inside the
-        # ``try``, so it maps to the same ``isError`` result.
-        refuse_missing_arguments(
-            binding, (*spec_params, *url_kwarg_values), pool_seeds=context.pool_seeds
-        )
         offline = build_offline_context(
             context.token.user,
             spec_params,
@@ -315,6 +313,24 @@ def _run_service_tool(
             action=binding.name,
             kwargs=url_kwarg_values or None,
             query_params=query_param_values,
+        )
+        # The spec's class-level check, against the request and view the call
+        # runs with, before the target is looked up and before a missing
+        # argument is named, as ``call_spec_tool`` judges it. The binding's
+        # wrapped copy of these classes judged a stand-in with no ``action``
+        # and the endpoint's own ``request.data``, so a ``has_permission``
+        # reading either was judged here only by the target guard, after the
+        # lookup: ``-32006`` for a row that exists, ``not_found`` for one that
+        # does not
+        # (``test_a_denied_caller_is_answered_alike_for_a_row_that_exists_and_one_that_does_not``),
+        # and the name of an argument left out
+        # (``test_a_denied_caller_is_not_told_which_argument_it_left_out``).
+        enforce_permissions(binding.spec, offline)
+        # Only for its refusal of a missing ``required=True`` kwarg: the values
+        # are the ones split above.
+        split_url_kwargs(arguments_raw, binding.url_kwargs)
+        refuse_missing_arguments(
+            binding, (*spec_params, *url_kwarg_values), pool_seeds=context.pool_seeds
         )
         result = dispatch_spec(
             binding.spec,
@@ -324,7 +340,9 @@ def _run_service_tool(
             view=offline.view,
             argument_binding=argument_binding,
             unknown_arguments=unknown_arguments,
-            on_target_resolved=enforce_permissions,
+            # Object-level only: the class-level half ran above, against the
+            # same request and view.
+            on_target_resolved=enforce_object_permissions,
             # Not dead on the sync path despite there being no stream: a
             # task worker runs *this* function and its reporter writes to
             # the task record. ``None`` for an ordinary sync request.

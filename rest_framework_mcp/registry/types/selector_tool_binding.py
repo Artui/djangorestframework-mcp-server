@@ -73,9 +73,16 @@ class SelectorToolBinding(Generic[ResultT, ExtraT]):
     the value against published choices before it reaches the ORM, while a bare
     parameter is only as safe as what the selector does with it. A selector
     parameter named ``page`` or ``limit`` is refused at registration:
-    ``RESERVED_POST_FETCH_KEYS`` strips both from the selector's arguments,
-    whether or not the tool paginates, so the parameter would never receive the
-    caller's value.
+    ``RESERVED_POST_FETCH_KEYS`` strips both from the selector's arguments on
+    every route, whether or not the tool paginates, so the parameter would never
+    receive the caller's value. The exception is a name the ``input_serializer``
+    lays back: a field of that name that is not ``read_only`` and is bound to
+    its own name (no ``source`` elsewhere, no ``source="*"``), on a plain
+    ``Serializer``, a ``DataclassSerializer`` or a bare ``@dataclass`` alike.
+    Dispatch overlays the validated values on the stripped arguments, so the
+    selector receives the caller's value under that name, coerced; ``call_tool``,
+    which runs no ``input_serializer``, keeps the name rather than stripping it,
+    so the selector receives it as sent.
 
     ``annotations`` and ``meta`` are emitted verbatim on this tool's
     ``tools/list`` entry, under ``annotations`` and ``_meta`` respectively.
@@ -174,7 +181,11 @@ class SelectorToolBinding(Generic[ResultT, ExtraT]):
     serializer reads when it branches on the query string. A ``filter_set``
     field is **not** one of these. Nor is a selector parameter: the value is split
     out of the arguments the selector receives, so registration refuses a
-    selector declaring a parameter of the same name."""
+    selector declaring a parameter of the same name, unless the
+    ``input_serializer`` lays the name back, on the terms the class docstring
+    gives for ``page`` / ``limit``. The wire and ``acall_tool`` then hand the
+    selector the validated value; ``call_tool`` runs no ``input_serializer``, so
+    the name reaches only ``request.query_params`` there."""
 
     url_kwargs: tuple[UrlKwarg, ...] = ()
     """URL-derived values the model supplies as tool args, seeded into the off-HTTP

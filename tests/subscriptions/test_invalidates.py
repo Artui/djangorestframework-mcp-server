@@ -6,7 +6,11 @@ import json
 from typing import Any
 
 import pytest
+from asgiref.sync import sync_to_async
 from django.db import transaction
+from rest_framework import serializers as drf_serializers
+from rest_framework.permissions import BasePermission
+from rest_framework_services.exceptions.additional_input_required import AdditionalInputRequired
 from rest_framework_services.exceptions.service_error import ServiceError
 from rest_framework_services.types.selector_kind import SelectorKind
 from rest_framework_services.types.selector_spec import SelectorSpec
@@ -160,6 +164,80 @@ async def test_a_failed_tool_announces_nothing() -> None:
         {"name": "invoices.broken", "arguments": {}}, _context(server)
     )
     assert result["isError"] is True
+    assert queue.qsize() == 0
+
+
+def _confirming(**kwargs: Any) -> dict[str, Any]:
+    """Runs only once the caller has confirmed; asks for the confirmation otherwise."""
+    if not kwargs.get("data", {}).get("confirmed"):
+        raise AdditionalInputRequired(
+            "Confirm to proceed.", schema={"confirmed": {"type": "boolean"}}
+        )
+    return {"pk": 1}
+
+
+class _ConfirmInput(drf_serializers.Serializer):
+    confirmed = drf_serializers.BooleanField(required=False, default=False)
+
+
+@pytest.mark.django_db(transaction=True)
+@pytest.mark.parametrize("is_async", [False, True])
+@pytest.mark.parametrize(
+    ("arguments", "announced"),
+    [({}, 0), ({"confirmed": True}, 1)],
+    ids=["input-required", "completed"],
+)
+async def test_only_a_completed_result_announces(
+    is_async: bool, arguments: dict[str, Any], announced: int
+) -> None:
+    """A result asking for more input ran nothing, so nothing changed: it has no
+    ``isError`` to fail on, which is why the check is on the result completing."""
+    broker = InMemorySubscriptionBroker()
+    server = MCPServer(name="inval", auth_backend=AllowAnyBackend(), subscription_broker=broker)
+    server.register_service_tool(
+        name="invoices.confirm",
+        description="x",
+        spec=ServiceSpec(service=_confirming, input_serializer=_ConfirmInput, atomic=False),
+        # Static, so the template is fillable from any result, a request for
+        # input included: what stops the announcement is the check under test.
+        invalidates=("invoices://",),
+    )
+    queue = await broker.subscribe(frozenset({topic_for_resource("invoices://")}))
+    context = _context(server, client_capabilities={"elicitation": {}})
+    params: dict[str, Any] = {"name": "invoices.confirm", "arguments": arguments}
+
+    if is_async:
+        result: Any = await handle_tools_call_async(params, context)
+    else:
+        result = await sync_to_async(handle_tools_call)(params, context)
+
+    assert result.get("resultType") == ("input_required" if not announced else None), result
+    assert queue.qsize() == announced
+
+
+class _Refuses(BasePermission):
+    def has_permission(self, request: Any, view: Any) -> bool:
+        return False
+
+
+@pytest.mark.django_db(transaction=True)
+async def test_a_non_dict_result_announces_nothing() -> None:
+    """A denied call is answered with a protocol error rather than a result."""
+    broker = InMemorySubscriptionBroker()
+    server = MCPServer(name="inval", auth_backend=AllowAnyBackend(), subscription_broker=broker)
+    server.register_service_tool(
+        name="invoices.denied",
+        description="x",
+        spec=ServiceSpec(service=_service, atomic=False, permission_classes=[_Refuses]),
+        invalidates=("invoices://",),
+    )
+    queue = await broker.subscribe(frozenset({topic_for_resource("invoices://")}))
+
+    result: Any = await handle_tools_call_async(
+        {"name": "invoices.denied", "arguments": {}}, _context(server)
+    )
+
+    assert result.code == -32006
     assert queue.qsize() == 0
 
 

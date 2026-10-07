@@ -108,6 +108,8 @@ def selector_spec_to_tool(
         # every dispatched call carries fills a parameter of the same name.
         selector_url_kwargs=url_kwargs,
         pool_seeds=pool_seeds,
+        # Never handed ``data`` or ``serializer``, whatever the binding.
+        is_selector=True,
     )
     validate_url_kwargs(
         label=f"selector tool {name!r}", url_kwargs=url_kwargs, pool_seeds=pool_seeds

@@ -189,7 +189,10 @@ async def test_a_permission_granting_the_delivered_route_is_followed_by_the_miss
     out = await _via(server, route, {"tenant": "acme"})
 
     assert _missing_pk(out) == {"project_pk": ["This field is required."]}
-    assert seen == [{"tenant": "acme"}]
+    # Every look on the delivered route: the wire judges the binding's wrapped
+    # copy of the class and then the spec's own, before the lookup and the
+    # missing argument; ``call_tool`` consults only the second.
+    assert seen == [{"tenant": "acme"}] * (1 if route == "call_tool" else 2)
 
 
 @pytest.mark.django_db(transaction=True)
