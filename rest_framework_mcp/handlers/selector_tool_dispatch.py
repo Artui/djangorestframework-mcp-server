@@ -30,10 +30,8 @@ from rest_framework.exceptions import PermissionDenied
 from rest_framework_services import (
     DEFAULT_PAGE_SIZE,
     OfflineContext,
-    OfflineServiceView,
     adispatch_spec,
     base_serializer_context,
-    build_offline_context,
     dispatch_spec,
     enforce_permissions,
     is_queryset,
@@ -58,9 +56,10 @@ from rest_framework_mcp.constants import (
 from rest_framework_mcp.handlers.types.context import MCPCallContext
 from rest_framework_mcp.handlers.utils import (
     build_validated_input_serializer,
-    check_permissions,
     consume_rate_limits,
+    dispatch_shape,
     effective_rate_limits,
+    judge_tool_permissions,
     read_shaping_error_result,
     refuse_missing_arguments,
     resolve_bound,
@@ -194,11 +193,25 @@ async def dispatch_selector_tool_async(
         return error
 
     try:
+        # Off the event loop, as the serializer's own validation is: building
+        # them calls the default of a field named for a URL kwarg the call
+        # left out, and a default that queries raised
+        # ``SynchronousOnlyOperation`` on the loop
+        # (``test_a_namesake_default_that_queries_fills_the_route_on_every_route``).
+        # The dispatch itself stays on the loop, which ``adispatch_spec`` bridges.
+        dispatch_kwargs: dict[str, Any] = await acall(
+            _dispatch_kwargs,
+            binding,
+            validated,
+            serializer,
+            drf_request,
+            view,
+            arguments_raw,
+            context,
+        )
         result = await adispatch_spec(
             binding.spec,
-            **_dispatch_kwargs(
-                binding, validated, serializer, drf_request, view, arguments_raw, context
-            ),
+            **dispatch_kwargs,
             # Passed explicitly rather than through ``_dispatch_kwargs``, which
             # is shared between the two siblings.
             progress=context.progress,
@@ -241,25 +254,22 @@ def _check_auth_and_rate_limits(
 ) -> JsonRpcError | None:
     """Answer a call its permissions deny or its rate limits refuse, else ``None``.
 
-    The spec's permission classes judge the route the call names: the URL
-    kwargs it delivered are split out for them first, as ``call_spec_tool``
-    splits them, where a permission reading ``view.kwargs`` was judged against
-    ``{}`` (``test_a_spec_permission_sees_the_url_kwargs_the_call_delivers``).
-    ``refuse_missing=False`` keeps this split from being the one that refuses:
-    ``_build_request_and_validate`` still answers a missing required kwarg, and
-    after the permission, so a caller it denies is not told which argument it
-    left out
+    The spec's permission classes judge the call as the dispatch view
+    ``_build_request_and_validate`` builds will carry it, from the same
+    ``dispatch_shape``: a permission reading ``view.kwargs`` was judged against
+    ``{}`` (``test_a_spec_permission_sees_the_url_kwargs_the_call_delivers``),
+    and one reading ``request.data`` raised
+    (``test_the_stand_in_sees_what_the_dispatch_view_sees``). The shape does
+    not refuse a missing URL kwarg: ``_build_request_and_validate`` still
+    answers a missing required kwarg, and after the permission, so a caller it
+    denies is not told which argument it left out
     (``test_a_permission_denying_the_delivered_route_answers_before_the_missing_argument``).
+    Before the rate limits, so a caller it denies is not charged: each
+    admit-and-deny test in ``test_the_stand_in_sees_what_the_dispatch_view_sees.py``
+    asserts the limiter was charged for the admitted call alone
+    (``test_a_permission_reading_request_data_admits_and_denies_by_the_arguments``).
     """
-    _, delivered_url_kwargs = split_url_kwargs(
-        arguments_raw, binding.url_kwargs, refuse_missing=False
-    )
-    allowed, required_scopes = check_permissions(
-        binding.permissions,
-        context.http_request,
-        context.token,
-        view_kwargs=delivered_url_kwargs,
-    )
+    allowed, required_scopes = judge_tool_permissions(binding, arguments_raw, context)
     if not allowed:
         return JsonRpcError(
             JsonRpcErrorCode.FORBIDDEN,
@@ -295,13 +305,13 @@ def _build_request_and_validate(
 
     The spec's class-level check runs here, against the request and view the
     selector will run with, before the lookup and before anything names a
-    missing argument. The binding's wrapped copy of those classes judged a
-    stand-in with no ``action`` and the MCP endpoint's own ``request.data``, so
-    a ``has_permission`` reading either was judged on this request only by the
-    target guard, after the lookup: a denied caller was answered ``-32006`` for
-    a row that exists and ``not_found`` for one that does not, and told which
-    argument it left out
-    (``test_a_denied_caller_is_answered_alike_for_a_row_that_exists_and_one_that_does_not``,
+    missing argument. The binding's wrapped copy of those classes has judged a
+    stand-in built from the same shape, and this check is kept beside it: a
+    ``has_permission`` whose answer changes between the two was judged on this
+    request only by the target guard, after the lookup, and a denied caller was
+    answered ``-32006`` for a row that exists and ``not_found`` for one that
+    does not, and told which argument it left out
+    (``test_the_dispatch_view_judges_before_the_lookup_when_the_stand_in_admits``,
     ``test_a_denied_caller_is_not_told_which_argument_it_left_out``). The guard
     is ``enforce_object_permissions`` for that reason.
 
@@ -316,30 +326,21 @@ def _build_request_and_validate(
     coercion respectively — so their names go in as ``additional_known_keys``.
     The serializer gets DRF's baseline context, as it has over HTTP.
     """
-    # Split first: the value has to be in hand before the request is built, and
-    # unlike the URL-kwarg split this one cannot fail.
-    _qp_params, query_param_values = split_query_params(arguments_raw, binding.query_params)
-    drf_request = build_offline_context(
-        context.token.user,
-        arguments_raw,
-        http_request=context.http_request,
-        # Always passed, empty or not: this *replaces* the wrapped request's
-        # ``GET``, so the MCP endpoint's own query string can never reach a
-        # serializer reading ``request.query_params``.
-        query_params=query_param_values,
-    ).request
-    # URL kwargs route through ``view.kwargs`` (from where drf-services spreads
-    # them, authoritative over params), never as selector params. Split without
-    # refusing a missing one, so the spec judges the route first.
-    _spec_params, url_kwarg_values = split_url_kwargs(
-        arguments_raw, binding.url_kwargs, refuse_missing=False
+    # From the shape the binding's stand-in was built from, so the two checks
+    # judge one request. DRF's layout: URL kwargs route through ``view.kwargs``
+    # (from where drf-services spreads them, authoritative over params) and
+    # query params through ``request.query_params``, whose mapping *replaces*
+    # the wrapped request's ``GET``, so the MCP endpoint's own query string can
+    # never reach a serializer reading it; neither is in ``request.data``,
+    # which they once were here alone
+    # (``test_request_data_holds_no_route_or_query_value``). Not refusing a
+    # missing URL kwarg, so the spec judges the route first.
+    offline: OfflineContext = dispatch_shape(binding, arguments_raw).build(
+        user=context.token.user, auth=context.token.raw, http_request=context.http_request
     )
-    view = OfflineServiceView(request=drf_request, action=binding.name, kwargs=url_kwarg_values)
+    drf_request, view = offline.request, offline.view
     try:
-        enforce_permissions(
-            binding.spec,
-            OfflineContext(user=context.token.user, request=drf_request, view=view),
-        )
+        enforce_permissions(binding.spec, offline)
     except PermissionDenied:
         return (
             drf_request,

@@ -1085,7 +1085,13 @@ layers: an upfront `enforce_permissions` call, before the target lookup, which
 judges each class's `has_permission` against the request and view the call runs
 with, and an `on_target_resolved` hook that runs only the object-level half,
 each class's `has_object_permission`, on the resolved target, so
-`has_permission` is not asked a second time.
+`has_permission` is asked once per class. That request and view are laid out as
+DRF lays out an HTTP request: the URL kwargs in `view.kwargs`, the declared
+`QueryParam` values in `request.query_params`, the rest of the arguments in
+`request.data`, the tool's name as `view.action`, and `request.auth` set to
+`None`. `acall_tool` and the wire handlers build theirs the same way, and also
+judge the binding's wrapped copy of each class first, against a stand-in built
+from the same values, so there a call asks `has_permission` twice per class.
 It does **not** layer on the read-shaped transport extras (pagination,
 ordering, a selector binding's MCP-only `input_serializer`); those stay with
 the wire handlers, as do the transport-level MCP permissions / rate limits.
@@ -2210,16 +2216,24 @@ The MCP package owns its own dispatch flow. It does **not** import
 `tools/call`:
 
 1. Look up the `ToolBinding` by name; reject unknown.
-2. Evaluate per-binding `MCPPermission` classes (AND-combined). Denial → 403
-   with `WWW-Authenticate` carrying any required scopes. Then judge the spec's
-   own `permission_classes`, each class's `has_permission`, against the
-   dispatch view (the stand-in view carrying the call's URL kwargs) and the
-   request the call runs with: before the target lookup in step 3, before a
-   missing argument is named and, on a selector tool, before its
+2. Evaluate per-binding `MCPPermission` classes (AND-combined), before any
+   rate limit is charged. Denial → 403 with `WWW-Authenticate` carrying any
+   required scopes. The spec's own `permission_classes` are among them, each
+   wrapped in a `DRFPermissionAdapter` and judged against a stand-in built from
+   the same values as the dispatch view: the URL kwargs in `view.kwargs`, the
+   declared `QueryParam` values in `request.query_params`, the rest of the
+   arguments in `request.data`, and the tool's name as `view.action`. Then
+   judge each class's `has_permission` again, against the dispatch view itself
+   and the request the call runs with: before the target lookup in step 3,
+   before a missing argument is named and, on a selector tool, before its
    `input_serializer` runs. A denied caller is answered `-32006` alike for a
    row that exists and one that does not, and is not told which argument it
    left out. Only the object-level half, each class's `has_object_permission`,
-   runs later, on the row step 3 resolves.
+   runs later, on the row step 3 resolves. A chain tool judges every step's
+   wrapped classes up front, each under its step's alias with the chain's
+   arguments as `request.data`, and each step judges its classes again against
+   its own view before its `inputs` run and its target is looked up, then only
+   the object-level half on the target it resolves.
 3. If `spec.instance_selector_spec` is set (sister-repo 0.16), resolve
    the mutation target first: the nested RETRIEVE selector runs against
    `{request, user}` + the raw arguments (the MCP analogue of URL kwargs)

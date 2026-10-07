@@ -5,7 +5,6 @@ from typing import Any
 from rest_framework import serializers as drf_serializers
 from rest_framework.exceptions import PermissionDenied
 from rest_framework_services import (
-    build_offline_context,
     dispatch_spec,
     enforce_permissions,
     render_for_audience,
@@ -31,17 +30,17 @@ from rest_framework_mcp.handlers.selector_tool_dispatch import (
 from rest_framework_mcp.handlers.task_dispatch import maybe_create_task
 from rest_framework_mcp.handlers.types.context import MCPCallContext
 from rest_framework_mcp.handlers.utils import (
-    check_permissions,
     consume_rate_limits,
+    dispatch_shape,
     effective_rate_limits,
     enforce_result_ceiling,
+    judge_tool_permissions,
     read_shaping_error_result,
     refuse_missing_arguments,
     resolve_bound,
     same_route,
     service_error_result,
     services_dispatch_policies,
-    split_query_params,
     split_url_kwargs,
     validate_output_format,
     validation_error_result,
@@ -166,13 +165,16 @@ def _dispatch_tool_call(
                 arguments_raw,
             )
 
-        # The spec's permission classes judge the route the call names, so the
-        # URL kwargs it delivered are split out first, as ``call_spec_tool``
-        # splits them: a permission scoping by ``view.kwargs["project_pk"]``
-        # was judged against ``{}`` and denied a caller it admits
-        # (``test_a_spec_permission_sees_the_url_kwargs_the_call_delivers``).
-        # ``refuse_missing=False`` because this split cannot be the one that
-        # refuses: the permission answers before a missing argument does
+        # The spec's permission classes judge the call as its dispatch view
+        # will carry it: the route in ``view.kwargs``, the routed query values
+        # in ``request.query_params``, the rest of the arguments in
+        # ``request.data`` and the tool's name in ``view.action``
+        # (``test_the_stand_in_sees_what_the_dispatch_view_sees``). A
+        # permission scoping by ``view.kwargs["project_pk"]`` was judged against
+        # ``{}`` and denied a caller it admits
+        # (``test_a_spec_permission_sees_the_url_kwargs_the_call_delivers``),
+        # and one reading ``request.data`` raised and made the call a 500. The
+        # permission answers before a missing argument does
         # (``test_a_permission_denying_the_delivered_route_answers_before_the_missing_argument``),
         # and the strict split in ``_run_service_tool`` still refuses it after.
         # The arguments as sent, before a retry's answers are merged in below,
@@ -181,12 +183,7 @@ def _dispatch_tool_call(
         _, delivered_url_kwargs = split_url_kwargs(
             arguments_raw, binding.url_kwargs, refuse_missing=False
         )
-        allowed, required_scopes = check_permissions(
-            binding.permissions,
-            context.http_request,
-            context.token,
-            view_kwargs=delivered_url_kwargs,
-        )
+        allowed, required_scopes = judge_tool_permissions(binding, arguments_raw, context)
         if not allowed:
             return _forbidden(required_scopes), arguments_raw
 
@@ -220,16 +217,13 @@ def _dispatch_tool_call(
         # Not refusing a missing kwarg, as the split above does not, since the
         # strict split in ``_run_service_tool`` is where that is answered
         # (``test_an_answer_leaving_a_required_route_kwarg_missing_is_told_which``).
+        # Judged on the arguments the answers produced, so the stand-in
+        # carries them as the dispatch view will.
         _, answered_url_kwargs = split_url_kwargs(
             arguments_raw, binding.url_kwargs, refuse_missing=False
         )
         if not same_route(answered_url_kwargs, delivered_url_kwargs):
-            allowed, required_scopes = check_permissions(
-                binding.permissions,
-                context.http_request,
-                context.token,
-                view_kwargs=answered_url_kwargs,
-            )
+            allowed, required_scopes = judge_tool_permissions(binding, arguments_raw, context)
             if not allowed:
                 return _forbidden(required_scopes), arguments_raw
 
@@ -297,32 +291,23 @@ def _run_service_tool(
     # ``PermissionDenied`` reaches the ``FORBIDDEN`` arm. Still after the
     # permission and rate-limit answers ``_dispatch_tool_call`` gave.
     try:
-        # Not refusing a missing kwarg yet: the spec judges the route first.
-        spec_params, url_kwarg_values = split_url_kwargs(
-            arguments_raw, binding.url_kwargs, refuse_missing=False
-        )
-        # ``query_params`` is always passed — an empty mapping still
-        # *replaces* whatever query string the client hung off the MCP
-        # endpoint URL, so ``request.query_params`` is this package's value
-        # rather than the caller's.
-        spec_params, query_param_values = split_query_params(spec_params, binding.query_params)
-        offline = build_offline_context(
-            context.token.user,
-            spec_params,
-            http_request=context.http_request,
-            action=binding.name,
-            kwargs=url_kwarg_values or None,
-            query_params=query_param_values,
+        # Built from the same shape the binding's stand-in was, so the two
+        # checks judge one request. Not refusing a missing kwarg yet: the spec
+        # judges the route first.
+        shape = dispatch_shape(binding, arguments_raw)
+        spec_params, url_kwarg_values = shape.data, shape.kwargs
+        offline = shape.build(
+            user=context.token.user, auth=context.token.raw, http_request=context.http_request
         )
         # The spec's class-level check, against the request and view the call
         # runs with, before the target is looked up and before a missing
-        # argument is named, as ``call_spec_tool`` judges it. The binding's
-        # wrapped copy of these classes judged a stand-in with no ``action``
-        # and the endpoint's own ``request.data``, so a ``has_permission``
-        # reading either was judged here only by the target guard, after the
-        # lookup: ``-32006`` for a row that exists, ``not_found`` for one that
-        # does not
-        # (``test_a_denied_caller_is_answered_alike_for_a_row_that_exists_and_one_that_does_not``),
+        # argument is named, as ``call_spec_tool`` judges it. Kept beside the
+        # stand-in's, which judges the same shape: a ``has_permission`` whose
+        # answer changes between the two is still answered before the lookup,
+        # not by the target guard after it, which told a denied caller
+        # ``-32006`` for a row that exists and ``not_found`` for one that does
+        # not
+        # (``test_the_dispatch_view_judges_before_the_lookup_when_the_stand_in_admits``),
         # and the name of an argument left out
         # (``test_a_denied_caller_is_not_told_which_argument_it_left_out``).
         enforce_permissions(binding.spec, offline)

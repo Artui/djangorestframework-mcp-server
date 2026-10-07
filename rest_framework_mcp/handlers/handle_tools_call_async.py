@@ -6,7 +6,7 @@ from typing import Any
 from asgiref.sync import sync_to_async
 from rest_framework import serializers as drf_serializers
 from rest_framework.exceptions import PermissionDenied
-from rest_framework_services import adispatch_spec, build_offline_context, enforce_permissions
+from rest_framework_services import adispatch_spec, enforce_permissions
 from rest_framework_services.exceptions.additional_input_required import AdditionalInputRequired
 from rest_framework_services.exceptions.service_error import ServiceError
 from rest_framework_services.exceptions.service_validation_error import ServiceValidationError
@@ -30,10 +30,11 @@ from rest_framework_mcp.handlers.selector_tool_dispatch import (
 from rest_framework_mcp.handlers.task_dispatch import maybe_create_task
 from rest_framework_mcp.handlers.types.context import MCPCallContext
 from rest_framework_mcp.handlers.utils import (
-    check_permissions,
     consume_rate_limits,
+    dispatch_shape,
     effective_rate_limits,
     enforce_result_ceiling,
+    judge_tool_permissions,
     read_shaping_error_result,
     refuse_missing_arguments,
     resolve_bound,
@@ -41,7 +42,6 @@ from rest_framework_mcp.handlers.utils import (
     same_route,
     service_error_result,
     services_dispatch_policies,
-    split_query_params,
     split_url_kwargs,
     validate_output_format,
     validation_error_result,
@@ -165,19 +165,15 @@ async def _dispatch_tool_call_async(
                 arguments_raw,
             )
 
-        # See the sync sibling: the spec's permission classes judge the route
-        # the call names, split from the arguments as sent and without refusing
-        # a missing one, which the strict split in ``_run_service_tool_async``
-        # still does after them.
+        # See the sync sibling: the spec's permission classes judge the call as
+        # its dispatch view will carry it, from the arguments as sent and
+        # without refusing a missing URL kwarg, which the strict split in
+        # ``_run_service_tool_async`` still does after them.
         _, delivered_url_kwargs = split_url_kwargs(
             arguments_raw, binding.url_kwargs, refuse_missing=False
         )
         allowed, required_scopes = await acall(
-            check_permissions,
-            binding.permissions,
-            context.http_request,
-            context.token,
-            view_kwargs=delivered_url_kwargs,
+            judge_tool_permissions, binding, arguments_raw, context
         )
         if not allowed:
             return _forbidden(required_scopes), arguments_raw
@@ -197,11 +193,7 @@ async def _dispatch_tool_call_async(
         )
         if not same_route(answered_url_kwargs, delivered_url_kwargs):
             allowed, required_scopes = await acall(
-                check_permissions,
-                binding.permissions,
-                context.http_request,
-                context.token,
-                view_kwargs=answered_url_kwargs,
+                judge_tool_permissions, binding, arguments_raw, context
             )
             if not allowed:
                 return _forbidden(required_scopes), arguments_raw
@@ -247,22 +239,12 @@ async def _run_service_tool_async(
     # kwarg reaches the ``isError`` mapping instead of escaping.
     argument_binding, unknown_arguments = services_dispatch_policies(binding)
     try:
-        # See the sync sibling: not refusing a missing kwarg until the spec has
-        # judged the route.
-        spec_params, url_kwarg_values = split_url_kwargs(
-            arguments_raw, binding.url_kwargs, refuse_missing=False
-        )
-        # ``query_params`` is always passed — an empty mapping still
-        # *replaces* whatever query string the client hung off the MCP
-        # endpoint URL.
-        spec_params, query_param_values = split_query_params(spec_params, binding.query_params)
-        offline = build_offline_context(
-            context.token.user,
-            spec_params,
-            http_request=context.http_request,
-            action=binding.name,
-            kwargs=url_kwarg_values or None,
-            query_params=query_param_values,
+        # See the sync sibling: built from the shape the stand-in was, and not
+        # refusing a missing kwarg until the spec has judged the route.
+        shape = dispatch_shape(binding, arguments_raw)
+        spec_params, url_kwarg_values = shape.data, shape.kwargs
+        offline = shape.build(
+            user=context.token.user, auth=context.token.raw, http_request=context.http_request
         )
         # See the sync sibling: the spec's class-level check, before the lookup
         # and before a missing argument is named. Off the event loop, as the

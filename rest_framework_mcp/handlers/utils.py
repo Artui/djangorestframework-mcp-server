@@ -28,6 +28,7 @@ from rest_framework_services.types.service_spec import ServiceSpec
 
 from rest_framework_mcp._compat.reject_awaitable import reject_awaitable
 from rest_framework_mcp.auth.permissions.drf_permission_adapter import DRFPermissionAdapter
+from rest_framework_mcp.auth.permissions.utils import DispatchShape
 from rest_framework_mcp.auth.rate_limits.types.mcp_rate_limit import MCPRateLimit
 from rest_framework_mcp.auth.types.token_info import TokenInfo
 from rest_framework_mcp.config.types.mcp_config import MCPConfig
@@ -376,6 +377,7 @@ def check_permissions(
     token: TokenInfo,
     *,
     view_kwargs: Mapping[str, Any] | None = None,
+    shape: DispatchShape | None = None,
 ) -> tuple[bool, list[str]]:
     """Return ``(allowed, required_scopes)`` after evaluating every permission.
 
@@ -383,40 +385,44 @@ def check_permissions(
     permission that would deny is returned so the transport can surface them in
     the ``WWW-Authenticate`` header.
 
-    **``view_kwargs`` is the route the request names**, and every
+    **``shape`` is the call the request names**, and every
     [`DRFPermissionAdapter`][rest_framework_mcp.auth.permissions.drf_permission_adapter.DRFPermissionAdapter]
-    among ``permissions`` is judged against a copy whose stand-in view carries
-    it: the URL kwargs a ``tools/call`` delivered, then the ones a retry's
-    answers produce where they moved the route, or the variables of the URI a
-    ``resources/read`` names, the values the dispatch then puts in
-    ``view.kwargs``. A spec permission scoping by a route capture reads
-    ``view.kwargs["project_pk"]``, as it would over HTTP, and judged against
-    ``{}`` it denied a caller it admits. Any other permission is judged as it
-    is, since an ``MCPPermission`` judges the request and token and has no view.
-    ``None`` judges every permission as registered, for the paths that name no
-    route: ``prompts/get``, ``completion/complete``, and a chain tool's up-front
-    check of its binding's permissions, which a chain declares no URL kwargs
-    for. Its steps are not judged here: each runs ``enforce_permissions``
-    against the target it resolved.
+    among ``permissions`` is judged against a copy whose stand-in is built from
+    it, as the call's dispatch view is: the arguments in ``request.data``, the
+    routed ``QueryParam`` values in ``request.query_params``, the URL kwargs in
+    ``view.kwargs`` and the tool's name in ``view.action``. The ``tools/call``
+    paths pass one, through ``judge_tool_permissions``. **``view_kwargs`` is the
+    route alone**, for the paths that name a route and no call: the variables
+    of the URI a ``resources/read`` names, or a subscription to it. A spec
+    permission scoping by a route capture reads ``view.kwargs["project_pk"]``,
+    as it would over HTTP, and judged against ``{}`` it denied a caller it
+    admits. Any other permission is judged as it is, since an ``MCPPermission``
+    judges the request and token and has no view. Neither judges every
+    permission as registered, for the paths that name nothing: ``prompts/get``,
+    ``completion/complete`` and a listing.
 
     The registered adapters are never written to, because every concurrent
     call to the binding shares them, and the wrapped DRF permission is not
     instantiated again (``test_the_registered_adapter_is_left_unbound``,
     ``test_the_permission_is_not_instantiated_again_nor_a_subclass_state_dropped``).
     """
+    # A path passes one of the two, never both.
+    bound: DispatchShape | None = shape
+    if view_kwargs is not None:
+        bound = DispatchShape(kwargs=view_kwargs)
     required: list[str] = []
     allowed: bool = True
     for registered in permissions:
         perm: Any = registered
         # Both conjuncts hold a test: without the ``None`` check every adapter
-        # on a path naming no route is bound to ``None``
+        # on a path naming nothing is bound to ``None``
         # (``test_without_view_kwargs_every_adapter_is_judged_on_an_empty_route``),
         # and without the ``isinstance`` an ``MCPPermission``, which has no view,
         # is handed one (``test_view_kwargs_reach_every_adapter_and_pass_the_rest_through``).
-        if view_kwargs is not None and isinstance(registered, DRFPermissionAdapter):
+        if bound is not None and isinstance(registered, DRFPermissionAdapter):
             # The adapter's private hook, and this is its one caller: binding a
-            # route is how a check is made, not something a consumer composes.
-            perm = registered._bound_to(view_kwargs)  # noqa: SLF001
+            # call is how a check is made, not something a consumer composes.
+            perm = registered._bound_to(bound)  # noqa: SLF001
         # Do not gate this loop on ``isinstance(perm, MCPPermission)``: the
         # Protocol is ``runtime_checkable``, so that demands *every* member
         # including ``required_scopes``, and a gate-only permission would be
@@ -434,6 +440,95 @@ def check_permissions(
             if callable(scopes):
                 required.extend(scopes())
     return allowed, required
+
+
+def dispatch_shape(
+    binding: ToolBinding | SelectorToolBinding, arguments: dict[str, Any]
+) -> DispatchShape:
+    """What a service or selector tool's dispatch request and view are built from.
+
+    The one split every route makes, so the binding's stand-in and the dispatch
+    view are built from the same values and cannot drift: the wire handlers,
+    ``acall_tool`` and ``call_tool`` build the view the spec runs with from it,
+    and ``judge_tool_permissions`` the stand-in the binding's wrapped classes
+    judge. DRF's layout, on every route: a URL kwarg in ``kwargs``, a
+    ``QueryParam`` value in ``query_params``, and the rest of the arguments in
+    ``data``. A selector tool once put the first two in ``data`` as well
+    (``test_request_data_holds_no_route_or_query_value``).
+
+    Not refusing a missing ``required=True`` URL kwarg: the permission answers
+    before a missing argument is named, and each route refuses it after with a
+    strict ``split_url_kwargs``. ``query_params`` is always a mapping, so an
+    empty one still *replaces* the query string the client hung off the MCP
+    endpoint's URL.
+    """
+    params, url_kwarg_values = split_url_kwargs(arguments, binding.url_kwargs, refuse_missing=False)
+    params, query_param_values = split_query_params(params, binding.query_params)
+    return DispatchShape(
+        data=params, kwargs=url_kwarg_values, query_params=query_param_values, action=binding.name
+    )
+
+
+def chain_shape(arguments: dict[str, Any], action: str) -> DispatchShape:
+    """What a chain tool's request is built from, under one of its views' actions.
+
+    A chain declares no URL kwargs and no query params, so its request carries
+    every argument in ``data`` and an empty query string, which replaces the
+    endpoint's. One request serves the whole chain and each step's view names
+    the step: ``action`` is the step's alias there, and the tool's name on the
+    view its ``input_serializer`` is validated with.
+    """
+    return DispatchShape(data=arguments, query_params={}, action=action)
+
+
+def judge_tool_permissions(
+    binding: Any, arguments: dict[str, Any], context: MCPCallContext
+) -> tuple[bool, list[str]]:
+    """A tool binding's permissions, judged against stand-ins of the call's dispatch views.
+
+    Every check a ``tools/call`` makes of ``binding.permissions`` goes through
+    this, so none judges a stand-in another check does not: the sync and async
+    handlers (before a retry's answers are read, and again on the route an
+    answer moves to), the streamed call's pre-flight and the check made before
+    a task is created.
+
+    A chain has a view per step, so each step's wrapped classes are judged
+    under that step's alias. ``chain_to_tool`` lays ``binding.permissions`` out
+    as each step's wrapped ``permission_classes``, in step order, then the
+    chain-level ``permissions``, which are judged under the tool's name
+    (``test_a_chain_steps_stand_in_carries_the_steps_action``). A binding laid
+    out otherwise is judged with the actions shifted, never with a permission
+    skipped, and each step's own check against its real view still runs before
+    its lookup.
+    """
+    if not isinstance(binding, ChainToolBinding):
+        return check_permissions(
+            binding.permissions,
+            context.http_request,
+            context.token,
+            shape=dispatch_shape(binding, arguments),
+        )
+    remaining: tuple[Any, ...] = binding.permissions
+    allowed: bool = True
+    required: list[str] = []
+    for step in binding.steps:
+        count: int = len(step.spec.permission_classes or ())
+        step_allowed, step_required = check_permissions(
+            remaining[:count],
+            context.http_request,
+            context.token,
+            shape=chain_shape(arguments, step.alias),
+        )
+        allowed = allowed and step_allowed
+        required.extend(step_required)
+        remaining = remaining[count:]
+    chain_allowed, chain_required = check_permissions(
+        remaining,
+        context.http_request,
+        context.token,
+        shape=chain_shape(arguments, binding.name),
+    )
+    return allowed and chain_allowed, required + chain_required
 
 
 def consume_rate_limits(
@@ -999,10 +1094,13 @@ __all__ = [
     "advertises_closed_schema",
     "binding_input_serializer",
     "build_validated_input_serializer",
+    "chain_shape",
     "check_permissions",
     "consume_rate_limits",
+    "dispatch_shape",
     "effective_rate_limits",
     "enforce_result_ceiling",
+    "judge_tool_permissions",
     "permission_verdict",
     "read_shaping_error_result",
     "refuse_missing_arguments",

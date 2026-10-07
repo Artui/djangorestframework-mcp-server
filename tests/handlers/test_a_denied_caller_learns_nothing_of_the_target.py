@@ -1,14 +1,14 @@
 """A caller the spec's permission denies learns nothing about the target it named.
 
-A spec's ``has_permission`` may read what only the dispatch view carries: the
-call's ``request.data``, its ``query_params``, or ``view.action``, which is the
-tool's name there and ``None`` on the stand-in the binding's wrapped check
-judges. Such a permission was judged on the wire only by the target guard, after
-the lookup, so a denied caller was answered ``-32006`` for a row that exists,
-``not_found`` for one that does not, and told the name of an argument it left
-out. ``call_tool`` already judged it before dispatch; every route now does, and
-the target guard is narrowed to the object-level check, so ``has_permission``
-still runs once per check rather than once more per call.
+A spec's ``has_permission`` may read what the dispatch view carries: the call's
+``request.data``, its ``query_params``, or ``view.action``. Such a permission
+was judged on the wire only by the target guard, after the lookup, so a denied
+caller was answered ``-32006`` for a row that exists, ``not_found`` for one
+that does not, and told the name of an argument it left out. ``call_tool``
+already judged it before dispatch; every route now does, against the dispatch
+view, and the binding's wrapped copy judges a stand-in built from the same
+shape before that. The target guard is narrowed to the object-level check, so
+``has_permission`` is asked once per check rather than once more per call.
 """
 
 from __future__ import annotations
@@ -43,11 +43,14 @@ _ROWS: dict[int, dict[str, Any]] = {1: {"id": 1}}
 
 
 class _RefusesTheDispatchedAction(BasePermission):
-    """Refuses the call the dispatch view describes, and admits the stand-in.
+    """Refuses the call the dispatch view describes.
 
-    The binding's wrapped check judges a view whose ``action`` is ``None``, so it
-    admits; the dispatch view carries the tool's name, so the spec's own check
-    refuses. The shape of any permission reading what only dispatch carries.
+    The dispatch view carries the tool's name, and so does the stand-in the
+    binding's wrapped check judges, which once carried ``None`` and admitted.
+    On ``call_tool``, which judges no stand-in, the dispatch view's check is
+    the one that refuses; on the other routes the stand-in answers first, and
+    ``test_the_dispatch_view_judges_before_the_lookup_when_the_stand_in_admits``
+    holds the dispatch view's check there.
     """
 
     def has_permission(self, request: Any, view: Any) -> bool:
@@ -144,6 +147,50 @@ async def test_a_denied_caller_is_answered_alike_for_a_row_that_exists_and_one_t
     assert looked_up == []
 
 
+def _admitting_every_other_check() -> type[BasePermission]:
+    """A permission whose answer changes between the two checks of one call.
+
+    It admits the first check of a call and refuses the second, so the
+    binding's stand-in admits and the dispatch view refuses. With the stand-in
+    built from the dispatch view's own shape, nothing else tells the two apart.
+    """
+    checks: list[None] = []
+
+    class _AdmittingEveryOtherCheck(BasePermission):
+        def has_permission(self, request: Any, view: Any) -> bool:
+            checks.append(None)
+            return len(checks) % 2 == 1
+
+    return _AdmittingEveryOtherCheck
+
+
+@pytest.mark.django_db(transaction=True)
+@pytest.mark.parametrize("kind", _KINDS)
+@pytest.mark.parametrize("route", ["handler", "async_handler", "acall_tool"])
+async def test_the_dispatch_view_judges_before_the_lookup_when_the_stand_in_admits(
+    route: str, kind: str
+) -> None:
+    # The dispatch view's class-level check is kept beside the stand-in's. Where
+    # the stand-in admits and the dispatch view refuses, the refusal still comes
+    # before the lookup: answered by the target guard, a denied caller was told
+    # ``-32006`` for a row that exists and ``not_found`` for one that does not.
+    looked_up: list[Any] = []
+
+    def _lookup(*, pk: int) -> Any:
+        looked_up.append(pk)
+        return _ROWS.get(pk)
+
+    server = _server(kind, _admitting_every_other_check(), _lookup)
+
+    existing = await _via(server, route, {"pk": 1})
+    missing = await _via(server, route, {"pk": 2})
+
+    assert isinstance(existing, JsonRpcError), f"answered {existing!r}"
+    assert isinstance(missing, JsonRpcError), f"answered {missing!r}"
+    assert existing.code == missing.code == JsonRpcErrorCode.FORBIDDEN
+    assert looked_up == []
+
+
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.parametrize("kind", _KINDS)
 @pytest.mark.parametrize("route", _ROUTES)
@@ -188,8 +235,9 @@ def _refusing_the_row(calls: list[str]) -> type[BasePermission]:
     return _RefusingTheRow
 
 
-# The wire judges the binding's wrapped copy of the class as well, which
-# ``call_tool`` does not consult; the up-front check is one more on every route.
+# The wire judges the binding's wrapped copy of the class as well, against a
+# stand-in of the same request, which ``call_tool`` does not consult; the
+# dispatch view's up-front check is one more on every route.
 _CLASS_CHECKS: dict[str, int] = {
     "handler": 2,
     "async_handler": 2,
@@ -217,6 +265,25 @@ async def test_the_class_level_check_is_not_run_again_on_the_resolved_row(
     assert not isinstance(out, JsonRpcError), f"answered {out!r}"
     assert out.get("isError") is not True, out
     assert calls == ["class"] * _CLASS_CHECKS[route] + ["object"]
+
+
+@pytest.mark.django_db(transaction=True)
+@pytest.mark.parametrize("kind", _KINDS)
+@pytest.mark.parametrize("route", _ROUTES)
+async def test_a_missing_row_is_asked_the_class_level_check_as_often_as_a_found_one(
+    route: str, kind: str
+) -> None:
+    # The class-level check runs before the lookup, so a row that does not
+    # exist is asked it as often as one that does, and no object-level check
+    # follows: twice per call where a stand-in judges too, once on
+    # ``call_tool``.
+    calls: list[str] = []
+    server = _server(kind, _counting(calls), _invoice)
+
+    out = await _via(server, route, {"pk": 404})
+
+    assert not isinstance(out, JsonRpcError), f"answered {out!r}"
+    assert calls == ["class"] * _CLASS_CHECKS[route]
 
 
 @pytest.mark.django_db(transaction=True)
