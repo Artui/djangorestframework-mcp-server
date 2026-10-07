@@ -213,3 +213,61 @@ async def test_a_url_kwarg_no_input_takes_registers(binding: ArgumentBinding) ->
     out = await server.acall_tool("archive", {"project_pk": 8}, user=None)
     assert isinstance(out, dict)
     assert out["structuredContent"] == {"scope": "project-8"}
+
+
+# ---------- a name the service and its target lookup both take ----------
+
+
+def _archive_project_instance(*, instance: Any, project_pk: int) -> dict[str, Any]:
+    return {"instance": instance.pk, "project_pk": project_pk}
+
+
+def _archive_project_instance_defaulted(*, instance: Any, project_pk: int = 0) -> dict[str, Any]:
+    return {"instance": instance.pk, "project_pk": project_pk}
+
+
+@pytest.mark.parametrize(
+    "service",
+    [
+        # Every call answered "Missing required argument(s): 'project_pk'".
+        pytest.param(_archive_project_instance, id="required"),
+        # Every call ran the service on project 0 while the lookup resolved 8.
+        pytest.param(_archive_project_instance_defaulted, id="defaulted"),
+    ],
+)
+@pytest.mark.parametrize("binding", _SPREADING)
+def test_a_parameter_the_service_and_its_lookup_both_take_is_refused(
+    service: Any, binding: ArgumentBinding
+) -> None:
+    # The lookup is handed ``view.kwargs`` and the service is not, so the
+    # service is the input left without the value. Counted as the lookup's
+    # alone, the name was never refused.
+    spec = ServiceSpec(
+        service=service,
+        atomic=False,
+        instance_selector_spec=SelectorSpec(kind=SelectorKind.RETRIEVE, selector=_project),
+    )
+    with pytest.raises(ImproperlyConfigured) as caught:
+        _register(_server(), spec, argument_binding=binding)
+    _assert_refused(caught, "the service declares parameter(s) ['project_pk']")
+
+
+@pytest.mark.parametrize("binding", _SPREADING)
+async def test_a_shared_name_the_services_provider_fills_from_the_route_is_served(
+    binding: ArgumentBinding,
+) -> None:
+    # The first remedy, on the shared name: the provider is handed ``view`` and
+    # fills the service's parameter from the route the lookup also read. Under
+    # ``SPREAD_CALLER_WINS`` the service's declared input still lists the name,
+    # so the subtraction of what the provider fills is what exempts it there.
+    server = _server()
+    spec = ServiceSpec(
+        service=_archive_project_instance,
+        atomic=False,
+        kwargs=_project_from_route,
+        instance_selector_spec=SelectorSpec(kind=SelectorKind.RETRIEVE, selector=_project),
+    )
+    _register(server, spec, argument_binding=binding)
+    out = await server.acall_tool("archive", {"project_pk": 8}, user=None)
+    assert isinstance(out, dict)
+    assert out["structuredContent"] == {"instance": 8, "project_pk": 8}

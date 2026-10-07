@@ -91,10 +91,11 @@ tool and the parameter, in place of a `TypeError` or a wrong answer per call.
   where its value never arrives, because drf-services hands `view.kwargs` to the
   target lookup and the `kwargs=` provider and never to the service: a spread
   service's own parameter, answered `Missing required argument(s):
-  'project_pk'.` on every call, or run on its default, and an `input_serializer`
-  field, answered `This field is required.`. A target lookup's parameter of the
-  same name, and one the service's own typed provider fills, are served and
-  stay allowed. That refusal names the callable and offers three remedies in
+  'project_pk'.` on every call, or run on its default, including one its target
+  lookup also takes, which the lookup is served while the service is not, and an
+  `input_serializer` field, answered `This field is required.`. A parameter only
+  the target lookup takes, and one the service's own typed provider fills, are
+  served and stay allowed. That refusal names the callable and offers three remedies in
   order: fill the parameter from `view.kwargs` with a `kwargs=` provider whose
   `TypedDict` declares it, take the value as a parameter of the spec's target
   lookup and drop the input, or drop the `UrlKwarg`

@@ -379,7 +379,9 @@ service tool registration refuses a `UrlKwarg` named like one of its inputs
 that would never receive the value: a spread service's own parameter, which
 was answered "Missing required argument(s)" on every call, or ran on its
 default, and an `input_serializer` field, which validates the arguments left
-once the URL kwarg is split out. A parameter the service's own typed
+once the URL kwarg is split out. A parameter the service and its target lookup
+both take is refused too: the lookup resolves the row the call named, and the
+service is still handed nothing under that name. A parameter the service's own typed
 `kwargs=` provider fills is exempt, because the provider reads `view.kwargs`;
 that is the first remedy the refusal offers, before taking the value as a
 parameter of the target lookup, and dropping the `UrlKwarg`.

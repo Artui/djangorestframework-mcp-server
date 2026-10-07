@@ -32,7 +32,10 @@ from rest_framework_mcp.registry.types.selector_tool_binding import SelectorTool
 from rest_framework_mcp.registry.types.tool_binding import ToolBinding
 from rest_framework_mcp.registry.types.url_kwarg import UrlKwarg
 from rest_framework_mcp.schema.input_schema import build_input_schema
-from rest_framework_mcp.schema.service_tool_schema import build_service_tool_input_schema
+from rest_framework_mcp.schema.service_tool_schema import (
+    build_service_tool_input_schema,
+    declared_service_input,
+)
 from rest_framework_mcp.schema.utils import (
     declares_default,
     laid_back_inputs,
@@ -413,7 +416,9 @@ def validate_url_kwarg_inputs(
     (``_service_tool_inputs``), so the two refusals read the schema the same way.
     What does receive the value is not refused: **a target lookup's parameter**,
     since drf-services spreads ``view.kwargs`` into the lookup's pool
-    (``test_a_target_lookup_parameter_a_url_kwarg_takes_is_served``), and **a
+    (``test_a_target_lookup_parameter_a_url_kwarg_takes_is_served``), unless a
+    spreading service declares the same name, which is still handed nothing
+    (``test_a_parameter_the_service_and_its_lookup_both_take_is_refused``), and **a
     parameter the service's own ``kwargs=`` provider declares it fills**, the
     ``own`` set's subtraction of ``filled``, because a provider is handed
     ``view`` and fills the parameter from the route
@@ -430,12 +435,34 @@ def validate_url_kwarg_inputs(
     # spares reading the schema at registration for the tools declaring none.
     if not declared:
         return
-    fields, own, _looked_up = _service_tool_inputs(
-        binding, filled=_provider_filled(binding, spec_kwargs_provides), pool_seeds=pool_seeds
+    filled = _provider_filled(binding, spec_kwargs_provides)
+    fields, own, looked_up = _service_tool_inputs(binding, filled=filled, pool_seeds=pool_seeds)
+    # ``own`` counts a name the target lookup also takes as the lookup's, which
+    # is right for the schema and for a ``QueryParam``, whose value neither
+    # receives. A ``UrlKwarg``'s value does reach the lookup, so a spreading
+    # service declaring the same name is the one left without it: a required
+    # one answered "Missing required argument(s)" and a defaulted one ran on
+    # its default while the lookup resolved the row the call named
+    # (``test_a_parameter_the_service_and_its_lookup_both_take_is_refused``).
+    # Read off the service's own declared input, before the lookup is merged
+    # in, so a lookup-only name stays served
+    # (``test_a_target_lookup_parameter_a_url_kwarg_takes_is_served``).
+    shared = (
+        (
+            looked_up
+            & frozenset(
+                declared_service_input(
+                    dataclasses.replace(binding, query_params=(), url_kwargs=()),
+                    pool_seeds=pool_seeds,
+                ).get("properties", {})
+            )
+        )
+        - fields
+        - filled
     )
     groups = (
         ("the service's input_serializer declares field(s)", fields & declared),
-        ("the service declares parameter(s)", own & declared),
+        ("the service declares parameter(s)", (own | shared) & declared),
     )
     parts = [f"{subject} {sorted(names)!r}" for subject, names in groups if names]
     if parts:

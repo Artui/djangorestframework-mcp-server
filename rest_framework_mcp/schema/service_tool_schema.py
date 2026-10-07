@@ -99,7 +99,7 @@ def build_service_tool_input_schema(
     else:
         schema = _with_target_lookups(
             spec,
-            _declared_input(binding, pool_seeds=pool_seeds),
+            declared_service_input(binding, pool_seeds=pool_seeds),
             url_kwargs=binding.url_kwargs,
             pool_seeds=pool_seeds,
         )
@@ -122,7 +122,7 @@ def build_service_tool_input_schema(
     return merged
 
 
-def _declared_input(binding: ToolBinding, *, pool_seeds: PoolSeeds) -> dict[str, Any]:
+def declared_service_input(binding: ToolBinding, *, pool_seeds: PoolSeeds) -> dict[str, Any]:
     """The input ``binding``'s spec declares itself, before its target lookup is merged in.
 
     An ``input_serializer``'s schema, or, without one, drf-services' reflection
@@ -241,4 +241,4 @@ def _with_target_lookups(
     return merged
 
 
-__all__ = ["build_service_tool_input_schema"]
+__all__ = ["build_service_tool_input_schema", "declared_service_input"]
