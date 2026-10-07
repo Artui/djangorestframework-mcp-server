@@ -28,7 +28,12 @@ import jsonschema
 import pytest
 from rest_framework import serializers
 from rest_framework.permissions import AllowAny
-from rest_framework_services import DEFAULT_POOL_SEEDS, InputRequired, UnknownArguments
+from rest_framework_services import (
+    DEFAULT_POOL_SEEDS,
+    InputRequired,
+    NotClientInput,
+    UnknownArguments,
+)
 from rest_framework_services.dispatch.utils import declared_input_keys
 from rest_framework_services.types.reserved_pool_seeds import RESERVED_POOL_SEEDS
 from rest_framework_services.types.selector_kind import SelectorKind
@@ -171,6 +176,45 @@ def test_an_open_target_lookup_leaves_the_schema_open() -> None:
     )
 
     assert _listed_input_schema(spec)["additionalProperties"] is True
+
+
+def _invoice_in_tenant(*, pk: int, tenant: int) -> Any:
+    # Names ``tenant`` plainly and with no default: the lookup alone would
+    # advertise it and require it.
+    return Invoice.objects.filter(pk=pk)
+
+
+def _same_tenant(*, tenant: Annotated[int, NotClientInput] = 1) -> None:
+    # The precondition owns ``tenant`` for the whole call.
+    return None
+
+
+def test_a_lookup_key_a_precondition_hides_is_not_advertised_but_a_field_of_that_name_is() -> None:
+    # drf-services drops the caller's ``tenant`` before the lookup reads it and
+    # ``REJECT`` refuses it, because a precondition marks it ``NotClientInput``
+    # (``server_owned_keys``), so the schema does not ask for it. A serializer
+    # field of the same name is the caller's input, validated into ``data``, and
+    # stays advertised with the field's own schema.
+    class _WithTenant(_RenameInput):
+        tenant = serializers.IntegerField(help_text="The tenant to move the invoice to.")
+
+    lookup = SelectorSpec(kind=SelectorKind.RETRIEVE, selector=_invoice_in_tenant)
+    hidden = _rename_spec(instance_selector_spec=lookup, preconditions=[_same_tenant])
+    kept = _rename_spec(
+        instance_selector_spec=lookup, preconditions=[_same_tenant], input_serializer=_WithTenant
+    )
+
+    hidden_schema = build_service_tool_input_schema(_binding(hidden))
+    kept_schema = build_service_tool_input_schema(_binding(kept))
+
+    assert set(hidden_schema["properties"]) == {"number", "pk"}
+    assert "tenant" not in hidden_schema["required"]
+    assert declared_input_keys(hidden, serializer=_RenameInput()) == {"number", "pk"}
+    assert set(kept_schema["properties"]) == {"number", "pk", "tenant"}
+    assert "tenant" in kept_schema["required"]
+    assert kept_schema["properties"]["tenant"]["description"] == (
+        "The tenant to move the invoice to."
+    )
 
 
 def test_an_input_field_of_the_same_name_wins_over_the_reflected_lookup() -> None:

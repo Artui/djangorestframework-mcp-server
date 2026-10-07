@@ -37,7 +37,7 @@ from rest_framework_services.types.service_spec import ServiceSpec
 from rest_framework_mcp import DRFPermissionAdapter, MCPServer, UrlKwarg
 from rest_framework_mcp.auth.backends.allow_any_backend import AllowAnyBackend
 from rest_framework_mcp.auth.types.token_info import TokenInfo
-from rest_framework_mcp.constants import ELICITATION_KEY, JsonRpcErrorCode
+from rest_framework_mcp.constants import ELICITATION_KEY, JsonRpcErrorCode, UnknownArguments
 from rest_framework_mcp.handlers.handle_tools_call import handle_tools_call
 from rest_framework_mcp.handlers.handle_tools_call_async import handle_tools_call_async
 from rest_framework_mcp.handlers.types.context import MCPCallContext
@@ -74,12 +74,16 @@ def _per_binding_server(
     ran_on: list[Any],
     *url_kwargs: UrlKwarg,
     rate_limits: list[Any] | None = None,
+    unknown_arguments: UnknownArguments = UnknownArguments.REJECT,
 ) -> MCPServer:
     """``archive_project`` behind ``permission`` as a per-binding adapter.
 
     Per-binding, not on the spec, because the spec's ``permission_classes``
     are also judged by the target guard after the merge, which is what hid
-    this: only ``check_permissions`` counts here.
+    this: only ``check_permissions`` counts here. The service declares no
+    argument, so under ``REJECT`` an answer carrying any key but the route
+    capture is refused as unexpected; a test about the route judge that sends
+    one passes ``IGNORE``.
     """
 
     def _archive_project(project_pk: Any = None) -> dict[str, Any]:
@@ -97,6 +101,7 @@ def _per_binding_server(
         permissions=[DRFPermissionAdapter(permission)],
         url_kwargs=url_kwargs,
         rate_limits=rate_limits or [],
+        unknown_arguments=unknown_arguments,
     )
     return server
 
@@ -265,6 +270,9 @@ async def test_an_answer_leaving_the_route_unchanged_is_not_judged_again(
         granting_route("project_pk", 7, seen),
         ran_on,
         UrlKwarg("project_pk", type="integer", required=True),
+        # ``note`` is no argument the service declares, and what is asserted
+        # here is the judge, not the unknown-argument policy.
+        unknown_arguments=UnknownArguments.IGNORE,
     )
 
     out = await _handler(

@@ -103,9 +103,10 @@ def _svc_no_input(*, user: Any = None) -> dict[str, Any]:
     return {"ok": True}
 
 
-def test_serializerless_service_schema_is_open_under_reject() -> None:
-    # A service with no input_serializer is downgraded off REJECT at
-    # dispatch, so it can't reject unknown keys — its schema must advertise open.
+def test_serializerless_service_schema_is_closed_under_reject() -> None:
+    # A service with no input_serializer keeps REJECT at dispatch, and bundled
+    # with no target lookup it declares no argument at all, so its schema is
+    # closed and lists nothing.
     server = _server()
     server.register_service_tool(
         name="t",
@@ -114,13 +115,15 @@ def test_serializerless_service_schema_is_open_under_reject() -> None:
     )
     out = handle_tools_list(None, _ctx(server))
     assert isinstance(out, dict)
-    assert out["tools"][0]["inputSchema"]["additionalProperties"] is True
+    schema = out["tools"][0]["inputSchema"]
+    assert schema["additionalProperties"] is False
+    assert not schema.get("properties")
 
 
 @pytest.mark.django_db
-def test_serializerless_service_accepts_unknown_key_under_reject() -> None:
-    # The runtime side of the same contract: an unknown key is not refused for
-    # a serializer-less service, matching the open schema above.
+def test_serializerless_service_refuses_unknown_key_under_reject() -> None:
+    # The runtime side of the same contract: an unknown key is refused for a
+    # serializer-less service, matching the closed schema above.
     server = _server()
     server.register_service_tool(
         name="t",
@@ -128,8 +131,7 @@ def test_serializerless_service_accepts_unknown_key_under_reject() -> None:
         unknown_arguments=UnknownArguments.REJECT,
     )
     out = handle_tools_call({"name": "t", "arguments": {"rogue": "v"}}, _ctx(server))
-    assert isinstance(out, dict)
-    assert out.get("isError") is not True
+    assert tool_error(out)["detail"] == {"non_field_errors": ["Unexpected argument(s): 'rogue'."]}
 
 
 # ---------- Runtime behaviour ----------
@@ -348,6 +350,26 @@ def test_selector_tool_schema_additional_properties_false_under_reject() -> None
     out = handle_tools_list(None, _ctx(server))
     assert isinstance(out, dict)
     assert out["tools"][0]["inputSchema"]["additionalProperties"] is False
+
+
+@pytest.mark.parametrize("policy", [UnknownArguments.IGNORE, UnknownArguments.PASSTHROUGH])
+def test_selector_tool_schema_stays_open_under_a_permissive_policy(
+    policy: UnknownArguments,
+) -> None:
+    # The same serializer as the closed case above: it is the policy, not the
+    # serializer, that leaves an undeclared key served here, so the schema
+    # stays open.
+    server = _server()
+    server.register_selector_tool(
+        name="x",
+        spec=SelectorSpec(kind=SelectorKind.LIST, selector=_list),
+        input_serializer=_OneFieldInput,
+        paginate=True,
+        unknown_arguments=policy,
+    )
+    out = handle_tools_list(None, _ctx(server))
+    assert isinstance(out, dict)
+    assert out["tools"][0]["inputSchema"]["additionalProperties"] is True
 
 
 def test_selector_tool_schema_additional_properties_true_when_serializerless_reject() -> None:

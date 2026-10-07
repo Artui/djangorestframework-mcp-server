@@ -59,6 +59,17 @@ tool and the parameter, in place of a `TypeError` or a wrong answer per call.
   validated value is a dataclass instance, which is not laid back), a
   `read_only` field, or a field whose `source=` names another attribute.
 
+- **`UnknownArguments.REJECT` against a `**kwargs` whose annotation does not
+  resolve is refused.** drf-services cannot read the declared set of a target
+  lookup, or of a service spread into its parameters, whose `**kwargs` is
+  annotated with something undefined at runtime, such as an `Unpack[...]` of a
+  `TypedDict` imported under `TYPE_CHECKING`, and its dispatch raises
+  `ImproperlyConfigured` under `REJECT` on every call. `tools/list` reads the same
+  set to decide whether the schema is closed, so such a tool also failed every
+  listing. Registration now raises drf-services' message, naming the tool. Make
+  the annotation resolvable, or register the tool with `IGNORE` or `PASSTHROUGH`,
+  which take the surface as open.
+
 These follow from drf-services 0.56.0, which this release requires.
 
 - **A service spec declaring a target lookup dispatch never calls is refused
@@ -78,6 +89,28 @@ These follow from drf-services 0.56.0, which this release requires.
   mapping, a `str` or `None` under that declaration now raises drf-services'
   `ImproperlyConfigured` after it has run, a server fault; declare
   `kind=SelectorKind.RETRIEVE` to present one value.
+
+- **A service tool with no `input_serializer` refuses arguments it does not
+  declare, and its `inputSchema` lists the ones it does.** Calls naming an
+  undeclared argument, served today with the argument dropped unread, become
+  `validation_error` results under `UnknownArguments.REJECT`, the default, such
+  as `{"non_field_errors": ["Unexpected argument(s): 'notify_owner'."]}`. This
+  server downgraded `REJECT` before dispatch for such a tool, to `PASSTHROUGH`
+  under a spreading binding and `IGNORE` under `BUNDLE`, and advertised its schema
+  open to match; it now passes the tool's `unknown_arguments` to dispatch as
+  registered, on every binding. The schema lists what drf-services' dispatch
+  declares for the spec and the binding: the target lookup's keys and, under
+  `SPREAD_AUTHOR_WINS` or `SPREAD_CALLER_WINS`, the service's own parameters,
+  required where they have no default and the spec's `kwargs=` provider does not
+  fill them, less the pool seeds, registered ones included. It is closed
+  (`additionalProperties: false`) exactly where dispatch refuses an undeclared
+  name, read from the policy dispatch receives and drf-services'
+  `declared_input_keys`, so it stays open beside a lookup or a spread service
+  taking a bare `**kwargs`, which dispatch treats as open. A serializer-less
+  `many=True` tool now refuses every key inside an item and advertises its items
+  closed. Register with `unknown_arguments=UnknownArguments.IGNORE` to keep the
+  old behaviour
+  ([#169](https://github.com/Artui/djangorestframework-mcp-server/issues/169)).
 
 ### Fixed
 
@@ -211,6 +244,16 @@ These follow from drf-services 0.56.0, which this release requires.
   message `Invalid arguments` and DRF's `detail` as raised, with `failedStep`
   naming the step, from a service step and a selector step alike. An atomic
   chain rolls back the steps before it, as for any mapped step error.
+- **A target lookup's parameter that a precondition or the service marks
+  `NotClientInput` is no longer advertised.** A service tool merges its target
+  lookup's parameters into its `inputSchema`, reflected from the lookup alone, so
+  a key the lookup names plainly was listed even where another callable in the
+  call owns it. drf-services drops the caller's value for it before the lookup
+  reads it, and `REJECT` refuses it, so the schema asked for an argument the call
+  then threw away or refused. The merge now subtracts drf-services'
+  `server_owned_keys` for the spec, less the `input_serializer`'s own fields: a
+  field of the same name is the caller's input, validated into `data`, and stays
+  advertised.
 
 ## [0.51.0] — 2026-10-06
 

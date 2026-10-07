@@ -54,10 +54,6 @@ from rest_framework_mcp.registry.types.url_kwarg import UrlKwarg
 from rest_framework_mcp.schema.types.agent_conventions import AgentConventions
 from rest_framework_mcp.schema.utils import declares_default, end_sentence, required_arguments
 
-_SPREAD_BINDINGS = frozenset(
-    {ArgumentBinding.SPREAD_AUTHOR_WINS, ArgumentBinding.SPREAD_CALLER_WINS}
-)
-
 
 def split_url_kwargs(
     arguments: dict[str, Any],
@@ -185,18 +181,18 @@ def split_query_params(
     return params, values
 
 
-def binding_input_serializer(binding: Any) -> type | None:
-    """The serializer a binding actually validates ``arguments`` against.
+def binding_input_serializer(binding: SelectorToolBinding | ChainToolBinding) -> type | None:
+    """The serializer a selector or chain binding validates ``arguments`` against.
 
-    A service tool uses ``spec.input_serializer``, a selector tool the MCP-only
-    ``binding.input_serializer``, a chain tool its ``resolved_input_serializer``.
-    ``None`` means there is nothing to validate against.
+    A selector tool uses the MCP-only ``binding.input_serializer``, a chain tool
+    its ``resolved_input_serializer``. ``None`` means there is nothing to
+    validate against. A service tool is not asked: drf-services validates its
+    ``spec.input_serializer`` and checks unknown arguments against the set the
+    spec declares, with or without one.
     """
     if isinstance(binding, SelectorToolBinding):
         return binding.input_serializer
-    if isinstance(binding, ChainToolBinding):
-        return binding.resolved_input_serializer
-    return binding.spec.input_serializer
+    return binding.resolved_input_serializer
 
 
 def advertises_closed_schema(binding: Any) -> bool:
@@ -209,21 +205,43 @@ def advertises_closed_schema(binding: Any) -> bool:
     governs the keys inside each item there, which ``advertises_closed_items``
     answers. Everything below describes the arguments of every other binding.
 
-    ``REJECT`` is a silent no-op for a serializer-less binding —
-    ``services_dispatch_policies`` downgrades it and
-    ``build_validated_input_serializer`` short-circuits before the
-    unknown-key check — so advertising a closed schema there would be a lie.
+    A **service** tool is closed exactly where its dispatch refuses an
+    undeclared name, and the answer is read the way dispatch reads it rather
+    than restated: the ``(argument_binding, unknown_arguments)`` pair
+    ``services_dispatch_policies`` hands ``dispatch_spec``, and drf-services'
+    ``declared_input_keys`` for the spec under that binding, which is the set
+    its ``resolve_unknown_arguments`` refuses against. Two conjuncts, one
+    branch arc, so each names the test that fails without it:
 
-    A **service** tool needs one further condition. Its unknown-argument check
-    is not run here but by the sister package, against the key set the spec
-    declares; that set is not always enumerable — the one lookup dispatch
-    calls (``collection_selector_spec`` when declared, else
-    ``instance_selector_spec``, and neither on ``many=True``) leaves it open
-    when it takes a bare ``**kwargs`` or carries a ``filter_set`` — and an
-    open set is answered by accepting and silently dropping every undeclared
-    key. Where nothing is enforced, nothing closed may be advertised. A lookup
-    dispatch never calls cannot open it
-    (``test_an_open_lookup_dispatch_never_calls_leaves_the_schema_closed``).
+    - the policy dispatch receives is ``REJECT``: ``IGNORE`` and
+      ``PASSTHROUGH`` serve an undeclared name. The ``IGNORE`` and
+      ``PASSTHROUGH`` rows of
+      ``test_the_advertised_properties_are_the_keys_dispatch_admits``.
+    - the declared set is enumerable under the binding dispatch runs: a target
+      lookup taking a bare ``**kwargs`` or carrying a ``filter_set`` opens it,
+      and so does a spread service's own bare ``**kwargs``, and an open set is
+      answered by serving every undeclared name. The ``var-keyword`` rows under
+      ``SPREAD_*`` and
+      ``test_a_bare_var_keyword_keeps_the_schema_open_and_receives_every_key``;
+      passing the binding is what makes ``BUNDLE`` close the same service.
+
+    An ``input_serializer`` is not a condition: without one, drf-services
+    declares the target lookup's keys and, under a ``SPREAD_*`` binding, the
+    service's own parameters, and ``REJECT`` refuses everything else
+    (``test_a_serializer_less_service_refuses_an_undeclared_argument``).
+    ``build_service_tool_input_schema`` lists the same set, so the properties of
+    a closed schema are the names a call may carry
+    (``test_the_advertised_properties_are_the_keys_dispatch_admits``, over
+    every binding and policy).
+
+    A **selector** or **chain** binding enforces ``REJECT`` in this package,
+    against its own input serializer (``build_validated_input_serializer``), so
+    it is closed under ``REJECT`` with one to validate against, and open without
+    one, where nothing checks the keys. The same two conjuncts, each held by its
+    own test: the policy by
+    ``test_selector_tool_schema_stays_open_under_a_permissive_policy``, and the
+    serializer by
+    ``test_selector_tool_schema_additional_properties_true_when_serializerless_reject``.
     """
     if takes_list_payload(binding):
         return True
@@ -251,21 +269,27 @@ def takes_list_payload(binding: Any) -> bool:
 
 
 def _enforces_unknown_keys(binding: Any) -> bool:
-    if binding.unknown_arguments is not UnknownArguments.REJECT:
-        return False
-    if binding_input_serializer(binding) is None:
-        return False
     spec: Any = getattr(binding, "spec", None)
-    if not isinstance(spec, ServiceSpec):
-        # Selector and chain bindings enforce the closed set in this package,
-        # via ``build_validated_input_serializer``, so the guarantee holds.
-        return True
-    # Asked of the sister package rather than recomputed here: this is the
-    # exact predicate its dispatch consults, and a second implementation of it
-    # would drift into advertising what the runtime stopped enforcing. The
-    # serializer only ever *adds* declared names, so it cannot change whether
-    # the set is enumerable and is not needed for the question.
-    return declared_input_keys(spec, serializer=None) is not None
+    if isinstance(spec, ServiceSpec):
+        # Asked of the sister package with the pair its dispatch is handed,
+        # rather than recomputed here: a second reading would drift into
+        # advertising what the runtime stopped enforcing. Neither the serializer
+        # nor the reserved seeds can change whether the set is enumerable, since
+        # one only adds declared names and the other only removes them, so the
+        # question needs neither.
+        argument_binding, unknown_arguments = services_dispatch_policies(binding)
+        return (
+            unknown_arguments is UnknownArguments.REJECT
+            and declared_input_keys(spec, serializer=None, argument_binding=argument_binding)
+            is not None
+        )
+    # Selector and chain bindings enforce the closed set in this package, via
+    # ``build_validated_input_serializer``, which has nothing to check against
+    # without a serializer.
+    return (
+        binding.unknown_arguments is UnknownArguments.REJECT
+        and binding_input_serializer(binding) is not None
+    )
 
 
 def validate_output_format(params: dict[str, Any]) -> JsonRpcError | None:
@@ -302,27 +326,22 @@ def validate_output_format(params: dict[str, Any]) -> JsonRpcError | None:
 def services_dispatch_policies(binding: Any) -> tuple[ArgumentBinding, UnknownArguments]:
     """The ``(argument_binding, unknown_arguments)`` to pass ``dispatch_spec``.
 
-    The binding value passes straight through; only ``unknown_arguments`` is
-    refined. A **selector** is already validated by the MCP layer against its own
-    ``inputSchema``, which is wider than the selector signature (filter /
-    ordering / pagination), so the neutral core must not re-reject: always
-    ``IGNORE``. A **service with no ``input_serializer``** has an empty declared
-    set, so rejecting against it is never right — ``PASSTHROUGH`` under the
-    ``SPREAD_*`` bindings (raw args still reach the callable), ``IGNORE`` under
-    ``BUNDLE``. Otherwise the binding's own value carries over.
+    The binding value passes straight through. A **selector** is already
+    validated by the MCP layer against its own ``inputSchema``, which is wider
+    than the selector signature (filter / ordering / pagination), so the
+    neutral core must not re-reject: always ``IGNORE``. A **service** passes its
+    registered ``unknown_arguments`` through unchanged, with or without an
+    ``input_serializer``: drf-services declares a serializer-less spec's input
+    itself, the target lookup's keys and, under a ``SPREAD_*`` binding, the
+    service's own parameters (``declared_input_keys``), so ``REJECT`` refuses
+    a name outside that set as it does beside a serializer.
+    ``advertises_closed_schema`` reads this pair, so the schema closes where
+    this policy refuses.
     """
     argument_binding = binding.argument_binding
     if not isinstance(binding.spec, ServiceSpec):
         return argument_binding, UnknownArguments.IGNORE
-    if binding.spec.input_serializer is None:
-        unknown = (
-            UnknownArguments.PASSTHROUGH
-            if argument_binding in _SPREAD_BINDINGS
-            else UnknownArguments.IGNORE
-        )
-    else:
-        unknown = binding.unknown_arguments
-    return argument_binding, unknown
+    return argument_binding, binding.unknown_arguments
 
 
 def permission_verdict(perm: Any, result: Any, *, method: str, effect: str) -> Any:

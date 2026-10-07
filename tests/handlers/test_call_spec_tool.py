@@ -43,7 +43,8 @@ def test_service_tool_returns_a_tool_result() -> None:
         name="things.create",
         spec=ServiceSpec(service=lambda **_: {"ok": True}, atomic=False),
     )
-    result = server.call_tool("things.create", {"x": 1}, user=None)
+    # No argument: the spec declares none, so ``REJECT`` would refuse one.
+    result = server.call_tool("things.create", {}, user=None)
     assert isinstance(result, ToolResult)
     assert result.is_error is False
     assert result.structured_content == {"ok": True}

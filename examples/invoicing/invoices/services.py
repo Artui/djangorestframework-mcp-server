@@ -10,6 +10,7 @@ from __future__ import annotations
 from typing import Any
 
 from rest_framework_services.exceptions.service_error import ServiceError
+from rest_framework_services.exceptions.service_validation_error import ServiceValidationError
 
 from invoices.models import Invoice
 
@@ -49,5 +50,25 @@ def set_invoice_amount(*, instance: Invoice, data: dict[str, Any]) -> Invoice:
     ``idempotentHint``.
     """
     instance.amount_cents = data["amount_cents"]
+    instance.save(update_fields=["amount_cents"])
+    return instance
+
+
+def apply_credit(*, instance: Invoice, credit_cents: int) -> Invoice | None:
+    """Take ``credit_cents`` off an invoice; ``None`` when the credit settles it.
+
+    ``instance`` is the row ``invoice_by_number`` found. There is no input
+    serializer: the tool spreads its arguments into this signature, so
+    ``credit_cents`` is the tool's own argument, listed in its ``inputSchema``
+    and required because it has no default. A credit covering the whole amount
+    deletes the invoice and presents nothing, which the spec declares with
+    ``allow_none=True``.
+    """
+    if credit_cents <= 0:
+        raise ServiceValidationError({"credit_cents": ["A credit must be positive."]})
+    if credit_cents >= instance.amount_cents:
+        instance.delete()
+        return None
+    instance.amount_cents -= credit_cents
     instance.save(update_fields=["amount_cents"])
     return instance

@@ -778,25 +778,52 @@ forms) accept three behavior knobs:
     `detail.non_field_errors`, and the outer `inputSchema` advertises
     `"additionalProperties": false`.
 
-    **The closed schema is advertised only where the runtime actually closes
-    the set**, which takes three things, not one:
+    **The closed schema is advertised exactly where the runtime refuses an
+    undeclared name.** A **service** tool hands its `unknown_arguments` to
+    drf-services' dispatch as registered, with or without an
+    `input_serializer`, and the `inputSchema` lists the set dispatch declares
+    for the spec under the tool's `argument_binding`:
 
-    1. `REJECT` itself;
-    2. an `input_serializer` to validate against — a serializer-less binding
-       has no declared field set, so `REJECT` cannot fire;
-    3. for a **service** tool, a key set the spec can enumerate. The lookup
-       dispatch calls (the `collection_selector_spec` when declared, else the
-       `instance_selector_spec`, and neither on `many=True`) leaves it open
-       when it takes a bare `**kwargs` or carries a `filter_set`, and an open
-       set is answered by accepting and silently dropping every undeclared
-       key. A lookup dispatch never calls cannot open it.
+    1. the `input_serializer`'s fields, when there is one;
+    2. the keys of the target lookup dispatch calls (the
+       `collection_selector_spec` when declared, else the
+       `instance_selector_spec`; a `many=True` spec has neither);
+    3. without an `input_serializer`, under `SPREAD_AUTHOR_WINS` or
+       `SPREAD_CALLER_WINS`, the service's own parameters, which are its
+       input there. A parameter without a default is required, unless the
+       spec's `kwargs=` provider may fill it.
 
-    Any of the three missing leaves the schema open
-    (`"additionalProperties": true`), on purpose: where nothing is enforced,
-    nothing closed may be advertised. Telling a client a typo'd field will be
-    refused, while the server takes it and throws it away, is the worse
-    failure. Selector and chain bindings enforce the closed set in this
-    package, so the third condition is a service-tool concern only.
+    Less every name the server fills: the pool seeds, the ones registered with
+    [`pool_seeds=`](#pool-seeds), and every key the service, a precondition or
+    the target lookup marks `NotClientInput`, which dispatch drops from the
+    caller's input. A lookup parameter a precondition hides is therefore not
+    advertised, though the lookup names it; an `input_serializer` field of the
+    same name is, because it is the caller's input to `data`.
+
+    So `def archive_task(*, instance, reason)` behind a `pk` lookup, under
+    `SPREAD_AUTHOR_WINS`, advertises `pk` and `reason` with
+    `"additionalProperties": false`, and a call adding `notify_owner` is a
+    `validation_error` naming it. Bundled, it advertises `pk` alone, because
+    nothing then reads `reason` by name, and refuses `reason` the same way.
+
+    The schema stays open (`"additionalProperties": true`) where dispatch
+    serves every name: a target lookup taking a bare `**kwargs` or carrying a
+    `filter_set`, or a spread service taking a bare `**kwargs`, which then
+    receives every key the caller sent. Telling a client a typo'd field will
+    be refused, while the server takes it and throws it away, is the worse
+    failure. A `**kwargs` whose annotation does not resolve at runtime (an
+    `Unpack[...]` of a `TypedDict` imported under `TYPE_CHECKING`) leaves the
+    set unknown, so `REJECT` cannot be enforced against it and registration
+    raises `ImproperlyConfigured`.
+
+    Earlier releases downgraded `REJECT` before dispatch for a service with no
+    `input_serializer` and advertised its schema open to match, so an argument
+    the service never declared was dropped without a word. That downgrade is
+    gone; `unknown_arguments=UnknownArguments.IGNORE` keeps the old behaviour.
+
+    **Selector and chain** bindings enforce the closed set in this package,
+    against their own input serializer, so they are closed under `REJECT` with
+    one and open without one, where nothing checks the keys.
   - `UnknownArguments.PASSTHROUGH` — `"additionalProperties": true`;
     unknown keys survive validation and are merged onto the validated
     payload before binding.

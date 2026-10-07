@@ -143,10 +143,11 @@ def test_invoicing_field_selection_is_per_item_and_refuses_the_envelope() -> Non
 
 
 # Runs inside the invoicing project, like the script above: the tool listing and
-# five ``tools/call`` posts, printed as JSON for the assertions below. ``post``
+# ``tools/call`` posts, printed as JSON for the assertions below. ``post``
 # reads ``result`` and nothing else, so a call answered with a JSON-RPC error
-# fails the script rather than reaching an assertion.
-_INVOICING_LOOKUP_EMPTY_IDEMPOTENT_SEEDS = textwrap.dedent(
+# fails the script rather than reaching an assertion. The client half is shared
+# by the two scripts that follow; each adds the calls it prints.
+_INVOICING_CLIENT = textwrap.dedent(
     """
     import json
     import django
@@ -187,8 +188,13 @@ _INVOICING_LOOKUP_EMPTY_IDEMPOTENT_SEEDS = textwrap.dedent(
         "io.modelcontextprotocol/clientInfo": {"name": "smoke", "version": "0"},
         "io.modelcontextprotocol/clientCapabilities": {},
     }})
+    tools = {tool["name"]: tool for tool in listed["tools"]}
+    """
+)
+_INVOICING_LOOKUP_EMPTY_IDEMPOTENT_SEEDS = _INVOICING_CLIENT + textwrap.dedent(
+    """
     print(json.dumps({
-        "tools": {tool["name"]: tool for tool in listed["tools"]},
+        "tools": tools,
         "set_amount": call("invoices.set_amount", {"number": "INV-A", "amount_cents": 250}),
         "no_number": call("invoices.set_amount", {"amount_cents": 250}),
         "find_miss": call("invoices.find", {"number": "INV-404"}),
@@ -276,3 +282,59 @@ def test_invoicing_demonstrates_lookup_empty_result_idempotency_and_seeds() -> N
         "message": "Invalid arguments",
         "detail": {"amount_cents": ["Ensure this value is greater than or equal to 0."]},
     }
+
+
+_INVOICING_SPREAD_CLOSED_AND_EMPTY = _INVOICING_CLIENT + textwrap.dedent(
+    """
+    print(json.dumps({
+        "tool": tools["invoices.apply_credit"],
+        "partial": call("invoices.apply_credit", {"number": "INV-A", "credit_cents": 40}),
+        "typo": call(
+            "invoices.apply_credit", {"number": "INV-A", "credit_cents": 5, "memo": "goodwill"}
+        ),
+        "settles": call("invoices.apply_credit", {"number": "INV-B", "credit_cents": 50}),
+        "remaining": dict(Invoice.objects.values_list("number", "amount_cents")),
+    }))
+    """
+)
+
+
+def test_invoicing_demonstrates_a_closed_spread_schema_and_a_declared_empty_result() -> None:
+    """``invoices.apply_credit``, a service tool with no input serializer.
+
+    Its arguments are spread into the service's own parameters, so the
+    ``inputSchema`` lists ``credit_cents`` beside the lookup's ``number`` and,
+    under the default ``REJECT``, is closed: a call naming ``memo`` is a
+    ``validation_error`` naming it, and nothing ran. The spec declares
+    ``allow_none=True`` with no output re-read, so its ``outputSchema`` admits
+    the ``{}`` that a credit settling the invoice is served as.
+    """
+    result = subprocess.run(
+        [sys.executable, "-c", _INVOICING_SPREAD_CLOSED_AND_EMPTY],
+        cwd=_EXAMPLES_DIR / "invoicing",
+        env={**os.environ, "DJANGO_SETTINGS_MODULE": "invoicing.settings"},
+        capture_output=True,
+        text=True,
+    )
+    assert result.returncode == 0, result.stderr
+    replies = json.loads(result.stdout)
+
+    input_schema = replies["tool"]["inputSchema"]
+    assert set(input_schema["properties"]) == {"number", "credit_cents"}
+    assert set(input_schema["required"]) == {"number", "credit_cents"}
+    assert input_schema["additionalProperties"] is False
+    assert replies["partial"]["structuredContent"]["amount_cents"] == 60
+
+    typo = replies["typo"]
+    assert typo["isError"] is True
+    assert json.loads(typo["content"][0]["text"])["error"] == {
+        "type": "validation_error",
+        "message": "Invalid arguments",
+        "detail": {"non_field_errors": ["Unexpected argument(s): 'memo'."]},
+    }
+
+    assert {"maxProperties": 0} in replies["tool"]["outputSchema"]["anyOf"]
+    assert not replies["settles"].get("isError")
+    assert replies["settles"]["structuredContent"] == {}
+    # The refused call took nothing off; the settling one deleted ``INV-B``.
+    assert replies["remaining"] == {"INV-A": 60}

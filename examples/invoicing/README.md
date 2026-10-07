@@ -10,6 +10,8 @@ MCP using every public registration surface of
 | `register_service_tool`        | `invoices.mark_sent` — flips the `sent` flag.                |
 | Argument validation            | `invoices.create` with a negative `amount_cents` — an `isError` result of type `validation_error` with the serializer's errors under `detail`, not a JSON-RPC error.|
 | `register_service_tool`        | `invoices.set_amount` — targets an invoice by number through `instance_selector_spec`, so `number` is in its `inputSchema`, required because the lookup gives it no default, and a call without it is a `validation_error` result; `idempotent=True` lists `idempotentHint: true`; with no output re-read selector its `outputSchema` keeps a strict `required`.|
+| `argument_binding=SPREAD_AUTHOR_WINS` with no `input_serializer` | `invoices.apply_credit` — the arguments are spread into `apply_credit(*, instance, credit_cents)`, so its `inputSchema` lists `credit_cents` beside the lookup's `number` and, under the default `unknown_arguments=REJECT`, is closed (`additionalProperties: false`): a call adding `memo` is a `validation_error` naming it, not an argument dropped unread.|
+| `ServiceSpec(allow_none=True)` | `invoices.apply_credit` — no output re-read, so the service's own return is presented; a credit that settles the invoice returns `None`, served as `structuredContent: {}`, which its `outputSchema` admits.|
 | `register_selector_tool`       | `invoices.list` — list with `FilterSet`, ordering, pagination, and a `QueryParam` for field selection.|
 | `register_selector_tool`       | `invoices.find` — an `allow_none` RETRIEVE: a miss is `structuredContent: {}`, which its `outputSchema` admits.|
 | `MCPServer(pool_seeds=)`       | `invoices.outstanding` — reads the mount's `currency` seed, which its `inputSchema` does not advertise; a client `currency` argument cannot replace it.|
@@ -127,14 +129,23 @@ curl -s -X POST http://localhost:8000/mcp/ $H \
   -d '{"jsonrpc":"2.0","id":6,"method":"tools/call",
        "params":{"name":"invoices.mark_sent","arguments":{"pk":1}}}'
 
+# Take a credit off an invoice. The tool has no input serializer: its
+# arguments are the service's own parameters, and the schema is closed, so
+# adding e.g. "memo" is refused as an `isError` `validation_error` naming it.
+# A credit covering the whole amount deletes the invoice and answers `{}`.
+curl -s -X POST http://localhost:8000/mcp/ $H \
+  -d '{"jsonrpc":"2.0","id":7,"method":"tools/call",
+       "params":{"name":"invoices.apply_credit",
+                 "arguments":{"number":"INV-B","credit_cents":100}}}'
+
 # Read it back via the resource template
 curl -s -X POST http://localhost:8000/mcp/ $H \
-  -d '{"jsonrpc":"2.0","id":7,"method":"resources/read",
+  -d '{"jsonrpc":"2.0","id":8,"method":"resources/read",
        "params":{"uri":"invoices://1"}}'
 
 # Render the email prompt
 curl -s -X POST http://localhost:8000/mcp/ $H \
-  -d '{"jsonrpc":"2.0","id":8,"method":"prompts/get",
+  -d '{"jsonrpc":"2.0","id":9,"method":"prompts/get",
        "params":{"name":"compose_invoice_email","arguments":{"pk":"1"}}}'
 ```
 

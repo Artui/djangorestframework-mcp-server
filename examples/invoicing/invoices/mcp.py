@@ -29,9 +29,15 @@ from invoices.serializers import (
     SelectableInvoiceSerializer,
     SetAmountInputSerializer,
 )
-from invoices.services import create_invoice, mark_invoice_sent, set_invoice_amount
+from invoices.services import (
+    apply_credit,
+    create_invoice,
+    mark_invoice_sent,
+    set_invoice_amount,
+)
 from rest_framework_mcp import (
     AgentConventions,
+    ArgumentBinding,
     MCPServer,
     PromptArgument,
     PromptMessage,
@@ -131,6 +137,37 @@ def build_server() -> MCPServer:
             idempotent=True,
         ),
         description="Set the amount of the invoice with the given number.",
+    )
+
+    server.register_service_tool(
+        name="invoices.apply_credit",
+        spec=ServiceSpec(
+            permission_classes=[AllowAny],
+            service=apply_credit,
+            # No input serializer: the arguments are spread into the service's
+            # own parameters, so the ``inputSchema`` lists ``credit_cents``
+            # beside the lookup's ``number``. Under the default
+            # ``unknown_arguments=REJECT`` that set is closed
+            # (``additionalProperties: false``), and a call naming anything else
+            # is a ``validation_error`` rather than an argument dropped unread.
+            instance_selector_spec=SelectorSpec(
+                kind=SelectorKind.RETRIEVE, selector=invoice_by_number
+            ),
+            # No ``selector`` here, so nothing is re-read: the service's own
+            # return is presented, and a credit that settles the invoice
+            # returns ``None``. ``allow_none=True`` says so, and the
+            # ``outputSchema`` admits the ``{}`` that call is served as.
+            output_selector_spec=SelectorSpec(
+                kind=SelectorKind.RETRIEVE,
+                output_serializer=InvoiceOutputSerializer,
+            ),
+            allow_none=True,
+        ),
+        argument_binding=ArgumentBinding.SPREAD_AUTHOR_WINS,
+        description=(
+            "Take a credit off the invoice with the given number; "
+            "an empty object when the credit settles it."
+        ),
     )
 
     # ----- Selector tool (read with filter / order / paginate / select) -----
