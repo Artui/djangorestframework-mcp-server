@@ -71,17 +71,22 @@ def build_tool_result(
         binding_name: Names the binding in that mismatch message.
 
     A ``None`` payload is a result with **nothing to present**: an
-    ``allow_none`` RETRIEVE that found no row, or a service whose output
-    re-read selector found none. It is served as ``{}``, both as
-    ``structuredContent`` and as the text block, because MCP requires
-    structured content to be an object and asks the text block to carry the
-    same JSON. This is the one place the rule lives, so a selector, a service
-    and a chain answer it the same way on every entry point. The advertised
-    ``outputSchema`` of those tools admits the ``{}``
-    (``build_output_schema(may_be_empty=...)``). A service with no re-read
-    selector that returns ``None`` is served ``{}`` too, against a schema that
-    still requires its fields: the documented limit, since nothing it declares
-    says whether it can return ``None``.
+    ``allow_none`` RETRIEVE that found no row, a service whose output re-read
+    selector found none, or a service with no re-read declaring
+    ``ServiceSpec(allow_none=True)`` that returned ``None``. It is served as
+    ``{}``, both as ``structuredContent`` and as the text block, because MCP
+    requires structured content to be an object and asks the text block to
+    carry the same JSON. This is the one place the rule lives, so a selector, a
+    service and a chain answer it the same way on every entry point. The
+    advertised ``outputSchema`` of those tools admits the ``{}``
+    (``build_output_schema(may_be_empty=...)``). A service with no re-read that
+    returns ``None`` without declaring ``allow_none`` is served ``{}`` too,
+    against a schema that still requires its fields, because drf-services
+    presents an undeclared ``None`` rather than refusing it
+    (``test_an_undeclared_none_is_still_served_empty_against_a_strict_schema``);
+    ``allow_none=True``
+    is the declaration that makes the schema admit it
+    (``test_a_service_declaring_allow_none_serves_an_empty_object_its_schema_admits``).
     """
     if content_kind is not ToolContentKind.TEXT:
         blocks = build_content_blocks(

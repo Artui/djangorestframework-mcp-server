@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from rest_framework_services import spec_to_json_schema
+from rest_framework_services import provider_keys, server_owned_keys, spec_to_json_schema
 from rest_framework_services.types.pool_seeds import DEFAULT_POOL_SEEDS, PoolSeeds
 from rest_framework_services.types.service_spec import ServiceSpec
 
@@ -17,12 +17,30 @@ def build_service_tool_input_schema(
 ) -> dict[str, Any]:
     """Build the JSON Schema for a service tool's ``inputSchema``.
 
-    The shape is ``spec.input_serializer`` verbatim (``spec.partial is True`` drops
-    ``required``, mirroring the dispatch-time partial-validation contract), plus any
-    registered [`UrlKwarg`][rest_framework_services.types.url_kwarg.UrlKwarg] properties
-    merged in.
+    The properties are the arguments drf-services' dispatch admits for the spec
+    under the binding's ``argument_binding`` (its ``declared_input_keys``), so a
+    schema ``tools/list`` closes lists every name a call may carry:
 
-    A ``UrlKwarg(required=True)`` joins ``required`` and ``spec.partial`` does
+    - With an ``input_serializer``, its schema verbatim (``spec.partial is True``
+      drops ``required``, mirroring the dispatch-time partial-validation
+      contract).
+    - Without one, drf-services' ``spec_to_json_schema`` given the binding. Under
+      ``BUNDLE`` nothing reads the caller's input but the target lookup, so the
+      service adds no property; under a ``SPREAD_*`` binding the service's own
+      parameters are its input and are listed, less every name the server
+      fills: drf-services' seeds, the ones this server registers, and every
+      key a callable in the call marks ``NotClientInput``. A parameter without a
+      default is required, unless the spec's ``kwargs=`` provider may fill it,
+      as drf-services' ``provider_keys`` reads the provider; one whose keys
+      cannot be read may fill any. A bare ``**kwargs`` lists what the service
+      names, and the set it opens is left to ``additionalProperties``. That
+      reflection merges ``metadata["json_schema"]["input"]`` on top, as the
+      ``many=True`` shape below does; the serializer's shape above does not
+      read it.
+
+    Registered [`UrlKwarg`][rest_framework_mcp.registry.types.url_kwarg.UrlKwarg]
+    and ``QueryParam`` properties are merged over either. A
+    ``UrlKwarg(required=True)`` joins ``required`` and ``spec.partial`` does
     **not** relax it: partial validation is about the *payload* the serializer
     checks, and a URL kwarg is routed to the off-HTTP ``view.kwargs`` at
     dispatch rather than into that payload.
@@ -35,17 +53,17 @@ def build_service_tool_input_schema(
     builds that list serializer, and a wrapper assembled here would advertise an
     unbounded list. The item inside is the same ``serializer_to_json_schema`` call
     either way. The reflection also merges ``metadata["json_schema"]["input"]``
-    on top, which the single-item shape above does not read.
+    on top. It is given the binding too, which it does not read for ``many``,
+    so the two shapes cannot be handed different bindings.
 
     **A single-item spec also advertises its target lookup.** drf-services hands
     the same ``params`` it validates against the input serializer to the one
     target lookup dispatch calls, and its unknown-argument check admits what
     that lookup declares (``declared_input_keys``), so ``{"pk": 1, "title": ...}``
     is served. That is the ``collection_selector_spec`` when one is declared,
-    else the ``instance_selector_spec`` (``schema.utils.target_lookup``):
-    drf-services never runs an instance lookup beside a collection lookup, and
-    ``UnknownArguments.REJECT`` refuses its keys there, so they are not
-    advertised. The lookup is described by the same ``spec_to_json_schema``
+    else the ``instance_selector_spec`` (``schema.utils.target_lookup``); a spec
+    declaring a lookup dispatch would not call is refused when it is built. The
+    lookup is described by the same ``spec_to_json_schema``
     reflection a selector tool advertises its own parameters with
     (``schema.utils.selector_inputs``): the selector's signature, minus the
     ``request`` / ``user`` / ``view`` seeds and every name this server fills --
@@ -65,18 +83,21 @@ def build_service_tool_input_schema(
 
     Args:
         binding: The service tool binding to describe.
-        pool_seeds: The server's registered seeds, which fill a lookup parameter
-            of the same name, so it is not asked of the client.
+        pool_seeds: The server's registered seeds, which fill a lookup or service
+            parameter of the same name, so it is not asked of the client.
     """
     spec = binding.spec
     if spec.many:
         # ``phase="input"`` never answers ``None`` (only the output phase is
         # nullable), so ``or {}`` narrows the type and never substitutes.
-        schema: dict[str, Any] = spec_to_json_schema(spec, phase="input") or {}
+        schema: dict[str, Any] = (
+            spec_to_json_schema(spec, phase="input", argument_binding=binding.argument_binding)
+            or {}
+        )
     else:
         schema = _with_target_lookups(
             spec,
-            build_input_schema(spec.input_serializer, partial=spec.partial is True),
+            _declared_input(binding, pool_seeds=pool_seeds),
             url_kwargs=binding.url_kwargs,
             pool_seeds=pool_seeds,
         )
@@ -99,6 +120,48 @@ def build_service_tool_input_schema(
     return merged
 
 
+def _declared_input(binding: ToolBinding, *, pool_seeds: PoolSeeds) -> dict[str, Any]:
+    """The input ``binding``'s spec declares itself, before its target lookup is merged in.
+
+    An ``input_serializer``'s schema, or, without one, drf-services' reflection
+    under the binding dispatch runs, which lists a spreading service's own
+    parameters. ``supplied=`` is the reserved seeds, the built-in ones and the
+    ones this server registers, because dispatch subtracts exactly those from
+    what it declares (``reserved=pool_seeds.reserved``): one left out would be
+    listed and then stripped from the call, and passing any is what makes a
+    parameter without a default required (``supplied=None`` would leave every
+    parameter optional: ``test_a_spread_service_lists_its_own_parameters``;
+    the built-in seeds alone would list a registered one:
+    ``test_a_registered_seed_is_not_listed_as_a_service_parameter``). A name
+    the spec's provider fills, or may decline, stays listed, since dispatch
+    admits it, and is only not required; an untyped provider may fill any
+    name, so none is. Each of the three readings is a row of
+    ``test_a_name_the_services_provider_fills_is_offered_but_not_required``.
+    """
+    spec = binding.spec
+    if spec.input_serializer is not None:
+        return build_input_schema(spec.input_serializer, partial=spec.partial is True)
+    schema: dict[str, Any] = (
+        spec_to_json_schema(
+            spec,
+            phase="input",
+            argument_binding=binding.argument_binding,
+            supplied=pool_seeds.reserved,
+        )
+        or {}
+    )
+    keys = provider_keys(spec.kwargs)
+    required: list[str] = (
+        []
+        if keys is None
+        else [n for n in schema.get("required", []) if n not in keys.filled | keys.declinable]
+    )
+    trimmed = {key: value for key, value in schema.items() if key != "required"}
+    if required:
+        trimmed["required"] = required
+    return trimmed
+
+
 def _with_target_lookups(
     spec: ServiceSpec[Any, Any, Any],
     schema: dict[str, Any],
@@ -109,12 +172,9 @@ def _with_target_lookups(
     """``schema`` with the reflected inputs of the target lookup dispatch calls merged under it.
 
     That lookup (``schema.utils.target_lookup``) is the one drf-services'
-    ``declared_input_keys`` reads to decide which keys the bind admits, so
-    beside a collection lookup the instance one is neither advertised nor
-    admitted: ``test_the_advertised_lookups_are_the_keys_the_bind_admits``
-    holds the two sides together, and
-    ``test_beside_a_collection_lookup_only_the_collection_lookup_is_required``
-    the schema alone. A key the serializer already declares keeps the
+    ``declared_input_keys`` reads to decide which keys the bind admits:
+    ``test_the_advertised_lookups_are_the_keys_the_bind_admits`` holds the two
+    sides together. A key the serializer already declares keeps the
     serializer's schema, so the reflected one is written first and overlaid
     (``test_a_serializer_field_keeps_its_property_and_the_lookup_its_requiredness``
     holds both halves), and a lookup asking nothing leaves ``schema`` as it came
@@ -124,6 +184,20 @@ def _with_target_lookups(
     author-wins whatever the binding says, because drf-services applies that
     provider last under every binding
     (``test_a_target_lookups_provider_outranks_the_caller_under_every_binding``).
+
+    **A key the service or one of its preconditions marks ``NotClientInput`` is
+    not advertised**, though the lookup names it plainly: drf-services owns it
+    for the whole call (``server_owned_keys``), so dispatch drops the caller's
+    value before the lookup reads it and ``REJECT`` refuses it, and asking for
+    it would invite a value nobody receives. The reflection of the lookup alone
+    cannot see a marker on another callable, so the set is asked of the spec
+    dispatch runs. A property ``schema`` brought, which for a serializer is one
+    of its fields, is not subtracted: drf-services keeps a field of an owned
+    name as the caller's input and validates it into ``data``. Each half is
+    held by one of
+    ``test_a_lookup_key_a_precondition_hides_is_not_advertised_but_a_field_of_that_name_is``'s
+    two schemas: the subtraction, from the properties and from what the
+    lookup requires, and the field names left out of it.
     """
     lookup = target_lookup(spec)
     if lookup is None:
@@ -132,8 +206,15 @@ def _with_target_lookups(
     properties: dict[str, Any] = dict(reflected.get("properties", {}))
     if not properties:
         return schema
-    properties.update(schema.get("properties", {}))
-    required: list[str] = [*reflected.get("required", []), *schema.get("required", [])]
+    own: dict[str, Any] = schema.get("properties", {})
+    properties.update(own)
+    hidden = server_owned_keys(spec) - own.keys()
+    properties = {key: value for key, value in properties.items() if key not in hidden}
+    required: list[str] = [
+        key
+        for key in (*reflected.get("required", []), *schema.get("required", []))
+        if key not in hidden
+    ]
     merged: dict[str, Any] = {**schema, "type": "object", "properties": properties}
     if required:
         merged["required"] = list(dict.fromkeys(required))

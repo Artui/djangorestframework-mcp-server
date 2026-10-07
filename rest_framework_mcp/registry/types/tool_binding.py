@@ -13,6 +13,12 @@ from rest_framework_services import (
     UnsetType,
     build_audience_projection,
 )
+
+# Not a top-level export of the sister package, like the ``declared_input_keys``
+# ``handlers.utils`` reads. It is the one place that turns "this surface cannot
+# be read" into the ``ImproperlyConfigured`` dispatch raises under ``REJECT``, so
+# asking it here refuses at registration exactly what every call would.
+from rest_framework_services.dispatch.utils import resolve_unknown_arguments
 from rest_framework_services.types.selector_kind import SelectorKind
 from rest_framework_services.types.service_spec import ServiceSpec
 
@@ -112,13 +118,18 @@ class ToolBinding(Generic[InputT, ResultT, ExtraT]):
 
     unknown_arguments: UnknownArguments = UnknownArguments.REJECT
     """How unknown ``arguments`` keys are handled relative to the binding's
-    ``inputSchema``.
+    ``inputSchema``. Passed to drf-services' dispatch as registered, with or
+    without an ``input_serializer``.
 
     - ``REJECT`` (default) answers an ``isError`` ``validation_error`` result
       naming the unexpected keys, and advertises ``additionalProperties:
-      false`` — but **only** with an ``input_serializer`` to validate against.
-      A serializer-less binding has no declared field set, so ``REJECT`` cannot
-      fire and its schema stays open.
+      false``. Without an ``input_serializer`` the declared set is the target
+      lookup's keys and, under a ``SPREAD_*`` binding, the service's own
+      parameters, which the ``inputSchema`` lists. Where that set is open, a
+      lookup or a spread service taking a bare ``**kwargs``, or a lookup
+      carrying a ``filter_set``, nothing is refused and the schema stays open.
+      One whose ``**kwargs`` annotation cannot be resolved cannot be enforced,
+      so registration refuses it.
     - ``PASSTHROUGH`` advertises an open schema and merges unknown keys into
       the validated payload.
     - ``IGNORE`` advertises an open schema and drops them."""
@@ -230,12 +241,16 @@ class ToolBinding(Generic[InputT, ResultT, ExtraT]):
     @property
     def can_present_nothing(self) -> bool:
         """Whether a successful call can present nothing: a single-row result
-        read back through an output re-read selector, which can find no row.
+        read back through an output re-read selector, which can find no row, or
+        a single-row service declaring ``ServiceSpec(allow_none=True)``.
 
         Read by ``tools/list`` so the ``outputSchema`` admits the ``{}`` such a
-        call is served as. A service with no re-read selector answers ``False``
-        and keeps a strict schema. See
-        ``registry.types.utils.can_present_nothing``."""
+        call is served as. A service with no re-read selector and no
+        ``allow_none`` answers ``False`` and keeps a strict schema
+        (``test_a_service_with_no_output_reread_keeps_its_schema_strict``), and
+        one declaring it answers ``True``
+        (``test_a_service_declaring_allow_none_serves_an_empty_object_its_schema_admits``).
+        See ``registry.types.utils.can_present_nothing``."""
         return can_present_nothing(self.spec)
 
     @cached_property
@@ -265,6 +280,35 @@ class ToolBinding(Generic[InputT, ResultT, ExtraT]):
             include_structured_content=self.include_structured_content,
             include_output_schema=self.include_output_schema,
         )
+        self._refuse_unenforceable_reject()
+
+    def _refuse_unenforceable_reject(self) -> None:
+        """Refuse ``REJECT`` where drf-services cannot read the declared set.
+
+        A ``**kwargs`` annotation that does not resolve at runtime, on the
+        target lookup or on a service spread into its parameters, makes the
+        declared set unknown, and drf-services' dispatch raises
+        ``ImproperlyConfigured`` under ``REJECT`` on every call rather than
+        accept everything. ``tools/list`` reads the same set to decide whether
+        the schema is closed, so it would fail every listing too. Asked with an
+        empty call under the binding dispatch runs, which reads the set and
+        refuses nothing else. Each condition holds one test in
+        ``tests/registry/types/test_tool_binding_reject.py``: the policy,
+        ``test_a_permissive_policy_registers_the_same_spec_open``; the binding,
+        ``test_a_service_dispatch_never_reads_is_not_asked``.
+        """
+        if self.unknown_arguments is not UnknownArguments.REJECT:
+            return
+        try:
+            resolve_unknown_arguments(
+                self.spec,
+                {},
+                unknown_arguments=UnknownArguments.REJECT,
+                serializer=None,
+                argument_binding=self.argument_binding,
+            )
+        except ImproperlyConfigured as exc:
+            raise ImproperlyConfigured(f"Tool {self.name!r}: {exc}") from exc
 
     @property
     def service(self) -> Callable[..., ResultT]:
