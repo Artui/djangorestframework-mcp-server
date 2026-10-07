@@ -333,7 +333,7 @@ class _ProjectInput:
 
 
 class _DataclassDefault(DataclassSerializer):
-    """A dataclass input, which validates into an instance that is not overlaid.
+    """A dataclass input, whose namesake default is not taken for a left-out kwarg.
 
     The field is declared rather than generated, so it carries a default of its
     own: a generated one leaves the default to the dataclass.
@@ -384,7 +384,10 @@ async def test_a_url_kwarg_the_call_left_out_reaches_the_selector_only_as_a_name
     # does: 8, moved onto ``project_pk`` by an alias or by ``validate``, is a
     # project nobody judged, so with no default the name stays out. A
     # read-only default never reaches the validated values, and a dataclass
-    # input's values are not overlaid at all, so neither fills the name.
+    # input's is laid back with the rest of the instance, where the route's
+    # names are dropped, but is not taken as a namesake default, because
+    # registration does not count it as one (``_serializer_fills``). So
+    # neither fills the name.
     seen: list[dict[str, Any]] = []
     read: list[Any] = []
     server = _server(

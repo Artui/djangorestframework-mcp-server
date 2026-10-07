@@ -740,8 +740,15 @@ forms) accept three behavior knobs:
   `djangorestframework-services` (the transport-neutral `dispatch_spec` owns
   these policies).
   - `ArgumentBinding.BUNDLE` (default for service tools) — only
-    `data=<validated>` enters the pool. Without an `input_serializer` nothing
-    does, so a service requiring `data` is refused at registration.
+    `data=<validated>` enters a service's pool. Without an `input_serializer`
+    nothing does, so a service requiring `data` is refused at registration.
+    A selector is never handed `data` or `serializer`, under any binding:
+    drf-services' selector dispatch seeds neither and strips both from the
+    spread. So a selector tool declaring an `input_serializer` under `BUNDLE` is
+    refused at registration, because the validated payload has no way to reach
+    the selector, and so is a selector requiring `data` or `serializer` under
+    any binding. A selector takes its validated fields as parameters of their
+    own, under a spreading binding.
   - `ArgumentBinding.SPREAD_AUTHOR_WINS` (default for selector tools) — every
     key from the validated arguments is spread into the pool as a top-level
     kwarg, so selectors can declare individual parameters
@@ -768,8 +775,13 @@ forms) accept three behavior knobs:
   refused at registration. For the same reason, registration refuses a selector
   parameter named `page` or `limit`, or named by one of the tool's
   [`QueryParam`s](#query-params-read-shaping-values-the-serializer-reads), unless
-  the tool's `input_serializer` declares it as a field, whose validated value is
-  laid back over the stripped arguments.
+  the tool's `input_serializer` lays it back: a field of that name that is not
+  `read_only` and is bound to its own name (no `source` elsewhere), on a plain
+  `Serializer`, a `DataclassSerializer` or a bare `@dataclass` alike, whose
+  validated value is laid back over the stripped arguments. A required
+  positional-only parameter (`def by_status(status, /)`) is refused at
+  registration as well, for service and selector alike: dispatch passes every
+  argument by keyword, so nothing can fill it.
 
 - **`unknown_arguments=`** — how `arguments` keys outside the binding's
   declared field set are handled.

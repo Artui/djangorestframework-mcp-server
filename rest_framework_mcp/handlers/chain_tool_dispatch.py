@@ -38,10 +38,10 @@ that is not there fails the step as ``not_found`` unless the spec sets
 
 from __future__ import annotations
 
-from collections.abc import Mapping
+from collections.abc import Iterable, Mapping
 from typing import Any
 
-from django.core.exceptions import ObjectDoesNotExist
+from django.core.exceptions import ImproperlyConfigured, ObjectDoesNotExist
 from django.db import transaction
 from rest_framework import serializers as drf_serializers
 from rest_framework.exceptions import PermissionDenied
@@ -382,16 +382,52 @@ def _run_service_step(
     # ``dispatch_spec`` leaves it: drf-services never runs the re-fetch for a list
     # payload, whose selector would be handed the whole list as ``instance``, and
     # ``rendered_kind`` renders that list ``many`` for a step and a tool alike.
-    if out_spec is not None and out_spec.selector is not None and not spec.many:
-        sel_pool: dict[str, Any] = {**pool, "instance": result, "result": result}
-        result = run_selector(
-            out_spec.selector, resolve_callable_kwargs(out_spec.selector, sel_pool)
+    if out_spec is None or spec.many:
+        return result
+    if out_spec.selector is None:
+        # No re-fetch, so the service's own return is presented, and under
+        # ``LIST`` it must be a set of rows: refused as ``dispatch_spec`` refuses
+        # it, where it once failed while rendering, a DRF ``AttributeError``
+        # reading a serializer field off a mapping's keys.
+        if out_spec.kind is SelectorKind.LIST:
+            return _service_return_as_list(spec, result)
+        return result
+    sel_pool: dict[str, Any] = {**pool, "instance": result, "result": result}
+    result = run_selector(out_spec.selector, resolve_callable_kwargs(out_spec.selector, sel_pool))
+    # A ``RETRIEVE`` re-fetch renders one row, so a queryset collapses here as
+    # ``dispatch_spec`` collapses it; handed to the renderer whole, every
+    # serializer field was looked up on the queryset and the call failed.
+    if out_spec.kind is SelectorKind.RETRIEVE:
+        result = materialize_retrieve(result)
+    return result
+
+
+def _service_return_as_list(spec: ServiceSpec[Any, Any, Any], result: Any) -> Any:
+    """``result``, once it is a set of rows a ``LIST`` declaration can present.
+
+    A mirror of drf-services' ``dispatch.utils.service_return_as_list``, message
+    included, so a chain step and a service tool refuse the same declaration
+    alike. That function is not exported, and the public path to it is
+    ``dispatch_spec`` itself, which runs the service a step has already run
+    through ``run_service``.
+
+    A mapping, a ``str`` or ``bytes`` (iterable, but by key or character rather
+    than by row), anything else that does not iterate, and ``None`` are refused.
+    ``ImproperlyConfigured``, not a tool error: the service has run and its
+    write stands. The test is one arc to coverage, so each member is a row of
+    ``test_a_list_output_spec_with_no_selector_refuses_a_return_that_is_no_set``
+    (``mapping``, ``str``, ``bytes``, ``non-iterable``, ``none``), which fails
+    without it.
+    """
+    if isinstance(result, Mapping | str | bytes) or not isinstance(result, Iterable):
+        label = getattr(spec.service, "__qualname__", repr(spec.service))
+        raise ImproperlyConfigured(
+            "output_selector_spec declares kind=LIST with no selector, so the service's "
+            f"own return is the list presented, and {label} returned "
+            f"{type(result).__name__}, which is neither a QuerySet nor an iterable of "
+            "rows. Return the rows, or declare kind=SelectorKind.RETRIEVE to present one "
+            "value. The service has already run, so its write stands."
         )
-        # A ``RETRIEVE`` re-fetch renders one row, so a queryset collapses here as
-        # ``dispatch_spec`` collapses it; handed to the renderer whole, every
-        # serializer field was looked up on the queryset and the call failed.
-        if out_spec.kind is SelectorKind.RETRIEVE:
-            result = materialize_retrieve(result)
     return result
 
 

@@ -23,7 +23,10 @@ from rest_framework_mcp.handlers.input_dispatch import (
     resolve_prior_input,
 )
 from rest_framework_mcp.handlers.invalidation_dispatch import announce_invalidations_async
-from rest_framework_mcp.handlers.selector_tool_dispatch import dispatch_selector_tool_async
+from rest_framework_mcp.handlers.selector_tool_dispatch import (
+    dispatch_selector_tool_async,
+    enforce_object_permissions,
+)
 from rest_framework_mcp.handlers.task_dispatch import maybe_create_task
 from rest_framework_mcp.handlers.types.context import MCPCallContext
 from rest_framework_mcp.handlers.utils import (
@@ -244,17 +247,15 @@ async def _run_service_tool_async(
     # kwarg reaches the ``isError`` mapping instead of escaping.
     argument_binding, unknown_arguments = services_dispatch_policies(binding)
     try:
-        spec_params, url_kwarg_values = split_url_kwargs(arguments_raw, binding.url_kwargs)
+        # See the sync sibling: not refusing a missing kwarg until the spec has
+        # judged the route.
+        spec_params, url_kwarg_values = split_url_kwargs(
+            arguments_raw, binding.url_kwargs, refuse_missing=False
+        )
         # ``query_params`` is always passed — an empty mapping still
         # *replaces* whatever query string the client hung off the MCP
         # endpoint URL.
         spec_params, query_param_values = split_query_params(spec_params, binding.query_params)
-        # After the permission and rate-limit answers, so a caller the listing
-        # hides the tool from never learns it exists from this one; inside the
-        # ``try``, so it maps to the same ``isError`` result.
-        refuse_missing_arguments(
-            binding, (*spec_params, *url_kwarg_values), pool_seeds=context.pool_seeds
-        )
         offline = build_offline_context(
             context.token.user,
             spec_params,
@@ -262,6 +263,14 @@ async def _run_service_tool_async(
             action=binding.name,
             kwargs=url_kwarg_values or None,
             query_params=query_param_values,
+        )
+        # See the sync sibling: the spec's class-level check, before the lookup
+        # and before a missing argument is named. Off the event loop, as the
+        # target guard is, since a ``has_permission`` may query.
+        await acall(enforce_permissions, binding.spec, offline)
+        split_url_kwargs(arguments_raw, binding.url_kwargs)
+        refuse_missing_arguments(
+            binding, (*spec_params, *url_kwarg_values), pool_seeds=context.pool_seeds
         )
         result = await adispatch_spec(
             binding.spec,
@@ -271,7 +280,8 @@ async def _run_service_tool_async(
             view=offline.view,
             argument_binding=argument_binding,
             unknown_arguments=unknown_arguments,
-            on_target_resolved=enforce_permissions,
+            # Object-level only; see the sync sibling.
+            on_target_resolved=enforce_object_permissions,
             # ``None`` unless the client asked for progress; drf-services
             # substitutes its no-op, so the service body is unchanged.
             progress=context.progress,

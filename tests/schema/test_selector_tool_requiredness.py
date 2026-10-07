@@ -584,8 +584,10 @@ def test_a_read_only_default_does_not_fill_the_parameter() -> None:
 
 
 def test_a_dataclass_inputs_default_does_not_fill_the_parameter() -> None:
-    # A dataclass validates into an instance, which is not overlaid on the
-    # selector's params.
+    # ``schema.utils._serializer_fills`` counts only a plain ``Serializer``'s
+    # defaults, so the schema keeps the name required. Dispatch lays the
+    # dataclass instance back all the same, default included, so a call
+    # omitting the name does run.
     server = _server()
     _register(server, _by_pk, input_serializer=_PkInput)
 

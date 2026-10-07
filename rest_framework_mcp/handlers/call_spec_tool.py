@@ -37,7 +37,10 @@ from rest_framework_services import (
 from rest_framework_services.exceptions.service_error import ServiceError
 from rest_framework_services.exceptions.service_validation_error import ServiceValidationError
 
+from rest_framework_mcp.adapters.utils import _overlaid_field_names
 from rest_framework_mcp.config.types.mcp_config import MCPConfig
+from rest_framework_mcp.constants import RESERVED_POST_FETCH_KEYS
+from rest_framework_mcp.handlers.selector_tool_dispatch import enforce_object_permissions
 from rest_framework_mcp.handlers.utils import (
     read_shaping_error_result,
     refuse_missing_arguments,
@@ -125,11 +128,14 @@ def call_spec_tool(
     )
     # Class-level ``permission_classes``, enforced upfront and unconditionally:
     # ``dispatch_spec`` never consults them (authz is the caller's job) and the
-    # ``on_target_resolved`` hook below only adds *object-level* checks on a
-    # resolved target, so without this a spec whose ``has_permission`` denies
-    # would leak its payload through this in-process surface.
+    # ``on_target_resolved`` hook below runs only the *object-level* checks on
+    # a resolved target, so without this a spec whose ``has_permission`` denies
+    # would leak its payload through this in-process surface. Before the
+    # lookup, so a denied caller is answered alike for a target that exists and
+    # one that does not; the wire handlers judge at the same point.
     enforce_permissions(spec, context)
     argument_binding, unknown_arguments = services_dispatch_policies(binding)
+    dispatch_params = _post_fetch_keys_stripped(binding, spec_params)
     try:
         # After ``enforce_permissions``, as on the wire: a denied caller is told
         # so before it is told which argument it left out. Without the
@@ -138,19 +144,27 @@ def call_spec_tool(
         # (``test_call_tool_refuses_a_name_only_the_input_serializer_it_skips_would_fill``).
         refuse_missing_arguments(
             binding,
-            (*spec_params, *url_kwarg_values),
+            (*dispatch_params, *url_kwarg_values),
             pool_seeds=pool_seeds,
             input_serializer_runs=False,
         )
         result = dispatch_spec(
             spec,
             user=user,
-            params=spec_params,
+            params=dispatch_params,
+            # Unstripped, as on the wire: a ``FilterSet`` reads only the fields
+            # it declares, so ``page`` / ``limit`` reach one that declares them
+            # (``test_a_filter_set_still_reads_a_pagination_named_filter_on_every_route``).
+            filter_data=spec_params,
             request=context.request,
             view=context.view,
             argument_binding=argument_binding,
             unknown_arguments=unknown_arguments,
-            on_target_resolved=enforce_permissions,
+            # Object-level only: the class-level half ran above, against the
+            # same request and view, and running it again here asked
+            # ``has_permission`` twice per call
+            # (``test_the_class_level_check_is_not_run_again_on_the_resolved_row``).
+            on_target_resolved=enforce_object_permissions,
             pool_seeds=pool_seeds,
             # A ``many=True`` spec's list arrives under ``spec.many_argument``, as
             # tool arguments are always an object; a no-op for any other spec.
@@ -217,6 +231,31 @@ def call_spec_tool(
         content_mime_type=binding.content_mime_type,
         binding_name=binding.name,
     )
+
+
+def _post_fetch_keys_stripped(
+    binding: ToolBinding | SelectorToolBinding, spec_params: dict[str, Any]
+) -> dict[str, Any]:
+    """A selector tool's params without ``page`` / ``limit``, as the wire passes them.
+
+    Both belong to the read pipeline's pagination, so the wire and
+    ``acall_tool`` strip them from a selector's arguments, and a ``**kwargs``
+    selector never sees them. This route passed them through
+    (``test_every_route_hands_a_selector_the_same_arguments``). The wire then lays
+    the ``input_serializer``'s validated values back, and this route runs no
+    ``input_serializer``, so a name that serializer would lay back with the
+    caller's value (``adapters.utils._overlaid_field_names``, the names
+    registration exempts from its refusal) is kept rather than stripped, which
+    is the value the wire hands over, uncoerced: stripped, the selector ran on
+    its own default for it
+    (``test_a_name_the_input_serializer_lays_back_reaches_the_selector_on_every_route``).
+    A service tool's arguments are its own, with no read pipeline to take them
+    (``test_a_service_tools_page_and_limit_are_its_own_on_every_route``).
+    """
+    if not isinstance(binding, SelectorToolBinding):
+        return spec_params
+    stripped = RESERVED_POST_FETCH_KEYS - _overlaid_field_names(binding.input_serializer)
+    return {name: value for name, value in spec_params.items() if name not in stripped}
 
 
 def _offline_context(

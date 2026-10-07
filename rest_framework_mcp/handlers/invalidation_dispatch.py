@@ -5,6 +5,7 @@ from typing import Any
 
 from asgiref.sync import sync_to_async
 
+from rest_framework_mcp.constants import ResultType
 from rest_framework_mcp.handlers.types.context import MCPCallContext
 from rest_framework_mcp.subscriptions.publish_invalidations import publish_invalidations
 from rest_framework_mcp.subscriptions.render_invalidations import render_invalidations
@@ -49,15 +50,32 @@ async def announce_invalidations_async(
 def _uris(binding: Any, result: Any, arguments: Mapping[str, Any]) -> tuple[str, ...]:
     """The URIs to announce, or nothing at all.
 
-    **A failed tool announces nothing**, and the check is on ``isError`` rather
-    than on the result being present: a ``ServiceError`` produces a well-formed
-    result, so "did it come back" is not the question.
+    **Only a result that completed announces.** A failed tool announces
+    nothing, and the check is on ``isError`` rather than on the result being
+    present: a ``ServiceError`` produces a well-formed result, so "did it come
+    back" is not the question. Nor does a result asking the client for input,
+    which ran nothing and carries no ``isError`` to fail on; it once announced
+    a change no call had made
+    (``test_only_a_completed_result_announces[input-required-*]``). Completed
+    is read as the envelope reads it: a ``resultType`` that is absent, which a
+    tool result's is until the envelope stamps it, or ``complete``.
+
+    The chain is one branch arc, so each condition is held by a test:
+    ``templates`` by ``test_a_binding_that_declares_nothing_publishes_nothing``,
+    the ``dict`` by ``test_a_non_dict_result_announces_nothing``, ``isError`` by
+    ``test_a_failed_tool_announces_nothing`` and ``resultType`` by
+    ``test_only_a_completed_result_announces``.
 
     The ``getattr`` default keeps a hand-built binding without the field
     working.
     """
     templates: tuple[str, ...] = getattr(binding, "invalidates", ())
-    if not templates or not isinstance(result, dict) or result.get("isError"):
+    if (
+        not templates
+        or not isinstance(result, dict)
+        or result.get("isError")
+        or result.get("resultType", ResultType.COMPLETE.value) != ResultType.COMPLETE.value
+    ):
         return ()
     return render_invalidations(templates, payload=result, arguments=arguments)
 

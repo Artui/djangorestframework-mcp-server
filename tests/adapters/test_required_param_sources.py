@@ -236,3 +236,207 @@ async def test_a_var_positional_parameter_needs_no_source() -> None:
     out = await server.acall_tool("note", {"text": "hello"}, user=None)
     assert isinstance(out, dict)
     assert out["structuredContent"] == {"tags": [], "saved": {"text": "hello"}}
+
+
+# ---------- a selector is never handed ``data`` or ``serializer`` ----------
+
+# drf-services' selector dispatch seeds neither name and strips both from the
+# spread, whatever the binding, so a selector requiring one registered and then
+# raised ``TypeError`` on every call; under ``BUNDLE`` no validated value reaches
+# a selector at all, so a ``**kwargs`` one ran with none of the payload.
+
+_NEVER_HANDED = "A selector is never handed `data` or `serializer`"
+
+
+class _Status(drf_serializers.Serializer):
+    status = drf_serializers.CharField(default="open")
+
+
+class _FieldNamedData(drf_serializers.Serializer):
+    data = drf_serializers.CharField()
+
+
+# Each takes ``status``, so the field check passes and the source check is the
+# one that answers.
+def _status_and_data(*, status: str, data: Any) -> Any: ...  # noqa: ARG001
+
+
+def _status_and_serializer(*, status: str, serializer: Any) -> Any: ...  # noqa: ARG001
+
+
+def _takes_anything(**kwargs: Any) -> Any: ...  # noqa: ARG001
+
+
+def _register_selector(selector: Any, input_serializer: Any, binding: ArgumentBinding) -> Any:
+    return _server().register_selector_tool(
+        name="read",
+        description="Read.",
+        spec=SelectorSpec(kind=SelectorKind.RETRIEVE, selector=selector),
+        input_serializer=input_serializer,
+        argument_binding=binding,
+    )
+
+
+@pytest.mark.parametrize(
+    ("selector", "input_serializer", "missing"),
+    [
+        pytest.param(_status_and_data, _Status, "data", id="data"),
+        pytest.param(_status_and_serializer, _Status, "serializer", id="serializer"),
+        # The spread strips the reserved name, so a field declared under it is
+        # no source either.
+        pytest.param(_needs_data, _FieldNamedData, "data", id="a-field-named-data"),
+    ],
+)
+@pytest.mark.parametrize("binding", _SPREADING)
+def test_a_spreading_selector_requiring_data_or_serializer_is_refused(
+    binding: ArgumentBinding, selector: Any, input_serializer: Any, missing: str
+) -> None:
+    with pytest.raises(ImproperlyConfigured, match=rf"parameter\(s\) \['{missing}'\]") as caught:
+        _register_selector(selector, input_serializer, binding)
+    assert _NEVER_HANDED in str(caught.value)
+    # The service remedy would misdirect: declaring an input_serializer fills
+    # nothing for a selector.
+    assert _DATA_HINT not in str(caught.value)
+
+
+@pytest.mark.parametrize("binding", [ArgumentBinding.BUNDLE, *_SPREADING])
+def test_a_selector_requiring_data_without_a_serializer_gets_the_selector_remedy(
+    binding: ArgumentBinding,
+) -> None:
+    with pytest.raises(ImproperlyConfigured, match=r"parameter\(s\) \['data'\]") as caught:
+        _register_selector(_needs_data, None, binding)
+    assert _NEVER_HANDED in str(caught.value)
+    assert _DATA_HINT not in str(caught.value)
+
+
+@pytest.mark.parametrize(
+    "selector",
+    [
+        pytest.param(_needs_data, id="data"),
+        pytest.param(_needs_serializer, id="serializer"),
+        pytest.param(_takes_anything, id="var-keyword"),
+    ],
+)
+def test_a_bundled_selector_with_an_input_serializer_is_refused(selector: Any) -> None:
+    with pytest.raises(ImproperlyConfigured, match="argument_binding=BUNDLE") as caught:
+        _register_selector(selector, _Status, ArgumentBinding.BUNDLE)
+    assert "no way to reach the selector" in str(caught.value)
+
+
+def test_a_bundled_selector_without_an_input_serializer_still_registers() -> None:
+    # Nothing validated, so nothing to lose: its arguments come from the route
+    # and the provider, as under ``BUNDLE`` they always do.
+    _register_selector(lambda **kwargs: None, None, ArgumentBinding.BUNDLE)
+
+
+def test_a_bundled_service_with_an_input_serializer_still_needs_a_way_to_take_it() -> None:
+    # ``_validate_data_only`` is a service's rule still.
+    def _no_payload(*, other: Any = None) -> Any: ...  # noqa: ARG001
+
+    with pytest.raises(ImproperlyConfigured, match="requires the callable to declare a `data`"):
+        service_spec_to_tool(
+            name="note",
+            spec=ServiceSpec(service=_no_payload, input_serializer=_NoteIn, atomic=False),
+        )
+
+
+def test_a_spreading_selector_taking_the_fields_as_parameters_registers() -> None:
+    async def _ok(*, status: str) -> Any: ...  # noqa: ARG001
+
+    _register_selector(_ok, _Status, ArgumentBinding.SPREAD_AUTHOR_WINS)
+
+
+@pytest.mark.parametrize("binding", _SPREADING)
+def test_a_selectors_data_parameter_does_not_take_the_fields_it_leaves_out(
+    binding: ArgumentBinding,
+) -> None:
+    # A defaulted ``data`` passes the source check, and once exempted the
+    # selector from the field check too, as if the payload arrived under it.
+    async def _data_defaulted(*, data: Any = None) -> Any: ...  # noqa: ARG001
+
+    with pytest.raises(ImproperlyConfigured, match=r"declares field\(s\) \['status'\]") as caught:
+        _register_selector(_data_defaulted, _Status, binding)
+    assert _NEVER_HANDED in str(caught.value)
+
+
+def test_a_services_data_parameter_still_takes_the_payload_whole() -> None:
+    def _bundled(*, data: Any) -> Any: ...  # noqa: ARG001
+
+    service_spec_to_tool(
+        name="note",
+        spec=ServiceSpec(service=_bundled, input_serializer=_NoteIn, atomic=False),
+        argument_binding=ArgumentBinding.SPREAD_AUTHOR_WINS,
+    )
+
+
+def test_the_field_check_offers_a_service_no_selector_remedy() -> None:
+    def _other(*, other: Any = None) -> Any: ...  # noqa: ARG001
+
+    with pytest.raises(ImproperlyConfigured, match=r"declares field\(s\) \['text'\]") as caught:
+        service_spec_to_tool(
+            name="note",
+            spec=ServiceSpec(service=_other, input_serializer=_NoteIn, atomic=False),
+            argument_binding=ArgumentBinding.SPREAD_AUTHOR_WINS,
+        )
+    assert _NEVER_HANDED not in str(caught.value)
+
+
+# ---------- a positional-only parameter is never filled ----------
+
+
+def _positional(x: Any, /, *, status: str = "a") -> Any: ...  # noqa: ARG001
+
+
+def _positional_beside_var_keyword(x: Any, /, **kwargs: Any) -> Any: ...  # noqa: ARG001
+
+
+def _positional_with_a_default(x: Any = 1, /, *, status: str = "a") -> Any: ...  # noqa: ARG001
+
+
+@pytest.mark.parametrize(
+    "callable_",
+    [
+        pytest.param(_positional, id="keyword-only-beside"),
+        # A catch-all takes the argument named ``x`` into ``kwargs``, never
+        # into the positional slot, so it is no source either.
+        pytest.param(_positional_beside_var_keyword, id="var-keyword-beside"),
+    ],
+)
+@pytest.mark.parametrize("kind", ["selector", "service"])
+def test_a_required_positional_only_parameter_is_refused(kind: str, callable_: Any) -> None:
+    with pytest.raises(ImproperlyConfigured, match=r"positional-only parameter\(s\) \['x'\]"):
+        if kind == "selector":
+            _register_selector(callable_, None, ArgumentBinding.SPREAD_AUTHOR_WINS)
+        else:
+            service_spec_to_tool(
+                name="t",
+                spec=ServiceSpec(service=callable_, atomic=False),
+                argument_binding=ArgumentBinding.SPREAD_AUTHOR_WINS,
+            )
+
+
+async def test_a_defaulted_positional_only_parameter_registers_and_runs_on_its_default() -> None:
+    seen: list[Any] = []
+
+    def _read(x: Any = 1, /, *, status: str = "a") -> Any:
+        seen.append((x, status))
+        return {"x": x}
+
+    server = _server()
+    server.register_selector_tool(
+        name="read",
+        description="Read.",
+        spec=SelectorSpec(kind=SelectorKind.RETRIEVE, selector=_read),
+    )
+    out = await server.acall_tool("read", {"status": "b"}, user=None)
+    assert isinstance(out, dict)
+    assert seen == [(1, "b")]
+
+
+def _status_and_instance(*, status: str, instance: Any) -> Any: ...  # noqa: ARG001
+
+
+def test_the_selector_remedy_accompanies_only_data_or_serializer() -> None:
+    with pytest.raises(ImproperlyConfigured, match=r"parameter\(s\) \['instance'\]") as caught:
+        _register_selector(_status_and_instance, _Status, ArgumentBinding.SPREAD_AUTHOR_WINS)
+    assert _NEVER_HANDED not in str(caught.value)

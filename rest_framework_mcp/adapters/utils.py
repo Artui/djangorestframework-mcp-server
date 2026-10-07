@@ -203,11 +203,12 @@ def validate_selector_parameter_names(
     - a name one of the tool's ``query_params`` declares, whose value is routed
       to ``request.query_params`` and split out of the arguments.
 
-    Neither is refused for a name the ``input_serializer`` lays back
-    (``_overlaid_field_names``): dispatch overlays the validated values on the
-    stripped arguments, so the selector does receive the caller's value under
-    that name. The subtraction is held by
-    ``test_a_pagination_named_parameter_the_input_serializer_declares_is_allowed``
+    Neither is refused for a name the ``input_serializer`` lays back with the
+    caller's value (``_overlaid_field_names``): dispatch overlays the validated
+    values on the stripped arguments, so the selector does receive the caller's
+    value under that name. The subtraction is held by
+    ``test_a_pagination_named_parameter_the_input_serializer_declares_is_allowed``,
+    ``test_a_pagination_named_parameter_a_dataclass_input_declares_is_allowed``
     and ``test_a_parameter_a_query_param_shadows_is_allowed_when_the_input_serializer_declares_it``,
     and its limit to the declared names by
     ``test_a_serializer_declaring_another_name_exempts_nothing``.
@@ -254,6 +255,7 @@ def validate_input_serializer_against_callable(
     provides_collection: bool = False,
     selector_url_kwargs: tuple[UrlKwarg, ...] = (),
     pool_seeds: PoolSeeds = DEFAULT_POOL_SEEDS,
+    is_selector: bool = False,
 ) -> None:
     """Fail-fast at registration time when input shape doesn't match the callable.
 
@@ -282,6 +284,15 @@ def validate_input_serializer_against_callable(
     spreads ``view.kwargs`` into a selector's pool, and into a service tool's
     target lookup but never into the service's own pool.
 
+    ``is_selector`` is passed by the selector adapter too, because **a selector
+    is never handed ``data`` or ``serializer``**: drf-services' selector dispatch
+    seeds neither and strips both from the spread, under every binding. So
+    neither counts as a source for a selector, and a selector tool declaring an
+    ``input_serializer`` under ``BUNDLE`` is refused outright, since that binding
+    spreads none of the validated fields either and the payload has no way to
+    reach the selector. ``_validate_data_only``'s demand for ``data``,
+    ``serializer`` or ``**kwargs`` under ``BUNDLE`` is a service's rule.
+
     ``input_serializer=None`` skips check (1) but check (2) still runs against
     the pool-seed and opt-in sources. ``callable_=None`` short-circuits
     everything — the per-adapter ``selector=None`` / ``service=None`` guards
@@ -299,10 +310,15 @@ def validate_input_serializer_against_callable(
 
     if argument_binding is ArgumentBinding.BUNDLE:
         if input_serializer is not None:
+            if is_selector:
+                # Before ``_validate_data_only``, which a ``data`` or
+                # ``**kwargs`` selector passes, and then ran with no payload
+                # (``test_a_bundled_selector_with_an_input_serializer_is_refused``).
+                _refuse_bundled_selector_input(label)
             _validate_data_only(label, sig)
     else:
         if input_serializer is not None:
-            _validate_merge_or_replace(label, sig, input_serializer)
+            _validate_merge_or_replace(label, sig, input_serializer, is_selector=is_selector)
 
     _validate_required_params_have_sources(
         label=label,
@@ -314,6 +330,18 @@ def validate_input_serializer_against_callable(
         provides_collection=provides_collection,
         selector_url_kwargs=selector_url_kwargs,
         pool_seeds=pool_seeds,
+        is_selector=is_selector,
+    )
+
+
+def _refuse_bundled_selector_input(label: str) -> None:
+    raise ImproperlyConfigured(
+        f"{label}: argument_binding=BUNDLE on a selector tool with an input_serializer "
+        "leaves the validated payload no way to reach the selector. A selector is never "
+        "handed `data` or `serializer`, and BUNDLE spreads none of the validated fields, "
+        "so every call would validate the arguments and then drop them. Use a spreading "
+        "argument_binding (SPREAD_AUTHOR_WINS, the selector default) and take the fields "
+        "as parameters, or drop the input_serializer."
     )
 
 
@@ -326,37 +354,44 @@ def _resolve_signature(callable_: Any) -> inspect.Signature | None:
 
 
 def _overlaid_field_names(input_serializer: type | None) -> frozenset[str]:
-    """The names a selector tool's validated input lays back over its arguments.
+    """The names a selector tool's validated input lays back with the caller's value.
 
-    Selector dispatch overlays the validated values on the arguments only when
-    they are a ``dict`` (``handlers.selector_tool_dispatch._selector_dispatch_params``),
-    so only a plain DRF ``Serializer`` lays any name back; the same reasoning as
-    ``schema.utils._serializer_fills``. The chain is one branch arc, so each
-    condition is held by a case of
-    ``test_a_field_whose_value_is_not_laid_back_exempts_nothing``:
+    Selector dispatch overlays the validated values on the arguments in both of
+    the shapes they arrive in (``handlers.selector_tool_dispatch._validated_values``):
+    a plain DRF ``Serializer``'s ``dict``, and the dataclass instance a bare
+    ``@dataclass`` or a ``DataclassSerializer`` validates into. So every shape
+    the adapter admits can lay a name back, and the names that carry the
+    caller's value are the same for all three: the serializer's fields, as
+    built for the call (a bare dataclass is wrapped in a ``DataclassSerializer``
+    there too), that are
 
-    - a DRF ``Serializer`` class: a bare ``@dataclass`` validates into a
-      dataclass instance (``bare-dataclass``). The ``isinstance`` arm is the
-      ``None`` of a tool with no ``input_serializer``, which every such
-      registration passes through
-      (``test_a_defaulted_pagination_named_parameter_is_refused``);
-    - not a ``DataclassSerializer``, which does too (``dataclass-serializer``);
     - not ``read_only``: DRF keeps the field out of the validated values
-      (``read-only-field``);
-    - a ``source`` that is the field's own name: a field bound with
-      ``source="number"`` puts its value under ``number``, and ``source="*"``
-      merges it, so neither lays back the name the field is declared under
-      (``source-elsewhere``).
+      (``read-only-field`` of
+      ``test_a_field_whose_value_is_not_laid_back_exempts_nothing``), and a
+      dataclass field so declared is laid back as its default, never as what
+      the caller sent (``read-only-dataclass-field``);
+    - bound to their own name: a field with ``source="number"`` puts its value
+      under ``number``, and ``source="*"`` merges it, so neither lays back the
+      name the field is declared under (``source-elsewhere``).
+
+    The dataclass shapes were once left out, when dispatch overlaid only a
+    ``dict``; they are held by
+    ``test_a_pagination_named_parameter_a_dataclass_input_declares_is_allowed``.
+    ``None`` is a tool with no ``input_serializer``, which every such
+    registration passes through
+    (``test_a_defaulted_pagination_named_parameter_is_refused``). Anything else
+    was refused by ``validate_serializer_shapes`` before this runs.
     """
-    if (
-        not isinstance(input_serializer, type)
-        or not issubclass(input_serializer, drf_serializers.Serializer)
-        or issubclass(input_serializer, DataclassSerializer)
-    ):
+    if input_serializer is None:
         return frozenset()
+    serializer: Any = (
+        DataclassSerializer(dataclass=input_serializer)
+        if dataclasses.is_dataclass(input_serializer)
+        else input_serializer()
+    )
     return frozenset(
         name
-        for name, field in input_serializer().fields.items()
+        for name, field in serializer.fields.items()
         if not field.read_only and field.source == name
     )
 
@@ -395,7 +430,9 @@ def _validate_data_only(label: str, sig: inspect.Signature) -> None:
     )
 
 
-def _validate_merge_or_replace(label: str, sig: inspect.Signature, input_serializer: type) -> None:
+def _validate_merge_or_replace(
+    label: str, sig: inspect.Signature, input_serializer: type, *, is_selector: bool
+) -> None:
     if _accepts_var_keyword(sig):
         return
     declared_params: frozenset[str] = frozenset(
@@ -407,10 +444,13 @@ def _validate_merge_or_replace(label: str, sig: inspect.Signature, input_seriali
             inspect.Parameter.KEYWORD_ONLY,
         )
     )
-    # A callable declaring ``data`` receives the whole validated payload under
+    # A service declaring ``data`` receives the whole validated payload under
     # that name, so its fields need not map to individual parameters — a
-    # deliberate spread-mode pattern (``def fn(*, data, request)``).
-    if "data" in declared_params:
+    # deliberate spread-mode pattern (``def fn(*, data, request)``). A selector
+    # is never handed ``data``, so one declaring it (with a default, or the
+    # source check refuses it) still drops every field it does not take
+    # (``test_a_selectors_data_parameter_does_not_take_the_fields_it_leaves_out``).
+    if "data" in declared_params and not is_selector:
         return
     fields: frozenset[str] = frozenset(_serializer_field_names(input_serializer))
     exempt: frozenset[str] = RESERVED_POOL_SEEDS | RESERVED_POST_FETCH_KEYS
@@ -424,6 +464,7 @@ def _validate_merge_or_replace(label: str, sig: inspect.Signature, input_seriali
             "silently dropped at dispatch time. Add the parameter(s) to the "
             "callable signature, declare `**kwargs` / `data`, or remove the "
             "field(s) from the serializer."
+            f"{_SELECTOR_HINT if is_selector else ''}"
         )
 
 
@@ -433,6 +474,20 @@ _DATA_HINT = (
     " Nothing fills `data` without an input_serializer: declare one, give `data` a "
     "default, or take the arguments as individual parameters under a spreading "
     "argument_binding."
+)
+
+# The two seeds a service is handed beside an ``input_serializer`` and a selector
+# never is: drf-services' selector dispatch seeds neither and strips both from
+# the spread.
+_NEVER_HANDED_TO_A_SELECTOR: frozenset[str] = frozenset({"data", "serializer"})
+
+# For a selector, declaring an ``input_serializer`` fills neither name, so the
+# service remedy above would misdirect it.
+_SELECTOR_HINT = (
+    " A selector is never handed `data` or `serializer`, with or without an "
+    "input_serializer: drf-services' selector dispatch seeds neither and strips both "
+    "from the arguments. Take the validated fields as individual parameters under a "
+    "spreading argument_binding, or give the parameter a default."
 )
 
 
@@ -447,6 +502,7 @@ def _validate_required_params_have_sources(
     provides_collection: bool,
     selector_url_kwargs: tuple[UrlKwarg, ...],
     pool_seeds: PoolSeeds,
+    is_selector: bool,
 ) -> None:
     """Every required callable parameter must have a static source.
 
@@ -454,7 +510,11 @@ def _validate_required_params_have_sources(
 
     - **Pool seeds.** ``request`` / ``user`` / ``progress`` always;
       ``instance`` and ``collection`` only when the spec resolves one, and
-      ``serializer`` and ``data`` only when an ``input_serializer`` is declared.
+      ``serializer`` and ``data`` only for a service, when an
+      ``input_serializer`` is declared. Never for a selector, which drf-services
+      hands neither, nor under a serializer field of either name, since the
+      spread strips both (``test_a_spreading_selector_requiring_data_or_serializer_is_refused``,
+      whose ``a-field-named-data`` case holds the field half).
       Every name the server's ``pool_seeds=`` registers, always: dispatch
       resolves each into every pool, so a callable declaring one is satisfiable
       on every call.
@@ -482,8 +542,17 @@ def _validate_required_params_have_sources(
     ``test_a_bundled_service_requiring_data_without_an_input_serializer_is_refused``
     and ``test_a_trust_mode_service_requiring_data_is_refused``.
 
-    ``**kwargs`` callables are exempt: every required name is structurally
-    satisfiable. With ``input_serializer=None`` a spreading binding is in trust
+    **A required positional-only parameter is refused first**, ``**kwargs`` or
+    not: dispatch passes every argument by keyword, so nothing fills it and
+    every call raises ``TypeError``, while a catch-all takes the argument of its
+    name into ``kwargs`` rather than into the slot
+    (``test_a_required_positional_only_parameter_is_refused``). One with a
+    default runs on it, so it registers
+    (``test_a_defaulted_positional_only_parameter_registers_and_runs_on_its_default``).
+    Refused for a service as well as a selector, since the failure is the same.
+
+    ``**kwargs`` callables are otherwise exempt: every required name is
+    structurally satisfiable. With ``input_serializer=None`` a spreading binding is in trust
     mode — the client's raw ``arguments`` are spread verbatim, so there is no
     static contract and every required parameter counts as one the caller
     supplies, **except a reserved pool seed**: drf-services strips every
@@ -492,6 +561,19 @@ def _validate_required_params_have_sources(
     ``test_trust_mode_does_not_count_a_reserved_seed_as_the_callers`` and the
     spreading cases of ``test_an_instance_lookup_seeds_no_collection``.
     """
+    positional_only: list[str] = sorted(
+        name
+        for name, param in sig.parameters.items()
+        if param.kind is inspect.Parameter.POSITIONAL_ONLY
+        and param.default is inspect.Parameter.empty
+    )
+    if positional_only:
+        raise ImproperlyConfigured(
+            f"{label}: callable declares positional-only parameter(s) {positional_only!r} "
+            "with no default. Dispatch passes every argument by keyword, so nothing on "
+            "any transport can fill it and every call would raise TypeError. Drop the `/` "
+            "so the parameter can be passed by keyword, or give it a default."
+        )
     if _accepts_var_keyword(sig):
         return
     # Only a parameter a keyword can fill is counted: a ``*args`` has no default
@@ -516,7 +598,7 @@ def _validate_required_params_have_sources(
         sources.add("instance")
     if provides_collection:
         sources.add("collection")
-    if input_serializer is not None:
+    if input_serializer is not None and not is_selector:
         sources.add("serializer")
         sources.add("data")
     sources.update(spec_kwargs_provides)
@@ -530,7 +612,10 @@ def _validate_required_params_have_sources(
     )
     if argument_binding is not ArgumentBinding.BUNDLE:
         if input_serializer is not None:
-            sources.update(_serializer_field_names(input_serializer))
+            fields: frozenset[str] = frozenset(_serializer_field_names(input_serializer))
+            if is_selector:
+                fields -= _NEVER_HANDED_TO_A_SELECTOR
+            sources.update(fields)
         else:
             # Trust mode: raw ``arguments`` are spread verbatim, so the client
             # can in principle supply any name the callable declares, other than
@@ -548,8 +633,24 @@ def _validate_required_params_have_sources(
             "``spec_kwargs_provides=(...)`` at registration to acknowledge that "
             "contract. (``spec.kwargs`` output is not assumed because its "
             "behaviour can differ between DRF API-view and MCP transports.)"
-            f"{_DATA_HINT if 'data' in missing else ''}"
+            f"{_missing_seed_hint(missing, is_selector=is_selector)}"
         )
+
+
+def _missing_seed_hint(missing: set[str], *, is_selector: bool) -> str:
+    """The remedy for a missing ``data`` / ``serializer``, which the generic one misdirects.
+
+    A selector's when it misses either, since declaring an ``input_serializer``
+    fills neither for a selector; held on both sides by
+    ``test_a_spreading_selector_requiring_data_or_serializer_is_refused`` and
+    ``test_the_selector_remedy_accompanies_only_data_or_serializer``. A service's
+    when it misses ``data``, as before.
+    """
+    if is_selector and missing & _NEVER_HANDED_TO_A_SELECTOR:
+        return _SELECTOR_HINT
+    if "data" in missing:
+        return _DATA_HINT
+    return ""
 
 
 def merge_tool_annotations(
