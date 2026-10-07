@@ -643,9 +643,14 @@ def _dispatch_kwargs(
     # A sent kwarg reaches the selector through ``view.kwargs``; a left-out
     # one, only as the default a field of its name declares.
     route_names = {url_kwarg.name for url_kwarg in binding.url_kwargs}
+    # ``page`` / ``limit`` are the read pipeline's on a ``LIST`` tool only: a
+    # ``RETRIEVE`` tool cannot paginate, so its selector receives them as sent
+    # (``test_a_retrieve_selector_receives_page_and_limit_on_every_route``).
     params = {
         name: value
-        for name, value in _selector_dispatch_params(spec_params, validated).items()
+        for name, value in _selector_dispatch_params(
+            spec_params, validated, strip_post_fetch_keys=binding.kind is SelectorKind.LIST
+        ).items()
         if name not in route_names
     }
     params.update(_url_kwarg_defaults(serializer, route_names - url_kwarg_values.keys()))
@@ -729,11 +734,11 @@ def _selector_dispatch_params(
     """Build a params mapping ``dispatch_spec`` receives for a selector.
 
     Called twice, for the two pools ``dispatch_spec`` keeps separate: ``params``
-    (the selector's kwarg spread) with the strip on, ``filter_data`` (the
-    ``FilterSet``'s input) with it off. The strip is about the *callable*:
-    ``page`` / ``limit`` (``RESERVED_POST_FETCH_KEYS``) belong to the MCP read
-    pipeline's pagination, so a selector taking ``**kwargs`` must not receive
-    them, whereas a ``FilterSet`` reads only the fields it declares, as it does
+    (the selector's kwarg spread) with the strip on for a ``LIST`` tool,
+    ``filter_data`` (the ``FilterSet``'s input) with it off. The strip is about
+    the *callable*: ``page`` / ``limit`` (``RESERVED_POST_FETCH_KEYS``) belong to
+    the MCP read pipeline's pagination, so a ``LIST`` selector taking
+    ``**kwargs`` must not receive them, whereas a ``FilterSet`` reads only the fields it declares, as it does
     on HTTP. Ordering is not stripped: an ``OrderingFilter`` on the
     ``filter_set`` reads it, and a selector may declare a sort parameter of its
     own.

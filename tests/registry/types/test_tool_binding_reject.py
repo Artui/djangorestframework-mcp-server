@@ -10,6 +10,7 @@ built and the author hears about it there, rather than every listing failing.
 
 from __future__ import annotations
 
+import importlib
 from typing import Any
 
 import pytest
@@ -112,3 +113,19 @@ def test_a_service_dispatch_never_reads_is_not_asked() -> None:
     (tool,) = server.list_tools(user=None)["tools"]
 
     assert tool["inputSchema"]["additionalProperties"] is False
+
+
+def test_a_typed_dict_declared_below_the_decorated_service_is_named_as_a_cause() -> None:
+    # The decorator registers while the module is still importing, so a
+    # ``TypedDict`` declared further down does not exist yet. drf-services'
+    # message names only ``TYPE_CHECKING``, which this module does not use; the
+    # refusal names both causes and the remedy for each.
+    with pytest.raises(ImproperlyConfigured) as caught:
+        importlib.import_module("tests.registry.types.forward_reference_tools")
+    message = str(caught.value)
+    assert "Tool 'touch': UnknownArguments.REJECT cannot be enforced" in message
+    assert "imported under 'if TYPE_CHECKING:'" in message
+    assert "declared below the decorated function" in message
+    assert "declare it above the function, or register the tool once the module has imported" in (
+        message
+    )

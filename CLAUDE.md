@@ -146,6 +146,17 @@ The dispatch leaves are **top-level exports** of `rest_framework_services` (its
 documented "stable dispatch surface", 0.17+) — import them from the package root,
 never from internal `utils` / `_compat` paths.
 
+**Two readers are the exception, because the root does not export them.**
+`declared_input_keys` (in `handlers/utils.py`) and `resolve_unknown_arguments`
+(in `registry/types/tool_binding.py`) are imported from
+`rest_framework_services.dispatch.utils`, the module dispatch itself calls them
+from: the first is the set `REJECT` admits, which decides whether a schema is
+closed, and the second is the check registration asks to refuse a `REJECT` it
+cannot enforce. A local copy of either is the drift this section exists to
+prevent, so the internal import is the lesser cost. Move each to the root
+import when drf-services exports it, and add nothing else to that module's
+list.
+
 Validation, output-serializer rendering, and kwarg-pool construction are **not**
 reproduced locally. The `handlers/` layer delegates to the sister repo's
 transport-neutral dispatch surface — `dispatch_spec` + `render_spec_output` — so a

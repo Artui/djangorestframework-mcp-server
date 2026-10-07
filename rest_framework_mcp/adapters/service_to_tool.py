@@ -20,6 +20,7 @@ from rest_framework_mcp.adapters.utils import (
     validate_query_param_inputs,
     validate_query_params,
     validate_serializer_shapes,
+    validate_url_kwarg_inputs,
     validate_url_kwargs,
 )
 from rest_framework_mcp.auth.permissions.wrap_spec_permissions import wrap_spec_permissions
@@ -109,7 +110,8 @@ def service_spec_to_tool(
     # ``test_an_instance_lookup_seeds_no_collection`` and
     # ``test_a_lookup_without_a_selector_seeds_nothing``. No ``url_kwargs`` are
     # passed: drf-services spreads them into the target lookup's pool, never
-    # into the service's (``test_a_url_kwarg_is_no_source_for_a_service_parameter``).
+    # into the service's (``test_a_url_kwarg_is_no_source_for_a_service_parameter``),
+    # and ``validate_url_kwarg_inputs`` refuses a service input a ``UrlKwarg`` takes.
     target = target_lookup(spec)
     resolves: bool = target is not None and target.selector is not None
     validate_input_serializer_against_callable(
@@ -163,9 +165,12 @@ def service_spec_to_tool(
         max_result_bytes=max_result_bytes,
         dispatch_timeout=dispatch_timeout,
     )
-    # On the built binding, because the check reads the schema the binding
+    # On the built binding, because both checks read the schema the binding
     # advertises, and before the binding is returned to be registered.
     validate_query_param_inputs(
+        binding, spec_kwargs_provides=frozenset(spec_kwargs_provides), pool_seeds=pool_seeds
+    )
+    validate_url_kwarg_inputs(
         binding, spec_kwargs_provides=frozenset(spec_kwargs_provides), pool_seeds=pool_seeds
     )
     return binding

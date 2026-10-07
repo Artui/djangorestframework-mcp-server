@@ -34,6 +34,7 @@ from rest_framework_services import (
 )
 from rest_framework_services.exceptions.service_error import ServiceError
 from rest_framework_services.exceptions.service_validation_error import ServiceValidationError
+from rest_framework_services.types.selector_kind import SelectorKind
 
 from rest_framework_mcp.adapters.utils import _overlaid_field_names
 from rest_framework_mcp.config.types.mcp_config import MCPConfig
@@ -230,11 +231,11 @@ def call_spec_tool(
 def _post_fetch_keys_stripped(
     binding: ToolBinding | SelectorToolBinding, spec_params: dict[str, Any]
 ) -> dict[str, Any]:
-    """A selector tool's params without ``page`` / ``limit``, as the wire passes them.
+    """A ``LIST`` selector tool's params without ``page`` / ``limit``, as the wire passes them.
 
     Both belong to the read pipeline's pagination, so the wire and
-    ``acall_tool`` strip them from a selector's arguments, and a ``**kwargs``
-    selector never sees them. This route passed them through
+    ``acall_tool`` strip them from a ``LIST`` selector's arguments, and a
+    ``**kwargs`` selector never sees them. This route passed them through
     (``test_every_route_hands_a_selector_the_same_arguments``). The wire then lays
     the ``input_serializer``'s validated values back, and this route runs no
     ``input_serializer``, so a name that serializer would lay back with the
@@ -244,9 +245,12 @@ def _post_fetch_keys_stripped(
     its own default for it
     (``test_a_name_the_input_serializer_lays_back_reaches_the_selector_on_every_route``).
     A service tool's arguments are its own, with no read pipeline to take them
-    (``test_a_service_tools_page_and_limit_are_its_own_on_every_route``).
+    (``test_a_service_tools_page_and_limit_are_its_own_on_every_route``), and so
+    are a ``RETRIEVE`` selector's, since that tool cannot paginate
+    (``test_a_retrieve_selector_receives_page_and_limit_on_every_route``). One
+    condition each: a ``ToolBinding`` has no ``kind`` to ask.
     """
-    if not isinstance(binding, SelectorToolBinding):
+    if not isinstance(binding, SelectorToolBinding) or binding.kind is not SelectorKind.LIST:
         return spec_params
     stripped = RESERVED_POST_FETCH_KEYS - _overlaid_field_names(binding.input_serializer)
     return {name: value for name, value in spec_params.items() if name not in stripped}

@@ -71,12 +71,14 @@ class SelectorToolBinding(Generic[ResultT, ExtraT]):
     ``inputSchema``, so one declaration serves the HTTP transport and every
     agent transport alike. Prefer the filter where there is one — it validates
     the value against published choices before it reaches the ORM, while a bare
-    parameter is only as safe as what the selector does with it. A selector
-    parameter named ``page`` or ``limit`` is refused at registration:
-    ``RESERVED_POST_FETCH_KEYS`` strips both from the selector's arguments on
-    every route, whether or not the tool paginates, so the parameter would never
-    receive the caller's value. The exception is a name the ``input_serializer``
-    lays back: a field of that name that is not ``read_only`` and is bound to
+    parameter is only as safe as what the selector does with it. On a ``LIST``
+    tool a selector parameter named ``page`` or ``limit`` is refused at
+    registration: ``RESERVED_POST_FETCH_KEYS`` strips both from a ``LIST``
+    selector's arguments on every route, whether or not the tool paginates, so
+    the parameter would never receive the caller's value. A ``RETRIEVE`` tool
+    cannot paginate, so nothing strips either name from its selector, which may
+    declare them, as on the Pydantic-AI route. The exception on a ``LIST`` tool
+    is a name the ``input_serializer`` lays back: a field of that name that is not ``read_only`` and is bound to
     its own name (no ``source`` elsewhere, no ``source="*"``), on a plain
     ``Serializer``, a ``DataclassSerializer`` or a bare ``@dataclass`` alike.
     Dispatch overlays the validated values on the stripped arguments, so the

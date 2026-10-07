@@ -139,6 +139,27 @@ def test_a_serializer_field_a_query_param_shadows_is_refused(binding: ArgumentBi
     _assert_refused(caught, "the service's input_serializer declares field(s) ['status']")
 
 
+def _invoice_with_status(*, pk: str, status: str) -> dict[str, Any]:
+    return {"pk": pk, "status": status}
+
+
+def test_a_name_the_serializer_and_the_lookup_both_take_is_named_as_the_serializers() -> None:
+    # The schema keeps the field's property for a name both declare, so the
+    # refusal names the serializer's field and not the lookup's parameter.
+    spec = ServiceSpec(
+        service=_set_status,
+        atomic=False,
+        input_serializer=_StatusIn,
+        instance_selector_spec=SelectorSpec(
+            kind=SelectorKind.RETRIEVE, selector=_invoice_with_status
+        ),
+    )
+    with pytest.raises(ImproperlyConfigured) as caught:
+        _register_service(_server(), spec, query_params=("status",))
+    _assert_refused(caught, "the service's input_serializer declares field(s) ['status']")
+    assert "target lookup declares" not in str(caught.value)
+
+
 def _set_flag(*, status: str) -> dict[str, Any]:
     return {"status": status}
 
@@ -282,8 +303,9 @@ async def test_a_parameter_a_typed_provider_fills_is_served(
 async def test_a_spread_service_parameter_its_provider_fills_is_served(
     binding: ArgumentBinding,
 ) -> None:
-    # The service's schema offers ``status`` though its provider fills it, so
-    # the check's subtraction is what exempts it.
+    # Under ``SPREAD_CALLER_WINS`` the service's schema offers ``status``
+    # though its provider fills it, so the check's subtraction is what exempts
+    # it there; under ``SPREAD_AUTHOR_WINS`` the schema leaves it out.
     server = _server()
     _register_service(
         server,
