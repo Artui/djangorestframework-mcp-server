@@ -29,10 +29,7 @@ missing was a way to check the claim once it *is* made.
 from __future__ import annotations
 
 from collections.abc import Mapping
-from typing import TYPE_CHECKING, Any
-
-if TYPE_CHECKING:  # pragma: no cover - imported only for typing
-    from jsonschema.exceptions import ValidationError
+from typing import Any
 
 # JSON's type vocabulary, in the order a value has to be tested against it.
 # ``bool`` leads because Python's ``bool`` is an ``int`` while JSON's boolean is
@@ -78,8 +75,12 @@ def _abbreviate(value: Any) -> str:
     return f"{text[:_VALUE_REPR_LIMIT]}... ({len(text)} chars)"
 
 
-def _instance_path(error: ValidationError) -> str:
+def _instance_path(error: Any) -> str:
     """Where in the payload the error sits, as a path expression.
+
+    ``error`` is a ``jsonschema`` ``ValidationError``, typed ``Any`` because
+    ``jsonschema`` is an optional extra and naming its class here would need a
+    guarded import.
 
     Built from ``absolute_path`` rather than read off ``json_path``: the
     rendering is also what the errors are sorted by, so owning it keeps the
@@ -91,7 +92,7 @@ def _instance_path(error: ValidationError) -> str:
     return "".join(parts)
 
 
-def _describe(error: ValidationError) -> str:
+def _describe(error: Any) -> str:
     """One line naming the property, the claim, and what actually arrived."""
     location: str = _instance_path(error)
     if error.validator in ("type", "format"):
@@ -183,7 +184,7 @@ def assert_tool_result_conforms(tool: Mapping[str, Any], result: Mapping[str, An
     # falls back to 2020-12, which is the draft MCP's own schema is written in.
     validator_cls: Any = validator_for(schema, default=Draft202012Validator)
     validator: Any = validator_cls(schema, format_checker=FormatChecker())
-    errors: list[ValidationError] = sorted(
+    errors: list[Any] = sorted(
         validator.iter_errors(result["structuredContent"]), key=_instance_path
     )
     if not errors:
