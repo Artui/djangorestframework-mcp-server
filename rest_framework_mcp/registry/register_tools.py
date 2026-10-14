@@ -30,7 +30,7 @@ from __future__ import annotations
 
 import dataclasses
 from collections.abc import Iterable
-from typing import TYPE_CHECKING, Any
+from typing import Any
 
 from rest_framework_mcp.constants import ToolKind
 from rest_framework_mcp.registry.types.selector_defaults import SelectorDefaults
@@ -38,10 +38,7 @@ from rest_framework_mcp.registry.types.selector_tool_binding import SelectorTool
 from rest_framework_mcp.registry.types.service_defaults import ServiceDefaults
 from rest_framework_mcp.registry.types.tool_binding import ToolBinding
 from rest_framework_mcp.registry.types.tool_definition import ToolDefinition
-
-if TYPE_CHECKING:  # pragma: no cover - imported only for typing
-    from rest_framework_mcp.server.mcp_server import MCPServer
-
+from rest_framework_mcp.server.mcp_server import MCPServer
 
 # Stripped before forwarding: these are the registration method's own
 # positional kwargs, or the discriminator, not values merged with defaults.

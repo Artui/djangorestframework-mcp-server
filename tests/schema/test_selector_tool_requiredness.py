@@ -25,9 +25,10 @@ import dataclasses
 import inspect
 import pathlib
 from types import SimpleNamespace
-from typing import TYPE_CHECKING, Annotated, Any, Generic, TypeVar, Union
+from typing import Annotated, Any, Generic, TypeVar, Union
 
 import pytest
+from django.http import HttpRequest
 from rest_framework import serializers
 from rest_framework_dataclasses.serializers import DataclassSerializer
 from rest_framework_services import DEFAULT_POOL_SEEDS, InputRequired, UnsetType
@@ -40,11 +41,6 @@ from rest_framework_mcp.auth.backends.allow_any_backend import AllowAnyBackend
 from rest_framework_mcp.constants import ArgumentBinding
 from tests.testapp.models import Invoice
 from tests.testapp.serializers import InvoiceOutputSerializer
-
-if TYPE_CHECKING:
-    # Imported for annotations only, where flake8-type-checking rules move such
-    # imports, so the name does not exist when the hints are resolved at runtime.
-    from django.http import HttpRequest
 
 _T = TypeVar("_T")
 

@@ -29,8 +29,6 @@ wrong metadata.
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
-
 from django.urls import URLPattern, path
 
 from rest_framework_mcp.auth.protected_resource_metadata import ProtectedResourceMetadataViewSet
@@ -46,9 +44,7 @@ from rest_framework_mcp.contrib.oauth.dynamic_client_registration_viewset import
     DynamicClientRegistrationViewSet,
 )
 from rest_framework_mcp.contrib.oauth.openid_discovery_viewset import OpenIDDiscoveryViewSet
-
-if TYPE_CHECKING:  # pragma: no cover - imported only for typing
-    from rest_framework_mcp.server.mcp_server import MCPServer
+from rest_framework_mcp.server.mcp_server import MCPServer
 
 
 def build_oauth_urlpatterns(

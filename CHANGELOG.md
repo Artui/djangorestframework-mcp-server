@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- **Three modules import their annotation-only names at module level.** The
+  registration path (`registry/register_tools.py`) and the OAuth URL builder
+  (`contrib/oauth/build_oauth_urlpatterns.py`) imported `MCPServer` under
+  `if TYPE_CHECKING:`, and the selector requiredness test imported `HttpRequest`
+  the same way. Neither import forms a cycle, so the guard only hid one from the
+  interpreter. No public module path, `__all__` entry, signature or runtime
+  behaviour changed.
+
 ## [0.52.0] — 2026-10-07
 
 ### Changed
