@@ -16,6 +16,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   the same way. Neither import forms a cycle, so the guard only hid one from the
   interpreter. No public module path, `__all__` entry, signature or runtime
   behaviour changed.
+- **No `if TYPE_CHECKING:` guard remains, and ruff bans one.** The
+  `assert_tool_result_conforms` helpers annotated a `jsonschema` error under a
+  guard because `jsonschema` is an optional extra; the two private helpers now
+  take `Any`, which changes no public signature. `TID251` rejects
+  `typing.TYPE_CHECKING` and its `typing_extensions` twin.
 
 ## [0.52.0] — 2026-10-07
 

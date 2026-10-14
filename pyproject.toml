@@ -296,6 +296,10 @@ required-imports = ["from __future__ import annotations"]
 # default is "parents", which lets ``from .foo import bar`` through.
 ban-relative-imports = "all"
 
+[tool.ruff.lint.flake8-tidy-imports.banned-api]
+"typing.TYPE_CHECKING".msg = "Break the import cycle instead of guarding it."
+"typing_extensions.TYPE_CHECKING".msg = "Break the import cycle instead of guarding it."
+
 [tool.ruff.format]
 quote-style = "double"
 indent-style = "space"
