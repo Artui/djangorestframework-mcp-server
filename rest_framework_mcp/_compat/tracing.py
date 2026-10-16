@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import importlib
-from collections.abc import Iterator
+from collections.abc import Generator
 from contextlib import contextmanager
 from typing import Any
 
@@ -40,7 +40,7 @@ class _NoopSpan:
 
 
 @contextmanager
-def span(name: str, attributes: dict[str, Any] | None = None) -> Iterator[Any]:
+def span(name: str, attributes: dict[str, Any] | None = None) -> Generator[Any]:
     """Start an MCP span; no-op if OpenTelemetry isn't installed.
 
     ``name`` follows the convention ``mcp.<method>`` (``mcp.tools.call``).
