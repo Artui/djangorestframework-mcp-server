@@ -9,6 +9,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- **The tracing helper annotates its context manager as a generator.** `span()`
+  in `_compat/tracing.py` returned `Iterator[Any]` under `@contextmanager`, which
+  newer type checkers flag as deprecated; it now returns `Generator[Any]`. The
+  annotation is never evaluated at runtime, and no signature a caller sees or
+  behaviour changed.
 - **Two package modules import their annotation-only names at module level.**
   The registration path (`registry/register_tools.py`) and the OAuth URL builder
   (`contrib/oauth/build_oauth_urlpatterns.py`) imported `MCPServer` under
