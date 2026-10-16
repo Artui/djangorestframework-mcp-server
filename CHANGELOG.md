@@ -7,8 +7,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.52.1] — 2026-10-16
+
 ### Changed
 
+- **`djangorestframework-services` now has a `<0.58` ceiling.** The declared range
+  was `>=0.56.0` with no upper bound, so a fresh install resolved 0.58.0, which
+  retires `ArgumentBinding.SPREAD_CALLER_WINS` and `UnknownArguments.PASSTHROUGH`
+  and changes other answers this release was written against. About 150 of
+  the package's own tests fail against it. The range is `>=0.56.0,<0.58`, so an
+  install resolves a kernel the package works with. The release adapted to 0.58
+  raises the floor to `>=0.58.0` and drops the ceiling. The three entries below,
+  which were unreleased, ship in this patch too; none changes behaviour.
 - **The tracing helper annotates its context manager as a generator.** `span()`
   in `_compat/tracing.py` returned `Iterator[Any]` under `@contextmanager`, which
   newer type checkers flag as deprecated; it now returns `Generator[Any]`. The
@@ -5917,7 +5927,8 @@ Pinned to `djangorestframework-services==0.6.0`.
 - 100% line + branch coverage enforced by pytest (**451 tests** at
   release).
 
-[Unreleased]: https://github.com/Artui/djangorestframework-mcp-server/compare/v0.52.0...HEAD
+[Unreleased]: https://github.com/Artui/djangorestframework-mcp-server/compare/v0.52.1...HEAD
+[0.52.1]: https://github.com/Artui/djangorestframework-mcp-server/compare/v0.52.0...v0.52.1
 [0.52.0]: https://github.com/Artui/djangorestframework-mcp-server/compare/v0.51.0...v0.52.0
 [0.51.0]: https://github.com/Artui/djangorestframework-mcp-server/compare/v0.50.1...v0.51.0
 [0.50.1]: https://github.com/Artui/djangorestframework-mcp-server/compare/v0.50.0...v0.50.1
