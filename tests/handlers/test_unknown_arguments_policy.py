@@ -233,11 +233,22 @@ def test_selector_tool_reject_rejects_truly_unknown_keys() -> None:
     assert "rogue" in error["detail"]["non_field_errors"][0]
 
 
-def _selector_tool_under_reject() -> MCPServer:
+def _selector_tool_under_reject(seen: dict[str, Any]) -> MCPServer:
+    """A selector tool under ``REJECT`` whose selector records what reaches it.
+
+    It takes a bare ``**kwargs`` rather than naming the keys these tests send: a
+    name the selector declares is known for that reason alone, so declaring them
+    would let each test pass without the seed set it is about.
+    """
+
+    def _recording(*, known: str, **kwargs: Any) -> list[dict[str, str]]:
+        seen.update(kwargs)
+        return [{"id": "1"}]
+
     server = _server()
     server.register_selector_tool(
         name="x",
-        spec=SelectorSpec(kind=SelectorKind.LIST, selector=_list),
+        spec=SelectorSpec(kind=SelectorKind.LIST, selector=_recording),
         unknown_arguments=UnknownArguments.REJECT,
         input_serializer=_OneFieldInput,
     )
@@ -247,12 +258,16 @@ def _selector_tool_under_reject() -> MCPServer:
 @pytest.mark.parametrize("name", ["result", "queryset"])
 def test_a_kernel_seed_is_not_refused_as_unknown(name: str) -> None:
     """Every reserved seed is known, ``result`` and ``queryset`` included: dispatch
-    drops a caller's key of a seed's name rather than refusing it."""
+    drops a caller's key of a seed's name rather than refusing it, so admitting it
+    here delivers nothing."""
+    seen: dict[str, Any] = {}
     out = handle_tools_call(
-        {"name": "x", "arguments": {"known": "ok", name: "v"}}, _ctx(_selector_tool_under_reject())
+        {"name": "x", "arguments": {"known": "ok", name: "v"}},
+        _ctx(_selector_tool_under_reject(seen)),
     )
     assert isinstance(out, dict)
     assert "isError" not in out, out
+    assert seen.get(name) != "v"
 
 
 @pytest.mark.parametrize("name", ["request", "serializer"])
@@ -261,13 +276,17 @@ def test_a_name_drf_services_drops_is_not_refused_as_unknown(name: str) -> None:
 
     Neither name is a kernel seed any more, but drf-services drops a caller's key
     of either one on every path, so refusing it here alone would answer the same
-    call two ways depending on which kind of tool received it.
+    call two ways depending on which kind of tool received it. Admitting it opens
+    nothing: the caller's value never reaches the selector.
     """
+    seen: dict[str, Any] = {}
     out = handle_tools_call(
-        {"name": "x", "arguments": {"known": "ok", name: "v"}}, _ctx(_selector_tool_under_reject())
+        {"name": "x", "arguments": {"known": "ok", name: "v"}},
+        _ctx(_selector_tool_under_reject(seen)),
     )
     assert isinstance(out, dict)
     assert "isError" not in out, out
+    assert seen.get(name) != "v"
 
 
 # ---------- A service tool whose declared key set is not enumerable ----------

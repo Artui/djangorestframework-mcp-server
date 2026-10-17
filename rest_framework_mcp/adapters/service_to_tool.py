@@ -196,9 +196,8 @@ def _validate_list_payload(
       ``view.kwargs`` or the query string and dispatch would answer every call as
       if the argument were missing.
     - Any binding but ``BUNDLE``. The service receives the whole list as one
-      ``data``, so there is nothing to spread. drf-services accepts a spreading
-      binding on a ``many=True`` spec and dispatches it exactly as ``AUTO``, which
-      would leave the declaration a choice that no call follows
+      ``data``, so there is nothing to spread, and a binding saying otherwise
+      would register as a choice no call could follow
       (``test_a_spreading_argument_binding_is_refused``).
     """
     if not spec.many:
