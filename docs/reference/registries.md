@@ -22,6 +22,11 @@ to each item in `items`, never to the envelope — and its description in the
 ::: rest_framework_mcp.registry.types.selector_tool_binding.SelectorToolBinding
 ::: rest_framework_services.types.url_kwarg.UrlKwarg
 ::: rest_framework_services.types.query_param.QueryParam
+
+A `UrlKwarg` or `QueryParam` may not take a name the DRF edge fills on every
+call; registration refuses one that does.
+
+::: rest_framework_mcp.constants.TOOL_EDGE_SEEDS
 ::: rest_framework_mcp.registry.tool_registry.ToolRegistry
 ::: rest_framework_mcp.registry.types.resource_binding.ResourceBinding
 ::: rest_framework_mcp.registry.resource_registry.ResourceRegistry

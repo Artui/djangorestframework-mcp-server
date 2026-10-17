@@ -19,7 +19,7 @@ from django_service_specs import (
     kernel_spec,
 )
 from rest_framework.serializers import Serializer
-from rest_framework_services import OfflineContract
+from rest_framework_services import OfflineContract, PolymorphicServiceSpec
 from rest_framework_services.types.selector_spec import SelectorSpec
 from rest_framework_services.types.service_spec import ServiceSpec
 from rest_framework_services.types.validate_channel_names import validate_channel_names
@@ -1945,9 +1945,16 @@ def _refuse_spec_this_server_cannot_dispatch(name: str, spec: object) -> None:
     with ``as_kernel_spec()``. This server's tools dispatch through
     drf-services' ``dispatch_spec``, which runs the DRF-bound spec it declares
     (serializers, permission classes, a view), so only those two types become
-    tools here. Anything else used to fall through to ``register_selector_tool``
-    and fail on a missing attribute
+    tools here. Anything else would reach ``register_selector_tool`` and fail
+    there on a missing attribute
     (``test_a_spec_that_is_not_drf_services_is_refused_naming_the_tool``).
+
+    The remedy depends on what was found. Only a spec of the kernel's own is
+    pointed at the kernel's ``dispatch``, which runs it with no transport; a
+    ``PolymorphicServiceSpec`` is pointed at its variants, which the kernel's
+    ``register`` refuses it for already, so only a registry assembled by hand
+    reaches that branch; anything else is told which two types are accepted
+    (``test_the_remedy_follows_the_type_found`` holds each of the three).
 
     The ``isinstance`` tuple is one branch arc, so coverage cannot see either
     member go: ``test_discriminates_service_from_selector_by_spec_type`` fails
@@ -1956,15 +1963,29 @@ def _refuse_spec_this_server_cannot_dispatch(name: str, spec: object) -> None:
     if isinstance(spec, (ServiceSpec, SelectorSpec)):
         return
     kind = type(spec)
+    if kind.__module__.partition(".")[0] == "django_service_specs":
+        remedy = (
+            "It is a django-service-specs spec, which runs with no transport through "
+            "django_service_specs.dispatch; to serve it as a tool here, declare the "
+            "operation with `from rest_framework_services import ServiceSpec, "
+            "SelectorSpec` (ServiceSpec for a write, SelectorSpec for a read), with "
+            "permission_classes and serializers in place of the kernel spec's "
+            "permissions, validator and presenter."
+        )
+    elif isinstance(spec, PolymorphicServiceSpec):
+        remedy = (
+            "A tool is one operation: register each variant in its `.specs` mapping "
+            "under its own name."
+        )
+    else:
+        remedy = (
+            "Declare the operation with `from rest_framework_services import "
+            "ServiceSpec, SelectorSpec` (ServiceSpec for a write, SelectorSpec for a read)."
+        )
     raise TypeError(
-        f"Tool {name!r}: register_specs registers a djangorestframework-services "
-        f"ServiceSpec or SelectorSpec, and the registry holds a "
-        f"{kind.__module__}.{kind.__qualname__} under this name. This server "
-        "dispatches through drf-services, which runs a DRF-bound spec: declare the "
-        "operation with `from rest_framework_services import ServiceSpec, "
-        "SelectorSpec` (ServiceSpec for a write, SelectorSpec for a read), with "
-        "permission_classes and serializers in place of the kernel spec's "
-        "permissions, validator and presenter."
+        f"Tool {name!r}: the SpecRegistry holds a {kind.__module__}.{kind.__qualname__} "
+        "under this name, which is not a rest_framework_services.ServiceSpec or "
+        f"SelectorSpec, the two types register_specs makes a tool from. {remedy}"
     )
 
 

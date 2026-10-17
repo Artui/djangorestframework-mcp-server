@@ -92,3 +92,14 @@ def test_a_channel_named_otherwise_still_registers(kind: str) -> None:
     _register(server, kind, url_kwargs=(UrlKwarg("project"),), query_params=(QueryParam("q"),))
 
     assert server.tools.get("op") is not None
+
+
+@pytest.mark.parametrize("kind", ["service", "selector"])
+@pytest.mark.parametrize("name", ["result", "queryset"])
+def test_a_channel_named_after_a_newer_kernel_seed_is_refused(kind: str, name: str) -> None:
+    # Not edge seeds: the kernel's ``RESERVED_POOL_SEEDS`` gained both, and the
+    # channel check reserves every seed the server's pool carries.
+    for channels in ({"url_kwargs": (UrlKwarg(name),)}, {"query_params": (QueryParam(name),)}):
+        server = _server()
+        with pytest.raises(ImproperlyConfigured, match=rf"\['{name}'\] collide"):
+            _register(server, kind, **channels)

@@ -158,3 +158,21 @@ def test_a_url_kwarg_does_not_reach_an_untyped_catch_all() -> None:
     result = server.call_tool("t", {"ceiling": 5}, user=None).to_dict()
 
     assert result["structuredContent"] == []
+
+
+def test_an_undeclared_argument_does_not_reach_an_untyped_catch_all() -> None:
+    # The same rule for an argument with no channel at all. ``IGNORE`` admits
+    # the call, and the catch-all still sees no ``ceiling``: on drf-services
+    # 0.56 it received every key the caller sent.
+    server = MCPServer(name="t", auth_backend=AllowAnyBackend(), session_store=None)
+    server.register_selector_tool(
+        name="t",
+        spec=SelectorSpec(
+            kind=SelectorKind.LIST, selector=_bare_list_selector, permission_classes=[AllowAny]
+        ),
+        unknown_arguments=UnknownArguments.IGNORE,
+    )
+
+    result = server.call_tool("t", {"ceiling": 5}, user=None).to_dict()
+
+    assert result["structuredContent"] == []

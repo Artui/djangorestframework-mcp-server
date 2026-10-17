@@ -479,3 +479,28 @@ def test_capabilities_describe_what_the_server_can_answer() -> None:
         selector=SelectorSpec(kind=SelectorKind.RETRIEVE, selector=lambda **_: None),
     )
     assert handle_initialize({}, _ctx(server)).capabilities.to_dict() == {"resources": {}}
+
+
+def _seed_named_siblings(*, value: str, result: Any = None, queryset: Any = None) -> list[str]:
+    return [f"{result}-{queryset}"]
+
+
+def test_a_sibling_named_after_a_newer_kernel_seed_does_not_reach_the_completer() -> None:
+    """The strip tracks the kernel's reserved seeds, which gained ``result`` and
+    ``queryset``; ``arguments`` still carries them verbatim, as caller input."""
+    server = _server()
+    server.register_prompt(
+        name="p",
+        render=lambda: "x",
+        arguments=[PromptArgument(name="a")],
+        completions={"a": _seed_named_siblings},
+    )
+    result = _complete(
+        server,
+        {
+            "ref": {"type": "ref/prompt", "name": "p"},
+            "argument": {"name": "a", "value": "v"},
+            "context": {"arguments": {"result": "r", "queryset": "q"}},
+        },
+    )
+    assert result["completion"]["values"] == ["None-None"]

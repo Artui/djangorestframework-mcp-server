@@ -281,7 +281,7 @@ def test_a_parameter_the_service_and_its_lookup_both_take_is_refused(
 
 
 @pytest.mark.parametrize("binding", _SPREADING)
-def test_a_shared_name_the_services_provider_fills_from_the_route_is_drf_services_to_refuse(
+def test_a_shared_name_the_services_provider_fills_from_the_route_is_refused_at_registration(
     binding: ArgumentBinding,
 ) -> None:
     # The first remedy does not reach a shared name: drf-services refuses a
