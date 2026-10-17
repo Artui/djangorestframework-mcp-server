@@ -169,9 +169,21 @@ ServiceSpec(
 ### "cannot apply to a spec declaring many=True"
 
 A `many=True` service receives the whole list as one `data` argument, so a
-`SPREAD_AUTHOR_WINS` or `SPREAD_CALLER_WINS` argument binding has nothing to
-spread, and drf-services raises `ValueError` for it on every call. Leave
-`argument_binding` at its `BUNDLE` default.
+`SPREAD_AUTHOR_WINS` argument binding has nothing to spread, and registration
+refuses it with `ImproperlyConfigured`. Leave `argument_binding` at its
+`BUNDLE` default.
+
+### "ArgumentBinding.SPREAD_CALLER_WINS is retired"
+
+drf-services 0.58.0 retired the member: a call has one pool, and an author's
+value for an argument (the spec's `kwargs` provider, a declared read) always
+outranks the caller's, so a caller cannot override what the server's spec
+declares. The member stays importable, and registering a tool with it raises
+`ImproperlyConfigured` naming the tool, rather than shipping one that fails
+every call. Pass `ArgumentBinding.SPREAD_AUTHOR_WINS` for a service whose own
+parameters are the caller's input, or `ArgumentBinding.BUNDLE` for one
+validated `data` payload. Where the caller's value should win for a key, leave
+that key out of the `kwargs` provider.
 
 ### "ServiceSpec declares collection_selector_spec with many=True"
 

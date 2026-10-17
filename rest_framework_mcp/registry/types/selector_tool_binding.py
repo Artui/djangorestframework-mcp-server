@@ -225,10 +225,11 @@ class SelectorToolBinding(Generic[ResultT, ExtraT]):
     one tool genuinely needs what a sibling hides: a lookup tool returning the
     identifier its neighbour drops.
 
-    Declared on the registry entry's
+    Declared as the spec's own ``field_audiences``, which a registry entry's
     [`OfflineContract`][rest_framework_services.types.offline_contract.OfflineContract]
-    and resolved here, so the field set an agent sees does not depend on which
-    agent transport served it."""
+    carries to ``register_specs``, or passed in an ``agent_contract=`` at
+    registration, and resolved here, so the field set an agent sees does not
+    depend on which agent transport served it."""
 
     @property
     def output_serializer(self) -> type | None:

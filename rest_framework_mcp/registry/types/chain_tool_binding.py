@@ -143,10 +143,11 @@ class ChainToolBinding:
     one tool genuinely needs what a sibling hides: a lookup tool returning the
     identifier its neighbour drops.
 
-    Declared on the registry entry's
+    Passed in the
     [`OfflineContract`][rest_framework_services.types.offline_contract.OfflineContract]
-    and resolved here, so the field set an agent sees does not depend on which
-    agent transport served it."""
+    given to ``register_chain_tool(agent_contract=...)``, since a chain has no
+    registry entry, and resolved here, so the field set an agent sees does not
+    depend on which agent transport served it."""
 
     @cached_property
     def audience_projection(self) -> AudienceProjection:

@@ -12,8 +12,8 @@ end up writing the list once per transport — and the lists drift. A spec gets
 added to the MCP wiring and forgotten in the agent's, or the same operation
 ends up named `create_order` here and something else there.
 
-`SpecRegistry` (`djangorestframework-services` 0.27+) is the one declaration
-site. `MCPServer.register_specs` is the MCP end of it.
+`SpecRegistry` (from `django-service-specs`, which `djangorestframework-services`
+re-exports) is the one declaration site. `MCPServer.register_specs` is the MCP end of it.
 
 ## Declare once
 
@@ -98,6 +98,7 @@ transport, so it is declared once on the spec, where each transport reads it:
 refund_order = ServiceSpec(
     service=refund_order_service,
     input_serializer=RefundInput,
+    permission_classes=[IsAdminUser],
     # Declared, not left unsaid: a second call refunds again.
     idempotent=False,
 )
@@ -114,24 +115,57 @@ An entry may carry an
 [`OfflineContract`][rest_framework_services.types.offline_contract.OfflineContract]:
 the `url_kwargs`, `query_params` and `field_audiences` a caller with **no HTTP
 request** has to be told, because the URLconf and query string tell an HTTP one
-for free. `register_specs` reads it as this mount's default, so the same entry
-mounted here and in an in-process Pydantic-AI toolset synthesises the same
-absent request:
+for free. It is declared on the spec, as its `reads` and `field_audiences`, and
+the entry's `agent_contract` answers it. `register_specs` reads it as this
+mount's default, so the same entry mounted here and in an in-process
+Pydantic-AI toolset synthesises the same absent request:
 
 ```python
-registry.register(
-    "list_project_orders",
-    orders_spec,
-    agent_contract=OfflineContract(url_kwargs=(UrlKwarg("project_pk", type="integer"),)),
+from django_service_specs import SelectorKind
+from rest_framework.permissions import IsAuthenticated
+from rest_framework_services import SelectorSpec, UrlKwarg
+
+orders_spec = SelectorSpec(
+    kind=SelectorKind.LIST,
+    selector=list_project_orders,
+    permission_classes=[IsAuthenticated],
+    reads=[UrlKwarg("project_pk", type="integer")],
 )
+registry.register("list_project_orders", orders_spec)
 
 server.register_specs(registry)  # the tool takes project_pk, declared once
 ```
 
+`SpecRegistry.register` takes no `agent_contract=` (drf-services 0.58.0 removed
+it). To add channels to an entry registered elsewhere, re-declare the spec it
+holds with `dataclasses.replace` and mount the result:
+
+```python
+from dataclasses import replace
+
+from django_service_specs import SpecRegistry
+from rest_framework_services import QueryParam, UrlKwarg
+
+entry = registry.get("list_project_orders")
+scoped = SpecRegistry(
+    [
+        replace(
+            entry,
+            spec=replace(
+                entry.spec,
+                reads=[UrlKwarg("project_pk", type="integer"), QueryParam("since")],
+            ),
+        )
+    ]
+)
+
+server.register_specs(scoped)  # the tool takes project_pk and since
+```
+
 A per-tool `url_kwargs` / `query_params` override wins over it. Overriding
-`agent_contract` itself replaces the entry's outright — the only way to mount an
-entry with *fewer* channels than it declares, since an empty tuple at the mount
-reads as saying nothing rather than saying none.
+`agent_contract` itself replaces the entry's outright — the only way for this
+mount to advertise *fewer* channels than the spec declares, since an empty
+tuple at the mount reads as saying nothing rather than saying none.
 
 Two things fail loudly rather than quietly:
 
@@ -160,10 +194,13 @@ names are unique *within* a registry, so two registries may reuse one.
 
 ## Permissions are not bypassed
 
-`register_specs` calls the same per-tool methods you would have called, so the
-permission-declaration guard still applies to every entry. A spec with no
-`permission_classes` and no `permissions` override is **refused** with
-`ImproperlyConfigured` — or, under
+A spec declaring no permissions at all never reaches this server:
+`SpecRegistry.register` refuses it (drf-services 0.58.0), because off HTTP there
+is no view whose policy it could inherit. `permission_classes=[]` still
+registers, as a spec with no guards, and `register_specs` calls the same
+per-tool methods you would have called, so the permission-declaration guard
+applies to it. A spec with empty `permission_classes` and no `permissions`
+override is **refused** with `ImproperlyConfigured` — or, under
 `REST_FRAMEWORK_MCP["REQUIRE_TOOL_PERMISSIONS"] = False`, downgraded to an
 `UnguardedToolWarning`.
 

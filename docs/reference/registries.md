@@ -72,9 +72,11 @@ bindings in input order.
 ::: rest_framework_mcp.registry.types.selector_defaults.SelectorDefaults
 ::: rest_framework_mcp.constants.ToolKind
 
-`ArgumentBinding` and `UnknownArguments` are re-exported from
-`djangorestframework-services` (the transport-neutral `dispatch_spec` owns
-these dispatch policies); import them from `rest_framework_mcp.constants`.
+`ArgumentBinding` is re-exported from `djangorestframework-services`, whose
+`dispatch_spec` owns it, and `UnknownArguments` from `django-service-specs`,
+the kernel that drf-services dispatches through and that owns it; import both
+from `rest_framework_mcp.constants`. `ArgumentBinding.SPREAD_CALLER_WINS` is
+retired: registering a tool with it raises `ImproperlyConfigured`.
 
 ::: django_service_specs.types.unknown_arguments.UnknownArguments
 ::: rest_framework_services.types.argument_binding.ArgumentBinding
