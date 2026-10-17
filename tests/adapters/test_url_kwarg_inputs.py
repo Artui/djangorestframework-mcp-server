@@ -281,14 +281,14 @@ def test_a_parameter_the_service_and_its_lookup_both_take_is_refused(
 
 
 @pytest.mark.parametrize("binding", _SPREADING)
-async def test_a_shared_name_the_services_provider_fills_from_the_route_is_drf_services_to_refuse(
+def test_a_shared_name_the_services_provider_fills_from_the_route_is_refused_at_registration(
     binding: ArgumentBinding,
 ) -> None:
     # The first remedy does not reach a shared name: drf-services refuses a
     # typed provider annotated to fill a name the target lookup reads, when it
-    # compiles the spec for the call, because the provider's values reach the
-    # service after the lookup has resolved the target. Registration here does
-    # not compile the spec, so the refusal is the call's.
+    # compiles the spec, because the provider's values reach the service after
+    # the lookup has resolved the target. Registration compiles the spec, so
+    # the refusal is the startup error rather than every call's.
     server = _server()
     spec = ServiceSpec(
         service=_archive_project_instance,
@@ -296,6 +296,6 @@ async def test_a_shared_name_the_services_provider_fills_from_the_route_is_drf_s
         kwargs=_project_from_route,
         instance_selector_spec=SelectorSpec(kind=SelectorKind.RETRIEVE, selector=_project),
     )
-    _register(server, spec, argument_binding=binding)
     with pytest.raises(ImproperlyConfigured, match=r"annotated to fill \['project_pk'\]"):
-        await server.acall_tool("archive", {"project_pk": 8}, user=None)
+        _register(server, spec, argument_binding=binding)
+    assert server.tools.get("archive") is None

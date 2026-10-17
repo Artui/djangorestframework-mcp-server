@@ -20,9 +20,12 @@ from typing import Any
 from django.http import HttpRequest
 from django_service_specs import SelectorKind
 from rest_framework import serializers
+from rest_framework.permissions import AllowAny
 from rest_framework_services.types.selector_spec import SelectorSpec
 from typing_extensions import TypedDict, Unpack
 
+from rest_framework_mcp import MCPServer, UrlKwarg
+from rest_framework_mcp.auth.backends.allow_any_backend import AllowAnyBackend
 from rest_framework_mcp.auth.types.token_info import TokenInfo
 from rest_framework_mcp.constants import UnknownArguments
 from rest_framework_mcp.handlers.handle_tools_call import handle_tools_call
@@ -111,3 +114,65 @@ class _IdentifiedUser(str):
 
 
 _ALICE = _IdentifiedUser("alice")
+
+
+# ---------- a ``UrlKwarg`` beside a reflected key ----------
+
+
+def _bare_list_selector(user: Any, **extras: Any) -> list[int]:
+    """The same read with an untyped catch-all, which names no key."""
+    ceiling = extras.get("ceiling")
+    return [n for n in (1, 5, 15) if ceiling is not None and n <= int(ceiling)]
+
+
+def _url_kwarg_server(selector: Any) -> MCPServer:
+    server = MCPServer(name="t", auth_backend=AllowAnyBackend(), session_store=None)
+    server.register_selector_tool(
+        name="t",
+        spec=SelectorSpec(kind=SelectorKind.LIST, selector=selector, permission_classes=[AllowAny]),
+        url_kwargs=(UrlKwarg("ceiling", type="integer"),),
+    )
+    return server
+
+
+def test_a_url_kwarg_beside_a_reflected_key_still_reaches_the_typed_extras() -> None:
+    # The documented superset: registering the ``UrlKwarg`` routes the value
+    # through ``view.kwargs`` and the selector still reads it from its extras,
+    # under the one property the schema lists.
+    server = _url_kwarg_server(_extras_list_selector)
+
+    result = server.call_tool("t", {"ceiling": 5}, user=None).to_dict()
+    listed: Any = server.list_tools(user=None)
+
+    assert result["structuredContent"] == [1, 5]
+    assert set(listed["tools"][0]["inputSchema"]["properties"]) == {"ceiling"}
+
+
+def test_a_url_kwarg_does_not_reach_an_untyped_catch_all() -> None:
+    # drf-services 0.58.0 hands a bare ``**kwargs`` the declared arguments and
+    # the seeds, never a key it does not declare, and a route capture is no
+    # declaration of the callable's: the selector reads ``view.kwargs`` or
+    # names the key, or it sees nothing.
+    server = _url_kwarg_server(_bare_list_selector)
+
+    result = server.call_tool("t", {"ceiling": 5}, user=None).to_dict()
+
+    assert result["structuredContent"] == []
+
+
+def test_an_undeclared_argument_does_not_reach_an_untyped_catch_all() -> None:
+    # The same rule for an argument with no channel at all. ``IGNORE`` admits
+    # the call, and the catch-all still sees no ``ceiling``: on drf-services
+    # 0.56 it received every key the caller sent.
+    server = MCPServer(name="t", auth_backend=AllowAnyBackend(), session_store=None)
+    server.register_selector_tool(
+        name="t",
+        spec=SelectorSpec(
+            kind=SelectorKind.LIST, selector=_bare_list_selector, permission_classes=[AllowAny]
+        ),
+        unknown_arguments=UnknownArguments.IGNORE,
+    )
+
+    result = server.call_tool("t", {"ceiling": 5}, user=None).to_dict()
+
+    assert result["structuredContent"] == []

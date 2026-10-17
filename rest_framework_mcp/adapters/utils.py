@@ -24,6 +24,7 @@ from rest_framework_services.types.validate_channel_names import validate_channe
 from rest_framework_mcp.constants import (
     RESERVED_POOL_SEEDS,
     RESERVED_POST_FETCH_KEYS,
+    TOOL_EDGE_SEEDS,
     ArgumentBinding,
 )
 from rest_framework_mcp.registry.types.query_param import QueryParam
@@ -141,8 +142,10 @@ def validate_url_kwargs(
     which ``validate_url_kwarg_inputs`` refuses.
 
     The checks live in drf-services' ``validate_channel_names``, which folds in
-    the pool seeds it owns; the pagination names and the server's own
-    ``pool_seeds`` are ours to contribute. A registered seed is reserved at
+    the kernel's pool seeds; the pagination names, the names the DRF edge fills
+    itself (``TOOL_EDGE_SEEDS``: ``request``, ``view``, ``serializer``, which the
+    kernel's set no longer lists) and the server's own ``pool_seeds`` are ours
+    to contribute. A registered seed is reserved at
     dispatch, which strips it from the URL kwargs, so a declaration named after
     one would be accepted here and then silently dropped on every call.
     Sharing the check is what keeps this package's notion of a valid declaration
@@ -152,7 +155,7 @@ def validate_url_kwargs(
         label=label,
         kind="url_kwargs",
         declarations=url_kwargs,
-        reserved=RESERVED_POST_FETCH_KEYS | pool_seeds.names,
+        reserved=RESERVED_POST_FETCH_KEYS | TOOL_EDGE_SEEDS | pool_seeds.names,
     )
 
 
@@ -184,7 +187,7 @@ def validate_query_params(
         label=label,
         kind="query_params",
         declarations=query_params,
-        reserved=RESERVED_POST_FETCH_KEYS | pool_seeds.names,
+        reserved=RESERVED_POST_FETCH_KEYS | TOOL_EDGE_SEEDS | pool_seeds.names,
     )
     overlap = sorted({qp.name for qp in query_params} & {uk.name for uk in url_kwargs})
     if overlap:

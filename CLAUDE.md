@@ -105,6 +105,12 @@ through module-level loaders. They receive them via `as_view(...)` from `MCPServ
 The MCP layer is an alternate transport over `djangorestframework-services` primitives.
 Import these — do not parallel them:
 
+Kernel-owned names are imported from `django_service_specs`, which owns them:
+`ServiceError`, `ServiceValidationError`, and every type drf-services re-exports by
+identity from the kernel (`UnknownArguments`, `SelectorKind`, `PoolSeeds`, `UNSET`,
+`SpecRegistry` and the rest). drf-services' root still re-exports them, but that is
+a compatibility path, not the home: import a name from the package that defines it.
+
 - `rest_framework_services.types.service_spec.ServiceSpec` — the unit of registration.
 - `resolve_callable_kwargs` — kwarg-pool dispatch. Picks the subset of a kwarg pool
   matching the callable's declared parameters; if the callable declares `**kwargs` the
@@ -126,8 +132,8 @@ Import these — do not parallel them:
   the `{items, page, totalPages, hasNext}` envelope around it. Only the coercion of the
   untyped `page` / `limit` arguments into ints stays here (`_coerce_int`), because
   answering a malformed argument is a transport's policy while what a page *is* is not.
-- `rest_framework_services.exceptions.service_error.ServiceError` and
-  `service_validation_error.ServiceValidationError` — caught at the MCP boundary and
+- `django_service_specs.ServiceError` and `django_service_specs.ServiceValidationError`
+  — caught at the MCP boundary and
   mapped to `isError: true` tool results via `build_error_tool_result(...)`
   (`error_type="validation_error"` for `ServiceValidationError`, `"service_error"`
   for `ServiceError`), not to JSON-RPC error envelopes. A dispatch failure surfaces
@@ -142,20 +148,32 @@ Import these — do not parallel them:
   files input validation under tool execution errors. On `tools/call`, `-32602`
   is left to an unknown tool and a request failing the `CallToolRequest` schema.
 
-The dispatch leaves are **top-level exports** of `rest_framework_services` (its
-documented "stable dispatch surface", 0.17+) — import them from the package root,
-never from internal `utils` / `_compat` paths.
+Each dispatch leaf is imported from the root of the package that owns it: the DRF
+edge (`dispatch_spec`, `spec_to_json_schema`, `build_offline_context`,
+`resolve_callable_kwargs`, `server_owned_keys`) from `rest_framework_services`, and
+what the kernel owns (`provider_keys`, `base_pool`, `operation_affordances`,
+`kernel_spec`, `paginate_output`) from `django_service_specs`. Never from either
+package's internal `utils` / `_compat` paths, with the exceptions below.
 
-**Two readers are the exception, because the root does not export them.**
-`declared_input_keys` (in `handlers/utils.py`) and `resolve_unknown_arguments`
-(in `registry/types/tool_binding.py`) are imported from
-`rest_framework_services.dispatch.utils`, the module dispatch itself calls them
-from: the first is the set `REJECT` admits, which decides whether a schema is
-closed, and the second is the check registration asks to refuse a `REJECT` it
-cannot enforce. A local copy of either is the drift this section exists to
-prevent, so the internal import is the lesser cost. Move each to the root
-import when drf-services exports it, and add nothing else to that module's
-list.
+**Three names are the exception, because no root exports them.** They are imported
+from `rest_framework_services.dispatch.utils`, the module dispatch itself reads
+them from:
+
+- `declared_input_keys` (in `handlers/utils.py`): the set `REJECT` admits, which
+  decides whether a schema is closed.
+- `resolve_unknown_arguments` (in `registry/types/tool_binding.py`): the check
+  registration asks to refuse a `REJECT` it cannot enforce.
+- `DROPPED_EDGE_SEEDS` (`request`, `serializer`): the names the DRF edge drops from
+  a caller's arguments because it fills them itself. The completion seeding, the
+  unknown-argument check, trust-mode registration and both schema builders' supplied
+  sets read it, so nothing is advertised or counted that the call then drops.
+
+A local copy of any of them is the drift this section exists to prevent, so the
+internal import is the lesser cost. Move each to the root import when drf-services
+exports it, and add nothing else to that module's list. `constants.TOOL_EDGE_SEEDS`
+is written out rather than composed from it, and a test pins it to
+`DROPPED_EDGE_SEEDS | EDGE_SEEDS`, so that the public constant does not import an
+internal module either.
 
 Validation, output-serializer rendering, and kwarg-pool construction are **not**
 reproduced locally. The `handlers/` layer delegates to the sister repo's

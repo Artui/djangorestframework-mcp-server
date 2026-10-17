@@ -59,6 +59,15 @@ Each entry becomes a tool: a `ServiceSpec` goes through
 `register_service_tool`, a `SelectorSpec` through `register_selector_tool`.
 Registration order is the registry's order, so `tools/list` stays stable.
 
+Both are the `djangorestframework-services` specs (`from rest_framework_services
+import ServiceSpec, SelectorSpec`), because this server dispatches through
+drf-services, which runs a DRF-bound spec. A `SpecRegistry` also accepts the
+kernel's own `django_service_specs.ServiceSpec` / `SelectorSpec` and any object
+with `as_kernel_spec()`; `register_specs` refuses such an entry with a
+`TypeError` naming the tool and the type it found. For a kernel spec it adds that
+`django_service_specs.dispatch` runs one with no transport; for anything else it
+names the import to declare the operation with.
+
 This is a **source for** the server's own `ToolRegistry`, not a replacement for
 it. Every tool still lands as a normal binding, and names still share the one
 MCP tool namespace — registering a name twice raises, exactly as before.
@@ -166,6 +175,16 @@ A per-tool `url_kwargs` / `query_params` override wins over it. Overriding
 `agent_contract` itself replaces the entry's outright — the only way for this
 mount to advertise *fewer* channels than the spec declares, since an empty
 tuple at the mount reads as saying nothing rather than saying none.
+
+A `QueryParam` read naming one of the selector's own parameters is refused here,
+while the same spec passed to `register_selector_tool(spec=...)` is served.
+`register_specs` hands the entry's reads to the registrar as this mount's
+`query_params`, and a query param shadowing a selector parameter is refused
+there, because its value is routed to `request.query_params` rather than to the
+parameter. Registered directly, drf-services reads the spec's `reads` itself and
+the value reaches the parameter. A later release makes the two routes agree;
+until then, register such a spec directly, or have the selector read the name off
+`request.query_params` instead of declaring it.
 
 Two things fail loudly rather than quietly:
 

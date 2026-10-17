@@ -163,8 +163,8 @@ class SelectorToolBinding(Generic[ResultT, ExtraT]):
     ordering, pagination). ``REJECT`` answers an ``isError``
     ``validation_error`` result naming them, ``IGNORE`` drops them.
     ``PASSTHROUGH`` is retired in drf-services 0.58.0, where an argument the
-    spec does not declare never reaches a callable: pass ``IGNORE`` or
-    ``REJECT``."""
+    spec does not declare never reaches a callable, and the registrars refuse
+    it: pass ``IGNORE`` or ``REJECT``."""
 
     always_listed: bool = False
     """Keep this binding in ``tools/list`` even when ``FILTER_LISTINGS_BY_PERMISSIONS``

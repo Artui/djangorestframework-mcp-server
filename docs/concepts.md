@@ -227,12 +227,12 @@ required. This server does not refuse a call that leaves it out, because only
 the assembled pool can say whether it arrived. drf-services can, once the
 provider has run: when the provider declines the key and the caller sent none,
 dispatch refuses the call before the selector runs, as a `validation_error`
-result in drf-services' own shape, where the selector used to raise
-`TypeError`:
+result keyed by the missing name (drf-services' `InvalidArguments`), where the
+selector used to raise `TypeError`:
 
 ```json
-{"error": {"type": "validation_error", "message": "Service validation error.",
-           "detail": {"non_field_errors": ["Missing required argument(s): 'tenant'."]}}}
+{"error": {"type": "validation_error", "message": "Invalid arguments",
+           "detail": {"tenant": ["This field is required."]}}}
 ```
 
 The provider's keys are read by drf-services' `provider_keys`, the static half
@@ -366,9 +366,12 @@ server.register_service_tool(
 Because a URL kwarg is popped before the spec sees the arguments, it never counts
 as an unknown argument (the `REJECT` policy ignores it) and never lands in the
 service's validated payload — it routes **only** through `view.kwargs`. A name
-can't collide with a reserved transport key (`page` / `limit`, or the
-`request` / `user` / `progress` / `data` / `instance` / `serializer` /
-`collection` pool seeds).
+can't collide with a reserved transport key, and registration refuses one that
+does: `page` / `limit`; the kernel's pool seeds `user` / `data` / `instance` /
+`collection` / `result` / `queryset` / `progress`; the names drf-services' DRF
+edge fills itself on every call, `request` / `view` / `serializer`
+(`TOOL_EDGE_SEEDS`); and any seed the server registers in `pool_seeds`. The same
+names are refused for a `QueryParam`.
 
 Sharing a name with an input is how a route capture reaches a callable that
 takes it as a parameter, **where that callable is handed `view.kwargs`**: a
@@ -426,7 +429,7 @@ value on the request:
 | --- | --- | --- |
 | In the `inputSchema` | yes | yes |
 | Can be required | yes (`InputRequired`) | yes (`required=True`, plus an `isError` result when omitted) |
-| Reaches the selector | yes, as a spec param | yes, via the `view.kwargs` spread |
+| Reaches the selector | yes, as a spec param | yes, via the `view.kwargs` spread, where the selector names it (a parameter or a typed `**extras` key); a bare `**kwargs` is not handed it |
 | Reaches `view.kwargs` | **no** | yes |
 | Ranks above caller-supplied params | no — it *is* caller input | yes |
 | Source of a required selector parameter at registration | not needed — `**extras` names no parameter | yes, when `required=True` or it declares a default |
@@ -438,10 +441,14 @@ scoping provider doing `view.kwargs.get("project_pk")` returns `None` and
 **mis-scopes every call** instead of failing: the failure mode worth naming here
 is that it is silent.
 
-Register the `UrlKwarg` as well when the value is scope. It is a strict superset
-— the selector still receives it in `**extras`, and the schema keeps one property
-and one `required` entry (an explicit `UrlKwarg` wins the merge over a reflected
-key of the same name).
+Register the `UrlKwarg` as well when the value is scope. Beside a reflected key
+it adds the route and takes nothing away: the selector still receives the value
+in its typed `**extras`, and the schema keeps one property and one `required`
+entry (an explicit `UrlKwarg` wins the merge over a reflected key of the same
+name). That holds because the key is declared. A selector taking an untyped
+`**kwargs` names no key, and since drf-services 0.58.0 a catch-all is handed the
+declared arguments and the seeds only, so a `UrlKwarg` value never reaches it:
+read `view.kwargs`, or declare the key.
 
 That split mirrors HTTP, where a route capture arrives in the URL and never in the
 body — which is what makes it unspoofable. Over MCP the arguments are whatever the
@@ -821,10 +828,12 @@ forms) accept three behavior knobs:
   - `ArgumentBinding.AUTO` — resolve per spec type (service → `BUNDLE`,
     selector → `SPREAD_AUTHOR_WINS`).
 
-  Reserved transport-pool seeds (`request` / `user` / `progress` / `data` /
-  `instance` / `serializer` / `collection`) and, on a `LIST` selector tool,
-  the pipeline keys (`page` / `limit`) are stripped from the spread regardless
-  of mode so clients can't poison transport-controlled state. So trust mode (no
+  Reserved transport-pool seeds (the kernel's `user` / `data` / `instance` /
+  `collection` / `result` / `queryset` / `progress`, and any seed the server
+  registers), the `request` and `serializer` drf-services' DRF edge fills
+  itself, and, on a `LIST` selector tool, the pipeline keys (`page` / `limit`)
+  are stripped from the spread regardless of mode so clients can't poison
+  transport-controlled state. So trust mode (no
   `input_serializer` under a spreading binding) does not count a reserved seed
   as one the caller supplies: a callable requiring a seed that nothing on the
   transport fills is refused at registration. For the same reason, registration
@@ -909,7 +918,11 @@ forms) accept three behavior knobs:
     against their own input serializer, so they are closed under `REJECT` with
     one and open without one, where nothing checks the keys.
   - `UnknownArguments.PASSTHROUGH` — retired in drf-services 0.58.0, where an
-    argument the spec does not declare never reaches a callable. Declare the
+    argument the spec does not declare never reaches a callable. Every tool
+    registrar (`register_service_tool`, `register_selector_tool`,
+    `register_chain_tool`, and the decorators, `register_specs` and
+    `register_tools` through them) refuses it with `ImproperlyConfigured`
+    naming the tool, so a server carrying it does not start. Declare the
     argument (a `reads` entry, a serializer field or a parameter) and pass
     `IGNORE` or `REJECT`.
   - `UnknownArguments.IGNORE` — `"additionalProperties": true`; unknown

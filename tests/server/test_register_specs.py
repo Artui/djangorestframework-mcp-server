@@ -2,13 +2,17 @@
 
 from __future__ import annotations
 
+import warnings
 from typing import Any
 
 import pytest
 from django.core.exceptions import ImproperlyConfigured
-from django_service_specs import SelectorKind, SpecRegistry
+from django_service_specs import RegisteredSpec, SelectorKind, SpecRegistry, Unrestricted
+from django_service_specs import SelectorSpec as KernelSelectorSpec
+from django_service_specs import ServiceSpec as KernelServiceSpec
 from rest_framework import serializers
-from rest_framework.permissions import IsAuthenticated
+from rest_framework.permissions import AllowAny, IsAuthenticated
+from rest_framework_services import PolymorphicServiceSpec, QueryParam
 from rest_framework_services.types.selector_spec import SelectorSpec
 from rest_framework_services.types.service_spec import ServiceSpec
 
@@ -235,3 +239,149 @@ class TestSecurityGuardsStillApply:
             registry, overrides={"refund_order": {"permissions": [IsAuthenticated]}}
         )
         assert binding.permissions == (IsAuthenticated,)
+
+
+# ---------- a spec this server cannot dispatch ----------
+
+
+def _kernel_service(**_: Any) -> None:
+    return None
+
+
+def _kernel_rows(**_: Any) -> list[Any]:
+    return []
+
+
+class _Declaration:
+    """Another library's declaration, compiling to a kernel spec: a ``SpecSource``."""
+
+    def as_kernel_spec(self) -> KernelServiceSpec:
+        return KernelServiceSpec(service=_kernel_service, permissions=[Unrestricted()])
+
+
+@pytest.mark.parametrize(
+    ("spec", "type_name"),
+    [
+        (
+            KernelServiceSpec(service=_kernel_service, permissions=[Unrestricted()]),
+            "django_service_specs.specs.service_spec.ServiceSpec",
+        ),
+        (
+            KernelSelectorSpec(
+                kind=SelectorKind.LIST, selector=_kernel_rows, permissions=[Unrestricted()]
+            ),
+            "django_service_specs.specs.selector_spec.SelectorSpec",
+        ),
+        (_Declaration(), f"{__name__}._Declaration"),
+    ],
+    ids=["kernel-service", "kernel-selector", "spec-source"],
+)
+def test_a_spec_that_is_not_drf_services_is_refused_naming_the_tool(
+    spec: Any, type_name: str
+) -> None:
+    # The registry holds anything the kernel can compile, and this server
+    # dispatches through drf-services' ``dispatch_spec``, which runs a
+    # DRF-bound spec. Without the check such an entry reaches the selector
+    # registrar and fails on a missing attribute
+    # (``'ServiceSpec' object has no attribute 'selector'``).
+    registry = SpecRegistry()
+    registry.register("place_order", spec)
+    server = _make()
+
+    with pytest.raises(TypeError) as caught:
+        server.register_specs(registry)
+
+    message = str(caught.value)
+    assert "Tool 'place_order'" in message
+    assert type_name in message
+    assert "is not a rest_framework_services.ServiceSpec or SelectorSpec" in message
+    assert "from rest_framework_services import ServiceSpec, SelectorSpec" in message
+    assert server.tools.get("place_order") is None
+
+
+class _HandBuiltRegistry:
+    """A registry assembled without ``SpecRegistry.register``, which refuses a
+    ``PolymorphicServiceSpec`` itself: the only way one reaches ``register_specs``."""
+
+    def __init__(self, *entries: RegisteredSpec) -> None:
+        self._entries = entries
+
+    def __contains__(self, name: object) -> bool:
+        return any(entry.name == name for entry in self._entries)
+
+    def all(self) -> tuple[RegisteredSpec, ...]:
+        return self._entries
+
+
+def _refusal(registry: Any) -> str:
+    with pytest.raises(TypeError) as caught:
+        _make().register_specs(registry)
+    return str(caught.value)
+
+
+def test_the_remedy_follows_the_type_found() -> None:
+    # Only the kernel's own spec is pointed at the kernel's dispatch.
+    kernel = SpecRegistry()
+    kernel.register(
+        "place_order", KernelServiceSpec(service=_kernel_service, permissions=[Unrestricted()])
+    )
+    assert "django_service_specs.dispatch" in _refusal(kernel)
+
+    # Another library's declaration is not a kernel spec, so it is told only
+    # which two types this server accepts.
+    source = SpecRegistry()
+    source.register("place_order", _Declaration())
+    source_message = _refusal(source)
+    assert "django_service_specs.dispatch" not in source_message
+    assert "from rest_framework_services import ServiceSpec, SelectorSpec" in source_message
+
+    # A polymorphic spec is pointed at its variants.
+    poly = PolymorphicServiceSpec(
+        discriminator=lambda **_: "email",
+        specs={"email": ServiceSpec(service=_kernel_service, atomic=False)},
+    )
+    poly_message = _refusal(
+        _HandBuiltRegistry(RegisteredSpec(name="sign_up", spec=poly, tags=frozenset()))
+    )
+    assert "Tool 'sign_up'" in poly_message
+    assert "rest_framework_services.types.polymorphic_service_spec.PolymorphicServiceSpec" in (
+        poly_message
+    )
+    assert "register each variant in its `.specs` mapping" in poly_message
+    assert "django_service_specs.dispatch" not in poly_message
+
+
+# ---------- a QueryParam read naming a selector parameter ----------
+
+
+def _orders_by_status(*, status: str = "any") -> list[dict[str, Any]]:
+    return [{"status": status}]
+
+
+def _status_read_spec() -> SelectorSpec[Any, Any]:
+    return SelectorSpec(
+        kind=SelectorKind.LIST,
+        selector=_orders_by_status,
+        permission_classes=[AllowAny],
+        reads=[QueryParam("status")],
+    )
+
+
+def test_a_query_param_read_naming_a_selector_parameter_differs_by_route() -> None:
+    # Held as it stands, so the registry recipe's account of it fails here the
+    # moment the two routes agree. ``register_specs`` hands the read on as the
+    # mount's ``query_params``, which refuses a name the selector declares,
+    # because such a value is routed to ``request.query_params``; registered
+    # directly, drf-services reads the spec's ``reads`` and the value reaches
+    # the parameter.
+    registry = SpecRegistry()
+    registry.register("orders", _status_read_spec())
+    with pytest.raises(ImproperlyConfigured, match="also declares as a QueryParam"):
+        _make().register_specs(registry)
+
+    server = _make()
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore")
+        server.register_selector_tool(name="orders", spec=_status_read_spec())
+    result = server.call_tool("orders", {"status": "open"}, user=None).to_dict()
+    assert result["structuredContent"] == [{"status": "open"}]

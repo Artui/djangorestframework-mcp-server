@@ -126,8 +126,8 @@ class ToolBinding(Generic[InputT, ResultT, ExtraT]):
       One whose ``**kwargs`` annotation cannot be resolved cannot be enforced,
       so registration refuses it.
     - ``PASSTHROUGH`` is retired in drf-services 0.58.0, where an argument the
-      spec does not declare never reaches a callable: pass ``IGNORE`` or
-      ``REJECT``.
+      spec does not declare never reaches a callable, and the registrars refuse
+      it: pass ``IGNORE`` or ``REJECT``.
     - ``IGNORE`` advertises an open schema and drops them."""
 
     always_listed: bool = False

@@ -3,12 +3,14 @@
 from __future__ import annotations
 
 import pytest
+from rest_framework_services.dispatch.utils import DROPPED_EDGE_SEEDS, EDGE_SEEDS
 
 from rest_framework_mcp.constants import (
     JSONRPC_VERSION,
     RESERVED_POOL_SEEDS,
     RESERVED_POST_FETCH_KEYS,
     RESOURCE_EDGE_SEEDS,
+    TOOL_EDGE_SEEDS,
     ArgumentBinding,
     JsonRpcErrorCode,
     OutputFormat,
@@ -106,6 +108,13 @@ def test_reserved_pool_seeds_shape() -> None:
 def test_the_resource_edge_seeds_are_what_the_kernel_leaves_out() -> None:
     assert frozenset({"request"}) == RESOURCE_EDGE_SEEDS
     assert not (RESOURCE_EDGE_SEEDS & RESERVED_POOL_SEEDS)
+
+
+def test_the_tool_edge_seeds_are_what_the_drf_edge_fills() -> None:
+    # Written out in ``constants.py``; pinned to drf-services' own sets so an
+    # upstream change to what the edge seeds or drops fails here.
+    assert frozenset(EDGE_SEEDS) | DROPPED_EDGE_SEEDS == TOOL_EDGE_SEEDS
+    assert not (TOOL_EDGE_SEEDS & RESERVED_POOL_SEEDS)
 
 
 def test_reserved_sets_are_disjoint() -> None:

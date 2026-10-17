@@ -38,7 +38,7 @@ from rest_framework_mcp.transport.in_memory_session_store import InMemorySession
 from tests.utils import tool_error
 
 # ``SPREAD_CALLER_WINS`` and ``UnknownArguments.PASSTHROUGH`` are left out: drf-services
-# retired both, and each raises ``ValueError`` at dispatch.
+# retired both, and the registrars refuse each with ``ImproperlyConfigured``.
 _BINDINGS = (ArgumentBinding.BUNDLE, ArgumentBinding.SPREAD_AUTHOR_WINS)
 _SPREAD = (ArgumentBinding.SPREAD_AUTHOR_WINS,)
 _POLICIES = (UnknownArguments.REJECT, UnknownArguments.IGNORE)

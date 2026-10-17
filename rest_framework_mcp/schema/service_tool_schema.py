@@ -4,6 +4,7 @@ from typing import Any
 
 from django_service_specs import DEFAULT_POOL_SEEDS, PoolSeeds, provider_keys
 from rest_framework_services import server_owned_keys, spec_to_json_schema
+from rest_framework_services.dispatch.utils import DROPPED_EDGE_SEEDS
 from rest_framework_services.types.service_spec import ServiceSpec
 
 from rest_framework_mcp.registry.types.tool_binding import ToolBinding
@@ -129,11 +130,16 @@ def declared_service_input(binding: ToolBinding, *, pool_seeds: PoolSeeds) -> di
     parameters. ``supplied=`` is the reserved seeds, the built-in ones and the
     ones this server registers, because dispatch subtracts exactly those from
     what it declares (``reserved=pool_seeds.reserved``): one left out would be
-    listed and then stripped from the call, and passing any is what makes a
+    listed and then stripped from the call. Passing any is what makes a
     parameter without a default required (``supplied=None`` would leave every
     parameter optional: ``test_a_spread_service_lists_its_own_parameters``;
     the built-in seeds alone would list a registered one:
     ``test_a_registered_seed_is_not_listed_as_a_service_parameter``).
+    ``DROPPED_EDGE_SEEDS`` joins them, because the DRF edge drops a caller's
+    ``request`` and ``serializer`` as dispatch strips a seed's, and the
+    kernel's reserved set no longer lists either: without it a ``serializer``
+    parameter with a default was listed and then dropped
+    (``test_a_spread_services_serializer_parameter_is_not_advertised``).
 
     **A name the spec's provider says it fills is not listed.** drf-services
     applies the provider over the caller's spread under every binding, so the
@@ -163,7 +169,7 @@ def declared_service_input(binding: ToolBinding, *, pool_seeds: PoolSeeds) -> di
             spec,
             phase="input",
             argument_binding=binding.argument_binding,
-            supplied=pool_seeds.reserved | filled,
+            supplied=pool_seeds.reserved | DROPPED_EDGE_SEEDS | filled,
         )
         or {}
     )

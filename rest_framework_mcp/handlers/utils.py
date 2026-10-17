@@ -653,7 +653,8 @@ def build_validated_input_serializer(
             them. ``PASSTHROUGH`` raises ``ValueError``, as drf-services' own
             dispatch does for it, because a chain step is dispatched here rather
             than through ``dispatch_spec`` and would otherwise run it as
-            ``IGNORE`` without a word.
+            ``IGNORE`` without a word. ``register_chain_tool`` refuses it first;
+            this answers a binding built by hand.
         additional_known_keys: Widens the known set beyond the serializer's own
             fields; selector tools pass their filter / ordering / pagination keys.
         partial: Relaxes required-field validation. MCP has no HTTP method to

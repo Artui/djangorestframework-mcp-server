@@ -223,3 +223,34 @@ async def test_a_service_tools_page_and_limit_are_its_own_on_every_route(route: 
     out = await _structured(server, route, {"page": 2, "limit": 5})
 
     assert out == {"page": 2, "limit": 5}
+
+
+class _PageDroppedByValidate(drf_serializers.Serializer):
+    """Declares ``page`` and then drops it: the serializer decides the selector gets none."""
+
+    page = drf_serializers.IntegerField(required=False)
+
+    def validate(self, attrs: dict[str, Any]) -> dict[str, Any]:
+        attrs.pop("page", None)
+        return attrs
+
+
+# ``call_tool`` is left out: it runs no ``input_serializer`` (``call_spec_tool``),
+# so nothing there can drop the name and the wire's value is the one served.
+@pytest.mark.django_db(transaction=True)
+@pytest.mark.parametrize("route", ["acall_tool", "handler", "async_handler"])
+async def test_a_page_the_input_serializer_drops_does_not_reach_a_list_selector_raw(
+    route: str,
+) -> None:
+    # The strip on a ``LIST`` tool's selector arguments is what keeps the raw
+    # ``page`` out: the overlay lays back only what the serializer validated, and
+    # this one validated ``page`` away. Without the strip
+    # (``strip_post_fetch_keys=binding.kind is SelectorKind.LIST`` in
+    # ``selector_tool_dispatch``) the caller's 3 reached the selector past the
+    # serializer that dropped it; with ``**kwargs`` selectors no longer handed
+    # undeclared keys, this is the case left in which the strip is observable.
+    server = _register(_server(), _page, input_serializer=_PageDroppedByValidate)
+
+    out = await _structured(server, route, {"page": 3})
+
+    assert out == [{"page": 1}]
