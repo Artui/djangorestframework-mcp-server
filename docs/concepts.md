@@ -902,15 +902,16 @@ forms) accept three behavior knobs:
     Earlier releases downgraded `REJECT` before dispatch for a service with no
     `input_serializer` and advertised its schema open to match, so an argument
     the service never declared was dropped without a word. That downgrade is
-    gone. To keep the old behaviour, register the policy it chose:
-    `PASSTHROUGH` under a spreading binding, `IGNORE` under `BUNDLE`.
+    gone. To keep a call that sends undeclared keys working, register
+    `IGNORE`, which drops them.
 
     **Selector and chain** bindings enforce the closed set in this package,
     against their own input serializer, so they are closed under `REJECT` with
     one and open without one, where nothing checks the keys.
-  - `UnknownArguments.PASSTHROUGH` — `"additionalProperties": true`;
-    unknown keys survive validation and are merged onto the validated
-    payload before binding.
+  - `UnknownArguments.PASSTHROUGH` — retired in drf-services 0.58.0, where an
+    argument the spec does not declare never reaches a callable. Declare the
+    argument (a `reads` entry, a serializer field or a parameter) and pass
+    `IGNORE` or `REJECT`.
   - `UnknownArguments.IGNORE` — `"additionalProperties": true`; unknown
     keys are silently dropped (the historic DRF default).
 

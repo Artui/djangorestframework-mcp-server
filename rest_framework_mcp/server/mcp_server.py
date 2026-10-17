@@ -1905,10 +1905,12 @@ def _refuse_retired_argument_binding(name: str, argument_binding: ArgumentBindin
     has one pool in which an author's value for an argument always outranks the
     caller's. Registering it anyway would ship a tool that lists and then fails
     each call, so the refusal is here, ahead of the binding, where startup
-    reads it. Both spec registrars call it, and every other route (the
-    decorators, ``register_specs`` overrides, ``register_tools`` with its
+    reads it. Both spec registrars call it, and every route through this server
+    (the decorators, ``register_specs`` overrides, ``register_tools`` with its
     defaults) reaches one of them; ``test_register_service_tool_refuses_it`` and
-    ``test_register_selector_tool_refuses_it`` each fail without their call.
+    ``test_register_selector_tool_refuses_it`` each fail without their call. A
+    binding built by hand and handed to ``tools.register`` skips the
+    registrars, and so this check: drf-services still refuses it on each call.
     """
     if argument_binding is ArgumentBinding.SPREAD_CALLER_WINS:
         raise ImproperlyConfigured(
