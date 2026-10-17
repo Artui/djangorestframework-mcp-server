@@ -189,15 +189,16 @@ def _validate_list_payload(
     MCP ``arguments`` is always an object, so the list travels under the one
     argument ``spec.many_argument`` names, and every dispatch passes drf-services
     ``many_as_argument=True`` to read it from there. Two declarations beside it
-    would fail every call rather than any one of them:
+    are refused at registration, because no call could honour them:
 
     - A ``UrlKwarg`` or ``QueryParam`` of the same name. Both channels pop their
       name out of the arguments before dispatch, so the list would be routed to
       ``view.kwargs`` or the query string and dispatch would answer every call as
       if the argument were missing.
-    - A ``SPREAD_*`` argument binding. The service receives the whole list as one
-      ``data``, so drf-services raises ``ValueError`` on each dispatch rather than
-      at registration.
+    - Any binding but ``BUNDLE``. The service receives the whole list as one
+      ``data``, so there is nothing to spread, and a binding saying otherwise
+      would register as a choice no call could follow
+      (``test_a_spreading_argument_binding_is_refused``).
     """
     if not spec.many:
         return

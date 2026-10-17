@@ -6,6 +6,7 @@ from itertools import islice
 from typing import Any
 
 from rest_framework_services import build_offline_context, resolve_callable_kwargs
+from rest_framework_services.dispatch.utils import DROPPED_EDGE_SEEDS
 
 from rest_framework_mcp._compat.tracing import span
 from rest_framework_mcp.constants import (
@@ -123,12 +124,20 @@ def handle_completion_complete(
         # supply, so a sibling called ``instance`` or ``collection`` — reserved
         # everywhere else, seeded nowhere here — still reached a completer under
         # a name the rest of the package treats as dispatcher-owned. Stripping
-        # tracks ``RESERVED_POOL_SEEDS`` instead of a hand-picked subset of it.
+        # tracks ``RESERVED_POOL_SEEDS`` instead of a hand-picked subset of it,
+        # with drf-services' ``DROPPED_EDGE_SEEDS`` beside it: ``request`` and
+        # ``serializer`` left the kernel's set, and drf-services still drops a
+        # caller's key of either name
+        # (``test_a_sibling_named_as_a_name_drf_services_drops_never_reaches_the_completer``).
         # ``arguments`` stays the client's mapping verbatim: it is documented as
         # the siblings the client resolved, and a completer reading it knows it
         # is reading caller input.
         pool: dict[str, Any] = {
-            **{key: v for key, v in resolved_siblings.items() if key not in RESERVED_POOL_SEEDS},
+            **{
+                key: v
+                for key, v in resolved_siblings.items()
+                if key not in RESERVED_POOL_SEEDS | DROPPED_EDGE_SEEDS
+            },
             "request": drf_request,
             "user": context.token.user,
             "value": value,

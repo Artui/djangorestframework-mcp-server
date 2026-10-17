@@ -942,23 +942,6 @@ def _tenant_server(
 
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.parametrize("route", _ROUTES)
-async def test_under_caller_wins_a_provider_filled_name_is_not_refused(route: str) -> None:
-    # The provider's key is advertised under ``SPREAD_CALLER_WINS``, because the
-    # caller's value outranks it, but it is not required: the provider fills it
-    # when the caller sends nothing.
-    acme = await Invoice.objects.acreate(number="acme-1")
-    beta = await Invoice.objects.acreate(number="beta-1")
-    server = _tenant_server(_acme_scope, argument_binding=ArgumentBinding.SPREAD_CALLER_WINS)
-
-    filled = await _via(server, route, "get", {"pk": acme.pk})
-    sent = await _via(server, route, "get", {"pk": beta.pk, "tenant": "beta"})
-
-    assert filled["structuredContent"]["number"] == "acme-1"
-    assert sent["structuredContent"]["number"] == "beta-1"
-
-
-@pytest.mark.django_db(transaction=True)
-@pytest.mark.parametrize("route", _ROUTES)
 async def test_under_author_wins_the_providers_value_outranks_the_callers(route: str) -> None:
     # The default binding, and the reason the schema hides the provider's key
     # there: a ``tenant`` the caller sends is admitted and then overwritten, so
@@ -976,7 +959,10 @@ def _touch(*, instance: Invoice, **_: Any) -> Invoice:
 
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.parametrize("route", _ROUTES)
-@pytest.mark.parametrize("binding", list(ArgumentBinding))
+# ``SPREAD_CALLER_WINS`` is left out: drf-services refuses it as a retired mode.
+@pytest.mark.parametrize(
+    "binding", [b for b in ArgumentBinding if b is not ArgumentBinding.SPREAD_CALLER_WINS]
+)
 async def test_a_target_lookups_provider_outranks_the_caller_under_every_binding(
     binding: ArgumentBinding, route: str
 ) -> None:
@@ -1035,28 +1021,6 @@ async def test_a_marked_key_the_provider_may_decline_is_not_refused(route: str) 
     assert out["structuredContent"]["number"] == "acme-1"
 
 
-@pytest.mark.django_db(transaction=True)
-@pytest.mark.parametrize("route", _ROUTES)
-async def test_under_caller_wins_a_marked_provider_key_is_neither_required_nor_refused(
-    route: str,
-) -> None:
-    # The marker says ``tenant`` is required, and the provider fills it when the
-    # caller sends none, so under ``SPREAD_CALLER_WINS`` it is offered rather
-    # than required, marker or not, and a call without it is served.
-    acme = await Invoice.objects.acreate(number="acme-1")
-    server = _tenant_server(
-        _acme_scope,
-        selector=_by_pk_for_marked_tenant,
-        argument_binding=ArgumentBinding.SPREAD_CALLER_WINS,
-    )
-    listed: Any = server.list_tools(user=None)
-
-    out = await _via(server, route, "get", {"pk": acme.pk})
-
-    assert listed["tools"][0]["inputSchema"]["required"] == ["pk"]
-    assert out["structuredContent"]["number"] == "acme-1"
-
-
 def _untyped_empty_scope(**_: Any) -> dict[str, Any]:
     return {}
 
@@ -1068,17 +1032,17 @@ async def test_a_marked_parameter_a_provider_might_fill_is_drf_services_to_refus
     route: str, provider: Any
 ) -> None:
     # Neither provider says it fills ``tenant`` for certain, so the check here
-    # skips it, and drf-services' own marker check answers once the pool is
-    # assembled, in its own shape: the one case the CHANGELOG names as keeping
-    # "Service validation error." with ``non_field_errors``.
+    # skips it, and drf-services answers once the pool is assembled: a missing
+    # argument is its ``InvalidArguments``, keyed by the name, so it reaches the
+    # caller as an invalid-arguments refusal naming ``tenant``.
     server = _tenant_server(provider, selector=_by_pk_for_marked_tenant)
 
     out = await _via(server, route, "get", {"pk": 1})
 
     error = tool_error(out)
     assert error["type"] == "validation_error"
-    assert error["message"] == "Service validation error."
-    assert error["detail"] == {"non_field_errors": ["Missing required argument(s): 'tenant'."]}
+    assert error["message"] == "Invalid arguments"
+    assert error["detail"] == {"tenant": _REQUIRED}
 
 
 @pytest.mark.django_db(transaction=True)
@@ -1103,14 +1067,14 @@ async def test_a_key_the_provider_declines_and_the_caller_leaves_out_is_refused_
     # This server does not refuse the call, because only the assembled pool can
     # say whether ``tenant`` arrived. drf-services can, once the provider has
     # declined: the caller could have sent it, so dispatch refuses the call
-    # before the selector runs, in its own shape, where the selector used to
-    # raise ``TypeError`` and the call failed as a server fault.
+    # before the selector runs, as ``InvalidArguments`` keyed by the name, where
+    # the selector used to raise ``TypeError`` and the call failed as a server fault.
     out = await _via(_tenant_server(_declining_scope), route, "get", {"pk": 1})
 
     error = tool_error(out)
     assert error["type"] == "validation_error"
-    assert error["message"] == "Service validation error."
-    assert error["detail"] == {"non_field_errors": ["Missing required argument(s): 'tenant'."]}
+    assert error["message"] == "Invalid arguments"
+    assert error["detail"] == {"tenant": _REQUIRED}
 
 
 # ---------- in the server's own words ----------

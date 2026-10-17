@@ -33,7 +33,9 @@ from rest_framework_mcp.auth.backends.allow_any_backend import AllowAnyBackend
 from rest_framework_mcp.constants import ArgumentBinding
 from rest_framework_mcp.transport.in_memory_session_store import InMemorySessionStore
 
-_SPREADING = [ArgumentBinding.SPREAD_AUTHOR_WINS, ArgumentBinding.SPREAD_CALLER_WINS]
+# The one spreading binding drf-services accepts: ``SPREAD_CALLER_WINS`` is retired
+# and raises ``ValueError`` at dispatch.
+_SPREADING = [ArgumentBinding.SPREAD_AUTHOR_WINS]
 
 _REMEDIES = (
     "Fill the parameter from view.kwargs with a kwargs= provider whose TypedDict declares it",
@@ -179,15 +181,41 @@ def _archive_by_pk(*, project_pk: int) -> dict[str, Any]:
 async def test_a_parameter_the_services_provider_fills_from_the_route_is_served(
     binding: ArgumentBinding,
 ) -> None:
-    # The first remedy the refusal offers. Under ``SPREAD_CALLER_WINS`` the
-    # schema still offers ``project_pk`` as the service's, so the subtraction of
-    # what the provider fills is what exempts it there.
+    # The first remedy the refusal offers. The schema does not offer
+    # ``project_pk``, which the provider fills, so nothing is refused.
     server = _server()
     spec = ServiceSpec(service=_archive_by_pk, atomic=False, kwargs=_project_from_route)
     _register(server, spec, argument_binding=binding)
     out = await server.acall_tool("archive", {"project_pk": 8}, user=None)
     assert isinstance(out, dict)
     assert out["structuredContent"] == {"project_pk": 8}
+
+
+def _untyped_project_from_route(view: Any) -> dict[str, Any]:
+    return {"project_pk": int(view.kwargs["project_pk"])}
+
+
+async def test_a_shared_name_spec_kwargs_provides_claims_is_served() -> None:
+    # The remedy drf-services leaves for a shared name: an untyped provider,
+    # whose value scopes the lookup and reaches the service. It says nothing it
+    # fills for certain, so ``spec_kwargs_provides`` claims the name, and the
+    # check's subtraction of the claimed names is what exempts it.
+    server = _server()
+    spec = ServiceSpec(
+        service=_archive_project_instance,
+        atomic=False,
+        kwargs=_untyped_project_from_route,
+        instance_selector_spec=SelectorSpec(kind=SelectorKind.RETRIEVE, selector=_project),
+    )
+    _register(
+        server,
+        spec,
+        argument_binding=ArgumentBinding.SPREAD_AUTHOR_WINS,
+        spec_kwargs_provides=("project_pk",),
+    )
+    out = await server.acall_tool("archive", {"project_pk": 8}, user=None)
+    assert isinstance(out, dict)
+    assert out["structuredContent"] == {"instance": 8, "project_pk": 8}
 
 
 class _Scope(TypedDict):
@@ -253,13 +281,14 @@ def test_a_parameter_the_service_and_its_lookup_both_take_is_refused(
 
 
 @pytest.mark.parametrize("binding", _SPREADING)
-async def test_a_shared_name_the_services_provider_fills_from_the_route_is_served(
+async def test_a_shared_name_the_services_provider_fills_from_the_route_is_drf_services_to_refuse(
     binding: ArgumentBinding,
 ) -> None:
-    # The first remedy, on the shared name: the provider is handed ``view`` and
-    # fills the service's parameter from the route the lookup also read. Under
-    # ``SPREAD_CALLER_WINS`` the service's declared input still lists the name,
-    # so the subtraction of what the provider fills is what exempts it there.
+    # The first remedy does not reach a shared name: drf-services refuses a
+    # typed provider annotated to fill a name the target lookup reads, when it
+    # compiles the spec for the call, because the provider's values reach the
+    # service after the lookup has resolved the target. Registration here does
+    # not compile the spec, so the refusal is the call's.
     server = _server()
     spec = ServiceSpec(
         service=_archive_project_instance,
@@ -268,6 +297,5 @@ async def test_a_shared_name_the_services_provider_fills_from_the_route_is_serve
         instance_selector_spec=SelectorSpec(kind=SelectorKind.RETRIEVE, selector=_project),
     )
     _register(server, spec, argument_binding=binding)
-    out = await server.acall_tool("archive", {"project_pk": 8}, user=None)
-    assert isinstance(out, dict)
-    assert out["structuredContent"] == {"instance": 8, "project_pk": 8}
+    with pytest.raises(ImproperlyConfigured, match=r"annotated to fill \['project_pk'\]"):
+        await server.acall_tool("archive", {"project_pk": 8}, user=None)

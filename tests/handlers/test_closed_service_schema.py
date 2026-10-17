@@ -37,12 +37,11 @@ from rest_framework_mcp.handlers.types.context import MCPCallContext
 from rest_framework_mcp.transport.in_memory_session_store import InMemorySessionStore
 from tests.utils import tool_error
 
-_BINDINGS = (
-    ArgumentBinding.BUNDLE,
-    ArgumentBinding.SPREAD_AUTHOR_WINS,
-    ArgumentBinding.SPREAD_CALLER_WINS,
-)
-_SPREAD = (ArgumentBinding.SPREAD_AUTHOR_WINS, ArgumentBinding.SPREAD_CALLER_WINS)
+# ``SPREAD_CALLER_WINS`` and ``UnknownArguments.PASSTHROUGH`` are left out: drf-services
+# retired both, and each raises ``ValueError`` at dispatch.
+_BINDINGS = (ArgumentBinding.BUNDLE, ArgumentBinding.SPREAD_AUTHOR_WINS)
+_SPREAD = (ArgumentBinding.SPREAD_AUTHOR_WINS,)
+_POLICIES = (UnknownArguments.REJECT, UnknownArguments.IGNORE)
 
 # A value for every name any spec below can advertise, so a call can send
 # exactly the advertised set.
@@ -151,7 +150,6 @@ def _call(server: MCPServer, arguments: dict[str, Any]) -> dict[str, Any]:
     [
         (ArgumentBinding.BUNDLE, {"pk"}),
         (ArgumentBinding.SPREAD_AUTHOR_WINS, {"pk", "reason"}),
-        (ArgumentBinding.SPREAD_CALLER_WINS, {"pk", "reason"}),
     ],
 )
 def test_a_serializer_less_service_refuses_an_undeclared_argument(
@@ -184,7 +182,7 @@ def test_a_serializer_less_service_refuses_an_undeclared_argument(
 
 
 @pytest.mark.django_db
-@pytest.mark.parametrize("policy", list(UnknownArguments))
+@pytest.mark.parametrize("policy", _POLICIES)
 @pytest.mark.parametrize("binding", _BINDINGS)
 @pytest.mark.parametrize("name", list(_SPECS))
 def test_the_advertised_properties_are_the_keys_dispatch_admits(
@@ -235,12 +233,14 @@ def test_ignore_keeps_serving_an_undeclared_argument(binding: ArgumentBinding) -
 
 @pytest.mark.django_db
 @pytest.mark.parametrize("binding", _SPREAD)
-def test_a_bare_var_keyword_keeps_the_schema_open_and_receives_every_key(
+def test_a_bare_var_keyword_keeps_the_schema_open_and_refuses_no_key(
     binding: ArgumentBinding,
 ) -> None:
     # drf-services treats a spread service's bare ``**kwargs`` as open, so
     # ``REJECT`` has nothing to refuse against: the schema names what the
-    # service names, stays open, and the extra reaches ``**changes``.
+    # service names and stays open, and the call is served. The extra is
+    # dropped before the service runs: a bare ``**kwargs`` receives the
+    # declared arguments and the seeds, never an undeclared key.
     server = _server(_SPECS["var-keyword"](), binding=binding, policy=UnknownArguments.REJECT)
 
     schema = _input_schema(server)
@@ -248,5 +248,6 @@ def test_a_bare_var_keyword_keeps_the_schema_open_and_receives_every_key(
 
     assert set(schema.get("properties", {})) == {"title"}
     assert schema["additionalProperties"] is True
+    assert out.get("isError") is not True
     assert out["structuredContent"]["title"] == "t"
-    assert "colour" in out["structuredContent"]["changes"]
+    assert "colour" not in out["structuredContent"]["changes"]

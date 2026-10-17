@@ -236,6 +236,39 @@ def test_a_sibling_named_data_does_not_reach_the_completer() -> None:
     assert seen["data"] == "seed-untouched"
 
 
+@pytest.mark.parametrize("name", ["result", "queryset"])
+def test_a_sibling_named_as_a_kernel_seed_does_not_reach_the_completer(name: str) -> None:
+    """``result`` and ``queryset`` are reserved seeds too, so stripping tracks
+    the whole set rather than the names it held when the strip was written."""
+    seen: dict[str, Any] = {}
+
+    def completer(*, value: str, **kwargs: Any) -> list[str]:
+        seen.update(kwargs)
+        return ["a"]
+
+    out = _complete(_server_with_completer(completer), {name: "attacker", "other": "kept"})
+
+    assert isinstance(out, dict)
+    assert name not in seen
+    assert seen["other"] == "kept"
+
+
+def test_a_sibling_named_as_a_name_drf_services_drops_never_reaches_the_completer() -> None:
+    """``serializer`` is no kernel seed, but drf-services drops a caller's key of
+    that name everywhere else, so a completer is not handed one either."""
+    seen: dict[str, Any] = {}
+
+    def completer(*, value: str, **kwargs: Any) -> list[str]:
+        seen.update(kwargs)
+        return ["a"]
+
+    out = _complete(_server_with_completer(completer), {"serializer": "attacker", "other": "kept"})
+
+    assert isinstance(out, dict)
+    assert "serializer" not in seen
+    assert seen["other"] == "kept"
+
+
 def test_an_ordinary_sibling_still_reaches_the_completer_by_name() -> None:
     """Stripping is scoped to the reserved names; a real sibling still binds."""
     seen: dict[str, Any] = {}

@@ -32,7 +32,9 @@ from rest_framework_mcp.handlers.types.context import MCPCallContext
 from rest_framework_mcp.registry.types.tool_binding import ToolBinding
 from rest_framework_mcp.schema.service_tool_schema import build_service_tool_input_schema
 
-_SPREAD = (ArgumentBinding.SPREAD_AUTHOR_WINS, ArgumentBinding.SPREAD_CALLER_WINS)
+# The one binding that spreads a serializer-less service's parameters: drf-services
+# retired ``SPREAD_CALLER_WINS``, which raises ``ValueError`` at dispatch.
+_SPREAD = (ArgumentBinding.SPREAD_AUTHOR_WINS,)
 
 
 def _close_ticket(
@@ -102,17 +104,8 @@ def _declining_provider(view: Any, request: Any) -> _MaybeTenantScope:
             {"ticket", "resolution"},
             id="typed-author-wins",
         ),
-        # Under ``SPREAD_CALLER_WINS`` the caller's spread is applied last, so
-        # the caller's value is the one served, and the name is offered.
-        pytest.param(
-            _typed_provider,
-            ArgumentBinding.SPREAD_CALLER_WINS,
-            {"ticket", "resolution", "tenant", "note"},
-            {"ticket", "resolution"},
-            id="typed-caller-wins",
-        ),
         # One that may decline ``tenant`` with ``UNSET`` leaves the caller to
-        # send it or not, so it is offered and not required under either.
+        # send it or not, so it is offered and not required.
         *(
             pytest.param(
                 _declining_provider,
@@ -148,6 +141,20 @@ def test_a_name_the_services_provider_fills_is_offered_where_the_callers_value_i
 
     assert set(schema["properties"]) == properties
     assert set(schema.get("required", [])) == required
+
+
+@pytest.mark.parametrize("argument_binding", [ArgumentBinding.AUTO, ArgumentBinding.BUNDLE])
+def test_a_service_that_does_not_spread_lists_none_of_its_parameters_beside_a_provider(
+    argument_binding: ArgumentBinding,
+) -> None:
+    # Why ``declared_service_input`` supplies the provider's keys without asking
+    # the binding: under ``AUTO`` and ``BUNDLE`` a serializer-less service's
+    # parameters are no client input, so there is nothing for them to hide.
+    spec = ServiceSpec(service=_close_ticket, atomic=False, kwargs=_typed_provider)
+
+    schema = build_service_tool_input_schema(_binding(spec, argument_binding))
+
+    assert schema == {"type": "object"}
 
 
 class _Reason(TypedDict):
@@ -198,7 +205,6 @@ async def _served(server: MCPServer, route: str, arguments: dict[str, Any]) -> A
         # The provider is applied over the spread, so the caller's value is
         # replaced and the name is not offered; ``REJECT`` still admits it.
         (ArgumentBinding.SPREAD_AUTHOR_WINS, "provider", False),
-        (ArgumentBinding.SPREAD_CALLER_WINS, "caller", True),
     ],
 )
 async def test_a_spread_services_provider_filled_name_is_offered_where_the_callers_value_is_served(

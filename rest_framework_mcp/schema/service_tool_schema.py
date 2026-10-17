@@ -6,7 +6,6 @@ from django_service_specs import DEFAULT_POOL_SEEDS, PoolSeeds, provider_keys
 from rest_framework_services import server_owned_keys, spec_to_json_schema
 from rest_framework_services.types.service_spec import ServiceSpec
 
-from rest_framework_mcp.constants import ArgumentBinding
 from rest_framework_mcp.registry.types.tool_binding import ToolBinding
 from rest_framework_mcp.registry.types.url_kwarg import UrlKwarg
 from rest_framework_mcp.schema.input_schema import build_input_schema
@@ -136,19 +135,20 @@ def declared_service_input(binding: ToolBinding, *, pool_seeds: PoolSeeds) -> di
     the built-in seeds alone would list a registered one:
     ``test_a_registered_seed_is_not_listed_as_a_service_parameter``).
 
-    **A name the spec's provider says it fills is listed only where the
-    caller's value is the one served.** Under ``SPREAD_AUTHOR_WINS`` drf-services
-    applies the provider over the caller's spread, so the caller's value for
-    such a name is admitted and then replaced: it is supplied, as a selector
-    tool's is (``schema.utils.selector_inputs``) and as a target lookup's own
-    provider's keys are. Under ``SPREAD_CALLER_WINS`` the spread is applied last,
-    so the name is listed and only not required. A key the provider may decline
-    stays listed under both, because on a call where it comes back ``UNSET`` the
-    caller's value is the only one, and an untyped provider fills nothing for
-    certain, so it hides none and every name is optional. Each reading is a row
-    of ``test_a_name_the_services_provider_fills_is_offered_where_the_callers_value_is_served``,
-    and the binding's condition is held by its ``typed-caller-wins`` row; that
-    ``REJECT`` still admits the hidden name, and serves the provider's value, by
+    **A name the spec's provider says it fills is not listed.** drf-services
+    applies the provider over the caller's spread under every binding, so the
+    caller's value for such a name is admitted and then replaced: it is
+    supplied, as a selector tool's is (``schema.utils.selector_inputs``) and as
+    a target lookup's own provider's keys are. Under ``AUTO`` and ``BUNDLE`` a
+    serializer-less service lists none of its parameters, so supplying the
+    provider's keys there changes nothing and the binding is not consulted. A
+    key the provider may decline stays listed, because on a call where it comes
+    back ``UNSET`` the caller's value is the only one, and an untyped provider
+    fills nothing for certain, so it hides none and every name is optional.
+    Each reading is a row of
+    ``test_a_name_the_services_provider_fills_is_offered_where_the_callers_value_is_served``;
+    that ``REJECT`` still admits the hidden name, and serves the provider's
+    value, is held by
     ``test_a_spread_services_provider_filled_name_is_offered_where_the_callers_value_is_served``.
     """
     spec = binding.spec
@@ -157,11 +157,7 @@ def declared_service_input(binding: ToolBinding, *, pool_seeds: PoolSeeds) -> di
     keys = provider_keys(spec.kwargs)
     # ``None`` is a provider whose keys cannot be read, which says it fills
     # nothing, so it hides nothing.
-    filled: frozenset[str] = (
-        keys.filled
-        if keys is not None and binding.argument_binding is ArgumentBinding.SPREAD_AUTHOR_WINS
-        else frozenset()
-    )
+    filled: frozenset[str] = keys.filled if keys is not None else frozenset()
     schema: dict[str, Any] = (
         spec_to_json_schema(
             spec,
