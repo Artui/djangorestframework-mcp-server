@@ -17,6 +17,7 @@ from __future__ import annotations
 
 from typing import Any
 
+import django_filters
 import pytest
 from django.http import HttpRequest
 from django_service_specs import SelectorKind
@@ -63,20 +64,18 @@ class _DenyObject(BasePermission):
         return False
 
 
-class _UnsentFilterSet:
-    """Duck-typed ``(data, queryset) -> .qs`` filter_set (no django-filter dep)."""
+class _UnsentFilterSet(django_filters.FilterSet):
+    """A ``sent`` filter over invoices.
 
-    def __init__(self, *, data: Any, queryset: Any) -> None:
-        self._data = data
-        self._queryset = queryset
+    drf-services accepts only a django-filter ``FilterSet`` here, and off HTTP it
+    type-checks the value, so the call sends the boolean the filter declares.
+    """
 
-    @property
-    def qs(self) -> Any:
-        raw = self._data.get("sent")
-        if raw is None:
-            return self._queryset
-        keep = str(raw).lower() in ("1", "true", "yes")
-        return self._queryset.filter(sent=keep)
+    sent = django_filters.BooleanFilter()
+
+    class Meta:
+        model = Invoice
+        fields = ["sent"]
 
 
 def _all_invoices() -> Any:
@@ -109,7 +108,7 @@ def test_collection_selector_spec_bulk_mutation_over_the_wire() -> None:
         ),
     )
     out = handle_tools_call(
-        {"name": "invoices.purge_unsent", "arguments": {"sent": "false"}}, _ctx(server)
+        {"name": "invoices.purge_unsent", "arguments": {"sent": False}}, _ctx(server)
     )
     assert isinstance(out, dict)
     assert out.get("isError") is not True

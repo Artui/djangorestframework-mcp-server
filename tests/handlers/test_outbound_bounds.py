@@ -272,6 +272,34 @@ def test_a_non_orm_list_result_is_bounded_by_the_same_ceiling() -> None:
     assert "2 row ceiling" in tool_error(out)["message"]
 
 
+@pytest.mark.django_db
+def test_a_manager_returned_by_a_list_selector_is_bounded_by_the_same_ceiling() -> None:
+    """A Manager has no ``__iter__``, so it once read as a single value and passed
+    the ceiling unbounded; drf-services hands it over as its ``.all()``, so it is
+    refused as the QuerySet it stands for."""
+
+    def _manager(*, user: Any) -> Any:  # noqa: ARG001
+        return Invoice.objects
+
+    _seed(3)
+    server = _server()
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore")
+        server.register_selector_tool(
+            name="invoices.list",
+            spec=SelectorSpec(
+                kind=SelectorKind.LIST,
+                selector=_manager,
+                output_serializer=InvoiceOutputSerializer,
+            ),
+        )
+    out = _call(server, {}, build_mcp_config(max_page_size=2))
+    assert isinstance(out, dict)
+    error = tool_error(out)
+    assert error["type"] == "result_too_large"
+    assert "2 row ceiling" in error["message"]
+
+
 @pytest.mark.django_db(transaction=True)
 async def test_async_path_enforces_the_same_row_ceiling() -> None:
     from asgiref.sync import sync_to_async

@@ -18,6 +18,7 @@ from django.core.exceptions import ImproperlyConfigured
 from django_service_specs import DEFAULT_POOL_SEEDS, PoolSeeds, SelectorKind, provider_keys
 from rest_framework import serializers as drf_serializers
 from rest_framework_dataclasses.serializers import DataclassSerializer
+from rest_framework_services.dispatch.utils import DROPPED_EDGE_SEEDS
 from rest_framework_services.types.validate_channel_names import validate_channel_names
 
 from rest_framework_mcp.constants import (
@@ -304,20 +305,22 @@ def validate_query_param_inputs(
     the server keeps from the call (``server_owned_keys``), which a service
     tool's schema leaves out of its target lookup's names
     (``test_a_server_owned_lookup_key_is_not_refused_but_a_plain_one_is``),
-    and, under ``SPREAD_AUTHOR_WINS``, a name the selector's or a spread
-    service's ``kwargs=`` provider fills. Three exemptions are made here,
-    because the schema still offers the name while the caller's value reaches
-    the reader by another way:
+    and a name the selector's or a spread service's ``kwargs=`` provider says
+    it fills, which drf-services applies over the caller's spread under every
+    binding, so neither schema offers it. The provider owns the parameter, and
+    one reading ``request.query_params`` is the ordinary way to route a query
+    parameter to a callable, so the caller's value is served, for a selector
+    (``test_a_parameter_a_typed_provider_fills_is_served``) and for a spread
+    service (``test_a_spread_service_parameter_its_provider_fills_is_served``).
+    A selector tool's schema hides a ``spec_kwargs_provides=`` name too. Three
+    exemptions are made here, because the schema still offers the name while
+    the caller's value reaches the reader by another way:
 
-    - **a name the ``kwargs=`` provider declares it fills**, its
-      ``provider_keys`` ``filled`` set, or that ``spec_kwargs_provides=``
-      claims. The provider owns the parameter, and one reading
-      ``request.query_params`` is the ordinary way to route a query parameter
-      to a callable, so the caller's value is served. The schema still offers
-      such a name under ``SPREAD_CALLER_WINS``, for a selector
-      (``test_a_parameter_a_typed_provider_fills_is_served``) and for a spread
-      service (``test_a_spread_service_parameter_its_provider_fills_is_served``),
-      so a call is what each asserts. **Only for the callable that provider feeds**: a
+    - **for a service tool, a name ``spec_kwargs_provides=`` claims**, which
+      its schema still offers, because the service schema hides only what the
+      provider's annotation says it fills
+      (``test_a_spread_service_parameter_spec_kwargs_provides_claims_is_served``).
+      **Only for the callable that provider feeds**: a
       selector's own, and a spread service's own parameters, never a
       service's serializer fields or its target lookup's parameters, which
       read the arguments rather than the service's pool
@@ -339,20 +342,21 @@ def validate_query_param_inputs(
       (``test_call_tool_leaves_a_query_params_value_to_request_query_params``).
 
     ``spec_kwargs_provides`` is passed by both adapters from the argument they
-    were given, since a ``ToolBinding`` does not keep it.
+    were given, since a ``ToolBinding`` does not keep it; a selector tool's
+    schema reads the ``SelectorToolBinding``'s own, so only the service branch
+    consults the argument.
     """
     declared: frozenset[str] = frozenset(query_param.name for query_param in binding.query_params)
     # Not a condition of the rule, which intersects with ``declared`` anyway: it
     # spares reading the schema at registration for the tools declaring none.
     if not declared:
         return
-    filled = _provider_filled(binding, spec_kwargs_provides)
     groups: tuple[tuple[str, frozenset[str]], ...]
     if isinstance(binding, SelectorToolBinding):
         offered = frozenset(
             selector_tool_inputs(binding, pool_seeds=pool_seeds)[0].get("properties", {})
         )
-        taken = (offered - filled - _overlaid_field_names(binding.input_serializer)) & declared
+        taken = (offered - _overlaid_field_names(binding.input_serializer)) & declared
         # The reflection lists a ``filter_set``'s fields beside the parameters,
         # and the FilterSet reads the stripped arguments as the selector does.
         filtering = taken & frozenset(getattr(binding.spec.filter_set, "base_filters", ()))
@@ -362,6 +366,7 @@ def validate_query_param_inputs(
             ("the selector's filter_set declares field(s)", filtering),
         )
     else:
+        filled = _provider_filled(binding, spec_kwargs_provides)
         fields, own, looked_up = _service_tool_inputs(binding, filled=filled, pool_seeds=pool_seeds)
         kind, target = "service tool", "the spec"
         reader = (
@@ -421,8 +426,10 @@ def validate_url_kwarg_inputs(
     ``own`` set's subtraction of ``filled``, because a provider is handed
     ``view`` and fills the parameter from the route
     (``test_a_parameter_the_services_provider_fills_from_the_route_is_served``,
-    whose ``SPREAD_CALLER_WINS`` row holds the subtraction: under
-    ``SPREAD_AUTHOR_WINS`` the schema does not offer such a name at all). A
+    where the schema does not offer such a name at all, and
+    ``test_a_shared_name_spec_kwargs_provides_claims_is_served``, which holds
+    the subtraction for a ``spec_kwargs_provides=`` claim the schema does not
+    see). A
     selector tool's parameter is served too, through the selector's pool, so a
     selector tool is not checked here. A ``UrlKwarg`` no input of the service
     takes registers, since the sets are read with the declarations left out
@@ -814,11 +821,9 @@ def _validate_required_params_have_sources(
       ``spec.kwargs(view, request)`` supplies these names at dispatch.
 
     ``data`` is no source without an ``input_serializer`` under any binding.
-    drf-services seeds it from a validated serializer, or from the extras an
-    ``UnknownArguments.PASSTHROUGH`` policy forwards: none at all under
-    ``BUNDLE``, where this transport forwards no extras, and under a spreading
-    binding only the arguments the call happened to carry, so a call carrying
-    none leaves it unfilled. Held by
+    drf-services hands such a service ``data={}`` under every binding, which
+    carries none of the caller's arguments, so a service requiring it would run
+    on an empty payload on every call. Held by
     ``test_a_bundled_service_requiring_data_without_an_input_serializer_is_refused``
     and ``test_a_trust_mode_service_requiring_data_is_refused``.
 
@@ -835,11 +840,14 @@ def _validate_required_params_have_sources(
     structurally satisfiable. With ``input_serializer=None`` a spreading binding is in trust
     mode — the client's raw ``arguments`` are spread verbatim, so there is no
     static contract and every required parameter counts as one the caller
-    supplies, **except a reserved pool seed**: drf-services strips every
-    ``pool_seeds.reserved`` name from the spread, so a caller cannot supply
+    supplies, **except a name dispatch owns**: drf-services drops every
+    ``pool_seeds.reserved`` name from the spread, and its ``DROPPED_EDGE_SEEDS``
+    (``request``, ``serializer``) with them, so a caller cannot supply
     ``instance`` or ``serializer`` and only the sources above can. Held by
-    ``test_trust_mode_does_not_count_a_reserved_seed_as_the_callers`` and the
-    spreading cases of ``test_an_instance_lookup_seeds_no_collection``.
+    ``test_trust_mode_does_not_count_a_reserved_seed_as_the_callers``, the
+    spreading cases of ``test_an_instance_lookup_seeds_no_collection`` and, for
+    the drf-services set, the ``serializer`` case of
+    ``test_a_trust_mode_selector_requiring_a_seed_nothing_fills_is_refused``.
     """
     positional_only: list[str] = sorted(
         name
@@ -904,8 +912,8 @@ def _validate_required_params_have_sources(
         else:
             # Trust mode: raw ``arguments`` are spread verbatim, so the client
             # can in principle supply any name the callable declares, other than
-            # the reserved seeds dispatch strips from that spread.
-            sources.update(required_params - pool_seeds.reserved)
+            # the names dispatch drops from that spread.
+            sources.update(required_params - pool_seeds.reserved - DROPPED_EDGE_SEEDS)
     missing: set[str] = set(required_params) - sources
     if missing:
         sources_human = ", ".join(sorted(sources)) or "(none)"

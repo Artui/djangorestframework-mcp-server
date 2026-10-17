@@ -385,7 +385,6 @@ _BINDINGS = pytest.mark.parametrize(
     [
         ArgumentBinding.BUNDLE,
         ArgumentBinding.SPREAD_AUTHOR_WINS,
-        ArgumentBinding.SPREAD_CALLER_WINS,
     ],
 )
 

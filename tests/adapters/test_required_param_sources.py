@@ -31,7 +31,9 @@ from rest_framework_mcp.auth.backends.allow_any_backend import AllowAnyBackend
 from rest_framework_mcp.constants import ArgumentBinding
 from rest_framework_mcp.transport.in_memory_session_store import InMemorySessionStore
 
-_SPREADING = [ArgumentBinding.SPREAD_AUTHOR_WINS, ArgumentBinding.SPREAD_CALLER_WINS]
+# The one spreading binding drf-services accepts: ``SPREAD_CALLER_WINS`` is retired
+# and raises ``ValueError`` at dispatch.
+_SPREADING = [ArgumentBinding.SPREAD_AUTHOR_WINS]
 
 # The sentence the refusal adds when ``data`` is among the missing names.
 _DATA_HINT = "Nothing fills `data` without an input_serializer"
@@ -104,9 +106,8 @@ def _create_note(*, data: Any) -> Any:
 
 
 def test_a_bundled_service_requiring_data_without_an_input_serializer_is_refused() -> None:
-    # ``BUNDLE`` with no serializer: drf-services seeds ``data`` only from a
-    # validated serializer or from ``PASSTHROUGH`` extras, and this transport
-    # forwards no extras for that binding, so ``data`` never arrives.
+    # ``BUNDLE`` with no serializer: drf-services hands the service ``data={}``,
+    # which carries none of the caller's arguments.
     with pytest.raises(ImproperlyConfigured, match=r"parameter\(s\) \['data'\]") as caught:
         service_spec_to_tool(name="note", spec=ServiceSpec(service=_create_note, atomic=False))
     assert _DATA_HINT in str(caught.value)
@@ -114,8 +115,8 @@ def test_a_bundled_service_requiring_data_without_an_input_serializer_is_refused
 
 @pytest.mark.parametrize("binding", _SPREADING)
 def test_a_trust_mode_service_requiring_data_is_refused(binding: Any) -> None:
-    # Spread with no serializer, ``data`` is only the arguments the call happened
-    # to carry, so a call with none leaves it unfilled.
+    # Spread with no serializer, ``data`` is still ``{}``: the caller's arguments
+    # reach the service's own parameters, never ``data``.
     with pytest.raises(ImproperlyConfigured, match=r"parameter\(s\) \['data'\]") as caught:
         service_spec_to_tool(
             name="note",

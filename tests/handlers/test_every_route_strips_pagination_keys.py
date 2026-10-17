@@ -82,15 +82,22 @@ def _server() -> MCPServer:
 
 def _sent(kwargs: dict[str, Any]) -> dict[str, Any]:
     # The pool's seeds arrive too; only what the caller sent is compared.
-    return {name: kwargs[name] for name in ("page", "limit", "status") if name in kwargs}
+    return {
+        name: kwargs[name] for name in ("page", "limit", "status") if kwargs.get(name) is not None
+    }
 
 
-def _anything(**kwargs: Any) -> list[dict[str, Any]]:
-    return [_sent(kwargs)]
+# Each names what it reads: a bare ``**kwargs`` is handed the declared arguments
+# and the seeds, never a key nothing declares, so an undeclared ``status`` would
+# reach neither selector on any route.
+def _anything(*, status: str | None = None, **kwargs: Any) -> list[dict[str, Any]]:
+    return [_sent({"status": status, **kwargs})]
 
 
-def _anything_one(**kwargs: Any) -> dict[str, Any]:
-    return _sent(kwargs)
+def _anything_one(
+    *, page: int | None = None, limit: int | None = None, status: str | None = None
+) -> dict[str, Any]:
+    return _sent({"page": page, "limit": limit, "status": status})
 
 
 def _page(*, page: int = 1) -> list[dict[str, Any]]:

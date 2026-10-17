@@ -23,7 +23,7 @@ from rest_framework_dataclasses.serializers import DataclassSerializer
 # what would let the advertisement drift away from the enforcement again. A
 # rename upstream breaks this import loudly at start-up rather than quietly at
 # the wire, which is the failure mode to prefer here.
-from rest_framework_services.dispatch.utils import declared_input_keys
+from rest_framework_services.dispatch.utils import DROPPED_EDGE_SEEDS, declared_input_keys
 from rest_framework_services.types.service_spec import ServiceSpec
 
 from rest_framework_mcp._compat.reject_awaitable import reject_awaitable
@@ -225,16 +225,16 @@ def advertises_closed_schema(binding: Any) -> bool:
     its ``resolve_unknown_arguments`` refuses against. Two conjuncts, one
     branch arc, so each names the test that fails without it:
 
-    - the policy dispatch receives is ``REJECT``: ``IGNORE`` and
-      ``PASSTHROUGH`` serve an undeclared name. The ``IGNORE`` and
-      ``PASSTHROUGH`` rows of
+    - the policy dispatch receives is ``REJECT``: ``IGNORE`` drops an
+      undeclared name rather than refusing it. The ``IGNORE`` rows of
       ``test_the_advertised_properties_are_the_keys_dispatch_admits``.
     - the declared set is enumerable under the binding dispatch runs: a target
       lookup taking a bare ``**kwargs`` or carrying a ``filter_set`` opens it,
-      and so does a spread service's own bare ``**kwargs``, and an open set is
-      answered by serving every undeclared name. The ``var-keyword`` rows under
-      ``SPREAD_*`` and
-      ``test_a_bare_var_keyword_keeps_the_schema_open_and_receives_every_key``;
+      and so does a spread service's own bare ``**kwargs``, and an open set
+      refuses no undeclared name: drf-services drops it before any callable
+      runs, a bare ``**kwargs`` included. The ``var-keyword`` rows under
+      ``SPREAD_AUTHOR_WINS`` and
+      ``test_a_bare_var_keyword_keeps_the_schema_open_and_refuses_no_key``;
       passing the binding is what makes ``BUNDLE`` close the same service.
 
     An ``input_serializer`` is not a condition: without one, drf-services
@@ -648,9 +648,12 @@ def build_validated_input_serializer(
         input_serializer: A DRF serializer class, a bare ``@dataclass`` (wrapped
             in a ``DataclassSerializer``), or ``None``.
         unknown_arguments: What to do with keys outside the declared set.
-            Reserved pool seeds and post-fetch keys are always exempt, and never
-            merged under ``PASSTHROUGH`` — the dispatch pipeline owns them, so a
-            client must not be able to poison them.
+            Reserved pool seeds and post-fetch keys are always exempt: the
+            dispatch pipeline owns them, so a client must not be able to poison
+            them. ``PASSTHROUGH`` raises ``ValueError``, as drf-services' own
+            dispatch does for it, because a chain step is dispatched here rather
+            than through ``dispatch_spec`` and would otherwise run it as
+            ``IGNORE`` without a word.
         additional_known_keys: Widens the known set beyond the serializer's own
             fields; selector tools pass their filter / ordering / pagination keys.
         partial: Relaxes required-field validation. MCP has no HTTP method to
@@ -667,7 +670,18 @@ def build_validated_input_serializer(
     Raises:
         drf_serializers.ValidationError: On invalid or, under ``REJECT``,
             unknown input.
+        ValueError: For ``UnknownArguments.PASSTHROUGH``, with or without a
+            serializer
+            (``test_a_chain_under_passthrough_raises_as_drf_services_dispatch_does``).
     """
+    if unknown_arguments is UnknownArguments.PASSTHROUGH:
+        # drf-services' wording (``refuse_retired_modes``), so a project meets
+        # one message whichever path refused the policy.
+        raise ValueError(
+            "UnknownArguments.PASSTHROUGH is retired: an argument the spec does not declare "
+            "never reaches a callable. Declare it (a reads entry, a serializer field or a "
+            "parameter), then pass UnknownArguments.IGNORE or UnknownArguments.REJECT."
+        )
     if input_serializer is None:
         return None, None
     target: type = input_serializer
@@ -687,10 +701,16 @@ def build_validated_input_serializer(
         serializer = target(**serializer_kwargs)
 
     declared_fields: set[str] = set(serializer.fields.keys())
+    # ``DROPPED_EDGE_SEEDS`` (``request``, ``serializer``) beside the kernel's seeds:
+    # drf-services drops a caller's key of either name as it drops a reserved seed's,
+    # on the service path and the selector path alike, so refusing it here would make
+    # a selector tool's input serializer refuse what the service path quietly drops
+    # (``test_a_name_drf_services_drops_is_not_refused_as_unknown``).
     known: set[str] = (
         declared_fields
         | set(additional_known_keys)
         | RESERVED_POOL_SEEDS
+        | DROPPED_EDGE_SEEDS
         | RESERVED_POST_FETCH_KEYS
     )
     unknown_keys: set[str] = set(arguments.keys()) - known
@@ -702,18 +722,7 @@ def build_validated_input_serializer(
         )
 
     serializer.is_valid(raise_exception=True)
-    validated: Any = serializer.validated_data
-
-    # A ``DataclassSerializer`` returns a dataclass instance, which is not a
-    # merge target, so those bindings get IGNORE-equivalent behaviour even under
-    # PASSTHROUGH.
-    if unknown_keys and unknown_arguments is UnknownArguments.PASSTHROUGH:
-        merge_keys: set[str] = unknown_keys - RESERVED_POOL_SEEDS - RESERVED_POST_FETCH_KEYS
-        if isinstance(validated, dict):
-            for key in merge_keys:
-                validated.setdefault(key, arguments[key])
-
-    return validated, serializer
+    return serializer.validated_data, serializer
 
 
 def validate_input_against_serializer(

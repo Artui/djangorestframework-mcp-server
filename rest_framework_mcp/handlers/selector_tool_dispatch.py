@@ -404,12 +404,9 @@ def _selector_tool_additional_known_keys(binding: SelectorToolBinding) -> frozen
     name the server fills is admitted when the client sends it anyway, rather
     than refused as unknown. Which value the selector then reads depends on the
     source. A seed's always, because dispatch strips a reserved name from the
-    client's spread under every binding. A provider key's under
-    ``SPREAD_AUTHOR_WINS``, the default, where the provider is applied last.
-    Under ``SPREAD_CALLER_WINS`` the client's spread is applied last, so its
-    value outranks the provider's, which is why the schema offers the
-    provider's keys there instead of hiding them
-    (``test_under_caller_wins_a_provider_filled_name_is_not_refused``).
+    client's spread under every binding. A provider key's too, because
+    drf-services applies the provider over the client's spread under every
+    binding it accepts, which is why the schema hides the provider's keys.
     """
     known: set[str] = set()
     # ``phase="input"`` never returns ``None``; ``or {}`` only narrows the type.
@@ -584,7 +581,12 @@ def _bound_unpaginated_rows(qs: Any, max_rows: int | None) -> tuple[Any, int | N
     if max_rows is None or not hasattr(qs, "__iter__"):
         # No ceiling, or a scalar: a selector may return one value for a LIST
         # spec, which the renderer passes through on the same ``__iter__``
-        # predicate. One value is bounded already, and ``iter(None)`` is not.
+        # predicate. One value is bounded already, and ``iter(None)`` is not
+        # (``test_selector_returning_none_renders_as_empty``). A Manager is not
+        # a scalar here although it has no ``__iter__``: drf-services hands a
+        # LIST selector's Manager over as its ``.all()``, so it arrives as the
+        # QuerySet it stands for and is bounded like one
+        # (``test_a_manager_returned_by_a_list_selector_is_bounded_by_the_same_ceiling``).
         return qs, None
     # ``qs[:n]`` on a QuerySet is a LIMIT; ``len()`` then evaluates it once and
     # fills the result cache the renderer iterates. Any other iterable — a list
@@ -635,13 +637,11 @@ def _dispatch_kwargs(
     # ``source="project_pk"`` validates the argument ``project`` into
     # ``project_pk``, and a ``source="*"`` field, a ``validate`` or the
     # namesake's own coercion write there too. Every such value is dropped, so
-    # the selector reads the route the permission judged. Left in,
-    # ``SPREAD_CALLER_WINS`` ranked it above a kwarg the call sent, which then
-    # reached the selector other than as sent
-    # (``test_a_url_kwarg_the_call_sent_reaches_the_selector_as_sent``), and
-    # under either spreading binding it stood in for a kwarg the call left out,
-    # on a route judged as naming none
-    # (``test_a_url_kwarg_the_call_left_out_reaches_the_selector_only_as_a_namesake_default``).
+    # the selector reads the route the permission judged. Left in, it stood in
+    # for a kwarg the call left out, on a route judged as naming none
+    # (``test_a_url_kwarg_the_call_left_out_reaches_the_selector_only_as_a_namesake_default``
+    # and ``test_a_serializer_field_sourcing_a_url_kwarg_left_out_does_not_fill_the_route``).
+    # For a kwarg the call sent, ``view.kwargs`` already outranks it.
     # A sent kwarg reaches the selector through ``view.kwargs``; a left-out
     # one, only as the default a field of its name declares.
     route_names = {url_kwarg.name for url_kwarg in binding.url_kwargs}

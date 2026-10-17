@@ -12,7 +12,6 @@ from rest_framework_services import server_owned_keys, spec_to_json_schema
 from rest_framework_services.types.selector_spec import SelectorSpec
 from rest_framework_services.types.service_spec import ServiceSpec
 
-from rest_framework_mcp.constants import ArgumentBinding
 from rest_framework_mcp.registry.types.selector_tool_binding import SelectorToolBinding
 from rest_framework_mcp.registry.types.tool_binding import ToolBinding
 from rest_framework_mcp.registry.types.url_kwarg import UrlKwarg
@@ -59,7 +58,6 @@ def selector_inputs(
     url_kwargs: Iterable[UrlKwarg] = (),
     pool_seeds: PoolSeeds = DEFAULT_POOL_SEEDS,
     provides: frozenset[str] = frozenset(),
-    caller_wins: bool = False,
 ) -> tuple[dict[str, Any], tuple[str, ...]]:
     """A selector's input schema as this server calls it, and what a call needs.
 
@@ -120,24 +118,11 @@ def selector_inputs(
     ``provides`` still drops its names beside an untyped provider: declaring a
     name is not a claim that the provider fills nothing else.
 
-    **Under ``SPREAD_CALLER_WINS`` (``caller_wins``) the provider's keys and the
-    ``provides`` names are offered rather than supplied**: advertised as the
-    reflection describes them, and neither required nor checked, marker or not,
-    because dispatch applies the caller's spread after them, so they fill a name
-    only when the caller sends none. Held by
-    ``test_under_caller_wins_a_typed_providers_keys_are_offered_but_not_required``,
-    ``test_under_caller_wins_a_spec_kwargs_provides_name_is_offered_but_not_required``
-    and, on the call side, ``test_under_caller_wins_a_provider_filled_name_is_not_refused``.
-    "Marker or not" means ``name in declared`` does not keep an offered name,
-    which ``test_under_caller_wins_a_marked_provider_key_is_neither_required_nor_refused``
-    holds on the schema and on every route's call. Only a selector tool passes
-    ``caller_wins``: drf-services lays a target lookup's provider over the
-    arguments under every binding, so a lookup is read author-wins
+    **Every binding reads the provider author-wins**: drf-services lays a
+    spec's ``kwargs=`` provider over the caller's spread under every
+    ``ArgumentBinding`` it accepts, so a name the provider fills is supplied
+    whichever binding the tool declares, a target lookup's included
     (``test_a_target_lookups_provider_outranks_the_caller_under_every_binding``).
-    A seed and a defaulted ``UrlKwarg`` stay supplied under every binding,
-    because dispatch strips a reserved name from the caller's spread and the
-    channel split pops a ``UrlKwarg`` name out of it
-    (``test_under_caller_wins_a_seed_is_still_not_advertised``).
 
     The second value is what a call is refused without: the schema's own
     ``required`` less every name a provider may fill, so the call and the
@@ -156,18 +141,13 @@ def selector_inputs(
     keys = provider_keys(spec.kwargs)
     filled, declinable = keys if keys is not None else (frozenset(), frozenset())
     defaulted = frozenset(uk.name for uk in url_kwargs if declares_default(uk.default))
-    supplied = pool_seeds.reserved | defaulted
-    offered: frozenset[str] = frozenset()
-    if caller_wins:
-        offered = filled | provides
-    else:
-        supplied |= filled | provides
+    supplied = pool_seeds.reserved | defaulted | filled | provides
     # ``phase="input"`` always returns a dict (only the output phase is
     # nullable), so ``or {}`` here and below only narrows the type.
     schema: dict[str, Any] = spec_to_json_schema(spec, phase="input", supplied=supplied) or {}
     uninformed: dict[str, Any] = spec_to_json_schema(spec, phase="input") or {}
     declared: list[str] = uninformed.get("required", [])
-    required = [name for name in schema.get("required", []) if name not in offered]
+    required: list[str] = schema.get("required", [])
     # ``None`` is every name: a provider whose keys cannot be read may fill any.
     checked = () if keys is None else tuple(name for name in required if name not in declinable)
     kept = [name for name in required if name in checked or name in declared]
@@ -261,10 +241,6 @@ def selector_tool_inputs(
       leaving it out is served. Left out when ``input_serializer_runs`` is
       false, for the route that does not run the serializer
       (``required_arguments``).
-
-    The binding's ``argument_binding`` says whether the caller's spread outranks
-    the provider (``SPREAD_CALLER_WINS``), which decides whether those names
-    and the provider's keys are hidden or offered.
     """
     provides = frozenset(binding.spec_kwargs_provides)
     if input_serializer_runs:
@@ -274,7 +250,6 @@ def selector_tool_inputs(
         url_kwargs=binding.url_kwargs,
         pool_seeds=pool_seeds,
         provides=provides,
-        caller_wins=binding.argument_binding is ArgumentBinding.SPREAD_CALLER_WINS,
     )
 
 

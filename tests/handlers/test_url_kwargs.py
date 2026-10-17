@@ -17,6 +17,7 @@ from django.core.exceptions import ImproperlyConfigured
 from django.http import HttpRequest
 from django_service_specs import SelectorKind
 from rest_framework import serializers
+from rest_framework_services import UrlKwarg as SpecUrlKwarg
 from rest_framework_services.types.selector_spec import SelectorSpec
 from rest_framework_services.types.service_spec import ServiceSpec
 
@@ -243,22 +244,36 @@ def _extras_list_selector(user: Any, **extras: Any) -> list[int]:
     return [n for n in (1, 5, 15) if ceiling is not None and n <= int(ceiling)]
 
 
-def test_selector_url_kwarg_delivered_to_extras_reading_selector() -> None:
-    # Dual channel: the selector reads ``project_pk`` from ``**extras`` (fed by
-    # drf-services' authoritative view-kwargs spread), and it is registered as a
-    # UrlKwarg so the model can supply it.
+@pytest.mark.parametrize(
+    ("reads", "expected"),
+    [
+        # The spec declares the capture it reads, so it is an argument of the
+        # call and reaches ``**extras``.
+        pytest.param((SpecUrlKwarg("project_pk"),), [1, 5], id="declared"),
+        # Undeclared, the capture is no argument: a bare ``**extras`` is handed
+        # the declared arguments and the seeds alone, so ``extras.get`` reads
+        # ``None`` and the list answers no rows, without an error.
+        pytest.param((), [], id="undeclared"),
+    ],
+)
+def test_selector_url_kwarg_delivered_to_extras_reading_selector(
+    reads: tuple[Any, ...], expected: list[int]
+) -> None:
+    # Dual channel: the selector reads ``project_pk`` from ``**extras``, and it is
+    # registered as a UrlKwarg so the model can supply it.
     tools = ToolRegistry()
     tools.register(
         SelectorToolBinding(
             name="t",
             description=None,
-            spec=SelectorSpec(kind=SelectorKind.LIST, selector=_extras_list_selector),
+            spec=SelectorSpec(kind=SelectorKind.LIST, selector=_extras_list_selector, reads=reads),
             url_kwargs=(UrlKwarg("project_pk"),),
         )
     )
     out = handle_tools_call({"name": "t", "arguments": {"project_pk": "5"}}, _ctx(tools=tools))
     assert isinstance(out, dict)
-    assert out["structuredContent"] == [1, 5]
+    assert out.get("isError") is not True, out
+    assert out["structuredContent"] == expected
 
 
 # ---------- in-process call_spec_tool ----------
@@ -536,14 +551,16 @@ def test_output_context_provider_sees_the_url_kwargs() -> None:
     assert out["structuredContent"]["scope"] == 7
 
 
-def test_url_kwarg_is_a_superset_of_a_reflected_extras_key() -> None:
-    """A reflected ``**extras`` key never reaches ``view.kwargs``; a UrlKwarg does.
+def test_only_a_spec_reads_entry_reaches_both_the_selector_and_view_kwargs() -> None:
+    """Where a route name lands depends on who declares it, and only ``reads=`` reaches both.
 
-    The distinction consumers get wrong: marking a reflected key
-    ``InputRequired`` is a *schema* statement and doesn't change where the value
-    lands, so a ``spec.kwargs`` provider scoping off ``view.kwargs`` silently
-    sees ``None``. Registering the same name as a ``UrlKwarg`` is a strict
-    superset — the selector still receives it in its extras.
+    drf-services hands a ``**extras`` callable only what the spec declares, so an
+    argument nobody declares reaches neither the selector nor a provider scoping
+    off ``view.kwargs``. Registering the name as a binding ``UrlKwarg`` routes it
+    through ``view.kwargs`` for the provider, but is a statement to drf-mcp alone:
+    the spec still does not read it, so the selector's extras stay without it.
+    A spec ``reads=[UrlKwarg(...)]`` entry is the one declaration that reaches
+    both, with or without the binding's ``UrlKwarg`` beside it.
     """
     seen: dict[str, Any] = {}
 
@@ -555,25 +572,35 @@ def test_url_kwarg_is_a_superset_of_a_reflected_extras_key() -> None:
     def provider(view: Any) -> dict[str, Any]:
         return {"scope": view.kwargs.get("project_pk")}
 
-    def call(url_kwargs: tuple[UrlKwarg, ...]) -> None:
+    def call(url_kwargs: tuple[UrlKwarg, ...], reads: tuple[SpecUrlKwarg, ...] = ()) -> None:
         seen.clear()
         tools = ToolRegistry()
         tools.register(
             SelectorToolBinding(
                 name="t",
                 description=None,
-                spec=SelectorSpec(kind=SelectorKind.LIST, selector=selector, kwargs=provider),
+                spec=SelectorSpec(
+                    kind=SelectorKind.LIST, selector=selector, kwargs=provider, reads=reads
+                ),
                 url_kwargs=url_kwargs,
             )
         )
-        handle_tools_call({"name": "t", "arguments": {"project_pk": 7}}, _ctx(tools=tools))
+        out = handle_tools_call({"name": "t", "arguments": {"project_pk": 7}}, _ctx(tools=tools))
+        assert not out.get("isError"), out
 
-    # Undeclared: the selector gets it as an ordinary param, the provider doesn't.
+    # Undeclared anywhere: dropped before any callable runs.
     call(())
-    assert seen == {"selector_project_pk": 7, "scope": None}
+    assert seen == {"selector_project_pk": None, "scope": None}
 
-    # Declared: it routes through ``view.kwargs`` *and* still reaches the selector.
+    # A binding UrlKwarg alone: the provider sees it, the selector does not.
     call((UrlKwarg("project_pk", type="integer"),))
+    assert seen == {"selector_project_pk": None, "scope": 7}
+
+    # A spec reads entry: both, whether or not the binding declares it too.
+    reads = (SpecUrlKwarg("project_pk", type="integer"),)
+    call((), reads)
+    assert seen == {"selector_project_pk": 7, "scope": 7}
+    call((UrlKwarg("project_pk", type="integer"),), reads)
     assert seen == {"selector_project_pk": 7, "scope": 7}
 
 
