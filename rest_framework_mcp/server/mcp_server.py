@@ -2,23 +2,23 @@ from __future__ import annotations
 
 import re
 from collections.abc import Callable, Mapping, Sequence
-from typing import Any
+from typing import Any, cast
 
 from asgiref.sync import sync_to_async
 from django.core.exceptions import ImproperlyConfigured
 from django.http import HttpRequest
 from django.urls import URLPattern, path
-from rest_framework.serializers import Serializer
-from rest_framework_services import (
+from django_service_specs import (
     DEFAULT_POOL_SEEDS,
     UNSET,
-    OfflineContract,
+    Affordance,
     PoolSeeds,
+    SelectorKind,
+    SpecRegistry,
     UnsetType,
 )
-from rest_framework_services.registry.spec_registry import SpecRegistry
-from rest_framework_services.types.affordance import Affordance
-from rest_framework_services.types.selector_kind import SelectorKind
+from rest_framework.serializers import Serializer
+from rest_framework_services import OfflineContract
 from rest_framework_services.types.selector_spec import SelectorSpec
 from rest_framework_services.types.service_spec import ServiceSpec
 from rest_framework_services.types.validate_channel_names import validate_channel_names
@@ -649,8 +649,17 @@ class MCPServer:
                     self.register_service_tool(name=entry.name, spec=entry.spec, **knobs)
                 )
             else:
+                # The registry types ``entry.spec`` as anything the kernel can
+                # compile (a ``SpecSource``), wider than the DRF-bound
+                # ``SelectorSpec`` this method lifts. This branch has always
+                # handed everything that is not a DRF-bound service to
+                # ``register_selector_tool``; the cast states that and checks
+                # nothing at runtime, so it does not make a kernel-native spec
+                # registrable here.
                 bindings.append(
-                    self.register_selector_tool(name=entry.name, spec=entry.spec, **knobs)
+                    self.register_selector_tool(
+                        name=entry.name, spec=cast(SelectorSpec, entry.spec), **knobs
+                    )
                 )
         return tuple(bindings)
 

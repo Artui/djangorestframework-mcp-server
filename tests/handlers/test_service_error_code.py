@@ -17,11 +17,8 @@ from __future__ import annotations
 from typing import Any
 
 from django.http import HttpRequest
+from django_service_specs import ActionUnavailable, Affordance, SelectorKind, ServiceConflict
 from rest_framework import serializers
-from rest_framework_services.exceptions.action_unavailable import ActionUnavailable
-from rest_framework_services.exceptions.service_conflict import ServiceConflict
-from rest_framework_services.types.affordance import Affordance
-from rest_framework_services.types.selector_kind import SelectorKind
 from rest_framework_services.types.selector_spec import SelectorSpec
 from rest_framework_services.types.service_spec import ServiceSpec
 

@@ -6,8 +6,8 @@ import json
 from dataclasses import dataclass
 from typing import Any
 
+from django_service_specs import SelectorKind
 from rest_framework import serializers
-from rest_framework_services.types.selector_kind import SelectorKind
 
 from rest_framework_mcp.constants import JsonRpcErrorCode, ResourceEncoding
 from rest_framework_mcp.output.build_resource_contents import build_resource_contents

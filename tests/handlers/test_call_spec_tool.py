@@ -12,12 +12,9 @@ import json
 from typing import Any
 
 import pytest
+from django_service_specs import UNSET, SelectorKind, ServiceError, ServiceValidationError
 from rest_framework.exceptions import PermissionDenied
 from rest_framework.permissions import BasePermission
-from rest_framework_services import UNSET
-from rest_framework_services.exceptions.service_error import ServiceError
-from rest_framework_services.exceptions.service_validation_error import ServiceValidationError
-from rest_framework_services.types.selector_kind import SelectorKind
 from rest_framework_services.types.selector_spec import SelectorSpec
 from rest_framework_services.types.service_spec import ServiceSpec
 

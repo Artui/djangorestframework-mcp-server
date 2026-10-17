@@ -28,10 +28,10 @@ from types import SimpleNamespace
 from typing import TYPE_CHECKING, Annotated, Any, Generic, TypeVar, Union
 
 import pytest
+from django_service_specs import DEFAULT_POOL_SEEDS, SelectorKind, UnsetType
 from rest_framework import serializers
 from rest_framework_dataclasses.serializers import DataclassSerializer
-from rest_framework_services import DEFAULT_POOL_SEEDS, InputRequired, UnsetType
-from rest_framework_services.types.selector_kind import SelectorKind
+from rest_framework_services import InputRequired
 from rest_framework_services.types.selector_spec import SelectorSpec
 from typing_extensions import NotRequired, TypedDict
 

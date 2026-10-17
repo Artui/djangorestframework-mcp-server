@@ -21,10 +21,8 @@ from typing import Any
 import pytest
 from django.db.models import Q
 from django.http import HttpRequest, QueryDict
+from django_service_specs import Affordance, SelectorKind, base_pool
 from rest_framework.request import Request
-from rest_framework_services import base_pool
-from rest_framework_services.types.affordance import Affordance
-from rest_framework_services.types.selector_kind import SelectorKind
 from rest_framework_services.types.service_spec import ServiceSpec
 
 from rest_framework_mcp import ChainStep, MCPServer

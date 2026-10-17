@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import pytest
-from rest_framework_services.types.selector_kind import SelectorKind
+from django_service_specs import SelectorKind
 
 from rest_framework_mcp.registry.resource_registry import ResourceRegistry
 from rest_framework_mcp.registry.types.resource_binding import ResourceBinding

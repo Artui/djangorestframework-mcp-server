@@ -25,18 +25,11 @@ import pytest
 from asgiref.sync import sync_to_async
 from django.http import HttpRequest
 from django.test import Client
+from django_service_specs import DEFAULT_POOL_SEEDS, UNSET, PoolSeeds, SelectorKind, UnsetType
 from rest_framework import serializers
 from rest_framework.exceptions import PermissionDenied
 from rest_framework.permissions import BasePermission, IsAuthenticated
-from rest_framework_services import (
-    DEFAULT_POOL_SEEDS,
-    UNSET,
-    InputRequired,
-    NotClientInput,
-    UnsetType,
-)
-from rest_framework_services.types.pool_seeds import PoolSeeds
-from rest_framework_services.types.selector_kind import SelectorKind
+from rest_framework_services import InputRequired, NotClientInput
 from rest_framework_services.types.selector_spec import SelectorSpec
 from rest_framework_services.types.service_spec import ServiceSpec
 from typing_extensions import TypedDict

@@ -76,7 +76,7 @@ bindings in input order.
 `djangorestframework-services` (the transport-neutral `dispatch_spec` owns
 these dispatch policies); import them from `rest_framework_mcp.constants`.
 
-::: rest_framework_services.types.unknown_arguments.UnknownArguments
+::: django_service_specs.types.unknown_arguments.UnknownArguments
 ::: rest_framework_services.types.argument_binding.ArgumentBinding
 
 ## Chain tools

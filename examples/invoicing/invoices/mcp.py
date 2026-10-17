@@ -7,9 +7,8 @@ modules (one per app) and combine them into a single ``MCPServer``.
 
 from __future__ import annotations
 
+from django_service_specs import DEFAULT_POOL_SEEDS, SelectorKind
 from rest_framework.permissions import AllowAny
-from rest_framework_services import DEFAULT_POOL_SEEDS
-from rest_framework_services.types.selector_kind import SelectorKind
 from rest_framework_services.types.selector_spec import SelectorSpec
 from rest_framework_services.types.service_spec import ServiceSpec
 

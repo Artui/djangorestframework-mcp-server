@@ -99,9 +99,13 @@ dependencies = [
     # lists a spreading service's own parameters, the set a closed service-tool
     # ``inputSchema`` advertises, and where a missing argument is refused only
     # where the caller could have sent it.
-    # The ceiling exists because 0.58.0 retires names this release passes; the
-    # release adapted to it floors ``>=0.58.0`` and drops the ceiling.
-    "djangorestframework-services>=0.56.0,<0.58",
+    # 0.58.0 is the floor because that release is the DRF adapter over the
+    # kernel, and it retires names this server no longer passes.
+    "djangorestframework-services>=0.58.0",
+    # The kernel this package imports its own names from. 0.9.0 is the first
+    # release with ``ServerArguments`` and ``format: uuid``, which the schema
+    # and dispatch seams build on.
+    "django-service-specs>=0.9.0",
     "djangorestframework-dataclasses>=1.3.1",
     # ``typing_extensions.Unpack`` is used at runtime by the strict service /
     # selector Protocols (PEP 692) we re-export from the sister package.

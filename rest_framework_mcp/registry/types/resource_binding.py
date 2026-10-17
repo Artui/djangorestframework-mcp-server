@@ -4,8 +4,7 @@ from collections.abc import Callable
 from dataclasses import dataclass, field
 from typing import Any, Generic, TypeVar
 
-from rest_framework_services import UNSET, UnsetType
-from rest_framework_services.types.selector_kind import SelectorKind
+from django_service_specs import UNSET, SelectorKind, UnsetType
 
 from rest_framework_mcp.constants import ResourceEncoding
 from rest_framework_mcp.protocol.types.icon import Icon

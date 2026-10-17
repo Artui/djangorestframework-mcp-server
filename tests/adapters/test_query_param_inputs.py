@@ -23,10 +23,10 @@ from typing import Annotated, Any
 import django_filters
 import pytest
 from django.core.exceptions import ImproperlyConfigured
+from django_service_specs import SelectorKind, UnsetType
 from rest_framework import serializers as drf_serializers
 from rest_framework_dataclasses.serializers import DataclassSerializer
-from rest_framework_services import NotClientInput, UnsetType
-from rest_framework_services.types.selector_kind import SelectorKind
+from rest_framework_services import NotClientInput
 from rest_framework_services.types.selector_spec import SelectorSpec
 from rest_framework_services.types.service_spec import ServiceSpec
 from typing_extensions import TypedDict

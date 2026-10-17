@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import pytest
-from rest_framework_services.exceptions.service_error import ServiceError
+from django_service_specs import ServiceError
 from rest_framework_services.types.service_spec import ServiceSpec
 
 from rest_framework_mcp.handlers.handle_initialize import handle_initialize

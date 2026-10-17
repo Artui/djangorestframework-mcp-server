@@ -19,7 +19,7 @@ site. `MCPServer.register_specs` is the MCP end of it.
 
 ```python
 # orders/registry.py
-from rest_framework_services import SpecRegistry
+from django_service_specs import SpecRegistry
 
 registry = SpecRegistry()
 

@@ -12,8 +12,8 @@ from typing import Any
 
 import pytest
 from django.http import HttpRequest
+from django_service_specs import AdditionalInputRequired
 from rest_framework import serializers as drf_serializers
-from rest_framework_services.exceptions.additional_input_required import AdditionalInputRequired
 from rest_framework_services.types.service_spec import ServiceSpec
 
 from rest_framework_mcp import MCPServer

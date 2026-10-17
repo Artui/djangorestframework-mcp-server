@@ -15,8 +15,8 @@ from __future__ import annotations
 from typing import Any
 
 import pytest
+from django_service_specs import UNSET
 from rest_framework import serializers as drf_serializers
-from rest_framework_services import UNSET
 
 from rest_framework_mcp import QueryParam, UrlKwarg
 from rest_framework_mcp.handlers.utils import (

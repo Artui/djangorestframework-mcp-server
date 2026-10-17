@@ -4,7 +4,7 @@ from collections.abc import Mapping
 from typing import Any
 
 from django.core.exceptions import ImproperlyConfigured
-from rest_framework_services import (
+from django_service_specs import (
     DEFAULT_POOL_SEEDS,
     UNSET,
     FieldMarking,

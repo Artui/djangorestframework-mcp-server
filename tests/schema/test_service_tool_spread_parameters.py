@@ -19,7 +19,7 @@ from typing import Any, TypedDict
 import pytest
 from asgiref.sync import sync_to_async
 from django.http import HttpRequest
-from rest_framework_services import DEFAULT_POOL_SEEDS, UnsetType
+from django_service_specs import DEFAULT_POOL_SEEDS, UnsetType
 from rest_framework_services.types.service_spec import ServiceSpec
 
 from rest_framework_mcp import MCPServer

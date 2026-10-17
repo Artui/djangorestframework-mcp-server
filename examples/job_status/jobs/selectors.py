@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from django.db.models import QuerySet
-from rest_framework_services.exceptions.service_error import ServiceError
+from django_service_specs import ServiceError
 
 from jobs.models import Job
 

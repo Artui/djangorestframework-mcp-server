@@ -14,8 +14,7 @@ what a server with default conventions serves.
 
 from __future__ import annotations
 
-from rest_framework_services.types.audience_projection import AudienceProjection
-from rest_framework_services.types.field_audience import FieldAudience
+from django_service_specs import AudienceProjection, FieldAudience
 
 HANDLE_DESCRIPTION = (
     "An opaque identifier. Pass it to other tools that ask for one; refer to the record "

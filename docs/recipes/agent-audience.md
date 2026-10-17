@@ -18,7 +18,8 @@ in DRF's per-field `style` bag:
 
 ```python
 from rest_framework import serializers
-from rest_framework_services import MARKING, FieldMarking
+from django_service_specs import FieldMarking
+from rest_framework_services import MARKING
 
 
 class InvoiceSerializer(serializers.ModelSerializer):

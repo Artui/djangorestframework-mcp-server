@@ -3,7 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Any
 
-from rest_framework_services import UNSET
+from django_service_specs import UNSET
 
 from rest_framework_mcp.protocol.types.tool_content_block import ToolContentBlock
 

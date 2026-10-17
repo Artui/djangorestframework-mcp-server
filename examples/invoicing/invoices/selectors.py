@@ -10,7 +10,7 @@ from __future__ import annotations
 from typing import Any
 
 from django.db.models import QuerySet, Sum
-from rest_framework_services.exceptions.service_error import ServiceError
+from django_service_specs import ServiceError
 
 from invoices.models import Invoice
 

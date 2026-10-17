@@ -22,9 +22,9 @@ from typing import Any
 import pytest
 from asgiref.sync import sync_to_async
 from django.http import HttpRequest
+from django_service_specs import SelectorKind
 from rest_framework import serializers
 from rest_framework_dataclasses.serializers import DataclassSerializer
-from rest_framework_services.types.selector_kind import SelectorKind
 from rest_framework_services.types.selector_spec import SelectorSpec
 
 from rest_framework_mcp import MCPServer

@@ -6,9 +6,15 @@ from collections.abc import Awaitable, Iterable, Mapping, Sequence
 from typing import Any
 
 from django.http import HttpRequest
+from django_service_specs import (
+    ActionUnavailable,
+    PoolSeeds,
+    ServiceError,
+    ServiceValidationError,
+    UnsetType,
+)
 from rest_framework import serializers as drf_serializers
 from rest_framework_dataclasses.serializers import DataclassSerializer
-from rest_framework_services import UnsetType
 
 # Not a top-level export of the sister package, so this reaches past its stable
 # dispatch surface on purpose. It is the single implementation of "can this
@@ -18,12 +24,6 @@ from rest_framework_services import UnsetType
 # rename upstream breaks this import loudly at start-up rather than quietly at
 # the wire, which is the failure mode to prefer here.
 from rest_framework_services.dispatch.utils import declared_input_keys
-from rest_framework_services.exceptions.action_unavailable import ActionUnavailable
-from rest_framework_services.exceptions.service_error import ServiceError
-from rest_framework_services.exceptions.service_validation_error import (
-    ServiceValidationError,
-)
-from rest_framework_services.types.pool_seeds import PoolSeeds
 from rest_framework_services.types.service_spec import ServiceSpec
 
 from rest_framework_mcp._compat.reject_awaitable import reject_awaitable

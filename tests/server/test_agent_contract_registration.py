@@ -14,17 +14,14 @@ green while no entry point accepted it at all.
 from __future__ import annotations
 
 import pytest
+from django_service_specs import FieldAudience, FieldMarking, SelectorKind, SpecRegistry
 from rest_framework_services import (
-    FieldMarking,
     OfflineContract,
     QueryParam,
-    SelectorKind,
     SelectorSpec,
     ServiceSpec,
-    SpecRegistry,
     UrlKwarg,
 )
-from rest_framework_services.types.field_audience import FieldAudience
 
 from rest_framework_mcp.server.mcp_server import MCPServer
 from tests.testapp.serializers import AgentInvoiceSerializer

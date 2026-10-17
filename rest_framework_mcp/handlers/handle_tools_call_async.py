@@ -4,12 +4,10 @@ import asyncio
 from typing import Any
 
 from asgiref.sync import sync_to_async
+from django_service_specs import AdditionalInputRequired, ServiceError, ServiceValidationError
 from rest_framework import serializers as drf_serializers
 from rest_framework.exceptions import PermissionDenied
 from rest_framework_services import adispatch_spec, enforce_permissions
-from rest_framework_services.exceptions.additional_input_required import AdditionalInputRequired
-from rest_framework_services.exceptions.service_error import ServiceError
-from rest_framework_services.exceptions.service_validation_error import ServiceValidationError
 
 from rest_framework_mcp._compat.acall import acall
 from rest_framework_mcp._compat.tracing import span

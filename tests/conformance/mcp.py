@@ -10,9 +10,9 @@ from __future__ import annotations
 
 from typing import Any
 
+from django_service_specs import SelectorKind
 from rest_framework import serializers as drf_serializers
 from rest_framework.permissions import IsAuthenticated
-from rest_framework_services import SelectorKind
 from rest_framework_services.types.selector_spec import SelectorSpec
 from rest_framework_services.types.service_spec import ServiceSpec
 

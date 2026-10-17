@@ -6,14 +6,9 @@ from functools import cached_property
 from typing import Any
 
 from django.core.exceptions import ImproperlyConfigured
-from rest_framework_services import (
-    UNSET,
-    AudienceProjection,
-    FieldMarking,
-    UnsetType,
-    build_audience_projection,
-)
-from rest_framework_services.types.selector_kind import SelectorKind
+from django_service_specs import UNSET, AudienceProjection, FieldMarking, SelectorKind, UnsetType
+from rest_framework_services import build_audience_projection
+from rest_framework_services.types.affordance_declarer import AffordanceDeclarer
 from rest_framework_services.types.selector_spec import SelectorSpec
 from rest_framework_services.types.service_spec import ServiceSpec
 
@@ -276,7 +271,7 @@ class ChainToolBinding:
         return spec.output_serializer
 
     @property
-    def rendered_affordances(self) -> Mapping[str, ServiceSpec[Any, Any, Any]] | None:
+    def rendered_affordances(self) -> Mapping[str, AffordanceDeclarer] | None:
         """The ``affordances`` answered on the rendered output, for ``outputSchema``.
 
         Read from the output step's spec the way drf-services' renderer reads

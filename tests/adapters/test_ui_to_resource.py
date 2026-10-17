@@ -6,7 +6,7 @@ from typing import Any
 
 import pytest
 from django.template import TemplateDoesNotExist
-from rest_framework_services.types.selector_kind import SelectorKind
+from django_service_specs import SelectorKind
 
 from rest_framework_mcp.auth.backends.allow_any_backend import AllowAnyBackend
 from rest_framework_mcp.constants import (

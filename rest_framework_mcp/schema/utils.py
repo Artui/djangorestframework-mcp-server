@@ -4,11 +4,11 @@ import dataclasses
 from collections.abc import Callable, Iterable
 from typing import Any
 
+from django_service_specs import DEFAULT_POOL_SEEDS, UNSET, PoolSeeds, provider_keys
 from rest_framework import serializers as drf_serializers
 from rest_framework.fields import empty
 from rest_framework_dataclasses.serializers import DataclassSerializer
-from rest_framework_services import UNSET, provider_keys, server_owned_keys, spec_to_json_schema
-from rest_framework_services.types.pool_seeds import DEFAULT_POOL_SEEDS, PoolSeeds
+from rest_framework_services import server_owned_keys, spec_to_json_schema
 from rest_framework_services.types.selector_spec import SelectorSpec
 from rest_framework_services.types.service_spec import ServiceSpec
 

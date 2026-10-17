@@ -29,10 +29,10 @@ from asgiref.sync import sync_to_async
 from django.core.exceptions import PermissionDenied as DjangoPermissionDenied
 from django.http import HttpRequest
 from django.test import AsyncClient, Client, override_settings
+from django_service_specs import SelectorKind
 from rest_framework import serializers
 from rest_framework.exceptions import PermissionDenied, ValidationError
 from rest_framework.throttling import BaseThrottle
-from rest_framework_services.types.selector_kind import SelectorKind
 from rest_framework_services.types.selector_spec import SelectorSpec
 
 from rest_framework_mcp import MCPServer, ScopeRequired

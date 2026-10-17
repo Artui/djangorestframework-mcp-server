@@ -24,17 +24,19 @@ from __future__ import annotations
 
 from typing import Any
 
-from rest_framework import serializers as drf_serializers
-from rest_framework_services import (
+from django_service_specs import (
     DEFAULT_POOL_SEEDS,
     PoolSeeds,
+    SelectorKind,
+    ServiceError,
+    ServiceValidationError,
+)
+from rest_framework import serializers as drf_serializers
+from rest_framework_services import (
     dispatch_spec,
     enforce_permissions,
     render_for_audience,
 )
-from rest_framework_services.exceptions.service_error import ServiceError
-from rest_framework_services.exceptions.service_validation_error import ServiceValidationError
-from rest_framework_services.types.selector_kind import SelectorKind
 
 from rest_framework_mcp.adapters.utils import _overlaid_field_names
 from rest_framework_mcp.config.types.mcp_config import MCPConfig

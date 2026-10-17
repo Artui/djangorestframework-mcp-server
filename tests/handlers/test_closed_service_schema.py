@@ -19,12 +19,11 @@ from typing import Annotated, Any
 
 import pytest
 from django.http import HttpRequest
+from django_service_specs import RESERVED_POOL_SEEDS, SelectorKind
 from rest_framework import serializers as drf_serializers
 from rest_framework.permissions import AllowAny
 from rest_framework_services import NotClientInput
 from rest_framework_services.dispatch.utils import declared_input_keys
-from rest_framework_services.types.reserved_pool_seeds import RESERVED_POOL_SEEDS
-from rest_framework_services.types.selector_kind import SelectorKind
 from rest_framework_services.types.selector_spec import SelectorSpec
 from rest_framework_services.types.service_spec import ServiceSpec
 

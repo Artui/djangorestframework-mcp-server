@@ -32,11 +32,10 @@ import pytest
 from asgiref.sync import sync_to_async
 from django.test import AsyncClient, Client, override_settings
 from django_restql.mixins import DynamicFieldsMixin
+from django_service_specs import SelectorKind, ServiceValidationError
 from rest_framework import serializers
 from rest_framework.request import Request
 from rest_framework.test import APIRequestFactory
-from rest_framework_services.exceptions.service_validation_error import ServiceValidationError
-from rest_framework_services.types.selector_kind import SelectorKind
 from rest_framework_services.types.selector_spec import SelectorSpec
 from rest_framework_services.types.service_spec import ServiceSpec
 

@@ -13,8 +13,8 @@ from typing import Any
 
 import pytest
 from django.http import HttpRequest
+from django_service_specs import SelectorKind
 from rest_framework.permissions import BasePermission
-from rest_framework_services.types.selector_kind import SelectorKind
 from rest_framework_services.types.selector_spec import SelectorSpec
 
 from rest_framework_mcp import MCPServer
@@ -644,7 +644,7 @@ async def test_run_with_deadline_raises_past_the_deadline() -> None:
 
 
 def test_resolve_bound_treats_unset_as_defer_and_none_as_disabled() -> None:
-    from rest_framework_services import UNSET
+    from django_service_specs import UNSET
 
     assert resolve_bound(UNSET, 500) == 500
     assert resolve_bound(None, 500) is None

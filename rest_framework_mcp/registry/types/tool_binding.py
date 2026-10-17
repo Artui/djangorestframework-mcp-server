@@ -6,20 +6,15 @@ from functools import cached_property
 from typing import Any, Generic, TypeVar
 
 from django.core.exceptions import ImproperlyConfigured
-from rest_framework_services import (
-    UNSET,
-    AudienceProjection,
-    FieldMarking,
-    UnsetType,
-    build_audience_projection,
-)
+from django_service_specs import UNSET, AudienceProjection, FieldMarking, SelectorKind, UnsetType
+from rest_framework_services import build_audience_projection
 
 # Not a top-level export of the sister package, like the ``declared_input_keys``
 # ``handlers.utils`` reads. It is the one place that turns "this surface cannot
 # be read" into the ``ImproperlyConfigured`` dispatch raises under ``REJECT``, so
 # asking it here refuses at registration exactly what every call would.
 from rest_framework_services.dispatch.utils import resolve_unknown_arguments
-from rest_framework_services.types.selector_kind import SelectorKind
+from rest_framework_services.types.affordance_declarer import AffordanceDeclarer
 from rest_framework_services.types.service_spec import ServiceSpec
 
 from rest_framework_mcp.constants import (
@@ -214,7 +209,7 @@ class ToolBinding(Generic[InputT, ResultT, ExtraT]):
         return spec.output_selector_spec.output_serializer if spec.output_selector_spec else None
 
     @property
-    def rendered_affordances(self) -> Mapping[str, ServiceSpec[Any, Any, Any]] | None:
+    def rendered_affordances(self) -> Mapping[str, AffordanceDeclarer] | None:
         """The ``affordances`` answered on every rendered item, if any are declared.
 
         Read off ``output_selector_spec``, the selector spec the result renders

@@ -5,8 +5,8 @@ from __future__ import annotations
 import pytest
 from django.db.models import QuerySet
 from django.http import HttpRequest
+from django_service_specs import SelectorKind
 from rest_framework import serializers as drf_serializers
-from rest_framework_services.types.selector_kind import SelectorKind
 from rest_framework_services.types.selector_spec import SelectorSpec
 
 from rest_framework_mcp.auth.backends.allow_any_backend import AllowAnyBackend

@@ -4,7 +4,7 @@ import json
 import sys
 
 import pytest
-from rest_framework_services import UNSET
+from django_service_specs import UNSET
 
 from rest_framework_mcp.constants import OutputFormat
 from rest_framework_mcp.output.tool_result import build_tool_result

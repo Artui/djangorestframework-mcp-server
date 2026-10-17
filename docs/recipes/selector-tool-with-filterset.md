@@ -111,7 +111,7 @@ class InvoiceFilterSet(django_filters.FilterSet):
 ## Register the selector tool
 
 ```python
-from rest_framework_services.types.selector_kind import SelectorKind
+from django_service_specs import SelectorKind
 from rest_framework_services.types.selector_spec import SelectorSpec
 from rest_framework_mcp import MCPServer
 

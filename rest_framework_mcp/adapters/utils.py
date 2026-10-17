@@ -15,11 +15,9 @@ from collections.abc import Iterable, Mapping
 from typing import Any
 
 from django.core.exceptions import ImproperlyConfigured
+from django_service_specs import DEFAULT_POOL_SEEDS, PoolSeeds, SelectorKind, provider_keys
 from rest_framework import serializers as drf_serializers
 from rest_framework_dataclasses.serializers import DataclassSerializer
-from rest_framework_services import provider_keys
-from rest_framework_services.types.pool_seeds import DEFAULT_POOL_SEEDS, PoolSeeds
-from rest_framework_services.types.selector_kind import SelectorKind
 from rest_framework_services.types.validate_channel_names import validate_channel_names
 
 from rest_framework_mcp.constants import (

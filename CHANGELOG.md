@@ -7,6 +7,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- **The `djangorestframework-services` floor is `>=0.58.0`, the `<0.58` ceiling
+  is dropped, and `django-service-specs>=0.9.0` is now declared.** 0.58.0 is
+  the release that makes `djangorestframework-services` the DRF adapter over
+  the kernel, and it retires names this package no longer passes, so the range
+  that capped it below that release is gone. The kernel is a direct dependency
+  because the package now imports its own names from it, and 0.9.0 is the first
+  release with `ServerArguments` and `format: uuid`, which the schema and
+  dispatch handling build on.
+- **Names the kernel owns are imported from `django_service_specs`.** The
+  exceptions, the pool seeds, `SelectorKind`, `SpecRegistry`, the dispatch
+  helpers and the other values that `djangorestframework-services` re-exports
+  by identity are imported from the package that defines them, in the package,
+  its tests, the docs snippets and the examples. Names `djangorestframework-services`
+  still owns, such as the DRF-bound specs and views, keep their imports. No public
+  module path, `__all__` entry or behaviour changed.
+
 ## [0.52.1] — 2026-10-16
 
 ### Changed

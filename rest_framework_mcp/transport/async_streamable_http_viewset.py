@@ -8,13 +8,12 @@ from typing import Any, cast
 from django.core.exceptions import PermissionDenied as DjangoPermissionDenied
 from django.http import HttpResponse, HttpResponseBase, JsonResponse
 from django.utils.decorators import classonlymethod
+from django_service_specs import DEFAULT_POOL_SEEDS, PoolSeeds, ProgressReporter
 from rest_framework.exceptions import PermissionDenied
 from rest_framework.permissions import AllowAny
 from rest_framework.renderers import JSONRenderer
 from rest_framework.request import Request
 from rest_framework.viewsets import ViewSet
-from rest_framework_services.types.pool_seeds import DEFAULT_POOL_SEEDS, PoolSeeds
-from rest_framework_services.types.progress_reporter import ProgressReporter
 
 from rest_framework_mcp._compat.acall import acall
 from rest_framework_mcp.auth.principal_for_token import principal_for_token

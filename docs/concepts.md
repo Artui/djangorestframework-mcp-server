@@ -12,7 +12,8 @@ instances directly. Same value object as the HTTP transport — same callable ca
 serve both at once.
 
 ```python
-from rest_framework_services import SelectorKind, SelectorSpec, ServiceSpec
+from django_service_specs import SelectorKind
+from rest_framework_services import SelectorSpec, ServiceSpec
 
 spec = ServiceSpec(
     service=create_invoice,
@@ -126,7 +127,7 @@ drf-services
 registry `dispatch_spec(pool_seeds=)` takes:
 
 ```python
-from rest_framework_services import DEFAULT_POOL_SEEDS
+from django_service_specs import DEFAULT_POOL_SEEDS
 
 
 def tenant_of(*, user):
@@ -712,7 +713,8 @@ is a spec on both surfaces.
 - `.kwargs` becomes the binding's per-request kwargs provider.
 
 ```python
-from rest_framework_services import SelectorKind, SelectorSpec
+from django_service_specs import SelectorKind
+from rest_framework_services import SelectorSpec
 
 server.register_resource(
     name="invoice",
@@ -935,7 +937,8 @@ such condition, through drf-services' `unmet_operation_affordance`, and leaves t
 tool out while any is unmet:
 
 ```python
-from rest_framework_services import Affordance, ServiceSpec
+from django_service_specs import Affordance
+from rest_framework_services import ServiceSpec
 
 server.register_service_tool(
     name="ledger.close_period",
@@ -1910,7 +1913,7 @@ only finds out after it has looked.
 A service says so by raising, and that is the whole of its involvement:
 
 ```python
-from rest_framework_services import AdditionalInputRequired
+from django_service_specs import AdditionalInputRequired
 
 
 def delete_rows(*, data):

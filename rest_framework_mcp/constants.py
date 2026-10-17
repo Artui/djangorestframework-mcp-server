@@ -11,8 +11,8 @@ from enum import Enum, IntEnum
 
 # ``dispatch_spec`` is the single dispatch core and owns these neutral-core
 # policies, so MCP consumes them rather than keeping a parallel copy.
-from rest_framework_services import ArgumentBinding, UnknownArguments
-from rest_framework_services.types.reserved_pool_seeds import RESERVED_POOL_SEEDS
+from django_service_specs import RESERVED_POOL_SEEDS, UnknownArguments
+from rest_framework_services import ArgumentBinding
 
 """Keys carrying transport-controlled pool seeds, owned by the sister repo.
 

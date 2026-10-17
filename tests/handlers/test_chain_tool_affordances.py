@@ -16,8 +16,7 @@ from typing import Any
 import pytest
 from django.db.models import Q
 from django.http import HttpRequest
-from rest_framework_services.exceptions.service_conflict import ServiceConflict
-from rest_framework_services.types.affordance import Affordance
+from django_service_specs import Affordance, ServiceConflict
 from rest_framework_services.types.service_spec import ServiceSpec
 
 from rest_framework_mcp import ChainStep, MCPServer

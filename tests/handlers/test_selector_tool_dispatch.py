@@ -12,11 +12,9 @@ from typing import Any
 import django_filters
 import pytest
 from django.http import HttpRequest
+from django_service_specs import SelectorKind, ServiceError, ServiceValidationError
 from rest_framework import permissions as drf_permissions
 from rest_framework import serializers as drf_serializers
-from rest_framework_services.exceptions.service_error import ServiceError
-from rest_framework_services.exceptions.service_validation_error import ServiceValidationError
-from rest_framework_services.types.selector_kind import SelectorKind
 from rest_framework_services.types.selector_spec import SelectorSpec
 
 from rest_framework_mcp import MCPServer

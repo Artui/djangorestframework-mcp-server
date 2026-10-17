@@ -20,7 +20,7 @@ from __future__ import annotations
 from typing import Any
 
 from django.core.exceptions import ImproperlyConfigured
-from rest_framework_services.exceptions.additional_input_required import AdditionalInputRequired
+from django_service_specs import AdditionalInputRequired
 
 from rest_framework_mcp.auth.principal_for_token import principal_for_token
 from rest_framework_mcp.constants import ELICITATION_KEY, ElicitAction, JsonRpcErrorCode

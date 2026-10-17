@@ -6,16 +6,10 @@ from functools import cached_property
 from typing import Any, Generic, TypeVar
 
 from django.core.exceptions import ImproperlyConfigured
-from rest_framework_services import (
-    UNSET,
-    AudienceProjection,
-    FieldMarking,
-    UnsetType,
-    build_audience_projection,
-)
-from rest_framework_services.types.selector_kind import SelectorKind
+from django_service_specs import UNSET, AudienceProjection, FieldMarking, SelectorKind, UnsetType
+from rest_framework_services import build_audience_projection
+from rest_framework_services.types.affordance_declarer import AffordanceDeclarer
 from rest_framework_services.types.selector_spec import SelectorSpec
-from rest_framework_services.types.service_spec import ServiceSpec
 
 from rest_framework_mcp.constants import (
     ArgumentBinding,
@@ -242,7 +236,7 @@ class SelectorToolBinding(Generic[ResultT, ExtraT]):
         return self.spec.output_serializer
 
     @property
-    def rendered_affordances(self) -> Mapping[str, ServiceSpec[Any, Any, Any]] | None:
+    def rendered_affordances(self) -> Mapping[str, AffordanceDeclarer] | None:
         """The ``affordances`` answered on every rendered item, if any are declared.
 
         The spec's own mapping, which drf-services' renderer adds to each item

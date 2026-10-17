@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from rest_framework_services.exceptions.service_error import ServiceError
+from django_service_specs import ServiceError
 
 from tests.testapp.models import Invoice
 

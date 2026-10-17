@@ -3,7 +3,7 @@ from __future__ import annotations
 from collections.abc import Callable
 from typing import Any
 
-from rest_framework_services import arun_selector, is_async, run_selector
+from django_service_specs import arun_selector, is_async, run_selector
 
 from rest_framework_mcp._compat.acall import acall
 

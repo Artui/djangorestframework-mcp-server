@@ -4,7 +4,7 @@ from collections.abc import Mapping
 from dataclasses import replace
 from typing import Any
 
-from rest_framework_services.types.progress_reporter import ProgressReporter
+from django_service_specs import ProgressReporter
 
 from rest_framework_mcp.tasks.types.task_record import TaskRecord
 from rest_framework_mcp.tasks.types.task_store import TaskStore

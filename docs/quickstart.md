@@ -55,7 +55,7 @@ class InvoiceOutputSerializer(serializers.ModelSerializer):
 ## 4. Wire the MCP server
 
 ```python title="invoices/mcp.py"
-from rest_framework_services.types.selector_kind import SelectorKind
+from django_service_specs import SelectorKind
 from rest_framework_services.types.selector_spec import SelectorSpec
 from rest_framework_services.types.service_spec import ServiceSpec
 from rest_framework_mcp import MCPServer

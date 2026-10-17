@@ -26,17 +26,16 @@ from typing import Annotated, Any
 
 import jsonschema
 import pytest
-from rest_framework import serializers
-from rest_framework.permissions import AllowAny
-from rest_framework_services import (
+from django_service_specs import (
     DEFAULT_POOL_SEEDS,
-    InputRequired,
-    NotClientInput,
+    RESERVED_POOL_SEEDS,
+    SelectorKind,
     UnknownArguments,
 )
+from rest_framework import serializers
+from rest_framework.permissions import AllowAny
+from rest_framework_services import InputRequired, NotClientInput
 from rest_framework_services.dispatch.utils import declared_input_keys
-from rest_framework_services.types.reserved_pool_seeds import RESERVED_POOL_SEEDS
-from rest_framework_services.types.selector_kind import SelectorKind
 from rest_framework_services.types.selector_spec import SelectorSpec
 from rest_framework_services.types.service_spec import ServiceSpec
 

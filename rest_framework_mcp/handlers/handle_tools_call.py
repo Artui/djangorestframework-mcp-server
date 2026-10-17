@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from typing import Any
 
+from django_service_specs import AdditionalInputRequired, ServiceError, ServiceValidationError
 from rest_framework import serializers as drf_serializers
 from rest_framework.exceptions import PermissionDenied
 from rest_framework_services import (
@@ -9,9 +10,6 @@ from rest_framework_services import (
     enforce_permissions,
     render_for_audience,
 )
-from rest_framework_services.exceptions.additional_input_required import AdditionalInputRequired
-from rest_framework_services.exceptions.service_error import ServiceError
-from rest_framework_services.exceptions.service_validation_error import ServiceValidationError
 
 from rest_framework_mcp._compat.tracing import span
 from rest_framework_mcp.constants import JsonRpcErrorCode, OutputFormat

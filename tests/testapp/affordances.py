@@ -11,9 +11,8 @@ from __future__ import annotations
 
 from typing import Any
 
+from django_service_specs import Affordance, SelectorKind
 from rest_framework import serializers
-from rest_framework_services.types.affordance import Affordance
-from rest_framework_services.types.selector_kind import SelectorKind
 from rest_framework_services.types.selector_spec import SelectorSpec
 from rest_framework_services.types.service_spec import ServiceSpec
 
