@@ -80,26 +80,52 @@ cost its keys twice over and hide nothing.
 
 The serializer stays authoritative — it is the one declaration your REST API,
 this server, and any in-process toolset all read. When a single tool genuinely
-needs what its sibling hides, that is an override, and it belongs on the
-registry entry rather than on this mount:
+needs what its sibling hides, that is an override, and it belongs on the spec
+the registry holds rather than on this mount:
 
 ```python
-registry.register(
-    "lookup_invoice",
-    invoice_spec,
+from django_service_specs import FieldMarking, SelectorKind
+from rest_framework.permissions import IsAuthenticated
+from rest_framework_services import SelectorSpec
+
+invoice_spec = SelectorSpec(
+    kind=SelectorKind.RETRIEVE,
+    selector=get_invoice,
+    output_serializer=InvoiceSerializer,
+    permission_classes=[IsAuthenticated],
     # This tool returns the etag after all.
-    agent_contract=OfflineContract(field_audiences={"etag": FieldMarking()}),
+    field_audiences={"etag": FieldMarking()},
 )
+registry.register("lookup_invoice", invoice_spec, tags=("billing",))
 
 server.register_specs(registry.by_tag("billing"))
 ```
 
-`OfflineContract` is drf-services' carrier for what a caller with **no HTTP
-request** has to be told — the URL kwargs and query params an agent must supply
-by hand, and this. Declaring it on the entry is what keeps an in-process
-Pydantic-AI toolset and this server projecting the *same* field set: an audience
-is not a transport, so a field hidden from one agent caller and visible to
-another is a bug you would find in a transcript rather than in a test.
+The entry's `agent_contract` answers what the spec declares, as an
+[`OfflineContract`][rest_framework_services.types.offline_contract.OfflineContract]:
+drf-services' carrier for what a caller with **no HTTP request** has to be
+told — the URL kwargs and query params an agent must supply by hand, and this.
+Declaring it on the spec is what keeps an in-process Pydantic-AI toolset and
+this server projecting the *same* field set: an audience is not a transport, so
+a field hidden from one agent caller and visible to another is a bug you would
+find in a transcript rather than in a test.
+
+`SpecRegistry.register` takes no `agent_contract=` (drf-services 0.58.0 removed
+it). For an entry registered elsewhere, re-declare the spec it holds with
+`dataclasses.replace`:
+
+```python
+from dataclasses import replace
+
+from django_service_specs import FieldMarking, SpecRegistry
+
+entry = registry.get("lookup_invoice")
+billing = SpecRegistry(
+    [replace(entry, spec=replace(entry.spec, field_audiences={"etag": FieldMarking()}))]
+)
+
+server.register_specs(billing)
+```
 
 A server registering a spec directly, with no registry in front of it, passes
 the same object:

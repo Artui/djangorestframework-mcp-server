@@ -243,16 +243,15 @@ list, so it is filled and hidden. A generic `TypedDict` is read with whatever
 binds its parameters, so `-> Scope[str | UnsetType]` may decline `Scope`'s
 `tenant: T`, as the same key written out does.
 
-**On a selector tool registered with
-`argument_binding=ArgumentBinding.SPREAD_CALLER_WINS` the client's value
-outranks the provider's**, so a provider key and a `spec_kwargs_provides=` name
-stay advertised there, as optional properties, and an `InputRequired` marker
-does not make them required: the server fills them when the client sends
-nothing. A seed is hidden under every binding, because drf-services strips a
-seed from the client's arguments whatever the binding. **A service tool's
-target lookup is read author-wins under every binding**, because drf-services
-lays the lookup's provider over the arguments last whatever `argument_binding`
-says, so its keys stay hidden.
+**A provider's value always outranks the client's**, so no binding advertises
+a provider key the server fills: drf-services 0.58.0 retired
+`ArgumentBinding.SPREAD_CALLER_WINS`, the one binding under which the client's
+value won, and registering a tool with it raises `ImproperlyConfigured`. A seed
+is hidden under every binding, because drf-services strips a seed from the
+client's arguments whatever the binding. **A service tool's target lookup is
+read author-wins under every binding**, because drf-services lays the lookup's
+provider over the arguments last whatever `argument_binding` says, so its keys
+stay hidden.
 
 **A service tool runs one target lookup**: the `collection_selector_spec` or
 the `instance_selector_spec` its spec declares, and that lookup's parameters
@@ -332,9 +331,8 @@ A seed or a provider key the client sends anyway is still accepted by the
 unknown-argument check, even under `UnknownArguments.REJECT`. A seed's value
 outranks the client's under every binding, as the [seeds](#pool-seeds) section
 describes. On a selector tool a provider key's value outranks it under
-`SPREAD_AUTHOR_WINS`, the selector tool default, and the client's value wins
-under `SPREAD_CALLER_WINS`. A service tool's target lookup reads its provider's
-value under every binding.
+`SPREAD_AUTHOR_WINS`, the selector tool default. A service tool's target lookup
+reads its provider's value under every binding.
 
 ### URL kwargs — route values a provider reads off `view.kwargs`
 
@@ -734,6 +732,13 @@ single point where output serializers and kwargs providers attach. Use the
 `@server.resource(uri_template=...)` decorator if you'd rather skip the
 boilerplate; it wraps the function in a `SelectorSpec` for you.
 
+A URI-template variable named after a value the read seeds itself is refused at
+registration with `ImproperlyConfigured`: one of the kernel's reserved pool
+seeds (`user`, `data`, `instance`, ...), `request`, which `resources/read`
+seeds beside them, or a name the server's [`pool_seeds=`](#pool-seeds)
+registers. The read lays those values over the template's variables, so the
+selector would never receive the segment the URI carried.
+
 ### What a resource cannot carry, and why registration refuses it
 
 Only those five fields are carried. `resources/read` dispatches the **bare
@@ -806,15 +811,13 @@ forms) accept three behavior knobs:
     kwarg, so selectors can declare individual parameters
     (`def list_drafts(*, project_id, status="draft")`). `spec.kwargs(...)` wins
     on conflict so author-declared invariants beat client input.
-  - `ArgumentBinding.SPREAD_CALLER_WINS` — like `SPREAD_AUTHOR_WINS` but the
-    spread wins on conflict, so `spec.kwargs(...)` supplies client-overridable
-    defaults. That includes a provider copying a route kwarg into a service's
-    pool, `{"project_pk": view.kwargs["project_pk"]}`, which an `input_serializer`
-    field validated into `project_pk` outranks, while the
-    [URL kwarg](#url-kwargs-route-values-a-provider-reads-off-viewkwargs) itself
-    is not overridable: where the service must act on the route the permission
-    judged, take it from the target lookup, which reads `view.kwargs` under
-    every binding, rather than from the pool.
+  - `ArgumentBinding.SPREAD_CALLER_WINS` — retired in drf-services 0.58.0, and
+    refused at registration with `ImproperlyConfigured`: a caller cannot
+    override what the server's spec declares, because a call has one pool in
+    which an author's value always outranks the caller's. Use
+    `SPREAD_AUTHOR_WINS` for a service whose own parameters are the caller's
+    input, or `BUNDLE` for one validated `data` payload; where the caller's
+    value should win for a key, leave that key out of `spec.kwargs(...)`.
   - `ArgumentBinding.AUTO` — resolve per spec type (service → `BUNDLE`,
     selector → `SPREAD_AUTHOR_WINS`).
 
@@ -856,9 +859,8 @@ forms) accept three behavior knobs:
     2. the keys of the target lookup dispatch calls (the
        `collection_selector_spec` when declared, else the
        `instance_selector_spec`; a `many=True` spec has neither);
-    3. without an `input_serializer`, under `SPREAD_AUTHOR_WINS` or
-       `SPREAD_CALLER_WINS`, the service's own parameters, which are its
-       input there. A parameter without a default is required, unless the
+    3. without an `input_serializer`, under `SPREAD_AUTHOR_WINS`, the
+       service's own parameters, which are its input there. A parameter without a default is required, unless the
        spec's `kwargs=` provider may fill it.
 
     Less every name the server fills: the pool seeds, the ones registered with
@@ -871,9 +873,8 @@ forms) accept three behavior knobs:
     says it fills, which dispatch lays over the caller's spread. `REJECT` still
     admits a key one of the providers fills and serves the provider's value,
     so leaving it out only stops asking for a value the call would replace.
-    Under `SPREAD_CALLER_WINS` the service's provider's keys stay listed, not
-    required, because the caller's value is the one served; so does a key
-    either provider may decline with `UNSET`. A lookup parameter a precondition
+    A key either provider may decline with `UNSET` stays listed, not
+    required. A lookup parameter a precondition
     hides is therefore not advertised, though the lookup names it; an
     `input_serializer` field of the same name is, because it is the caller's
     input to `data`.
@@ -901,15 +902,16 @@ forms) accept three behavior knobs:
     Earlier releases downgraded `REJECT` before dispatch for a service with no
     `input_serializer` and advertised its schema open to match, so an argument
     the service never declared was dropped without a word. That downgrade is
-    gone. To keep the old behaviour, register the policy it chose:
-    `PASSTHROUGH` under a spreading binding, `IGNORE` under `BUNDLE`.
+    gone. To keep a call that sends undeclared keys working, register
+    `IGNORE`, which drops them.
 
     **Selector and chain** bindings enforce the closed set in this package,
     against their own input serializer, so they are closed under `REJECT` with
     one and open without one, where nothing checks the keys.
-  - `UnknownArguments.PASSTHROUGH` — `"additionalProperties": true`;
-    unknown keys survive validation and are merged onto the validated
-    payload before binding.
+  - `UnknownArguments.PASSTHROUGH` — retired in drf-services 0.58.0, where an
+    argument the spec does not declare never reaches a callable. Declare the
+    argument (a `reads` entry, a serializer field or a parameter) and pass
+    `IGNORE` or `REJECT`.
   - `UnknownArguments.IGNORE` — `"additionalProperties": true`; unknown
     keys are silently dropped (the historic DRF default).
 

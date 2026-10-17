@@ -33,6 +33,10 @@ class _Payload(serializers.Serializer):
     text = serializers.CharField()
 
 
+# ``guarded=False`` is ``permission_classes=[]``, not ``None``: since drf-services
+# 0.58.0 ``SpecRegistry.register`` refuses a spec declaring no permissions at all,
+# so ``[]`` (registered "with no guards", as its CHANGELOG puts it) is the only
+# unguarded spec a registry can hand this mount.
 def _service_spec(*, guarded: bool = True) -> ServiceSpec:
     def svc(*, data: dict) -> dict:
         return data
@@ -42,7 +46,7 @@ def _service_spec(*, guarded: bool = True) -> ServiceSpec:
     return ServiceSpec(
         service=svc,
         input_serializer=_Payload,
-        permission_classes=[IsAuthenticated] if guarded else None,
+        permission_classes=[IsAuthenticated] if guarded else [],
     )
 
 
@@ -50,7 +54,7 @@ def _selector_spec(*, guarded: bool = True) -> SelectorSpec:
     return SelectorSpec(
         kind=SelectorKind.LIST,
         selector=lambda: None,
-        permission_classes=[IsAuthenticated] if guarded else None,
+        permission_classes=[IsAuthenticated] if guarded else [],
     )
 
 

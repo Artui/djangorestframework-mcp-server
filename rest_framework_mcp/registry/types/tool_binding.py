@@ -125,8 +125,9 @@ class ToolBinding(Generic[InputT, ResultT, ExtraT]):
       carrying a ``filter_set``, nothing is refused and the schema stays open.
       One whose ``**kwargs`` annotation cannot be resolved cannot be enforced,
       so registration refuses it.
-    - ``PASSTHROUGH`` advertises an open schema and merges unknown keys into
-      the validated payload.
+    - ``PASSTHROUGH`` is retired in drf-services 0.58.0, where an argument the
+      spec does not declare never reaches a callable: pass ``IGNORE`` or
+      ``REJECT``.
     - ``IGNORE`` advertises an open schema and drops them."""
 
     always_listed: bool = False
@@ -197,10 +198,11 @@ class ToolBinding(Generic[InputT, ResultT, ExtraT]):
     one tool genuinely needs what a sibling hides: a lookup tool returning the
     identifier its neighbour drops.
 
-    Declared on the registry entry's
+    Declared as the spec's own ``field_audiences``, which a registry entry's
     [`OfflineContract`][rest_framework_services.types.offline_contract.OfflineContract]
-    and resolved here, so the field set an agent sees does not depend on which
-    agent transport served it."""
+    carries to ``register_specs``, or passed in an ``agent_contract=`` at
+    registration, and resolved here, so the field set an agent sees does not
+    depend on which agent transport served it."""
 
     @property
     def output_serializer(self) -> type | None:

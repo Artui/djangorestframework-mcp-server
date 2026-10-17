@@ -161,8 +161,10 @@ class SelectorToolBinding(Generic[ResultT, ExtraT]):
     """How unknown ``arguments`` keys are handled relative to the merged
     ``inputSchema`` (``input_serializer`` fields, ``filter_set`` properties,
     ordering, pagination). ``REJECT`` answers an ``isError``
-    ``validation_error`` result naming them, ``PASSTHROUGH`` merges them into
-    the validated payload, ``IGNORE`` drops them."""
+    ``validation_error`` result naming them, ``IGNORE`` drops them.
+    ``PASSTHROUGH`` is retired in drf-services 0.58.0, where an argument the
+    spec does not declare never reaches a callable: pass ``IGNORE`` or
+    ``REJECT``."""
 
     always_listed: bool = False
     """Keep this binding in ``tools/list`` even when ``FILTER_LISTINGS_BY_PERMISSIONS``
@@ -225,10 +227,11 @@ class SelectorToolBinding(Generic[ResultT, ExtraT]):
     one tool genuinely needs what a sibling hides: a lookup tool returning the
     identifier its neighbour drops.
 
-    Declared on the registry entry's
+    Declared as the spec's own ``field_audiences``, which a registry entry's
     [`OfflineContract`][rest_framework_services.types.offline_contract.OfflineContract]
-    and resolved here, so the field set an agent sees does not depend on which
-    agent transport served it."""
+    carries to ``register_specs``, or passed in an ``agent_contract=`` at
+    registration, and resolved here, so the field set an agent sees does not
+    depend on which agent transport served it."""
 
     @property
     def output_serializer(self) -> type | None:

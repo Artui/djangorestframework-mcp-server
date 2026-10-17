@@ -41,6 +41,7 @@ from rest_framework_mcp.config.build_mcp_config import build_mcp_config
 from rest_framework_mcp.config.types.mcp_config import MCPConfig
 from rest_framework_mcp.constants import (
     JSONRPC_VERSION,
+    RESOURCE_EDGE_SEEDS,
     RESOURCE_UPDATED_METHOD,
     UI_RESOURCE_MIME_TYPE,
     ArgumentBinding,
@@ -357,6 +358,7 @@ class MCPServer:
         transport reads it; an explicit ``url_kwargs`` / ``query_params`` here
         wins over it.
         """
+        _refuse_retired_argument_binding(name, argument_binding)
         ui_meta = build_ui_tool_meta(
             name=name,
             ui=ui,
@@ -496,6 +498,7 @@ class MCPServer:
         transport reads it; an explicit ``url_kwargs`` / ``query_params`` here
         wins over it.
         """
+        _refuse_retired_argument_binding(name, argument_binding)
         ui_meta = build_ui_tool_meta(
             name=name,
             ui=ui,
@@ -608,14 +611,16 @@ class MCPServer:
             )
 
 
-        Each entry's
+        Each entry's ``agent_contract``, the
         [`OfflineContract`][rest_framework_services.types.offline_contract.OfflineContract]
-        comes across as the mount's default — the ``url_kwargs``,
-        ``query_params`` and ``field_audiences`` an off-HTTP caller needs and an
-        HTTP one gets from the URLconf and query string for free. A per-tool
-        ``url_kwargs`` / ``query_params`` override wins over it; overriding
-        ``agent_contract`` itself replaces it outright, which is the only way to
-        register an entry with *fewer* channels than it declares.
+        drf-services answers from the spec's own ``reads`` and
+        ``field_audiences``, comes across as the mount's default — the
+        ``url_kwargs``, ``query_params`` and ``field_audiences`` an off-HTTP
+        caller needs and an HTTP one gets from the URLconf and query string for
+        free. A per-tool ``url_kwargs`` / ``query_params`` override wins over it;
+        overriding ``agent_contract`` itself replaces it outright, which is the
+        only way for this mount to advertise *fewer* channels than the spec
+        declares.
 
         Keys are checked against the target method's own signature, so a knob
         used on the wrong spec kind (``paginate`` on a ``ServiceSpec``) raises
@@ -1252,14 +1257,15 @@ class MCPServer:
         # catches a name declared twice. The transport's own post-fetch names
         # (``page`` / ``limit`` / ``ordering``) are deliberately *not* reserved
         # here: a resource has no post-fetch pipeline, so ``docs://{page}`` is a
-        # legitimate locator. The server's own ``pool_seeds`` are: the read
-        # lays them over the template variables, so a variable named after one
-        # would never reach the selector.
+        # legitimate locator. The server's own ``pool_seeds`` are, and so is
+        # the ``request`` the read seeds itself (``RESOURCE_EDGE_SEEDS``): the
+        # read lays both over the template variables, so a variable named after
+        # one would never reach the selector.
         validate_channel_names(
             label=f"Resource {name!r}",
             kind="uri_template variable",
             declarations=tuple(UrlKwarg(name=variable) for variable in template_variables),
-            reserved=self._pool_seeds.names,
+            reserved=self._pool_seeds.names | RESOURCE_EDGE_SEEDS,
         )
         # Template variables are the only completable arguments a resource has.
         check_completions_declared(f"Resource {name!r}", binding.completions, template_variables)
@@ -1889,6 +1895,33 @@ class MCPServer:
             ),
         ]
         return patterns, self._url_namespace, self._url_namespace
+
+
+def _refuse_retired_argument_binding(name: str, argument_binding: ArgumentBinding) -> None:
+    """Refuse ``ArgumentBinding.SPREAD_CALLER_WINS`` before a tool is built from it.
+
+    drf-services 0.58.0 retired the member and kept it importable: its
+    ``dispatch_spec`` raises ``ValueError`` for it on every call, because a call
+    has one pool in which an author's value for an argument always outranks the
+    caller's. Registering it anyway would ship a tool that lists and then fails
+    each call, so the refusal is here, ahead of the binding, where startup
+    reads it. Both spec registrars call it, and every route through this server
+    (the decorators, ``register_specs`` overrides, ``register_tools`` with its
+    defaults) reaches one of them; ``test_register_service_tool_refuses_it`` and
+    ``test_register_selector_tool_refuses_it`` each fail without their call. A
+    binding built by hand and handed to ``tools.register`` skips the
+    registrars, and so this check: drf-services still refuses it on each call.
+    """
+    if argument_binding is ArgumentBinding.SPREAD_CALLER_WINS:
+        raise ImproperlyConfigured(
+            f"Tool {name!r}: ArgumentBinding.SPREAD_CALLER_WINS is retired, because a "
+            "caller cannot override what the server's spec declares: an author's value "
+            "for an argument (the spec's kwargs provider, a declared read) always "
+            "outranks the caller's. Pass ArgumentBinding.SPREAD_AUTHOR_WINS for a "
+            "service whose own parameters are the caller's input, or "
+            "ArgumentBinding.BUNDLE for one validated data payload. Where the caller's "
+            "value should win for a key, leave that key out of the kwargs provider."
+        )
 
 
 def _template_variables(uri_template: str) -> tuple[str, ...]:
