@@ -53,10 +53,11 @@ def _merge_service(*, number: str, amount_cents: int) -> dict[str, Any]:
 
 
 def _project_scoped_selector(*, project_id: str, **rest: Any) -> Any:
-    """Echoes the validated + (under PASSTHROUGH) unknown keys it received.
+    """Echoes the validated argument and whatever else its ``**rest`` received.
 
     ``**rest`` absorbs every pool kwarg the explicit ``project_id`` doesn't
-    take — which includes the transport-controlled pool seeds. Filter those
+    take: the transport-controlled pool seeds, and never a key the spec does
+    not declare, since drf-services 0.58.0 hands a catch-all none. Filter those
     out before returning so the response is JSON-serialisable (the seeds are
     not: ``progress`` is a callable, ``request`` an object).
 
@@ -104,13 +105,6 @@ def build_conformance_server() -> MCPServer:
         spec=SelectorSpec(kind=SelectorKind.LIST, selector=_project_scoped_selector),
         input_serializer=_ProjectScopedArgs,
         unknown_arguments=UnknownArguments.REJECT,
-    )
-    # unknown-args PASSTHROUGH sibling.
-    server.register_selector_tool(
-        name="conformance.passthrough_unknown",
-        spec=SelectorSpec(kind=SelectorKind.LIST, selector=_project_scoped_selector),
-        input_serializer=_ProjectScopedArgs,
-        unknown_arguments=UnknownArguments.PASSTHROUGH,
     )
 
     # declarative bulk registration with mixed kinds + defaults.

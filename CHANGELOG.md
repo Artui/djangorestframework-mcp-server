@@ -7,6 +7,66 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+Adapted to `djangorestframework-services` 0.58.0, the DRF adapter over
+`django-service-specs`. Most of what changes below is that release's behaviour
+reaching this package's tools; the rest is this package refusing at
+registration what 0.58.0 now refuses on every call, so a server that would
+have shipped a tool that fails each call does not start.
+
+### Changed (breaking)
+
+- **`ArgumentBinding.SPREAD_CALLER_WINS` is refused at registration.**
+  drf-services 0.58.0 retired it and raises `ValueError` on every call, because
+  a call has one pool in which an author's value for an argument always
+  outranks the caller's. `register_service_tool` and `register_selector_tool`
+  raise `ImproperlyConfigured` naming the tool and both replacements:
+  `SPREAD_AUTHOR_WINS` for a service whose own parameters are the caller's
+  input, `BUNDLE` for one validated payload. Every route reaching them refuses
+  it: the decorators, `register_specs` overrides, `register_tools` and its
+  `ServiceDefaults` / `SelectorDefaults`.
+- **`UnknownArguments.PASSTHROUGH` is refused at registration.** drf-services
+  0.58.0 retired it: an argument the spec does not declare never reaches a
+  callable, and its dispatch raises `ValueError` on every call. All three tool
+  registrars (`register_service_tool`, `register_selector_tool`,
+  `register_chain_tool`, so the decorators, `register_specs` and
+  `register_tools` too) raise `ImproperlyConfigured` naming the tool and the
+  supported policies, `REJECT` and `IGNORE`, and saying to declare the argument
+  instead. A chain binding built by hand and handed to `tools.register`, which
+  skips the registrars, still raises drf-services' own `ValueError` on each
+  call rather than running as `IGNORE` without a word.
+- **A tool's `UrlKwarg` or `QueryParam` named `request`, `view` or `serializer`
+  is refused at registration.** drf-services' DRF edge seeds `request` and
+  `view` on every call and its validator binds `serializer`, and none of the
+  three is in the kernel's `RESERVED_POOL_SEEDS` any more, so such a channel
+  registered, was listed, and never reached what read it. The refusal names the
+  tool, the channel and the name; the set is `rest_framework_mcp.constants.TOOL_EDGE_SEEDS`.
+  It is the rule drf-services already applies to a spec's own `reads`.
+- **`register_specs` refuses a registry entry that is not a
+  `djangorestframework-services` spec, with a `TypeError` naming the tool.** A
+  `SpecRegistry` also holds the kernel's own `ServiceSpec` / `SelectorSpec` and
+  any object with `as_kernel_spec()`. Such an entry fell through to
+  `register_selector_tool` and failed on a missing attribute (`'ServiceSpec'
+  object has no attribute 'selector'`). The message names the type found and
+  the import to declare the operation with instead,
+  `from rest_framework_services import ServiceSpec, SelectorSpec`.
+- **A spec drf-services refuses to compile is refused when its tool is
+  registered.** drf-services compiles a spec on first read and refuses some
+  declarations there, such as an output selector declaring `preconditions` or a
+  `reads` entry named after a seed. Registration did not compile, so such a spec
+  registered, and the first read was usually `tools/list`, whose
+  operation-condition pass compiles every service tool's spec and every chain
+  step's: the listing failed for every tool on the server. The three tool
+  registrars now compile each spec as their last step, after this package's own
+  checks, so drf-services' `ImproperlyConfigured` is a startup error and this
+  package's own wording still answers where both would refuse. A refusal only a
+  call's own compile variant raises (a spreading binding's, a partial update's)
+  still arrives with the call.
+- **A service whose bare `**kwargs` reads the caller's input no longer receives
+  undeclared arguments.** drf-services 0.58.0 hands a catch-all the declared
+  arguments and the seeds only. A service relying on a key arriving through
+  `**kwargs` without declaring it must declare it: a parameter, an
+  `input_serializer` field or a `reads` entry.
+
 ### Changed
 
 - **The `djangorestframework-services` floor is `>=0.58.0`, the `<0.58` ceiling
@@ -23,7 +83,68 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   by identity are imported from the package that defines them, in the package,
   its tests, the docs snippets and the examples. Names `djangorestframework-services`
   still owns, such as the DRF-bound specs and views, keep their imports. No public
-  module path, `__all__` entry or behaviour changed.
+  module path or `__all__` entry changed.
+- **`rendered_affordances` and `build_output_schema` take the wider affordance
+  type.** `rendered_affordances` on `ToolBinding`, `SelectorToolBinding` and
+  `ChainToolBinding` returns `Mapping[str, AffordanceDeclarer] | None`, and
+  `build_output_schema(affordances=...)` accepts the same, where both named
+  drf-services' `ServiceSpec`. It is the type drf-services 0.58.0 declares for a
+  spec's `affordances`; a caller passing or reading `ServiceSpec` values is
+  unaffected.
+- **A drf-services-answered missing argument reads "Invalid arguments", keyed
+  by the name.** When a `kwargs=` provider declines a key the selector requires
+  and the caller leaves it out, drf-services refuses the call with
+  `InvalidArguments`: the result's `detail` is `{"tenant": ["This field is
+  required."]}` under the message `"Invalid arguments"`, where it was
+  `{"non_field_errors": ["Missing required argument(s): 'tenant'."]}` under
+  `"Service validation error."`. The check this package runs itself before
+  dispatch keeps its wording.
+- **A service tool whose `input_serializer` declares the target lookup's key is
+  refused on each call.** drf-services 0.58.0 withholds a name the target
+  lookup reads from the input serializer's data, so a writable field of that
+  name sees it missing and the call answers `{"pk": ["This field is
+  required."]}` as a `validation_error`, with nothing written. Leave the lookup
+  key out of the serializer.
+- **The row ceiling holds for a `Manager` a `LIST` selector returns.**
+  drf-services hands it over as its `.all()`, so it is bounded like the
+  `QuerySet` it stands for and an oversized result is refused as
+  `result_too_large`.
+
+### Fixed
+
+- **`tools/list` no longer advertises a `serializer` parameter the call drops.**
+  A selector, or a service under a spreading binding, declaring `serializer`
+  with a default was listed with that property, while drf-services drops a
+  caller's `serializer` key (and `request`, which was never listed). Both schema
+  builders now count drf-services' `DROPPED_EDGE_SEEDS` as supplied by the
+  server.
+- **A selector tool's `input_serializer` no longer refuses a `request` or
+  `serializer` key under `REJECT`.** Both left the kernel's reserved set in
+  drf-services 0.58.0, and the service path already dropped them; the
+  unknown-argument check now exempts them on the selector path too.
+- **A trust-mode callable requiring `serializer` is refused at registration
+  again.** With no `input_serializer` under a spreading binding, nothing fills
+  `serializer`, and drf-services drops a caller's key of that name; the source
+  check reads `DROPPED_EDGE_SEEDS` beside the kernel's seeds.
+- **A completion sibling named `serializer`, `result` or `queryset` no longer
+  reaches the completer.** The strip tracks the kernel's reserved seeds, which
+  gained `result` and `queryset`, beside drf-services' dropped edge seeds.
+- **A resource URI-template variable named `request` is refused at
+  registration.** `resources/read` lays its own request over the template
+  variables, and the kernel's reserved set no longer lists `request`, so such a
+  variable registered and never reached the selector. `register_resource`
+  reserves it (`RESOURCE_EDGE_SEEDS`).
+
+### Documentation
+
+- **The registry recipes declare `reads` and `field_audiences` on the spec.**
+  `SpecRegistry.register(agent_contract=...)` is gone in drf-services 0.58.0,
+  and `SPREAD_CALLER_WINS` and `PASSTHROUGH` are described as retired and
+  refused, with the policies and bindings to use instead.
+- **The concepts page states the reserved channel names and the pool seeds as
+  0.58.0 draws them**, says a `UrlKwarg` value reaches a typed `**extras` key
+  but not an untyped catch-all, and shows the missing-argument refusal in its
+  current shape. `register_specs`' recipe says which spec types it registers.
 
 ## [0.52.1] — 2026-10-16
 

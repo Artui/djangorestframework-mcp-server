@@ -59,6 +59,13 @@ Each entry becomes a tool: a `ServiceSpec` goes through
 `register_service_tool`, a `SelectorSpec` through `register_selector_tool`.
 Registration order is the registry's order, so `tools/list` stays stable.
 
+Both are the `djangorestframework-services` specs (`from rest_framework_services
+import ServiceSpec, SelectorSpec`), because this server dispatches through
+drf-services, which runs a DRF-bound spec. A `SpecRegistry` also accepts the
+kernel's own `django_service_specs.ServiceSpec` / `SelectorSpec` and any object
+with `as_kernel_spec()`; `register_specs` refuses such an entry with a
+`TypeError` naming the tool and the import to use instead.
+
 This is a **source for** the server's own `ToolRegistry`, not a replacement for
 it. Every tool still lands as a normal binding, and names still share the one
 MCP tool namespace — registering a name twice raises, exactly as before.

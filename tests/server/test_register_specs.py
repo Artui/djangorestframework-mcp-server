@@ -6,7 +6,9 @@ from typing import Any
 
 import pytest
 from django.core.exceptions import ImproperlyConfigured
-from django_service_specs import SelectorKind, SpecRegistry
+from django_service_specs import SelectorKind, SpecRegistry, Unrestricted
+from django_service_specs import SelectorSpec as KernelSelectorSpec
+from django_service_specs import ServiceSpec as KernelServiceSpec
 from rest_framework import serializers
 from rest_framework.permissions import IsAuthenticated
 from rest_framework_services.types.selector_spec import SelectorSpec
@@ -235,3 +237,60 @@ class TestSecurityGuardsStillApply:
             registry, overrides={"refund_order": {"permissions": [IsAuthenticated]}}
         )
         assert binding.permissions == (IsAuthenticated,)
+
+
+# ---------- a spec this server cannot dispatch ----------
+
+
+def _kernel_service(**_: Any) -> None:
+    return None
+
+
+def _kernel_rows(**_: Any) -> list[Any]:
+    return []
+
+
+class _Declaration:
+    """Another library's declaration, compiling to a kernel spec: a ``SpecSource``."""
+
+    def as_kernel_spec(self) -> KernelServiceSpec:
+        return KernelServiceSpec(service=_kernel_service, permissions=[Unrestricted()])
+
+
+@pytest.mark.parametrize(
+    ("spec", "type_name"),
+    [
+        (
+            KernelServiceSpec(service=_kernel_service, permissions=[Unrestricted()]),
+            "django_service_specs.specs.service_spec.ServiceSpec",
+        ),
+        (
+            KernelSelectorSpec(
+                kind=SelectorKind.LIST, selector=_kernel_rows, permissions=[Unrestricted()]
+            ),
+            "django_service_specs.specs.selector_spec.SelectorSpec",
+        ),
+        (_Declaration(), f"{__name__}._Declaration"),
+    ],
+    ids=["kernel-service", "kernel-selector", "spec-source"],
+)
+def test_a_spec_that_is_not_drf_services_is_refused_naming_the_tool(
+    spec: Any, type_name: str
+) -> None:
+    # The registry holds anything the kernel can compile, and this server
+    # dispatches through drf-services' ``dispatch_spec``, which runs a
+    # DRF-bound spec. Before the check such an entry reached the selector
+    # registrar and failed on a missing attribute
+    # (``'ServiceSpec' object has no attribute 'selector'``).
+    registry = SpecRegistry()
+    registry.register("place_order", spec)
+    server = _make()
+
+    with pytest.raises(TypeError) as caught:
+        server.register_specs(registry)
+
+    message = str(caught.value)
+    assert "Tool 'place_order'" in message
+    assert type_name in message
+    assert "from rest_framework_services import ServiceSpec, SelectorSpec" in message
+    assert server.tools.get("place_order") is None

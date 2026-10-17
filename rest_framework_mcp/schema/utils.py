@@ -9,6 +9,7 @@ from rest_framework import serializers as drf_serializers
 from rest_framework.fields import empty
 from rest_framework_dataclasses.serializers import DataclassSerializer
 from rest_framework_services import server_owned_keys, spec_to_json_schema
+from rest_framework_services.dispatch.utils import DROPPED_EDGE_SEEDS
 from rest_framework_services.types.selector_spec import SelectorSpec
 from rest_framework_services.types.service_spec import ServiceSpec
 
@@ -65,7 +66,7 @@ def selector_inputs(
     transport fills, so drf-services' reflection is told: ``supplied`` names what
     this server fills in the pool ``dispatch_spec`` calls the selector with, read
     from the sources that pool is built from. A supplied name is not advertised,
-    and every other parameter without a default is required. The union has four
+    and every other parameter without a default is required. The union has five
     parts, each held by a test, because deleting one leaves every branch covered:
 
     - ``pool_seeds.reserved``: drf-services' own seeds and the registered ones.
@@ -74,6 +75,11 @@ def selector_inputs(
       to any ``supplied`` set itself, so the registered half is the part only
       this server can state. Held by ``test_a_registered_seed_is_not_advertised``
       and ``test_a_lookup_parameter_the_server_seeds_is_not_advertised``.
+    - ``DROPPED_EDGE_SEEDS``: ``request`` and ``serializer``, whose caller's
+      value the DRF edge drops, and which the kernel's reserved set no longer
+      lists. The reflection already counts ``request``; without this a
+      ``serializer`` parameter with a default was advertised and then dropped.
+      Held by ``test_a_selectors_serializer_parameter_is_not_advertised``.
     - the name of every ``UrlKwarg`` declaring a default, which reaches the pool
       through ``view.kwargs`` whenever the client leaves it out. Held by
       ``test_a_url_kwarg_with_a_default_fills_the_parameter_so_it_is_not_required``.
@@ -141,7 +147,7 @@ def selector_inputs(
     keys = provider_keys(spec.kwargs)
     filled, declinable = keys if keys is not None else (frozenset(), frozenset())
     defaulted = frozenset(uk.name for uk in url_kwargs if declares_default(uk.default))
-    supplied = pool_seeds.reserved | defaulted | filled | provides
+    supplied = pool_seeds.reserved | DROPPED_EDGE_SEEDS | defaulted | filled | provides
     # ``phase="input"`` always returns a dict (only the output phase is
     # nullable), so ``or {}`` here and below only narrows the type.
     schema: dict[str, Any] = spec_to_json_schema(spec, phase="input", supplied=supplied) or {}

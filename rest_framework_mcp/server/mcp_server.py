@@ -16,6 +16,7 @@ from django_service_specs import (
     SelectorKind,
     SpecRegistry,
     UnsetType,
+    kernel_spec,
 )
 from rest_framework.serializers import Serializer
 from rest_framework_services import OfflineContract
@@ -359,6 +360,7 @@ class MCPServer:
         wins over it.
         """
         _refuse_retired_argument_binding(name, argument_binding)
+        _refuse_retired_unknown_arguments(name, unknown_arguments)
         ui_meta = build_ui_tool_meta(
             name=name,
             ui=ui,
@@ -419,6 +421,7 @@ class MCPServer:
             default_output_schema=self._config.include_output_schema,
             default_structured_content=self._config.include_structured_content,
         )
+        _compile_specs((binding.spec,))
         self._tools.register(binding)
         return binding
 
@@ -499,6 +502,7 @@ class MCPServer:
         wins over it.
         """
         _refuse_retired_argument_binding(name, argument_binding)
+        _refuse_retired_unknown_arguments(name, unknown_arguments)
         ui_meta = build_ui_tool_meta(
             name=name,
             ui=ui,
@@ -578,6 +582,7 @@ class MCPServer:
                 paginate=binding.paginate,
                 require=self._config.require_list_pagination,
             )
+        _compile_specs((binding.spec,))
         self._tools.register(binding)
         return binding
 
@@ -644,6 +649,13 @@ class MCPServer:
 
         bindings: list[ToolBinding | SelectorToolBinding] = []
         for entry in registry.all():
+            # The registry types ``entry.spec`` as anything the kernel can
+            # compile (a ``SpecSource``), wider than the DRF-bound specs this
+            # server dispatches through drf-services' ``dispatch_spec``. Checked
+            # before anything else is read off the entry, so a kernel-native spec
+            # or another library's declaration is refused by name rather than
+            # failing inside a registrar on an attribute it does not have.
+            _refuse_spec_this_server_cannot_dispatch(entry.name, entry.spec)
             knobs = dict(override_map.get(entry.name, {}))
             # An entry's own agent contract, unless this mount replaced it.
             # ``setdefault`` rather than a merge on purpose: the contract is one
@@ -654,13 +666,8 @@ class MCPServer:
                     self.register_service_tool(name=entry.name, spec=entry.spec, **knobs)
                 )
             else:
-                # The registry types ``entry.spec`` as anything the kernel can
-                # compile (a ``SpecSource``), wider than the DRF-bound
-                # ``SelectorSpec`` this method lifts. This branch has always
-                # handed everything that is not a DRF-bound service to
-                # ``register_selector_tool``; the cast states that and checks
-                # nothing at runtime, so it does not make a kernel-native spec
-                # registrable here.
+                # A drf-services ``SelectorSpec``: the refusal above let nothing
+                # else through. The cast states that for the type checker.
                 bindings.append(
                     self.register_selector_tool(
                         name=entry.name, spec=cast(SelectorSpec, entry.spec), **knobs
@@ -741,6 +748,7 @@ class MCPServer:
         from. Only its ``field_audiences`` apply -- a chain declares its
         arguments through its steps.
         """
+        _refuse_retired_unknown_arguments(name, unknown_arguments)
         ui_meta = build_ui_tool_meta(
             name=name,
             ui=ui,
@@ -795,6 +803,7 @@ class MCPServer:
             default_output_schema=self._config.include_output_schema,
             default_structured_content=self._config.include_structured_content,
         )
+        _compile_specs(tuple(step.spec for step in binding.steps))
         self._tools.register(binding)
         return binding
 
@@ -1897,6 +1906,68 @@ class MCPServer:
         return patterns, self._url_namespace, self._url_namespace
 
 
+def _compile_specs(specs: tuple[ServiceSpec | SelectorSpec, ...]) -> None:
+    """Compile each spec as drf-services will, so its refusal is a startup error.
+
+    drf-services compiles a spec to the kernel's on first read, through the
+    kernel's ``kernel_spec``, which caches the compiled spec on the object, and
+    refuses some declarations there: an output selector declaring
+    ``preconditions``, a ``reads`` entry named after a seed. Nothing compiled at
+    registration, so the first read did, and on ``tools/list`` that read is the
+    operation-condition pass (``operation_affordances``) over every service
+    tool's spec and every chain step's: one such spec took the listing down for
+    every tool on the server. The kernel's own ``SpecRegistry.register``
+    compiles at registration for the same reason.
+
+    Each registrar calls this last, just before the binding is stored, so this
+    package's own refusals run first and keep their wording where both would
+    refuse: a selector tool with no selector, a serializer handed as an
+    instance, a ``QueryParam`` named like a lookup parameter. Compiled first,
+    drf-services' wording answered each of those. ``test_a_service_tool_drf_services_cannot_compile_is_refused_at_registration``,
+    ``test_a_selector_tool_drf_services_cannot_compile_is_refused_at_registration``
+    and ``test_a_chain_step_drf_services_cannot_compile_is_refused_at_registration``
+    each fail without their call.
+
+    This compiles the variant ``kernel_spec`` answers, which is the one the
+    listing reads. drf-services' dispatch may compile a variant of its own for
+    a call (a spreading binding's, a partial update's), and a refusal only that
+    variant raises still arrives with the call.
+    """
+    for spec in specs:
+        kernel_spec(spec)
+
+
+def _refuse_spec_this_server_cannot_dispatch(name: str, spec: object) -> None:
+    """Refuse a ``SpecRegistry`` entry that is not a drf-services spec, naming the tool.
+
+    A ``SpecRegistry`` is the kernel's and holds anything it can compile: its
+    own ``ServiceSpec`` and ``SelectorSpec``, or another library's declaration
+    with ``as_kernel_spec()``. This server's tools dispatch through
+    drf-services' ``dispatch_spec``, which runs the DRF-bound spec it declares
+    (serializers, permission classes, a view), so only those two types become
+    tools here. Anything else used to fall through to ``register_selector_tool``
+    and fail on a missing attribute
+    (``test_a_spec_that_is_not_drf_services_is_refused_naming_the_tool``).
+
+    The ``isinstance`` tuple is one branch arc, so coverage cannot see either
+    member go: ``test_discriminates_service_from_selector_by_spec_type`` fails
+    without each, since it registers one spec of both kinds.
+    """
+    if isinstance(spec, (ServiceSpec, SelectorSpec)):
+        return
+    kind = type(spec)
+    raise TypeError(
+        f"Tool {name!r}: register_specs registers a djangorestframework-services "
+        f"ServiceSpec or SelectorSpec, and the registry holds a "
+        f"{kind.__module__}.{kind.__qualname__} under this name. This server "
+        "dispatches through drf-services, which runs a DRF-bound spec: declare the "
+        "operation with `from rest_framework_services import ServiceSpec, "
+        "SelectorSpec` (ServiceSpec for a write, SelectorSpec for a read), with "
+        "permission_classes and serializers in place of the kernel spec's "
+        "permissions, validator and presenter."
+    )
+
+
 def _refuse_retired_argument_binding(name: str, argument_binding: ArgumentBinding) -> None:
     """Refuse ``ArgumentBinding.SPREAD_CALLER_WINS`` before a tool is built from it.
 
@@ -1921,6 +1992,36 @@ def _refuse_retired_argument_binding(name: str, argument_binding: ArgumentBindin
             "service whose own parameters are the caller's input, or "
             "ArgumentBinding.BUNDLE for one validated data payload. Where the caller's "
             "value should win for a key, leave that key out of the kwargs provider."
+        )
+
+
+def _refuse_retired_unknown_arguments(name: str, unknown_arguments: UnknownArguments) -> None:
+    """Refuse ``UnknownArguments.PASSTHROUGH`` before a tool is built from it.
+
+    The sibling of ``_refuse_retired_argument_binding``. drf-services 0.58.0
+    retired the member and kept it importable: an argument the spec does not
+    declare never reaches the callable, so its ``dispatch_spec`` raises
+    ``ValueError`` for it on every call, and a chain, which validates its
+    arguments here rather than through ``dispatch_spec``, raises the same words
+    (``handlers.utils.validate_input_against_serializer``). Registering it
+    anyway would ship a tool that lists and then fails each call, so the refusal
+    is here, ahead of the binding, where startup reads it. All three tool
+    registrars call it, and every route through this server (the decorators,
+    ``register_specs`` overrides, ``register_tools`` with its defaults) reaches
+    one of them; ``test_register_service_tool_refuses_it``,
+    ``test_register_selector_tool_refuses_it`` and
+    ``test_register_chain_tool_refuses_it`` each fail without their call. A
+    binding built by hand and handed to ``tools.register`` skips the
+    registrars, and so this check: the per-call refusals still answer it.
+    """
+    if unknown_arguments is UnknownArguments.PASSTHROUGH:
+        raise ImproperlyConfigured(
+            f"Tool {name!r}: UnknownArguments.PASSTHROUGH is retired, because an "
+            "argument the spec does not declare never reaches the callable: a tool "
+            "call has no channel that carries such a name past the spec's declared "
+            "input. Pass UnknownArguments.REJECT to refuse an undeclared argument, or "
+            "UnknownArguments.IGNORE to drop it. Where the callable needs the value, "
+            "declare it: a reads entry, a serializer field or a parameter."
         )
 
 
