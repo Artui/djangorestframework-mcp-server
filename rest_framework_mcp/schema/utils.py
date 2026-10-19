@@ -233,11 +233,13 @@ def required_arguments(
     (``caller_fields``), as ``service_tool_schema`` subtracts them. A
     ``HiddenField`` of the key's name is not one of those, so it does not put
     the key back (``test_a_hidden_field_of_an_owned_lookup_key_is_not_asked_of_the_caller``).
-    A writable field of a lookup key's name is refused at registration
-    (``adapters.utils.validate_lookup_key_fields``), so no registered tool
-    reaches the subtraction here with a name it removes, and no test can hold
-    it; it is kept so the two sides read one set and cannot drift apart if
-    that refusal is ever relaxed. drf-services drops the caller's value for
+    The registrars refuse a writable field of a lookup key's name
+    (``adapters.utils.validate_lookup_key_fields``), so only a binding built by
+    hand and passed to ``server.tools.register``, which skips that refusal,
+    reaches the subtraction here with a name it removes; there it keeps
+    asking for the field the schema advertises, so the two sides agree
+    (``test_the_check_and_the_schema_agree_on_a_hand_registered_owned_key_field``).
+    drf-services drops the caller's value for
     such a key before the lookup reads it, so refusing a call for leaving it
     out named a key no resend could deliver; one nothing on the server fills
     is the author's gap, which drf-services answers as the lookup's own

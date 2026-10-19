@@ -387,7 +387,7 @@ Sharing a name with an input is how a route capture reaches a callable that
 takes it as a parameter, **where that callable is handed `view.kwargs`**: a
 selector tool's selector, and a service tool's target lookup and `kwargs=`
 provider. A service's own parameters are never handed the route (a service
-naming `view` is handed the view, and can read `view.kwargs`), so on a
+naming `view` is handed the view), so on a
 service tool registration refuses a `UrlKwarg` named like one of its inputs
 that would never receive the value: a spread service's own parameter, which
 was answered "Missing required argument(s)" on every call, or ran on its

@@ -44,6 +44,8 @@ from rest_framework_mcp.handlers.handle_tools_call import handle_tools_call
 from rest_framework_mcp.handlers.handle_tools_call_async import handle_tools_call_async
 from rest_framework_mcp.handlers.types.context import MCPCallContext
 from rest_framework_mcp.protocol.types.json_rpc_error import JsonRpcError
+from rest_framework_mcp.registry.types.tool_binding import ToolBinding
+from rest_framework_mcp.schema.utils import required_arguments
 from rest_framework_mcp.transport.in_memory_session_store import InMemorySessionStore
 from tests.conftest import post_jsonrpc
 from tests.testapp.models import Invoice
@@ -762,22 +764,22 @@ class _NumberAndTenantInput(_NumberInput):
     tenant = serializers.CharField(required=False)
 
 
-def _owned_tenant_server(input_serializer: type[serializers.Serializer]) -> MCPServer:
-    """A service tool whose lookup requires ``tenant``, which its precondition owns."""
-    server = MCPServer(name="t", auth_backend=AllowAnyBackend(), session_store=None)
-    server.register_service_tool(
-        name="rename",
-        spec=ServiceSpec(
-            service=_rename,
-            atomic=False,
-            input_serializer=input_serializer,
-            instance_selector_spec=SelectorSpec(
-                kind=SelectorKind.RETRIEVE, selector=_by_pk_in_tenant
-            ),
-            preconditions=[_same_tenant],
-            output_selector_spec=_out(),
-        ),
+def _owned_tenant_spec(input_serializer: type[serializers.Serializer]) -> ServiceSpec:
+    """A service spec whose lookup requires ``tenant``, which its precondition owns."""
+    return ServiceSpec(
+        service=_rename,
+        atomic=False,
+        input_serializer=input_serializer,
+        instance_selector_spec=SelectorSpec(kind=SelectorKind.RETRIEVE, selector=_by_pk_in_tenant),
+        preconditions=[_same_tenant],
+        output_selector_spec=_out(),
     )
+
+
+def _owned_tenant_server(input_serializer: type[serializers.Serializer]) -> MCPServer:
+    """A service tool named ``rename`` over ``_owned_tenant_spec``."""
+    server = MCPServer(name="t", auth_backend=AllowAnyBackend(), session_store=None)
+    server.register_service_tool(name="rename", spec=_owned_tenant_spec(input_serializer))
     return server
 
 
@@ -838,6 +840,23 @@ def test_an_owned_lookup_key_a_field_declares_is_refused_at_registration() -> No
     # declares (``tests/adapters/test_lookup_key_input_field.py``).
     with pytest.raises(ImproperlyConfigured, match=r"declares field\(s\) \['tenant'\]"):
         _owned_tenant_server(_NumberAndTenantInput)
+
+
+def test_the_check_and_the_schema_agree_on_a_hand_registered_owned_key_field() -> None:
+    # ``server.tools.register`` does not run the registrars' lookup-key-field
+    # refusal, so a writable ``tenant`` reaches both owned-key subtractions.
+    # Each keeps the field the caller sends, so the missing-argument check asks
+    # for what the schema requires, rather than the two drifting apart.
+    server = MCPServer(name="t", auth_backend=AllowAnyBackend(), session_store=None)
+    binding = ToolBinding(
+        name="rename", description=None, spec=_owned_tenant_spec(_NumberAndTenantInput)
+    )
+    server.tools.register(binding)
+
+    schema = _rename_schema(server)
+
+    assert "tenant" in schema["properties"]
+    assert set(required_arguments(binding)) == {"pk", "tenant"} <= set(schema["required"])
 
 
 @pytest.mark.django_db(transaction=True)
