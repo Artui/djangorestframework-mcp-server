@@ -42,7 +42,9 @@ def _listed(server: MCPServer, name: str) -> dict[str, Any]:
 
 
 def _project_spec(**extra: Any) -> SelectorSpec[Any, Any]:
-    def project_card(**_: Any) -> dict[str, Any]:
+    # No catch-all: the route captures are there to be advertised, and a
+    # bare ``**kwargs`` that names none of them is refused at registration.
+    def project_card() -> dict[str, Any]:
         return {}
 
     return SelectorSpec(
@@ -177,7 +179,9 @@ def test_a_url_kwarg_read_never_reaches_the_query_string() -> None:
     # spec's ``UrlKwarg``, never a query value.
     _SeesQuery.seen = []
 
-    def report(**_: Any) -> dict[str, Any]:
+    # The captures are the permission class's to read, so the selector takes
+    # none: a bare ``**kwargs`` beside them is refused at registration.
+    def report() -> dict[str, Any]:
         return {}
 
     spec = SelectorSpec(
@@ -261,7 +265,9 @@ _KNOBS = pytest.mark.parametrize(
 
 
 def _plain_selector() -> SelectorSpec[Any, Any]:
-    def project_card(**_: Any) -> dict[str, Any]:
+    # No catch-all: the route captures are there to be advertised, and a
+    # bare ``**kwargs`` that names none of them is refused at registration.
+    def project_card() -> dict[str, Any]:
         return {}
 
     return SelectorSpec(
@@ -328,7 +334,9 @@ def test_a_mount_level_knob_replaces_the_specs_reads_of_its_kind_in_the_listing_
     # ``withheld`` takes a channel away from the caller.
     _SeesQuery.seen = []
 
-    def report(**_: Any) -> dict[str, Any]:
+    # The captures are the permission class's to read, so the selector takes
+    # none: a bare ``**kwargs`` beside them is refused at registration.
+    def report() -> dict[str, Any]:
         return {}
 
     spec = SelectorSpec(

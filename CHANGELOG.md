@@ -59,7 +59,14 @@ against 0.52.1 on `djangorestframework-services` 0.56.
   a service under a spreading binding and for a selector, and it covers a
   `UrlKwarg` value too, which still reaches a typed `**extras:
   Unpack[TypedDict]` that names the key. Declare the name instead: a parameter,
-  an `input_serializer` field, a `reads` entry or a `TypedDict` key.
+  an `input_serializer` field, a `reads` entry or a `TypedDict` key. On a
+  selector tool, a `UrlKwarg` beside such a catch-all that the selector names
+  nowhere, and that its `kwargs=` provider does not fill, is refused at
+  registration naming the tool and the capture, where 0.52.1 handed it to the
+  catch-all. Declare the parameter or the `TypedDict` key, or take `view` and
+  read `view.kwargs`; where the capture is only for a permission class or
+  another `view.kwargs` reader, drop the selector's `**kwargs`. A selector with
+  no catch-all is not refused.
 - **`view`, `result` and `queryset` are reserved names.** A tool's `UrlKwarg` or
   `QueryParam` named `view`, `result` or `queryset` is refused at registration,
   beside `request`, `serializer` and the other names refused already;
@@ -69,6 +76,20 @@ against 0.52.1 on `djangorestframework-services` 0.56.
   either name no longer reaches the completer's parameters (`arguments` still
   carries it verbatim). `result` and `queryset` joined the kernel's
   `RESERVED_POOL_SEEDS`, which every one of these checks reserves.
+  An `input_serializer` field of a reserved name (`RESERVED_POOL_SEEDS`,
+  `TOOL_EDGE_SEEDS` or a seed the server's `pool_seeds` registers) is refused at
+  registration on a selector tool, and on a service tool under
+  `SPREAD_AUTHOR_WINS`, naming the tool and the field: the seed keeps its own
+  value in the spread. In 0.52.1 a `result` or `queryset` field reached the
+  callable's parameter of that name, and a field of any other reserved name
+  never did. Rename the field, bind it with `source=` to a parameter no seed
+  takes, or, on a service, take it inside `data` under `BUNDLE`; a `read_only`
+  field and a `HiddenField` register as before. In trust mode (no
+  `input_serializer` under a spreading binding) 0.52.1 advertised a callable
+  parameter named `result` or `queryset` and handed it the caller's value. A
+  required one is now refused at registration, the refusal saying the name is
+  reserved; rename it, or give it a default, and a defaulted one is not
+  advertised and runs on its default.
 - **A spec drf-services refuses to compile is refused when its tool is
   registered.** drf-services 0.58.0 compiles a spec on first read and refuses
   there some declarations 0.56 accepted, such as an output selector declaring
@@ -78,7 +99,9 @@ against 0.52.1 on `djangorestframework-services` 0.56.
   would fail the listing for every tool on the server. The three tool
   registrars now compile each spec as their last step, after this package's own
   checks, so drf-services' `ImproperlyConfigured` is a startup error and this
-  package's own wording still answers where both would refuse. A refusal only a
+  package's own wording still answers where both would refuse. drf-services'
+  message names the spec's kind and callable, so the refusal is raised again
+  prefixed `Tool 'name': `, naming the tool. A refusal only a
   call's own compile variant raises (a spreading binding's, a partial update's)
   still arrives with the call.
 - **`SpecRegistry.register` takes no `agent_contract=`.** The registry is the
@@ -90,11 +113,14 @@ against 0.52.1 on `djangorestframework-services` 0.56.
   field_audiences=...))`. A per-tool `agent_contract` override to
   `register_specs` still replaces the entry's.
 - **A service tool whose `input_serializer` declares the target lookup's key is
-  refused on each call.** drf-services 0.58.0 withholds a name the target
-  lookup reads from the input serializer's data, so a writable field of that
-  name sees it missing and the call answers `{"pk": ["This field is
-  required."]}` as a `validation_error`, with nothing written. Leave the lookup
-  key out of the serializer.
+  refused at registration.** drf-services 0.58.0 withholds a name the target
+  lookup's selector reads from the input serializer's data, so a writable field
+  of that name would be missing on every call, answered `{"pk": ["This field is
+  required."]}` with nothing written, under every binding and whether the field
+  is required or not. In 0.52.1 the same tool served. Registration now refuses
+  it, naming the tool and the field; drf-services' per-call refusal stays for a
+  spec dispatched another way. Leave the lookup key out of the serializer, or
+  declare it `read_only=True`.
 - **A drf-services-answered missing argument reads "Invalid arguments", keyed
   by the name.** When a `kwargs=` provider declines a key the selector requires
   and the caller leaves it out, drf-services refuses the call with
@@ -196,8 +222,10 @@ against 0.52.1 on `djangorestframework-services` 0.56.
   a selector parameter with `server_arguments=` in `invoices.unsent`.
 - **The concepts page states the reserved channel names and the pool seeds as
   0.58.0 draws them**, says a `UrlKwarg` value reaches a typed `**extras` key
-  but not an untyped catch-all, and shows the missing-argument refusal in its
-  current shape. The API reference lists `TOOL_EDGE_SEEDS`.
+  but not an untyped catch-all, states the registration refusals for such a
+  capture, a reserved `input_serializer` field and a lookup key declared as a
+  field, and shows the missing-argument refusal in its current shape. The API
+  reference lists `TOOL_EDGE_SEEDS` and `RESOURCE_EDGE_SEEDS`.
 
 ## [0.52.1] — 2026-10-16
 

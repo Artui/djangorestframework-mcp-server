@@ -209,7 +209,10 @@ def required_arguments(
     caller**, as the service tool's schema does not advertise it: a key the
     service or one of its preconditions marks ``NotClientInput``
     (``server_owned_keys``), less the names the ``input_serializer``'s schema
-    lists, which stay the caller's input. drf-services drops the caller's value
+    lists, as ``service_tool_schema`` subtracts them. A writable field of a
+    lookup key's name is refused at registration
+    (``adapters.utils.validate_lookup_key_fields``), so the only such name that
+    reaches here is a ``HiddenField``'s. drf-services drops the caller's value
     for such a key before the lookup reads it, so refusing a call for leaving
     it out named a key no resend could deliver; one nothing on the server
     fills is the author's gap, which drf-services answers as the lookup's own

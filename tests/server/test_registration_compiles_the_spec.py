@@ -60,9 +60,12 @@ def _good_service_spec() -> ServiceSpec:
 def test_a_service_tool_drf_services_cannot_compile_is_refused_at_registration() -> None:
     server = _server()
 
-    with pytest.raises(ImproperlyConfigured, match=_NESTED_PRECONDITIONS):
+    with pytest.raises(ImproperlyConfigured, match=_NESTED_PRECONDITIONS) as caught:
         server.register_service_tool(name="svc", spec=_refused_service_spec())
 
+    # drf-services' message names the spec, never the tool, so the registrar
+    # names it: a server registering many tools needs to find the one at fault.
+    assert str(caught.value).startswith("Tool 'svc': ")
     assert server.tools.get("svc") is None
 
 
@@ -92,9 +95,12 @@ def test_a_selector_tool_drf_services_cannot_compile_is_refused_at_registration(
         field_audiences={"label": FieldMarking()},
     )
 
-    with pytest.raises(ImproperlyConfigured, match=r"field_audiences and no output serializer"):
+    with pytest.raises(
+        ImproperlyConfigured, match=r"field_audiences and no output serializer"
+    ) as caught:
         server.register_selector_tool(name="sel", spec=spec)
 
+    assert str(caught.value).startswith("Tool 'sel': ")
     assert server.tools.get("sel") is None
 
 
@@ -120,7 +126,7 @@ def test_a_chain_step_drf_services_cannot_compile_is_refused_at_registration() -
     # Every chain step's spec is compiled by the same listing pass.
     server = _server()
 
-    with pytest.raises(ImproperlyConfigured, match=_NESTED_PRECONDITIONS):
+    with pytest.raises(ImproperlyConfigured, match=_NESTED_PRECONDITIONS) as caught:
         server.register_chain_tool(
             name="flow",
             steps=[
@@ -129,4 +135,5 @@ def test_a_chain_step_drf_services_cannot_compile_is_refused_at_registration() -
             ],
         )
 
+    assert str(caught.value).startswith("Tool 'flow': ")
     assert server.tools.get("flow") is None

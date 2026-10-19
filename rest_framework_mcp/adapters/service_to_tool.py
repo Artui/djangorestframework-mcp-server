@@ -18,8 +18,10 @@ from rest_framework_mcp.adapters.utils import (
     merge_meta,
     merge_tool_annotations,
     validate_input_serializer_against_callable,
+    validate_lookup_key_fields,
     validate_query_param_inputs,
     validate_query_params,
+    validate_reserved_input_fields,
     validate_serializer_shapes,
     validate_url_kwarg_inputs,
     validate_url_kwargs,
@@ -126,6 +128,12 @@ def service_spec_to_tool(
         provides_instance=resolves and spec.collection_selector_spec is None,
         provides_collection=resolves and spec.collection_selector_spec is not None,
     )
+    validate_reserved_input_fields(
+        label=f"service tool {name!r}",
+        input_serializer=spec.input_serializer,
+        argument_binding=argument_binding,
+        pool_seeds=pool_seeds,
+    )
     validate_url_kwargs(
         label=f"service tool {name!r}", url_kwargs=url_kwargs, pool_seeds=pool_seeds
     )
@@ -177,6 +185,9 @@ def service_spec_to_tool(
     validate_url_kwarg_inputs(
         binding, spec_kwargs_provides=frozenset(spec_kwargs_provides), pool_seeds=pool_seeds
     )
+    # After the channel checks, which name a field a ``UrlKwarg`` or ``QueryParam``
+    # shadows in their own words.
+    validate_lookup_key_fields(binding, pool_seeds=pool_seeds)
     return binding
 
 

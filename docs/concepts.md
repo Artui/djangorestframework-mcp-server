@@ -407,6 +407,17 @@ it. The route reaches the selector as sent, uncoerced, under every
 `argument_binding`, and a field of the same name supplies only its default,
 for a kwarg the call leaves out.
 
+A selector is handed a capture only under a name it declares. Since
+drf-services 0.58.0 a bare or `Any`-annotated `**kwargs` receives the declared
+arguments and the seeds alone, so registration refuses a `UrlKwarg` on a
+selector with such a catch-all that names it nowhere: not as a parameter, not
+as a key of a typed `**extras: Unpack[TypedDict]`, and not as a key its
+`kwargs=` provider fills or `spec_kwargs_provides=` claims. Declare the
+parameter, or take `view` and read `view.kwargs`. A selector with no catch-all
+at all is not refused, since the capture is then there for what reads
+`view.kwargs`, such as a permission class; dropping the `**kwargs` is the
+remedy when that is all it is for.
+
 A capture the spec genuinely cannot run without takes `required=True`:
 
 ```python
@@ -439,7 +450,7 @@ value on the request:
 | --- | --- | --- |
 | In the `inputSchema` | yes | yes |
 | Can be required | yes (`InputRequired`) | yes (`required=True`, plus an `isError` result when omitted) |
-| Reaches the selector | yes, as a spec param | yes, via the `view.kwargs` spread, where the selector names it (a parameter or a typed `**extras` key); a bare `**kwargs` is not handed it |
+| Reaches the selector | yes, as a spec param | yes, via the `view.kwargs` spread, where the selector names it (a parameter or a typed `**extras` key); a bare `**kwargs` is not handed it, and registration refuses that |
 | Reaches `view.kwargs` | **no** | yes |
 | Ranks above caller-supplied params | no — it *is* caller input | yes |
 | Source of a required selector parameter at registration | not needed — `**extras` names no parameter | yes, when `required=True` or it declares a default |
@@ -457,8 +468,9 @@ in its typed `**extras`, and the schema keeps one property and one `required`
 entry (an explicit `UrlKwarg` wins the merge over a reflected key of the same
 name). That holds because the key is declared. A selector taking an untyped
 `**kwargs` names no key, and since drf-services 0.58.0 a catch-all is handed the
-declared arguments and the seeds only, so a `UrlKwarg` value never reaches it:
-read `view.kwargs`, or declare the key.
+declared arguments and the seeds only, so a `UrlKwarg` value would never reach
+it, and registration refuses the `UrlKwarg`: declare the key, or read
+`view.kwargs`.
 
 That split mirrors HTTP, where a route capture arrives in the URL and never in the
 body — which is what makes it unspoofable. Over MCP the arguments are whatever the
@@ -928,6 +940,20 @@ forms) accept three behavior knobs:
   may declare either and receives the caller's value, as on the Pydantic-AI
   route.
 
+  For the same reason registration refuses an `input_serializer` field named
+  after one of those seeds (`RESERVED_POOL_SEEDS`, `TOOL_EDGE_SEEDS` or a seed
+  the server registers) wherever the fields are spread: on a selector tool under
+  any binding, and on a service tool under `SPREAD_AUTHOR_WINS`. The seed keeps
+  its own value in the spread, so the field was advertised and its value never
+  reached a parameter of its name. The refusal names the tool and the field.
+  Rename the field, or keep its name on the wire and bind it with `source=` to
+  a parameter no seed takes; a service can also take it inside `data` under
+  `BUNDLE` (or `AUTO`, which bundles a service). A `read_only` field and a
+  `HiddenField` take nothing from the caller and register. In trust mode a
+  required parameter named `result` or `queryset` is refused with the
+  reservation named, since no argument can reach it: rename it, or give it a
+  default, and a defaulted one is not advertised and runs on its default.
+
 - **`unknown_arguments=`** — how `arguments` keys outside the binding's
   declared field set are handled.
   - `UnknownArguments.REJECT` (default) — the validator rejects unknown
@@ -961,9 +987,14 @@ forms) accept three behavior knobs:
     so leaving it out only stops asking for a value the call would replace.
     A key either provider may decline with `UNSET` stays listed, not
     required. A lookup parameter a precondition
-    hides is therefore not advertised, though the lookup names it; an
-    `input_serializer` field of the same name is, because it is the caller's
-    input to `data`.
+    hides is therefore not advertised, though the lookup names it.
+
+    An `input_serializer` field named like a parameter of the target lookup's
+    selector is refused at registration, under every binding, naming the tool
+    and the field. drf-services withholds a name the lookup reads from the
+    serializer's data, so the row is the lookup's to choose and never the
+    body's, and every call was refused for the field as missing. Leave the
+    lookup key out of the `input_serializer`, or declare it `read_only=True`.
 
     So `def archive_task(*, instance, reason)` behind a `pk` lookup, under
     `SPREAD_AUTHOR_WINS`, advertises `pk` and `reason` with

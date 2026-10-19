@@ -17,6 +17,8 @@ from __future__ import annotations
 
 from typing import Any
 
+import pytest
+from django.core.exceptions import ImproperlyConfigured
 from django.http import HttpRequest
 from django_service_specs import SelectorKind
 from rest_framework import serializers
@@ -148,16 +150,15 @@ def test_a_url_kwarg_beside_a_reflected_key_still_reaches_the_typed_extras() -> 
     assert set(listed["tools"][0]["inputSchema"]["properties"]) == {"ceiling"}
 
 
-def test_a_url_kwarg_does_not_reach_an_untyped_catch_all() -> None:
+def test_a_url_kwarg_only_an_untyped_catch_all_could_take_is_refused() -> None:
     # drf-services 0.58.0 hands a bare ``**kwargs`` the declared arguments and
     # the seeds, never a key it does not declare, and a route capture is no
     # declaration of the callable's: the selector reads ``view.kwargs`` or
-    # names the key, or it sees nothing.
-    server = _url_kwarg_server(_bare_list_selector)
-
-    result = server.call_tool("t", {"ceiling": 5}, user=None).to_dict()
-
-    assert result["structuredContent"] == []
+    # names the key, or it sees nothing. Registration says so rather than
+    # serving a tool that drops the capture on every call
+    # (``adapters.utils.validate_selector_url_kwargs_reach``).
+    with pytest.raises(ImproperlyConfigured, match=r"UrlKwarg\(s\) \['ceiling'\]"):
+        _url_kwarg_server(_bare_list_selector)
 
 
 def test_an_undeclared_argument_does_not_reach_an_untyped_catch_all() -> None:

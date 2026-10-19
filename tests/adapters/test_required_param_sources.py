@@ -98,6 +98,102 @@ def test_a_trust_mode_selector_requiring_a_seed_nothing_fills_is_refused(
         )
 
 
+def _needs_result(*, result: Any) -> None: ...  # noqa: ARG001
+
+
+def _needs_queryset(*, queryset: Any) -> None: ...  # noqa: ARG001
+
+
+_RESERVATION = "reserved: dispatch fills"
+
+
+@pytest.mark.parametrize(
+    ("callable_", "seed"), [(_needs_result, "result"), (_needs_queryset, "queryset")]
+)
+@pytest.mark.parametrize("kind", ["selector", "service"])
+def test_a_trust_mode_parameter_named_after_a_seed_is_refused_naming_the_reservation(
+    kind: str, callable_: Any, seed: str
+) -> None:
+    # The kernel's ``RESERVED_POOL_SEEDS`` gained ``result`` and ``queryset``, so
+    # the caller's value of either is dropped from the spread and nothing else
+    # fills it on a tool. The refusal says the name is reserved, which is the
+    # remedy's reason: no input_serializer field or default makes a caller's
+    # value reach it.
+    with pytest.raises(ImproperlyConfigured, match=rf"parameter\(s\) \['{seed}'\]") as caught:
+        if kind == "selector":
+            selector_spec_to_tool(
+                name="read", spec=SelectorSpec(kind=SelectorKind.LIST, selector=callable_)
+            )
+        else:
+            service_spec_to_tool(
+                name="write",
+                spec=ServiceSpec(service=callable_, atomic=False),
+                argument_binding=ArgumentBinding.SPREAD_AUTHOR_WINS,
+            )
+    assert f"`{seed}` is {_RESERVATION}" in str(caught.value)
+    assert "Rename the parameter" in str(caught.value)
+
+
+def test_the_reservation_hint_accompanies_only_a_reserved_name() -> None:
+    # A plain missing name keeps the generic remedy alone.
+    with pytest.raises(ImproperlyConfigured, match=r"parameter\(s\) \['title'\]") as caught:
+        service_spec_to_tool(
+            name="write",
+            spec=ServiceSpec(service=_rename_task_titled, atomic=False),
+        )
+    assert _RESERVATION not in str(caught.value)
+
+
+def _rename_task_titled(*, title: str) -> None: ...  # noqa: ARG001
+
+
+def _needs_instance(*, instance: Any) -> None: ...  # noqa: ARG001
+
+
+def test_a_name_seeded_on_a_condition_keeps_its_own_remedy() -> None:
+    # ``instance`` is reserved too, but a target lookup fills it, so a rename is
+    # not the only remedy and the reservation's wording would misdirect.
+    with pytest.raises(ImproperlyConfigured, match=r"parameter\(s\) \['instance'\]") as caught:
+        selector_spec_to_tool(
+            name="read", spec=SelectorSpec(kind=SelectorKind.LIST, selector=_needs_instance)
+        )
+    assert _RESERVATION not in str(caught.value)
+
+
+@pytest.mark.django_db
+@pytest.mark.parametrize("seed", ["result", "queryset"])
+def test_a_defaulted_trust_mode_parameter_named_after_a_seed_runs_on_its_default(
+    seed: str,
+) -> None:
+    # Not refused: it is not advertised and the call never offers it, so the
+    # tool is honest about it. The caller's value of the name is dropped, where
+    # 0.52.1 advertised it and handed it over.
+    seen: dict[str, Any] = {}
+
+    def by_result(*, result: Any = None) -> list[Any]:
+        seen["value"] = result
+        return []
+
+    def by_queryset(*, queryset: Any = None) -> list[Any]:
+        seen["value"] = queryset
+        return []
+
+    server = _server()
+    server.register_selector_tool(
+        name="read",
+        spec=SelectorSpec(
+            kind=SelectorKind.LIST, selector=by_result if seed == "result" else by_queryset
+        ),
+    )
+
+    listed: Any = server.list_tools(user=None)
+    out: Any = server.call_tool("read", {seed: "sent"}, user=None)
+
+    assert seed not in listed["tools"][0]["inputSchema"].get("properties", {})
+    assert not out.to_dict().get("isError")
+    assert seen == {"value": None}
+
+
 # ---------- ``data`` is a source only beside an ``input_serializer`` ----------
 
 

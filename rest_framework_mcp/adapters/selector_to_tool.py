@@ -20,6 +20,8 @@ from rest_framework_mcp.adapters.utils import (
     validate_input_serializer_against_callable,
     validate_query_param_inputs,
     validate_query_params,
+    validate_reserved_input_fields,
+    validate_selector_url_kwargs_reach,
     validate_serializer_shapes,
     validate_url_kwargs,
 )
@@ -117,6 +119,16 @@ def selector_spec_to_tool(
         # Never handed ``data`` or ``serializer``, whatever the binding.
         is_selector=True,
     )
+    # After the callable checks, so a field named ``data`` a selector requires
+    # keeps their remedy (``a-field-named-data`` of
+    # ``test_a_spreading_selector_requiring_data_or_serializer_is_refused``).
+    validate_reserved_input_fields(
+        label=f"selector tool {name!r}",
+        input_serializer=input_serializer,
+        argument_binding=argument_binding,
+        pool_seeds=pool_seeds,
+        is_selector=True,
+    )
     validate_url_kwargs(
         label=f"selector tool {name!r}", url_kwargs=url_kwargs, pool_seeds=pool_seeds
     )
@@ -166,6 +178,9 @@ def selector_spec_to_tool(
     # On the built binding, because the check reads the schema the binding
     # advertises, and before the binding is returned to be registered.
     validate_query_param_inputs(
+        binding, spec_kwargs_provides=frozenset(spec_kwargs_provides), pool_seeds=pool_seeds
+    )
+    validate_selector_url_kwargs_reach(
         binding, spec_kwargs_provides=frozenset(spec_kwargs_provides), pool_seeds=pool_seeds
     )
     return binding

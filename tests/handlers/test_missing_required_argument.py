@@ -23,6 +23,7 @@ from typing import Annotated, Any
 
 import pytest
 from asgiref.sync import sync_to_async
+from django.core.exceptions import ImproperlyConfigured
 from django.http import HttpRequest
 from django.test import Client
 from django_service_specs import DEFAULT_POOL_SEEDS, UNSET, PoolSeeds, SelectorKind, UnsetType
@@ -803,22 +804,13 @@ async def test_a_lookup_key_the_server_owns_is_not_asked_of_the_caller(route: st
         await _via(server, route, "rename", {"pk": invoice.pk, "number": "INV-2"})
 
 
-@pytest.mark.django_db(transaction=True)
-@pytest.mark.parametrize("route", _ROUTES)
-async def test_an_owned_lookup_key_a_field_declares_is_still_asked_of_the_caller(
-    route: str,
-) -> None:
-    # A field of the owned name is the caller's input, so the schema keeps the
-    # lookup's ``tenant`` required, and the call is refused for it as the
-    # schema says. Holds the subtraction's limit to the names the
-    # ``input_serializer`` does not list.
-    invoice = await Invoice.objects.acreate(number="INV-1")
-    server = _owned_tenant_server(_NumberAndTenantInput)
-
-    assert "tenant" in _rename_schema(server)["required"]
-    out = await _via(server, route, "rename", {"pk": invoice.pk, "number": "INV-2"})
-
-    assert _missing(out) == {"tenant": _REQUIRED}
+def test_an_owned_lookup_key_a_field_declares_is_refused_at_registration() -> None:
+    # drf-services withholds a name the target lookup reads from the
+    # serializer's data, so a writable ``tenant`` field could never be filled,
+    # owned or not. Registration refuses it, as it does any lookup key a field
+    # declares (``tests/adapters/test_lookup_key_input_field.py``).
+    with pytest.raises(ImproperlyConfigured, match=r"declares field\(s\) \['tenant'\]"):
+        _owned_tenant_server(_NumberAndTenantInput)
 
 
 @pytest.mark.django_db(transaction=True)

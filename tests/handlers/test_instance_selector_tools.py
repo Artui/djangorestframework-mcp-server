@@ -6,6 +6,7 @@ from __future__ import annotations
 from typing import Any
 
 import pytest
+from django.core.exceptions import ImproperlyConfigured
 from django.db.models import IntegerField, QuerySet, Value
 from django.http import HttpRequest
 from django_service_specs import SelectorKind
@@ -57,7 +58,8 @@ class _NumberInput(drf_serializers.Serializer):
 
     The lookup reads ``pk`` itself, so the serializer does not declare it: drf-services
     refuses a call whose input serializer writes a name the target lookup reads, rather
-    than letting the body choose the row (``test_a_lookup_key_declared_as_a_serializer_field_is_refused``).
+    than letting the body choose the row, and registration refuses a serializer that does
+    (``test_a_lookup_key_declared_as_a_serializer_field_is_refused``).
     """
 
     number = drf_serializers.CharField()
@@ -104,26 +106,18 @@ def test_service_tool_receives_spec_resolved_instance() -> None:
     assert invoice.number == "new"
 
 
-@pytest.mark.django_db
 def test_a_lookup_key_declared_as_a_serializer_field_is_refused() -> None:
     """A body field cannot name the row the target lookup resolves.
 
     drf-services withholds a name the target lookup reads from the input serializer's
-    data, so a serializer declaring it as a writable field sees it missing and refuses
-    the call as a validation error, with the row left as it was.
+    data, so a serializer declaring it as a writable field would see it missing on every
+    call. Registration refuses it, naming the field and the lookup; every registrar and
+    binding is a case of ``tests/adapters/test_lookup_key_input_field.py``.
     """
-    invoice = Invoice.objects.create(number="orig")
     server = _server()
-    _register_rename(server, input_serializer=_RenameInput)
-    out = handle_tools_call(
-        {"name": "invoices.rename", "arguments": {"pk": invoice.pk, "number": "new"}},
-        _ctx(server),
-    )
-    error = tool_error(out)
-    assert error["type"] == "validation_error"
-    assert error["detail"] == {"pk": ["This field is required."]}
-    invoice.refresh_from_db()
-    assert invoice.number == "orig"
+    with pytest.raises(ImproperlyConfigured, match=r"declares field\(s\) \['pk'\]"):
+        _register_rename(server, input_serializer=_RenameInput)
+    assert server.tools.get("invoices.rename") is None
 
 
 @pytest.mark.django_db(transaction=True)

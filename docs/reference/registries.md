@@ -36,6 +36,11 @@ call; registration refuses one that does.
 ::: rest_framework_mcp.registry.tool_registry.ToolRegistry
 ::: rest_framework_mcp.registry.types.resource_binding.ResourceBinding
 ::: rest_framework_mcp.registry.resource_registry.ResourceRegistry
+
+A URI-template variable may not take a name `resources/read` seeds itself;
+registration refuses one that does.
+
+::: rest_framework_mcp.constants.RESOURCE_EDGE_SEEDS
 ::: rest_framework_mcp.constants.ResourceEncoding
 ::: rest_framework_mcp.registry.types.prompt_binding.PromptBinding
 ::: rest_framework_mcp.registry.prompt_registry.PromptRegistry

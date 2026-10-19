@@ -79,11 +79,12 @@ def _refuse_server_arguments_that_cannot_hold(
     carries none, its steps being specs of their own: without the first,
     every chain registration fails on the missing attribute
     (``test_chain_of_only_selectors_is_read_only``). A binding that binds
-    nothing is not asked, because the kernel's check compiles the spec's
-    parameters and would answer a declaration this package refuses later in
-    its own words: without the second,
-    ``test_a_lookup_key_declared_as_a_serializer_field_is_refused`` gets the
-    kernel's message.
+    nothing is not asked, because the kernel's check assembles the spec's
+    parameters, and the assembly refuses declarations the registration does
+    not: without the second, a target lookup's filter named like an
+    ``input_serializer`` field is refused here as two sources of one
+    parameter, where it registers and fails each call
+    (``test_a_lookup_filter_named_like_a_field_is_left_to_the_kernel``).
     """
     if isinstance(binding, ChainToolBinding) or not binding.server_arguments.names():
         return

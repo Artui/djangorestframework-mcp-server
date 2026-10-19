@@ -32,7 +32,7 @@ def _service(**_: Any) -> dict[str, str]:
     return {"ok": "true"}
 
 
-def _rows(**_: Any) -> list[dict[str, str]]:
+def _rows(*, project: str = "", **_: Any) -> list[dict[str, str]]:
     return []
 
 

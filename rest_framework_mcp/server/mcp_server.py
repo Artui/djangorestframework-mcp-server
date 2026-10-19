@@ -455,7 +455,7 @@ class MCPServer:
             default_output_schema=self._config.include_output_schema,
             default_structured_content=self._config.include_structured_content,
         )
-        _compile_specs((binding.spec,))
+        _compile_specs(binding.name, (binding.spec,))
         self._tools.register(binding)
         return binding
 
@@ -645,7 +645,7 @@ class MCPServer:
                 paginate=binding.paginate,
                 require=self._config.require_list_pagination,
             )
-        _compile_specs((binding.spec,))
+        _compile_specs(binding.name, (binding.spec,))
         self._tools.register(binding)
         return binding
 
@@ -872,7 +872,7 @@ class MCPServer:
             default_output_schema=self._config.include_output_schema,
             default_structured_content=self._config.include_structured_content,
         )
-        _compile_specs(tuple(step.spec for step in binding.steps))
+        _compile_specs(binding.name, tuple(step.spec for step in binding.steps))
         self._tools.register(binding)
         return binding
 
@@ -1975,7 +1975,7 @@ class MCPServer:
         return patterns, self._url_namespace, self._url_namespace
 
 
-def _compile_specs(specs: tuple[ServiceSpec | SelectorSpec, ...]) -> None:
+def _compile_specs(name: str, specs: tuple[ServiceSpec | SelectorSpec, ...]) -> None:
     """Compile each spec as drf-services will, so its refusal is a startup error.
 
     drf-services compiles a spec to the kernel's on first read, through the
@@ -2001,9 +2001,17 @@ def _compile_specs(specs: tuple[ServiceSpec | SelectorSpec, ...]) -> None:
     listing reads. drf-services' dispatch may compile a variant of its own for
     a call (a spreading binding's, a partial update's), and a refusal only that
     variant raises still arrives with the call.
+
+    drf-services' message names the spec's kind and callable, never the tool,
+    so the refusal is raised again prefixed ``Tool {name!r}:``, which is what a
+    server registering many tools needs to find the one at fault. Each of the
+    three tests above asserts the prefix.
     """
     for spec in specs:
-        kernel_spec(spec)
+        try:
+            kernel_spec(spec)
+        except ImproperlyConfigured as exc:
+            raise ImproperlyConfigured(f"Tool {name!r}: {exc}") from exc
 
 
 def _refuse_spec_this_server_cannot_dispatch(name: str, spec: object) -> None:

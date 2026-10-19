@@ -36,7 +36,7 @@ from tests.testapp.serializers import AgentInvoiceSerializer
 def _selector_spec() -> SelectorSpec:
     return SelectorSpec(
         kind=SelectorKind.LIST,
-        selector=lambda **_: [],
+        selector=lambda: [],
         output_serializer=AgentInvoiceSerializer,
     )
 
@@ -169,7 +169,7 @@ class TestRegisterSpecsCarriesTheEntrysOwn:
             "lookup_invoice",
             SelectorSpec(
                 kind=SelectorKind.LIST,
-                selector=lambda **_: [],
+                selector=lambda: [],
                 output_serializer=AgentInvoiceSerializer,
                 permission_classes=[],
                 reads=[UrlKwarg("invoice_pk", type="integer")],
