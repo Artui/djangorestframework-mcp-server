@@ -66,6 +66,11 @@ See the [quickstart](docs/quickstart.md) for the full end-to-end recipe.
 - **Tools** — `tools/list`, `tools/call` for `register_service_tool`
   (mutations) and `register_selector_tool` (reads, with optional
   `FilterSet` + ordering + pagination).
+- **Server-supplied arguments** — `server_arguments=ServerArguments(values=...,
+  withheld=...)` at registration answers a declared argument for the caller:
+  the name leaves the tool's schema, a caller's value for it is dropped and
+  logged by name, and the binding is checked when it is registered. Route and
+  query values a tool asks for are read from the spec's own `reads`.
 - **Resources** — `resources/list`, `resources/templates/list`,
   `resources/read` against `SelectorSpec`-backed callables; RFC 6570
   templated URIs.

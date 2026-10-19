@@ -96,7 +96,7 @@ server.register_specs(
 
 Each value is the keyword arguments for that entry's registration method, so
 anything those methods accept works — `title`, `output_format`,
-`include_output_schema`, `rate_limits`, `url_kwargs`, and the rest.
+`include_output_schema`, `rate_limits`, `server_arguments`, and the rest.
 
 A fact about the **operation** is not an MCP knob, though, even when MCP has a
 hint for it. Whether repeating a refund is safe is true of the refund on every
@@ -120,14 +120,12 @@ spec that declares nothing (`idempotent=None`, the default) gets no hint, and an
 
 ## What the entry already says
 
-An entry may carry an
-[`OfflineContract`][rest_framework_services.types.offline_contract.OfflineContract]:
-the `url_kwargs`, `query_params` and `field_audiences` a caller with **no HTTP
-request** has to be told, because the URLconf and query string tell an HTTP one
-for free. It is declared on the spec, as its `reads` and `field_audiences`, and
-the entry's `agent_contract` answers it. `register_specs` reads it as this
-mount's default, so the same entry mounted here and in an in-process
-Pydantic-AI toolset synthesises the same absent request:
+A spec declares what a caller with **no HTTP request** has to be told, because
+the URLconf and query string tell an HTTP one for free: the route captures and
+query values it reads, as its `reads`, and the output fields an agent sees, as
+its `field_audiences`. Every registrar reads both off the spec, so the same
+entry mounted here and in an in-process Pydantic-AI toolset synthesises the
+same absent request:
 
 ```python
 from django_service_specs import SelectorKind
@@ -171,20 +169,60 @@ scoped = SpecRegistry(
 server.register_specs(scoped)  # the tool takes project_pk and since
 ```
 
-A per-tool `url_kwargs` / `query_params` override wins over it. Overriding
-`agent_contract` itself replaces the entry's outright — the only way for this
-mount to advertise *fewer* channels than the spec declares, since an empty
-tuple at the mount reads as saying nothing rather than saying none.
+`register_specs` passes nothing about an entry's channels: each registrar reads
+the spec's own `reads` and `field_audiences`, so the spec above registered with
+`register_selector_tool(spec=...)` is the same tool, advertising the same
+arguments.
 
-A `QueryParam` read naming one of the selector's own parameters is refused here,
-while the same spec passed to `register_selector_tool(spec=...)` is served.
-`register_specs` hands the entry's reads to the registrar as this mount's
-`query_params`, and a query param shadowing a selector parameter is refused
-there, because its value is routed to `request.query_params` rather than to the
-parameter. Registered directly, drf-services reads the spec's `reads` itself and
-the value reaches the parameter. A later release makes the two routes agree;
-until then, register such a spec directly, or have the selector read the name off
-`request.query_params` instead of declaring it.
+A `QueryParam` read naming one of the selector's own parameters is served, on
+every route: the spec says where the parameter comes from, so it is not a
+shadow. It is advertised once, as the selector's parameter, and the value
+reaches both the parameter and `request.query_params`. A query param declared at
+the mount (`query_params=`, or an `agent_contract=` carrying one) and named like
+a selector parameter is still refused, because that value would be routed away
+from the parameter.
+
+### Answering an argument for the caller: `server_arguments`
+
+A mount that already knows an argument - the project this server is scoped to,
+say - answers it with a
+[`ServerArguments`][django_service_specs.ServerArguments] from
+`django_service_specs`, as an override like any other:
+
+```python
+from django_service_specs import ServerArguments
+
+server.register_specs(
+    registry,
+    overrides={
+        "list_project_orders": {
+            "server_arguments": ServerArguments(
+                values={"project_pk": 7},  # always this project
+                withheld={"since"},  # never the caller's; the default applies
+            ),
+        },
+    },
+)
+```
+
+Both names leave the tool's `inputSchema` and its `required` list, so the model
+is never asked for them. A caller sending one anyway has its value dropped
+before anything reads it, and the server logs the tool and the argument names at
+`WARNING`, never the values. Registration checks the binding: a name the spec
+does not declare, a value its declared type refuses, and a withheld name with no
+default each raise `ImproperlyConfigured` naming the tool. See
+[server-supplied arguments](../concepts.md#server-arguments) for the full rule.
+
+The values are fixed for the life of the server. A value computed per request,
+such as a project read off the signed-in user, is not something
+`server_arguments` carries; scope it in a `kwargs=` provider or a permission.
+
+The `url_kwargs`, `query_params` and `agent_contract` overrides are deprecated
+and warn: each declares at the mount what the spec declares itself. While they
+last, an explicit `url_kwargs` / `query_params` replaces the spec's reads of
+that kind in what the tool advertises, and `agent_contract` replaces all of them
+and the audiences. None of them takes a channel away from dispatch, which still
+reads the spec's own declaration; only `withheld` does.
 
 Two things fail loudly rather than quietly:
 

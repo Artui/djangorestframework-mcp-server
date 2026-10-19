@@ -89,12 +89,14 @@ class ToolDefinition:
     url_kwargs: Sequence[UrlKwarg] | None = None
     """URL-derived values the model supplies as tool args, seeded into the off-HTTP
     ``view.kwargs`` at dispatch. See
-    [`UrlKwarg`][rest_framework_services.types.url_kwarg.UrlKwarg]."""
+    [`UrlKwarg`][rest_framework_services.types.url_kwarg.UrlKwarg]. Deprecated, and
+    warns at registration: declare it in the spec's ``reads`` instead."""
 
     query_params: Sequence[QueryParam] | None = None
     """Read-shaping values the model supplies as tool args, seeded into the off-HTTP
     ``request.query_params`` at dispatch. See
-    [`QueryParam`][rest_framework_services.types.query_param.QueryParam]."""
+    [`QueryParam`][rest_framework_services.types.query_param.QueryParam]. Deprecated, and
+    warns at registration: declare it in the spec's ``reads`` instead."""
 
     @classmethod
     def service(

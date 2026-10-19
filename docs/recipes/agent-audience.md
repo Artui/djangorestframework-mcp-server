@@ -101,12 +101,9 @@ registry.register("lookup_invoice", invoice_spec, tags=("billing",))
 server.register_specs(registry.by_tag("billing"))
 ```
 
-The entry's `agent_contract` answers what the spec declares, as an
-[`OfflineContract`][rest_framework_services.types.offline_contract.OfflineContract]:
-drf-services' carrier for what a caller with **no HTTP request** has to be
-told — the URL kwargs and query params an agent must supply by hand, and this.
-Declaring it on the spec is what keeps an in-process Pydantic-AI toolset and
-this server projecting the *same* field set: an audience is not a transport, so
+Every registrar reads `field_audiences` off the spec, beside its `reads`.
+Declaring it on the spec is what keeps an in-process Pydantic-AI toolset and this
+server projecting the *same* field set: an audience is not a transport, so
 a field hidden from one agent caller and visible to another is a bug you would
 find in a transcript rather than in a test.
 
@@ -127,21 +124,27 @@ billing = SpecRegistry(
 server.register_specs(billing)
 ```
 
-A server registering a spec directly, with no registry in front of it, passes
-the same object:
+A server registering a spec directly, with no registry in front of it, gets the
+same projection from the same declaration: `register_selector_tool(spec=...)`
+and `register_service_tool(spec=...)` read the spec's `field_audiences` as
+`register_specs` does.
+
+A chain has no spec of its own to declare them on, so `register_chain_tool`
+takes them as an
+[`OfflineContract`][rest_framework_services.types.offline_contract.OfflineContract]:
 
 ```python
-server.register_selector_tool(
-    name="lookup_invoice",
-    spec=invoice_spec,
+server.register_chain_tool(
+    name="lookup_and_bill",
+    steps=[...],
     agent_contract=OfflineContract(field_audiences={"etag": FieldMarking()}),
 )
 ```
 
-It works the same on `register_service_tool` and `register_chain_tool` — a chain
-has no registry entry, so this is its only route — and as an `overrides` key on
-`register_specs`, which **replaces** the entry's contract rather than merging
-into it.
+On `register_selector_tool`, `register_service_tool` and as a `register_specs`
+override, `agent_contract=` is deprecated and warns: it declares at the mount
+what the spec declares itself, and replaces the spec's declaration outright
+while it lasts.
 
 Two fields left claiming `FieldMarking.label()` raises `ImproperlyConfigured`
 naming the tool: a record has one name, and picking one silently is the kind of

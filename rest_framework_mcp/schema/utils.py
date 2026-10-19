@@ -4,7 +4,13 @@ import dataclasses
 from collections.abc import Callable, Iterable
 from typing import Any
 
-from django_service_specs import DEFAULT_POOL_SEEDS, UNSET, PoolSeeds, provider_keys
+from django_service_specs import (
+    DEFAULT_POOL_SEEDS,
+    UNSET,
+    PoolSeeds,
+    ServerArguments,
+    provider_keys,
+)
 from rest_framework import serializers as drf_serializers
 from rest_framework.fields import empty
 from rest_framework_dataclasses.serializers import DataclassSerializer
@@ -368,6 +374,34 @@ def _dataclass_default(field: dataclasses.Field[Any]) -> Callable[[], Any] | Non
     return None
 
 
+def without_server_arguments(schema: dict[str, Any], server: ServerArguments) -> dict[str, Any]:
+    """``schema`` with every name ``server`` answers left out of ``properties`` and ``required``.
+
+    What both tool schema builders apply last, so ``tools/list`` never offers a
+    name the server supplies or withholds, and never requires one: the
+    subtraction the kernel's ``ServerArguments.names`` exists for, made beside
+    the one each builder makes for ``server_owned_keys``. A schema whose
+    ``required`` this empties carries no ``required`` key, as the builders
+    leave it out when nothing is required. A binding binding nothing gets its
+    schema back as built.
+    """
+    names = server.names()
+    if not names:
+        return schema
+    out: dict[str, Any] = {
+        **schema,
+        "properties": {
+            key: value for key, value in schema.get("properties", {}).items() if key not in names
+        },
+    }
+    required = [name for name in schema.get("required", []) if name not in names]
+    if required:
+        out["required"] = required
+    else:
+        out.pop("required", None)
+    return out
+
+
 __all__ = [
     "declares_default",
     "end_sentence",
@@ -376,4 +410,5 @@ __all__ = [
     "selector_inputs",
     "selector_tool_inputs",
     "target_lookup",
+    "without_server_arguments",
 ]

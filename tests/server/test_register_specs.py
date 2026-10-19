@@ -367,21 +367,24 @@ def _status_read_spec() -> SelectorSpec[Any, Any]:
     )
 
 
-def test_a_query_param_read_naming_a_selector_parameter_differs_by_route() -> None:
-    # Held as it stands, so the registry recipe's account of it fails here the
-    # moment the two routes agree. ``register_specs`` hands the read on as the
-    # mount's ``query_params``, which refuses a name the selector declares,
-    # because such a value is routed to ``request.query_params``; registered
-    # directly, drf-services reads the spec's ``reads`` and the value reaches
-    # the parameter.
+def test_a_query_param_read_naming_a_selector_parameter_is_served_by_both_routes() -> None:
+    # The registry recipe says the two routes agree here: the spec's own read
+    # says where the parameter comes from, so it is no shadow on either route.
+    # It is advertised once and the value reaches the parameter.
     registry = SpecRegistry()
     registry.register("orders", _status_read_spec())
-    with pytest.raises(ImproperlyConfigured, match="also declares as a QueryParam"):
-        _make().register_specs(registry)
-
-    server = _make()
+    from_registry = _make()
     with warnings.catch_warnings():
         warnings.simplefilter("ignore")
-        server.register_selector_tool(name="orders", spec=_status_read_spec())
-    result = server.call_tool("orders", {"status": "open"}, user=None).to_dict()
-    assert result["structuredContent"] == [{"status": "open"}]
+        from_registry.register_specs(registry)
+
+    direct = _make()
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore")
+        direct.register_selector_tool(name="orders", spec=_status_read_spec())
+
+    for server in (from_registry, direct):
+        listed: Any = server.list_tools(user=None)
+        assert list(listed["tools"][0]["inputSchema"]["properties"]) == ["status"]
+        result = server.call_tool("orders", {"status": "open"}, user=None).to_dict()
+        assert result["structuredContent"] == [{"status": "open"}]

@@ -14,6 +14,26 @@ registration what 0.58.0 refuses on every call, so a server that would have
 shipped a tool that fails each call does not start. Each change is stated
 against 0.52.1 on `djangorestframework-services` 0.56.
 
+### Added
+
+- **`server_arguments=` answers a declared argument for the caller.**
+  `register_service_tool`, `register_selector_tool` and a `register_specs`
+  override take a `ServerArguments` from `django_service_specs`: its `values`
+  are fixed for the life of the tool, and its `withheld` names leave the
+  callable to its own default. Both leave the tool's `inputSchema` and its
+  `required` list on every listing. On every `tools/call` route, wire and
+  in-process, a caller's value for one is dropped before the permission check,
+  the required-argument checks and the spec read it, so a bound value can fill
+  a `required=True` read or a selector parameter with no default; a value an
+  elicitation answer carries is dropped the same way. A dropped value is logged
+  at `WARNING` with the tool's name and the argument names, never the values.
+  The binding is checked when the tool is registered, including a binding
+  built by hand and passed to `server.tools.register`: a name the spec does not
+  declare, a value its declared type refuses, a pool seed, and a withheld name
+  with no default raise `ImproperlyConfigured` naming the tool. A value
+  computed per request is out of scope; `ToolBinding` and
+  `SelectorToolBinding` gain the `server_arguments` field.
+
 ### Changed (breaking)
 
 - **`ArgumentBinding.SPREAD_CALLER_WINS` is refused at registration.**
@@ -92,8 +112,8 @@ against 0.52.1 on `djangorestframework-services` 0.56.
   the kernel, and it retires names this package no longer passes, so the range
   that capped it below that release is gone. The kernel is a direct dependency
   because the package now imports its own names from it, and 0.9.0 is the first
-  release with `ServerArguments` and `format: uuid`, which the schema and
-  dispatch handling build on.
+  release with `ServerArguments`, `check_server_arguments` and
+  `apply_server_arguments`, which `server_arguments=` is built on.
 - **Names the kernel owns are imported from `django_service_specs`.** The
   exceptions, the pool seeds, `SelectorKind`, `SpecRegistry`, the dispatch
   helpers and the other values that `djangorestframework-services` re-exports
@@ -123,6 +143,39 @@ against 0.52.1 on `djangorestframework-services` 0.56.
   spec's `affordances`; a caller passing or reading `ServiceSpec` values is
   unaffected.
 
+- **Every registrar reads a spec's own `reads` and `field_audiences`.**
+  `register_service_tool`, `register_selector_tool` and the decorators now
+  advertise and route the `UrlKwarg` and `QueryParam` reads a spec declares,
+  refuse a missing `required=True` read in the package's own words, and apply
+  the spec's field audiences, as `register_specs` did; `register_specs` no
+  longer passes the entry's contract. One spec is the same tool however it is
+  mounted. The spec's reads are held to the reserved channel names a mount's
+  are, so a read named after a seed is refused by this package before
+  drf-services compiles the spec.
+- **A `QueryParam` read naming one of a selector's own parameters is served.**
+  The spec says where that parameter comes from, so it is not a shadow: it is
+  advertised once, as the parameter, and the value reaches both the selector
+  and `request.query_params`, on every registration route. The permission
+  classes judge a request carrying it. A query param declared at the mount
+  (`query_params=`, or an `agent_contract=` carrying one) and named like a
+  selector parameter is still refused, as 0.52.1 refused it.
+
+### Deprecated
+
+- **`url_kwargs=`, `query_params=` and `agent_contract=` on
+  `register_service_tool` and `register_selector_tool`**, and so on the
+  decorators, as `register_specs` overrides and on `ToolDefinition`. Each
+  declares at the mount what the spec declares itself, and each raises a
+  `DeprecationWarning` naming the tool and its replacement: `reads=[UrlKwarg(...)]`
+  or `reads=[QueryParam(...)]` on the spec, `field_audiences=` on the spec, and
+  `server_arguments=ServerArguments(withheld={...})` to keep an argument from
+  callers. They keep working until they are removed: an explicit `url_kwargs` /
+  `query_params` replaces the spec's reads of that kind in what the tool
+  advertises, and `agent_contract` replaces them all and the audiences, while
+  dispatch still reads the spec's declaration. `register_chain_tool`'s
+  `agent_contract=` is not deprecated, since a chain has no spec of its own to
+  declare audiences on.
+
 ### Fixed
 
 - **The row ceiling holds for a `Manager` a `LIST` selector returns.** It
@@ -136,11 +189,11 @@ against 0.52.1 on `djangorestframework-services` 0.56.
   describe `SPREAD_CALLER_WINS` and `PASSTHROUGH` as retired and refused, with
   the policies and bindings to use instead, and say which spec types
   `register_specs` makes a tool from.
-- **A known difference between two routes is written down.** A `QueryParam`
-  read naming one of the selector's own parameters is refused by
-  `register_specs`, which hands the read on as the mount's `query_params`,
-  while the same spec passed to `register_selector_tool(spec=...)` is served
-  with the value reaching the parameter. A later release makes the two agree.
+- **`server_arguments`, the spec-declared channels and the deprecated mount
+  knobs are documented** on the concepts page, the registry and audience
+  recipes and the API reference, with the per-request case stated as out of
+  scope. The invoicing example declares its `QueryParam` on the spec and binds
+  a selector parameter with `server_arguments=` in `invoices.unsent`.
 - **The concepts page states the reserved channel names and the pool seeds as
   0.58.0 draws them**, says a `UrlKwarg` value reaches a typed `**extras` key
   but not an untyped catch-all, and shows the missing-argument refusal in its

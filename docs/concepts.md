@@ -339,11 +339,13 @@ reads its provider's value under every binding.
 On a **tool** call, `view.kwargs` is empty by default (a tool has no URL). So a
 provider shared with an HTTP view that scopes by a route capture — e.g.
 `view.kwargs["project_pk"]` behind a tenant/role lookup — would return its
-fallback (usually `None`) over MCP and **mis-scope for every caller**. Register a
-[`UrlKwarg`](reference/registries.md) so the model can supply that route value: it is
-advertised as a tool argument, popped at dispatch, and seeded into the off-HTTP
-`view.kwargs` — from where drf-services spreads it into the dispatch pools
-(authoritative over the spec params, below the `spec.kwargs` provider).
+fallback (usually `None`) over MCP and **mis-scope for every caller**. Declare a
+[`UrlKwarg`](reference/registries.md) in the spec's `reads` so the model can
+supply that route value: it is advertised as a tool argument, popped at dispatch,
+and seeded into the off-HTTP `view.kwargs` — from where drf-services spreads it
+into the dispatch pools (authoritative over the spec params, below the
+`spec.kwargs` provider). Every registrar reads the spec's `reads`, so the
+declaration is made once for every transport.
 
 ```python
 from rest_framework_mcp import UrlKwarg
@@ -358,10 +360,18 @@ def scope_by_project(view, request) -> dict:
 
 server.register_service_tool(
     name="policies.update",
-    spec=ServiceSpec(service=update_policy, kwargs=scope_by_project),
-    url_kwargs=(UrlKwarg("project_pk", type="integer", description="owning project"),),
+    spec=ServiceSpec(
+        service=update_policy,
+        kwargs=scope_by_project,
+        reads=[UrlKwarg("project_pk", type="integer", description="owning project")],
+    ),
 )
 ```
+
+The registrar's own `url_kwargs=` argument still works and is deprecated: it
+declares at the mount what the spec declares itself, and warns naming
+`reads=[UrlKwarg(...)]`. When the mount already knows the value, answer it with
+[`server_arguments`](#server-arguments) instead of asking the model.
 
 Because a URL kwarg is popped before the spec sees the arguments, it never counts
 as an unknown argument (the `REJECT` policy ignores it) and never lands in the
@@ -475,12 +485,17 @@ from rest_framework_mcp import QueryParam
 server.register_selector_tool(
     name="invoices.list",
     spec=SelectorSpec(
-        kind=SelectorKind.LIST, selector=list_invoices, output_serializer=InvoiceSerializer
+        kind=SelectorKind.LIST,
+        selector=list_invoices,
+        output_serializer=InvoiceSerializer,
+        reads=[QueryParam("query", description="django-restql fieldset, e.g. {id,number}")],
     ),
     paginate=True,
-    query_params=(QueryParam("query", description="django-restql fieldset, e.g. {id,number}"),),
 )
 ```
+
+As with `UrlKwarg`, the registrar's `query_params=` argument is deprecated in
+favour of the spec's `reads`.
 
 The value is advertised in the tool's `inputSchema`, **popped** from the
 arguments, and handed to `build_offline_context(query_params=…)`. It never
@@ -513,6 +528,13 @@ Three rules worth knowing:
   A name the schema does not offer as the caller's, or whose reader receives the
   caller's value another way, is exempt:
 
+  - **on a selector tool, a `QueryParam` the spec itself declares in `reads`**.
+    The spec says where that parameter comes from, so it is not a shadow: the
+    name is advertised once, as the selector's parameter, it is not popped, and
+    the value reaches both the parameter and `request.query_params`, on every
+    registration route. Only a query param declared at the mount
+    (`query_params=`, or an `agent_contract=` carrying one) is refused under
+    this rule;
   - **a name a `kwargs=` provider declares it fills**, by returning a
     `TypedDict` whose key cannot be `UNSET`, or that `spec_kwargs_provides=`
     claims. A provider reading `request.query_params["status"]` into the
@@ -617,6 +639,61 @@ outcome, and it stays a server error — over HTTP a JSON-RPC `-32603` reading
 `acall_tool`, the exception itself. Any other exception raised while rendering
 is a server error whatever the caller sent: an `AttributeError` in a serializer
 is a bug, not a bad argument.
+
+### Server-supplied arguments: `server_arguments=` { #server-arguments }
+
+A `UrlKwarg` asks the model for a route value. When the mount already knows it
+- a server scoped to one project, a deployment that always reads one tenant -
+asking is both wasted tokens and a door left open: the model can send another
+project's id. `server_arguments=` answers the argument for the caller instead.
+It takes a
+[`ServerArguments`][django_service_specs.ServerArguments] from
+`django_service_specs`, on `register_service_tool`, `register_selector_tool`
+and as a `register_specs` override:
+
+```python
+from django_service_specs import ServerArguments
+
+server.register_selector_tool(
+    name="list_document_vendors",
+    spec=vendors_spec,  # reads=[UrlKwarg("project_pk"), UrlKwarg("draw_request_pk")]
+    server_arguments=ServerArguments(
+        values={"project_pk": 7},  # this server's project, always
+        withheld={"draw_request_pk"},  # never the caller's; the default applies
+    ),
+)
+```
+
+- **The names leave the tool's `inputSchema`** and its `required` list, on
+  `tools/list` and wherever else the schema is built, so the model is never
+  asked for them. A bound value can fill a read the spec marks
+  `required=True`, or a selector parameter with no default.
+- **A caller's value for one is dropped before anything reads it**: the
+  permission classes, the strict check of a required `UrlKwarg`, the
+  missing-argument check and the spec all see the server's value. A value an elicitation answer carries is dropped the same
+  way. The server logs the tool's name and the dropped argument names at
+  `WARNING`, never the values; a caller restating the bound value is not
+  logged.
+- **A bound value reaches every channel the name is declared on**: a bound
+  `UrlKwarg` lands in `view.kwargs`, so a provider or permission scoping by it
+  reads the server's value. A withheld name is absent, so the callable runs on
+  its own default.
+- **It is checked at registration.** A name the spec does not declare, a value
+  its declared type refuses, a name the server fills as a pool seed, and a
+  withheld name whose callable has no default each raise
+  `ImproperlyConfigured` naming the tool. A binding built by hand and passed to
+  `server.tools.register` is checked there too.
+
+The values are **static** for the life of the binding. A value computed per
+request - the project the signed-in user belongs to - is not something
+`server_arguments` carries: compute it in a `kwargs=` provider, or refuse the
+call in a permission.
+
+Only `withheld` takes an argument away from the caller. The deprecated mount
+knobs (`url_kwargs=`, `query_params=`, `agent_contract=`) replace what a tool
+*advertises* for their kind, but dispatch still reads the spec's own `reads`,
+so a read the knob leaves out is unadvertised and still delivered when a
+caller sends it.
 
 ### A list payload: `many=True` service tools { #list-payload }
 
@@ -1294,11 +1371,10 @@ class ArchiveWidgetInput(serializers.Serializer):
 
 
 # 2. URL kwargs — `UrlKwarg` takes a description of its own.
-server.register_selector_tool(
-    name="list_loan_documents",
-    spec=documents_spec,
-    description="List the documents filed against a loan.",
-    url_kwargs=[
+documents_spec = SelectorSpec(
+    kind=SelectorKind.LIST,
+    selector=list_loan_documents,
+    reads=[
         UrlKwarg(
             name="loan_pk",
             type="string",
@@ -1306,6 +1382,11 @@ server.register_selector_tool(
             description="Primary key of the *loan*, not the borrower.",
         )
     ],
+)
+server.register_selector_tool(
+    name="list_loan_documents",
+    spec=documents_spec,
+    description="List the documents filed against a loan.",
 )
 ```
 
