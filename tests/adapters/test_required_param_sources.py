@@ -18,9 +18,9 @@ from typing import Any
 
 import pytest
 from django.core.exceptions import ImproperlyConfigured
+from django_service_specs import SelectorKind
 from rest_framework import serializers as drf_serializers
 from rest_framework_dataclasses.serializers import DataclassSerializer
-from rest_framework_services.types.selector_kind import SelectorKind
 from rest_framework_services.types.selector_spec import SelectorSpec
 from rest_framework_services.types.service_spec import ServiceSpec
 
@@ -31,7 +31,9 @@ from rest_framework_mcp.auth.backends.allow_any_backend import AllowAnyBackend
 from rest_framework_mcp.constants import ArgumentBinding
 from rest_framework_mcp.transport.in_memory_session_store import InMemorySessionStore
 
-_SPREADING = [ArgumentBinding.SPREAD_AUTHOR_WINS, ArgumentBinding.SPREAD_CALLER_WINS]
+# The one spreading binding drf-services accepts: ``SPREAD_CALLER_WINS`` is retired
+# and raises ``ValueError`` at dispatch.
+_SPREADING = [ArgumentBinding.SPREAD_AUTHOR_WINS]
 
 # The sentence the refusal adds when ``data`` is among the missing names.
 _DATA_HINT = "Nothing fills `data` without an input_serializer"
@@ -96,6 +98,174 @@ def test_a_trust_mode_selector_requiring_a_seed_nothing_fills_is_refused(
         )
 
 
+def _needs_result(*, result: Any) -> None: ...  # noqa: ARG001
+
+
+def _needs_queryset(*, queryset: Any) -> None: ...  # noqa: ARG001
+
+
+_RESERVATION = "reserved: dispatch fills"
+
+
+@pytest.mark.parametrize(
+    ("callable_", "seed"), [(_needs_result, "result"), (_needs_queryset, "queryset")]
+)
+@pytest.mark.parametrize("kind", ["selector", "service"])
+def test_a_trust_mode_parameter_named_after_a_seed_is_refused_naming_the_reservation(
+    kind: str, callable_: Any, seed: str
+) -> None:
+    # The kernel's ``RESERVED_POOL_SEEDS`` gained ``result`` and ``queryset``, so
+    # the caller's value of either is dropped from the spread and nothing else
+    # fills it on a tool. The refusal says the name is reserved, which is the
+    # remedy's reason: no input_serializer field or default makes a caller's
+    # value reach it.
+    with pytest.raises(ImproperlyConfigured, match=rf"parameter\(s\) \['{seed}'\]") as caught:
+        if kind == "selector":
+            selector_spec_to_tool(
+                name="read", spec=SelectorSpec(kind=SelectorKind.LIST, selector=callable_)
+            )
+        else:
+            service_spec_to_tool(
+                name="write",
+                spec=ServiceSpec(service=callable_, atomic=False),
+                argument_binding=ArgumentBinding.SPREAD_AUTHOR_WINS,
+            )
+    message = str(caught.value)
+    assert f"`{seed}` is {_RESERVATION}" in message
+    assert "Rename the parameter" in message
+    # No remedy that cannot work: a field of the name is refused, and neither a
+    # catch-all nor a provider is handed a reserved name.
+    for misdirection in ("input_serializer", "**kwargs", "spec_kwargs_provides"):
+        assert misdirection not in message
+
+
+def _needs_result_and_title(*, result: Any, title: str) -> None: ...  # noqa: ARG001
+
+
+def test_a_reserved_name_beside_a_plain_one_keeps_every_remedy() -> None:
+    # Bundled, ``title`` has no source either, and the generic remedies are its;
+    # the reservation is named for ``result`` beside them.
+    with pytest.raises(ImproperlyConfigured, match=r"\['result', 'title'\]") as caught:
+        service_spec_to_tool(
+            name="write", spec=ServiceSpec(service=_needs_result_and_title, atomic=False)
+        )
+    message = str(caught.value)
+    assert f"`result` is {_RESERVATION}" in message
+    assert "Add the parameter(s) to ``input_serializer``" in message
+
+
+class _TitleInput(drf_serializers.Serializer):
+    title = drf_serializers.CharField(required=False)
+
+
+@pytest.mark.django_db
+@pytest.mark.parametrize("kind", ["selector", "service-spread", "service-bundle"])
+def test_a_required_view_parameter_registers_and_receives_the_view(kind: str) -> None:
+    # The DRF edge hands every tool's callable the ``view`` it runs in, under
+    # every binding, so it is a source like ``request``.
+    seen: dict[str, Any] = {}
+
+    def by_title(*, view: Any, title: str = "") -> list[Any]:
+        seen["view"] = view
+        return []
+
+    def by_data(*, view: Any, data: Any) -> list[Any]:
+        seen["view"] = view
+        return []
+
+    server = _server()
+    if kind == "selector":
+        server.register_selector_tool(
+            name="op",
+            spec=SelectorSpec(kind=SelectorKind.LIST, selector=by_title),
+            input_serializer=_TitleInput,
+        )
+    else:
+        bundled = kind == "service-bundle"
+        server.register_service_tool(
+            name="op",
+            spec=ServiceSpec(
+                service=by_data if bundled else by_title,
+                input_serializer=_TitleInput,
+                atomic=False,
+            ),
+            argument_binding=ArgumentBinding.BUNDLE
+            if bundled
+            else ArgumentBinding.SPREAD_AUTHOR_WINS,
+        )
+
+    result = server.call_tool("op", {"title": "t"}, user=None).to_dict()
+
+    assert result.get("isError") is not True, result
+    assert hasattr(seen["view"], "kwargs")
+
+
+def test_the_sources_a_refusal_lists_include_view() -> None:
+    with pytest.raises(ImproperlyConfigured, match=r"parameter\(s\) \['title'\]") as caught:
+        service_spec_to_tool(
+            name="write", spec=ServiceSpec(service=_rename_task_titled, atomic=False)
+        )
+    assert "user, view" in str(caught.value)
+
+
+def test_the_reservation_hint_accompanies_only_a_reserved_name() -> None:
+    # A plain missing name keeps the generic remedy alone.
+    with pytest.raises(ImproperlyConfigured, match=r"parameter\(s\) \['title'\]") as caught:
+        service_spec_to_tool(
+            name="write",
+            spec=ServiceSpec(service=_rename_task_titled, atomic=False),
+        )
+    assert _RESERVATION not in str(caught.value)
+
+
+def _rename_task_titled(*, title: str) -> None: ...  # noqa: ARG001
+
+
+def test_a_name_seeded_on_a_condition_keeps_its_own_remedy() -> None:
+    # ``instance`` is reserved too, but a target lookup fills it, so a rename is
+    # not the only remedy and the reservation's wording would misdirect.
+    with pytest.raises(ImproperlyConfigured, match=r"parameter\(s\) \['instance'\]") as caught:
+        selector_spec_to_tool(
+            name="read", spec=SelectorSpec(kind=SelectorKind.LIST, selector=_needs_instance)
+        )
+    assert _RESERVATION not in str(caught.value)
+    assert "Available sources are:" in str(caught.value)
+
+
+@pytest.mark.django_db
+@pytest.mark.parametrize("seed", ["result", "queryset"])
+def test_a_defaulted_trust_mode_parameter_named_after_a_seed_runs_on_its_default(
+    seed: str,
+) -> None:
+    # Not refused: it is not advertised and the call never offers it, so the
+    # tool is honest about it. The caller's value of the name is dropped, where
+    # 0.52.1 advertised it and handed it over.
+    seen: dict[str, Any] = {}
+
+    def by_result(*, result: Any = None) -> list[Any]:
+        seen["value"] = result
+        return []
+
+    def by_queryset(*, queryset: Any = None) -> list[Any]:
+        seen["value"] = queryset
+        return []
+
+    server = _server()
+    server.register_selector_tool(
+        name="read",
+        spec=SelectorSpec(
+            kind=SelectorKind.LIST, selector=by_result if seed == "result" else by_queryset
+        ),
+    )
+
+    listed: Any = server.list_tools(user=None)
+    out: Any = server.call_tool("read", {seed: "sent"}, user=None)
+
+    assert seed not in listed["tools"][0]["inputSchema"].get("properties", {})
+    assert not out.to_dict().get("isError")
+    assert seen == {"value": None}
+
+
 # ---------- ``data`` is a source only beside an ``input_serializer`` ----------
 
 
@@ -104,9 +274,8 @@ def _create_note(*, data: Any) -> Any:
 
 
 def test_a_bundled_service_requiring_data_without_an_input_serializer_is_refused() -> None:
-    # ``BUNDLE`` with no serializer: drf-services seeds ``data`` only from a
-    # validated serializer or from ``PASSTHROUGH`` extras, and this transport
-    # forwards no extras for that binding, so ``data`` never arrives.
+    # ``BUNDLE`` with no serializer: drf-services hands the service ``data={}``,
+    # which carries none of the caller's arguments.
     with pytest.raises(ImproperlyConfigured, match=r"parameter\(s\) \['data'\]") as caught:
         service_spec_to_tool(name="note", spec=ServiceSpec(service=_create_note, atomic=False))
     assert _DATA_HINT in str(caught.value)
@@ -114,8 +283,8 @@ def test_a_bundled_service_requiring_data_without_an_input_serializer_is_refused
 
 @pytest.mark.parametrize("binding", _SPREADING)
 def test_a_trust_mode_service_requiring_data_is_refused(binding: Any) -> None:
-    # Spread with no serializer, ``data`` is only the arguments the call happened
-    # to carry, so a call with none leaves it unfilled.
+    # Spread with no serializer, ``data`` is still ``{}``: the caller's arguments
+    # reach the service's own parameters, never ``data``.
     with pytest.raises(ImproperlyConfigured, match=r"parameter\(s\) \['data'\]") as caught:
         service_spec_to_tool(
             name="note",

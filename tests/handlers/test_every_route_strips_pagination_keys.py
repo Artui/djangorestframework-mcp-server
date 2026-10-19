@@ -16,8 +16,8 @@ import django_filters
 import pytest
 from asgiref.sync import sync_to_async
 from django.http import HttpRequest
+from django_service_specs import SelectorKind
 from rest_framework import serializers as drf_serializers
-from rest_framework_services.types.selector_kind import SelectorKind
 from rest_framework_services.types.selector_spec import SelectorSpec
 from rest_framework_services.types.service_spec import ServiceSpec
 
@@ -82,15 +82,22 @@ def _server() -> MCPServer:
 
 def _sent(kwargs: dict[str, Any]) -> dict[str, Any]:
     # The pool's seeds arrive too; only what the caller sent is compared.
-    return {name: kwargs[name] for name in ("page", "limit", "status") if name in kwargs}
+    return {
+        name: kwargs[name] for name in ("page", "limit", "status") if kwargs.get(name) is not None
+    }
 
 
-def _anything(**kwargs: Any) -> list[dict[str, Any]]:
-    return [_sent(kwargs)]
+# Each names what it reads: a bare ``**kwargs`` is handed the declared arguments
+# and the seeds, never a key nothing declares, so an undeclared ``status`` would
+# reach neither selector on any route.
+def _anything(*, status: str | None = None, **kwargs: Any) -> list[dict[str, Any]]:
+    return [_sent({"status": status, **kwargs})]
 
 
-def _anything_one(**kwargs: Any) -> dict[str, Any]:
-    return _sent(kwargs)
+def _anything_one(
+    *, page: int | None = None, limit: int | None = None, status: str | None = None
+) -> dict[str, Any]:
+    return _sent({"page": page, "limit": limit, "status": status})
 
 
 def _page(*, page: int = 1) -> list[dict[str, Any]]:
@@ -216,3 +223,34 @@ async def test_a_service_tools_page_and_limit_are_its_own_on_every_route(route: 
     out = await _structured(server, route, {"page": 2, "limit": 5})
 
     assert out == {"page": 2, "limit": 5}
+
+
+class _PageDroppedByValidate(drf_serializers.Serializer):
+    """Declares ``page`` and then drops it: the serializer decides the selector gets none."""
+
+    page = drf_serializers.IntegerField(required=False)
+
+    def validate(self, attrs: dict[str, Any]) -> dict[str, Any]:
+        attrs.pop("page", None)
+        return attrs
+
+
+# ``call_tool`` is left out: it runs no ``input_serializer`` (``call_spec_tool``),
+# so nothing there can drop the name and the wire's value is the one served.
+@pytest.mark.django_db(transaction=True)
+@pytest.mark.parametrize("route", ["acall_tool", "handler", "async_handler"])
+async def test_a_page_the_input_serializer_drops_does_not_reach_a_list_selector_raw(
+    route: str,
+) -> None:
+    # The strip on a ``LIST`` tool's selector arguments is what keeps the raw
+    # ``page`` out: the overlay lays back only what the serializer validated, and
+    # this one validated ``page`` away. Without the strip
+    # (``strip_post_fetch_keys=binding.kind is SelectorKind.LIST`` in
+    # ``selector_tool_dispatch``) the caller's 3 reached the selector past the
+    # serializer that dropped it; with ``**kwargs`` selectors no longer handed
+    # undeclared keys, this is the case left in which the strip is observable.
+    server = _register(_server(), _page, input_serializer=_PageDroppedByValidate)
+
+    out = await _structured(server, route, {"page": 3})
+
+    assert out == [{"page": 1}]

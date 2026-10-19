@@ -15,9 +15,9 @@ from typing import Any
 
 import pytest
 from django.core.exceptions import ImproperlyConfigured
+from django_service_specs import SelectorKind
 from rest_framework import serializers
 from rest_framework.permissions import AllowAny
-from rest_framework_services.types.selector_kind import SelectorKind
 from rest_framework_services.types.selector_spec import SelectorSpec
 from rest_framework_services.types.service_spec import ServiceSpec
 
@@ -88,7 +88,7 @@ def test_reject_against_an_unreadable_surface_is_refused_at_registration(
 
 
 @pytest.mark.parametrize(("spec", "argument_binding"), _UNREADABLE)
-@pytest.mark.parametrize("policy", [UnknownArguments.IGNORE, UnknownArguments.PASSTHROUGH])
+@pytest.mark.parametrize("policy", [UnknownArguments.IGNORE])
 def test_a_permissive_policy_registers_the_same_spec_open(
     spec: ServiceSpec, argument_binding: ArgumentBinding, policy: UnknownArguments
 ) -> None:

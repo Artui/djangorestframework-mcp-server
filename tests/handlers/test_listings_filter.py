@@ -11,7 +11,7 @@ from __future__ import annotations
 from typing import Any
 
 from django.http import HttpRequest
-from rest_framework_services.types.selector_kind import SelectorKind
+from django_service_specs import SelectorKind
 from rest_framework_services.types.service_spec import ServiceSpec
 
 from rest_framework_mcp import DRFPermissionAdapter, UrlKwarg

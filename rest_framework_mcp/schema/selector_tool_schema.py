@@ -2,13 +2,17 @@ from __future__ import annotations
 
 from typing import Any
 
-from rest_framework_services.types.pool_seeds import DEFAULT_POOL_SEEDS, PoolSeeds
+from django_service_specs import DEFAULT_POOL_SEEDS, PoolSeeds
 
 from rest_framework_mcp.registry.types.query_param import QueryParam
 from rest_framework_mcp.registry.types.selector_tool_binding import SelectorToolBinding
 from rest_framework_mcp.schema.agent_conventions import PAGED_QUERY_PARAM_SCOPE
 from rest_framework_mcp.schema.input_schema import build_input_schema
-from rest_framework_mcp.schema.utils import end_sentence, selector_tool_inputs
+from rest_framework_mcp.schema.utils import (
+    end_sentence,
+    selector_tool_inputs,
+    without_server_arguments,
+)
 
 
 def build_selector_tool_input_schema(
@@ -51,6 +55,10 @@ def build_selector_tool_input_schema(
        [`QueryParam`][rest_framework_services.types.query_param.QueryParam]'s
        advertised schema. On a paged tool its description also says that the
        param applies to each item, never to the envelope.
+
+    Last, the binding's ``server_arguments`` names leave ``properties`` and
+    ``required``, whichever source listed them: the server answers each of
+    them, so the caller is never asked (``schema.utils.without_server_arguments``).
 
     Args:
         binding: The selector tool binding to describe.
@@ -102,7 +110,7 @@ def build_selector_tool_input_schema(
     out: dict[str, Any] = {"type": "object", "properties": properties}
     if required:
         out["required"] = required
-    return out
+    return without_server_arguments(out, binding.server_arguments)
 
 
 def _query_param_schema(query_param: QueryParam, *, scope: str | None) -> dict[str, Any]:

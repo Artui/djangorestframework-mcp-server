@@ -9,11 +9,11 @@ from __future__ import annotations
 from typing import Any
 
 import pytest
+from django_service_specs import SelectorKind
 from opentelemetry import trace
 from opentelemetry.sdk.trace import TracerProvider
 from opentelemetry.sdk.trace.export import SimpleSpanProcessor
 from opentelemetry.sdk.trace.export.in_memory_span_exporter import InMemorySpanExporter
-from rest_framework_services.types.selector_kind import SelectorKind
 from rest_framework_services.types.selector_spec import SelectorSpec
 from rest_framework_services.types.service_spec import ServiceSpec
 
@@ -146,7 +146,7 @@ def test_span_helper_is_noop_without_otel(monkeypatch) -> None:
 
 def _tools_raising_service_error() -> Any:
     """A registry holding a tool whose service raises ``ServiceError``."""
-    from rest_framework_services.exceptions.service_error import ServiceError
+    from django_service_specs import ServiceError
 
     from rest_framework_mcp.registry.tool_registry import ToolRegistry
     from rest_framework_mcp.registry.types.tool_binding import ToolBinding

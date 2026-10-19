@@ -21,8 +21,7 @@ import jsonschema
 import pytest
 from django.http import HttpRequest
 from django.test import Client, override_settings
-from rest_framework_services.exceptions.service_validation_error import ServiceValidationError
-from rest_framework_services.types.selector_kind import SelectorKind
+from django_service_specs import SelectorKind, ServiceValidationError
 from rest_framework_services.types.selector_spec import SelectorSpec
 from rest_framework_services.types.service_spec import ServiceSpec
 
@@ -163,9 +162,7 @@ def test_url_kwargs_and_query_params_ride_beside_the_list() -> None:
 # ---------- what dispatch refuses ----------
 
 
-@pytest.mark.parametrize(
-    "policy", [UnknownArguments.REJECT, UnknownArguments.IGNORE, UnknownArguments.PASSTHROUGH]
-)
+@pytest.mark.parametrize("policy", [UnknownArguments.REJECT, UnknownArguments.IGNORE])
 def test_an_argument_beside_the_list_is_refused_whatever_the_policy(
     policy: UnknownArguments,
 ) -> None:
@@ -268,10 +265,9 @@ def _listed_input_schema(binding: ToolBinding) -> dict[str, Any]:
 _POLICIES = [
     pytest.param(UnknownArguments.REJECT, InvoiceInputSerializer, True, id="reject"),
     pytest.param(UnknownArguments.IGNORE, InvoiceInputSerializer, False, id="ignore"),
-    pytest.param(UnknownArguments.PASSTHROUGH, InvoiceInputSerializer, False, id="passthrough"),
-    # No serializer declares nothing inside an item, so ``REJECT`` refuses every key.
-    pytest.param(UnknownArguments.REJECT, None, True, id="no-serializer"),
 ]
+# No serializer-less row: drf-services refuses a ``many=True`` spec with no input
+# serializer when it compiles the spec, since each row is validated by it.
 
 
 @pytest.mark.parametrize(("policy", "serializer", "_items_closed"), _POLICIES)
@@ -285,9 +281,7 @@ def test_the_arguments_are_closed_whatever_the_policy(
     assert schema["additionalProperties"] is False
 
 
-def _accept(*, data: Any = None) -> None:
-    # ``data`` defaults because a serializer-less spec whose policy drops every key
-    # is dispatched with no ``data`` at all.
+def _accept(*, data: Any) -> None:
     return None
 
 
@@ -314,13 +308,9 @@ def test_each_item_is_closed_exactly_when_dispatch_refuses_an_unknown_key(
     assert refused is items_closed
     if refused:
         # Read as served: the result's text is JSON, so the index is a string key.
-        # Without a serializer the first item's own keys are already undeclared.
-        expected = (
-            {"1": {"non_field_errors": ["Unexpected argument(s): 'note'."]}}
-            if serializer is not None
-            else {"0": {"non_field_errors": ["Unexpected argument(s): 'amount_cents', 'number'."]}}
-        )
-        assert tool_error(out)["detail"] == {"items": expected}
+        assert tool_error(out)["detail"] == {
+            "items": {"1": {"non_field_errors": ["Unexpected argument(s): 'note'."]}}
+        }
 
 
 def test_a_fragment_replacing_the_properties_is_served_as_written() -> None:

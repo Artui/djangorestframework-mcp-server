@@ -15,9 +15,8 @@ from typing import Any
 import pytest
 from django.core.exceptions import ImproperlyConfigured
 from django.http import HttpRequest
+from django_service_specs import SelectorKind, SpecRegistry
 from rest_framework import serializers
-from rest_framework_services.registry.spec_registry import SpecRegistry
-from rest_framework_services.types.selector_kind import SelectorKind
 from rest_framework_services.types.selector_spec import SelectorSpec
 from rest_framework_services.types.service_spec import ServiceSpec
 
@@ -74,7 +73,9 @@ def test_a_many_spec_in_a_registry_registers() -> None:
     """The path a project exposing its REST specs wholesale takes, which the refusal
     once made it narrow with ``by_tag`` first."""
     registry = SpecRegistry()
-    registry.register("bulk", _bulk_spec(), tags=("write",))
+    # The kernel's registry refuses a spec declaring no permissions at all; an empty
+    # ``permission_classes`` is drf-services' explicit "anyone may run it".
+    registry.register("bulk", _bulk_spec(permission_classes=[]), tags=("write",))
     server = _server()
 
     server.register_specs(registry)
@@ -137,16 +138,15 @@ def test_a_single_item_spec_may_route_a_channel_named_items() -> None:
 # ---------- declarations a list payload cannot honour ----------
 
 
-@pytest.mark.parametrize(
-    "binding", [ArgumentBinding.SPREAD_AUTHOR_WINS, ArgumentBinding.SPREAD_CALLER_WINS]
-)
-def test_a_spreading_argument_binding_is_refused(binding: ArgumentBinding) -> None:
-    """drf-services raises ``ValueError`` for it on every dispatch: the service
-    receives the whole list as ``data``, so there is nothing to spread."""
+def test_a_spreading_argument_binding_is_refused() -> None:
+    """The service receives the whole list as ``data``, so there is nothing to
+    spread: drf-services hands a spreading ``many`` dispatch what ``AUTO`` does."""
     server = _server()
 
     with pytest.raises(ImproperlyConfigured, match=r"'bulk'.*argument_binding"):
-        server.register_service_tool(name="bulk", spec=_bulk_spec(), argument_binding=binding)
+        server.register_service_tool(
+            name="bulk", spec=_bulk_spec(), argument_binding=ArgumentBinding.SPREAD_AUTHOR_WINS
+        )
 
 
 _INSTANCE = SelectorSpec(kind=SelectorKind.RETRIEVE, selector=lambda **_: None)

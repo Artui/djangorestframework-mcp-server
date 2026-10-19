@@ -3,11 +3,14 @@
 from __future__ import annotations
 
 import pytest
+from rest_framework_services.dispatch.utils import DROPPED_EDGE_SEEDS, EDGE_SEEDS
 
 from rest_framework_mcp.constants import (
     JSONRPC_VERSION,
     RESERVED_POOL_SEEDS,
     RESERVED_POST_FETCH_KEYS,
+    RESOURCE_EDGE_SEEDS,
+    TOOL_EDGE_SEEDS,
     ArgumentBinding,
     JsonRpcErrorCode,
     OutputFormat,
@@ -89,14 +92,29 @@ def test_reserved_post_fetch_keys_shape() -> None:
 
 
 def test_reserved_pool_seeds_shape() -> None:
-    # Re-exported from drf-services, which owns the set. The local copy this
-    # replaced had fallen a key behind it (``collection``) — pinning the shape
-    # here is what would have caught that, so keep asserting the full set rather
-    # than deferring to the import.
+    # Re-exported from django-service-specs, which owns the set. The local copy
+    # this once replaced had fallen a key behind it (``collection``) — pinning the
+    # shape here is what would have caught that, so keep asserting the full set
+    # rather than deferring to the import. drf-services 0.58.0 ("Breaking: pool
+    # seeds") swapped ``request`` and ``serializer`` for ``result`` and
+    # ``queryset``: the DRF edge seeds ``request`` itself, which is why
+    # ``RESOURCE_EDGE_SEEDS`` exists.
     assert (
-        frozenset({"request", "user", "data", "instance", "serializer", "collection", "progress"})
+        frozenset({"user", "data", "instance", "collection", "result", "queryset", "progress"})
         == RESERVED_POOL_SEEDS
     )
+
+
+def test_the_resource_edge_seeds_are_what_the_kernel_leaves_out() -> None:
+    assert frozenset({"request"}) == RESOURCE_EDGE_SEEDS
+    assert not (RESOURCE_EDGE_SEEDS & RESERVED_POOL_SEEDS)
+
+
+def test_the_tool_edge_seeds_are_what_the_drf_edge_fills() -> None:
+    # Written out in ``constants.py``; pinned to drf-services' own sets so an
+    # upstream change to what the edge seeds or drops fails here.
+    assert frozenset(EDGE_SEEDS) | DROPPED_EDGE_SEEDS == TOOL_EDGE_SEEDS
+    assert not (TOOL_EDGE_SEEDS & RESERVED_POOL_SEEDS)
 
 
 def test_reserved_sets_are_disjoint() -> None:
@@ -124,6 +142,11 @@ def test_unknown_arguments_has_three_members() -> None:
     assert {m.name for m in UnknownArguments} == {"REJECT", "PASSTHROUGH", "IGNORE"}
 
 
-def test_unknown_arguments_str_value_is_internal_only() -> None:
-    assert UnknownArguments.REJECT != "reject"
+def test_unknown_arguments_is_a_str_enum() -> None:
+    # The kernel's own enum, a ``str`` enum since drf-services 0.58.0 ("``UnknownArguments``
+    # is a ``str`` enum ordered ``REJECT``, ``IGNORE``, ``PASSTHROUGH``"), where the
+    # earlier plain ``Enum`` compared unequal to its value.
+    assert isinstance(UnknownArguments.REJECT, str)
+    assert UnknownArguments.REJECT == "reject"
     assert UnknownArguments.PASSTHROUGH.value == "passthrough"
+    assert [m.name for m in UnknownArguments] == ["REJECT", "IGNORE", "PASSTHROUGH"]

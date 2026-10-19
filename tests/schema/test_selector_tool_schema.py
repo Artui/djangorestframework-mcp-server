@@ -14,8 +14,8 @@ from __future__ import annotations
 import json
 from typing import Any
 
+from django_service_specs import SelectorKind
 from rest_framework import serializers
-from rest_framework_services.types.selector_kind import SelectorKind
 from rest_framework_services.types.selector_spec import SelectorSpec
 from rest_framework_services.types.service_spec import ServiceSpec
 from typing_extensions import NotRequired, TypedDict, Unpack

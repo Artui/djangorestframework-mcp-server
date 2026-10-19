@@ -10,17 +10,22 @@ compiled to a regex group that overwrote the authenticated principal.
 
 from __future__ import annotations
 
+import json
 from typing import Any
 
 import pytest
 from django.core.exceptions import ImproperlyConfigured
-from rest_framework.permissions import IsAuthenticated
-from rest_framework_services.types.selector_kind import SelectorKind
+from django.http import HttpRequest
+from django_service_specs import SelectorKind
+from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework_services.types.selector_spec import SelectorSpec
 
 from rest_framework_mcp import PromptArgument
 from rest_framework_mcp.auth.backends.allow_any_backend import AllowAnyBackend
 from rest_framework_mcp.auth.permissions.scope_required import ScopeRequired
+from rest_framework_mcp.auth.types.token_info import TokenInfo
+from rest_framework_mcp.handlers.handle_resources_read import handle_resources_read
+from rest_framework_mcp.handlers.types.context import MCPCallContext
 from rest_framework_mcp.registry.types.ui_resource_meta import UIResourceMeta
 from rest_framework_mcp.server.mcp_server import MCPServer
 from rest_framework_mcp.server.utils import UnguardedToolWarning
@@ -119,7 +124,7 @@ def test_an_unguarded_view_is_deliberately_allowed(
 # ---------- URI-template variable names ----------
 
 
-@pytest.mark.parametrize("reserved", ["user", "request", "data", "instance"])
+@pytest.mark.parametrize("reserved", ["user", "request", "data", "instance", "result", "queryset"])
 def test_a_template_variable_named_after_a_pool_seed_is_refused(reserved: str) -> None:
     """A template variable lands in the selector's kwarg pool, so one named
     after a dispatcher seed would let a URI segment stand in for it."""
@@ -135,6 +140,36 @@ def test_a_template_variable_named_after_a_pool_seed_is_refused(reserved: str) -
             ),
         )
     assert server.resources.resolve("notes://victim/1") is None
+
+
+def test_a_template_variable_named_serializer_reaches_the_selector() -> None:
+    """A read runs its selector directly, with no validator to bind ``serializer``,
+    so the name is an ordinary segment here though a tool reserves it."""
+
+    def _by_serializer(*, serializer: str) -> dict[str, str]:
+        return {"serializer": serializer}
+
+    server = _server()
+    server.register_resource(
+        name="formats",
+        uri_template="formats://{serializer}",
+        selector=SelectorSpec(
+            kind=SelectorKind.RETRIEVE, selector=_by_serializer, permission_classes=[AllowAny]
+        ),
+    )
+    request = HttpRequest()
+    request.method = "POST"
+    context = MCPCallContext(
+        http_request=request,
+        token=TokenInfo(user=None),
+        tools=server.tools,
+        resources=server.resources,
+        prompts=server.prompts,
+        protocol_version=server.config.protocol_versions[0],
+        config=server.config,
+    )
+    result: Any = handle_resources_read({"uri": "formats://csv"}, context)
+    assert json.loads(result["contents"][0]["text"]) == {"serializer": "csv"}
 
 
 def test_a_duplicated_template_variable_is_refused() -> None:

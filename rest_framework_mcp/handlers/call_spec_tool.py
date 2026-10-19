@@ -24,23 +24,26 @@ from __future__ import annotations
 
 from typing import Any
 
-from rest_framework import serializers as drf_serializers
-from rest_framework_services import (
+from django_service_specs import (
     DEFAULT_POOL_SEEDS,
     PoolSeeds,
+    SelectorKind,
+    ServiceError,
+    ServiceValidationError,
+)
+from rest_framework import serializers as drf_serializers
+from rest_framework_services import (
     dispatch_spec,
     enforce_permissions,
     render_for_audience,
 )
-from rest_framework_services.exceptions.service_error import ServiceError
-from rest_framework_services.exceptions.service_validation_error import ServiceValidationError
-from rest_framework_services.types.selector_kind import SelectorKind
 
 from rest_framework_mcp.adapters.utils import _overlaid_field_names
 from rest_framework_mcp.config.types.mcp_config import MCPConfig
 from rest_framework_mcp.constants import RESERVED_POST_FETCH_KEYS
 from rest_framework_mcp.handlers.selector_tool_dispatch import enforce_object_permissions
 from rest_framework_mcp.handlers.utils import (
+    apply_tool_server_arguments,
     dispatch_shape,
     read_shaping_error_result,
     refuse_missing_arguments,
@@ -98,6 +101,9 @@ def call_spec_tool(
             "orchestrates several specs and has no single dispatch target. Call it "
             "over the HTTP / JSON-RPC transport instead."
         )
+    # The binding's ``server_arguments`` in place before anything below reads
+    # the arguments, as on the wire (``apply_tool_server_arguments``).
+    arguments = apply_tool_server_arguments(binding, arguments)
     spec = binding.spec
     # The request and view the call runs with, from the shape the wire builds
     # its own from, so ``request.data`` holds neither a URL kwarg nor a

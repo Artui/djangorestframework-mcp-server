@@ -2,15 +2,20 @@ from __future__ import annotations
 
 from typing import Any
 
-from rest_framework_services import provider_keys, server_owned_keys, spec_to_json_schema
-from rest_framework_services.types.pool_seeds import DEFAULT_POOL_SEEDS, PoolSeeds
+from django_service_specs import DEFAULT_POOL_SEEDS, PoolSeeds, provider_keys
+from rest_framework_services import server_owned_keys, spec_to_json_schema
+from rest_framework_services.dispatch.utils import DROPPED_EDGE_SEEDS
 from rest_framework_services.types.service_spec import ServiceSpec
 
-from rest_framework_mcp.constants import ArgumentBinding
 from rest_framework_mcp.registry.types.tool_binding import ToolBinding
 from rest_framework_mcp.registry.types.url_kwarg import UrlKwarg
 from rest_framework_mcp.schema.input_schema import build_input_schema
-from rest_framework_mcp.schema.utils import selector_inputs, target_lookup
+from rest_framework_mcp.schema.utils import (
+    caller_fields,
+    selector_inputs,
+    target_lookup,
+    without_server_arguments,
+)
 
 
 def build_service_tool_input_schema(
@@ -83,11 +88,23 @@ def build_service_tool_input_schema(
     list alone and an item offers only the serializer's fields
     (``test_a_list_payload_item_advertises_only_the_keys_the_bind_admits``).
 
+    **The binding's ``server_arguments`` names are left out last**, from
+    ``properties`` and from ``required``, beside the keys the server owns
+    above: the server answers each of them, so the caller is never asked
+    (``schema.utils.without_server_arguments``).
+
     Args:
         binding: The service tool binding to describe.
         pool_seeds: The server's registered seeds, which fill a lookup or service
             parameter of the same name, so it is not asked of the client.
     """
+    return without_server_arguments(
+        _advertised(binding, pool_seeds=pool_seeds), binding.server_arguments
+    )
+
+
+def _advertised(binding: ToolBinding, *, pool_seeds: PoolSeeds) -> dict[str, Any]:
+    """Everything ``build_service_tool_input_schema`` describes, before the server's names leave."""
     spec = binding.spec
     if spec.many:
         # ``phase="input"`` never answers ``None`` (only the output phase is
@@ -130,25 +147,31 @@ def declared_service_input(binding: ToolBinding, *, pool_seeds: PoolSeeds) -> di
     parameters. ``supplied=`` is the reserved seeds, the built-in ones and the
     ones this server registers, because dispatch subtracts exactly those from
     what it declares (``reserved=pool_seeds.reserved``): one left out would be
-    listed and then stripped from the call, and passing any is what makes a
+    listed and then stripped from the call. Passing any is what makes a
     parameter without a default required (``supplied=None`` would leave every
     parameter optional: ``test_a_spread_service_lists_its_own_parameters``;
     the built-in seeds alone would list a registered one:
     ``test_a_registered_seed_is_not_listed_as_a_service_parameter``).
+    ``DROPPED_EDGE_SEEDS`` joins them, because the DRF edge drops a caller's
+    ``request`` and ``serializer`` as dispatch strips a seed's, and the
+    kernel's reserved set no longer lists either: without it a ``serializer``
+    parameter with a default was listed and then dropped
+    (``test_a_spread_services_serializer_parameter_is_not_advertised``).
 
-    **A name the spec's provider says it fills is listed only where the
-    caller's value is the one served.** Under ``SPREAD_AUTHOR_WINS`` drf-services
-    applies the provider over the caller's spread, so the caller's value for
-    such a name is admitted and then replaced: it is supplied, as a selector
-    tool's is (``schema.utils.selector_inputs``) and as a target lookup's own
-    provider's keys are. Under ``SPREAD_CALLER_WINS`` the spread is applied last,
-    so the name is listed and only not required. A key the provider may decline
-    stays listed under both, because on a call where it comes back ``UNSET`` the
-    caller's value is the only one, and an untyped provider fills nothing for
-    certain, so it hides none and every name is optional. Each reading is a row
-    of ``test_a_name_the_services_provider_fills_is_offered_where_the_callers_value_is_served``,
-    and the binding's condition is held by its ``typed-caller-wins`` row; that
-    ``REJECT`` still admits the hidden name, and serves the provider's value, by
+    **A name the spec's provider says it fills is not listed.** drf-services
+    applies the provider over the caller's spread under every binding, so the
+    caller's value for such a name is admitted and then replaced: it is
+    supplied, as a selector tool's is (``schema.utils.selector_inputs``) and as
+    a target lookup's own provider's keys are. Under ``AUTO`` and ``BUNDLE`` a
+    serializer-less service lists none of its parameters, so supplying the
+    provider's keys there changes nothing and the binding is not consulted. A
+    key the provider may decline stays listed, because on a call where it comes
+    back ``UNSET`` the caller's value is the only one, and an untyped provider
+    fills nothing for certain, so it hides none and every name is optional.
+    Each reading is a row of
+    ``test_a_name_the_services_provider_fills_is_offered_where_the_callers_value_is_served``;
+    that ``REJECT`` still admits the hidden name, and serves the provider's
+    value, is held by
     ``test_a_spread_services_provider_filled_name_is_offered_where_the_callers_value_is_served``.
     """
     spec = binding.spec
@@ -157,17 +180,13 @@ def declared_service_input(binding: ToolBinding, *, pool_seeds: PoolSeeds) -> di
     keys = provider_keys(spec.kwargs)
     # ``None`` is a provider whose keys cannot be read, which says it fills
     # nothing, so it hides nothing.
-    filled: frozenset[str] = (
-        keys.filled
-        if keys is not None and binding.argument_binding is ArgumentBinding.SPREAD_AUTHOR_WINS
-        else frozenset()
-    )
+    filled: frozenset[str] = keys.filled if keys is not None else frozenset()
     schema: dict[str, Any] = (
         spec_to_json_schema(
             spec,
             phase="input",
             argument_binding=binding.argument_binding,
-            supplied=pool_seeds.reserved | filled,
+            supplied=pool_seeds.reserved | DROPPED_EDGE_SEEDS | filled,
         )
         or {}
     )
@@ -211,13 +230,15 @@ def _with_target_lookups(
     value before the lookup reads it and ``REJECT`` refuses it, and asking for
     it would invite a value nobody receives. The reflection of the lookup alone
     cannot see a marker on another callable, so the set is asked of the spec
-    dispatch runs. A property ``schema`` brought, which for a serializer is one
-    of its fields, is not subtracted: drf-services keeps a field of an owned
-    name as the caller's input and validates it into ``data``. Each half is
-    held by one of
-    ``test_a_lookup_key_a_precondition_hides_is_not_advertised_but_a_field_of_that_name_is``'s
-    two schemas: the subtraction, from the properties and from what the
-    lookup requires, and the field names left out of it.
+    dispatch runs. A field the caller sends (``caller_fields``) is not
+    subtracted: drf-services keeps a field of an owned name as the caller's
+    input and validates it into ``data``
+    (``test_a_field_named_like_an_owned_key_the_lookup_does_not_read_stays_the_callers``
+    registers one, and
+    ``test_a_lookup_key_a_precondition_hides_is_not_advertised_but_a_field_of_that_name_is``
+    holds both halves on bindings built directly). A ``HiddenField`` takes
+    nothing from the caller, so it does not keep an owned name advertised
+    (``test_a_hidden_field_of_an_owned_lookup_key_is_not_asked_of_the_caller``).
     """
     lookup = target_lookup(spec)
     if lookup is None:
@@ -228,7 +249,7 @@ def _with_target_lookups(
         return schema
     own: dict[str, Any] = schema.get("properties", {})
     properties.update(own)
-    hidden = server_owned_keys(spec) - own.keys()
+    hidden = server_owned_keys(spec) - caller_fields(spec.input_serializer).keys()
     properties = {key: value for key, value in properties.items() if key not in hidden}
     required: list[str] = [
         key

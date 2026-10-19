@@ -4,12 +4,10 @@ import asyncio
 from typing import Any
 
 from asgiref.sync import sync_to_async
+from django_service_specs import AdditionalInputRequired, ServiceError, ServiceValidationError
 from rest_framework import serializers as drf_serializers
 from rest_framework.exceptions import PermissionDenied
 from rest_framework_services import adispatch_spec, enforce_permissions
-from rest_framework_services.exceptions.additional_input_required import AdditionalInputRequired
-from rest_framework_services.exceptions.service_error import ServiceError
-from rest_framework_services.exceptions.service_validation_error import ServiceValidationError
 
 from rest_framework_mcp._compat.acall import acall
 from rest_framework_mcp._compat.tracing import span
@@ -30,6 +28,7 @@ from rest_framework_mcp.handlers.selector_tool_dispatch import (
 from rest_framework_mcp.handlers.task_dispatch import maybe_create_task
 from rest_framework_mcp.handlers.types.context import MCPCallContext
 from rest_framework_mcp.handlers.utils import (
+    apply_tool_server_arguments,
     consume_rate_limits,
     dispatch_shape,
     effective_rate_limits,
@@ -95,6 +94,9 @@ async def handle_tools_call_async(
     bad_format: JsonRpcError | None = validate_output_format(params)
     if bad_format is not None:
         return bad_format
+
+    # See the sync sibling: before the task and the permission check read them.
+    arguments_raw = apply_tool_server_arguments(binding, arguments_raw)
 
     # Placed as in the sync sibling, and deliberately *outside* the deadline:
     # creating a task is a store write and a queue hand-off, not the work, and
@@ -179,18 +181,20 @@ async def _dispatch_tool_call_async(
         # before anything else looks at them, and a declined one is answered
         # after the rate limit.
         prior: ResolvedInput = resolve_prior_input(params, binding.name, arguments_raw, context)
+        # See the sync sibling: applied again, since the merge takes any key.
+        answered = apply_tool_server_arguments(binding, prior.arguments)
 
         # See the sync sibling: answers that changed the arguments, by
         # ``same_arguments`` rather than ``==``, are judged again on the
         # arguments they produced, before the target is looked up. The same
         # tests hold the condition here, each parametrized over this handler.
-        if not same_arguments(prior.arguments, arguments_raw):
+        if not same_arguments(answered, arguments_raw):
             allowed, required_scopes = await acall(
-                judge_tool_permissions, binding, prior.arguments, context
+                judge_tool_permissions, binding, answered, context
             )
             if not allowed:
-                return _forbidden(required_scopes), prior.arguments
-        arguments_raw = prior.arguments
+                return _forbidden(required_scopes), answered
+        arguments_raw = answered
 
         # See the sync sibling: after both checks, so a caller either one
         # denies is never charged.

@@ -7,7 +7,7 @@ from dataclasses import dataclass
 from typing import Any
 
 from django.http import StreamingHttpResponse
-from rest_framework_services.types.progress_reporter import ProgressReporter
+from django_service_specs import ProgressReporter
 
 from rest_framework_mcp.constants import INTERNAL_ERROR_MESSAGE, JSONRPC_VERSION, JsonRpcErrorCode
 from rest_framework_mcp.observability import get_logger

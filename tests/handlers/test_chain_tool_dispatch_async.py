@@ -7,8 +7,7 @@ from typing import Any
 import pytest
 from asgiref.sync import sync_to_async
 from django.http import HttpRequest
-from rest_framework_services.exceptions.service_error import ServiceError
-from rest_framework_services.types.selector_kind import SelectorKind
+from django_service_specs import SelectorKind, ServiceError
 from rest_framework_services.types.selector_spec import SelectorSpec
 from rest_framework_services.types.service_spec import ServiceSpec
 

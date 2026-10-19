@@ -27,11 +27,9 @@ from django.contrib.auth.models import AnonymousUser
 from django.core.exceptions import ImproperlyConfigured
 from django.http import HttpRequest
 from django.test import AsyncClient, Client, override_settings
+from django_service_specs import DEFAULT_POOL_SEEDS, Affordance, PoolSeeds, SelectorKind
 from rest_framework import serializers
 from rest_framework.permissions import AllowAny
-from rest_framework_services import DEFAULT_POOL_SEEDS, PoolSeeds
-from rest_framework_services.types.affordance import Affordance
-from rest_framework_services.types.selector_kind import SelectorKind
 from rest_framework_services.types.selector_spec import SelectorSpec
 from rest_framework_services.types.service_spec import ServiceSpec
 

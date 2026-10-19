@@ -3,8 +3,8 @@ from __future__ import annotations
 import base64
 from typing import Any
 
+from django_service_specs import SelectorKind
 from rest_framework_services import base_serializer_context, renderable_serializer_class
-from rest_framework_services.types.selector_kind import SelectorKind
 
 from rest_framework_mcp.constants import JsonRpcErrorCode, ResourceEncoding
 from rest_framework_mcp.output.encode_json import encode_json

@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from rest_framework_services.types.selector_kind import SelectorKind
+from django_service_specs import SelectorKind
 from rest_framework_services.types.selector_spec import SelectorSpec
 from rest_framework_services.types.service_spec import ServiceSpec
 
@@ -49,14 +49,14 @@ def test_service_classmethod_forwards_all_kwargs() -> None:
         output_format=OutputFormat.TOON,
         include_structured_content=True,
         argument_binding=ArgumentBinding.SPREAD_AUTHOR_WINS,
-        unknown_arguments=UnknownArguments.PASSTHROUGH,
+        unknown_arguments=UnknownArguments.IGNORE,
     )
     assert d.description == "desc"
     assert d.title == "Title"
     assert d.output_format is OutputFormat.TOON
     assert d.include_structured_content is True
     assert d.argument_binding is ArgumentBinding.SPREAD_AUTHOR_WINS
-    assert d.unknown_arguments is UnknownArguments.PASSTHROUGH
+    assert d.unknown_arguments is UnknownArguments.IGNORE
 
 
 def test_service_classmethod_forwards_include_output_schema() -> None:

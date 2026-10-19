@@ -9,7 +9,7 @@ tests pin the equivalence.
 from __future__ import annotations
 
 import pytest
-from rest_framework_services.types.selector_kind import SelectorKind
+from django_service_specs import SelectorKind
 from rest_framework_services.types.selector_spec import SelectorSpec
 from rest_framework_services.types.service_spec import ServiceSpec
 
@@ -125,13 +125,13 @@ def test_selector_defaults_apply_when_definition_unset() -> None:
         ],
         selector_defaults=SelectorDefaults(
             paginate=True,
-            unknown_arguments=UnknownArguments.PASSTHROUGH,
+            unknown_arguments=UnknownArguments.IGNORE,
         ),
     )
     binding = bindings[0]
     assert isinstance(binding, SelectorToolBinding)
     assert binding.paginate is True
-    assert binding.unknown_arguments is UnknownArguments.PASSTHROUGH
+    assert binding.unknown_arguments is UnknownArguments.IGNORE
 
 
 def test_service_defaults_do_not_leak_to_selector_definitions() -> None:

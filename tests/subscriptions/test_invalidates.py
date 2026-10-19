@@ -8,11 +8,9 @@ from typing import Any
 import pytest
 from asgiref.sync import sync_to_async
 from django.db import transaction
+from django_service_specs import AdditionalInputRequired, SelectorKind, ServiceError
 from rest_framework import serializers as drf_serializers
 from rest_framework.permissions import BasePermission
-from rest_framework_services.exceptions.additional_input_required import AdditionalInputRequired
-from rest_framework_services.exceptions.service_error import ServiceError
-from rest_framework_services.types.selector_kind import SelectorKind
 from rest_framework_services.types.selector_spec import SelectorSpec
 from rest_framework_services.types.service_spec import ServiceSpec
 

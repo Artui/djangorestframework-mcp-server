@@ -1,7 +1,8 @@
 from __future__ import annotations
 
+from django_service_specs import FieldMarking
 from rest_framework import serializers
-from rest_framework_services import MARKING, FieldMarking
+from rest_framework_services import MARKING
 
 from tests.testapp.models import Invoice
 

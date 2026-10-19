@@ -23,20 +23,14 @@ from typing import Annotated, Any
 
 import pytest
 from asgiref.sync import sync_to_async
+from django.core.exceptions import ImproperlyConfigured
 from django.http import HttpRequest
 from django.test import Client
+from django_service_specs import DEFAULT_POOL_SEEDS, UNSET, PoolSeeds, SelectorKind, UnsetType
 from rest_framework import serializers
 from rest_framework.exceptions import PermissionDenied
 from rest_framework.permissions import BasePermission, IsAuthenticated
-from rest_framework_services import (
-    DEFAULT_POOL_SEEDS,
-    UNSET,
-    InputRequired,
-    NotClientInput,
-    UnsetType,
-)
-from rest_framework_services.types.pool_seeds import PoolSeeds
-from rest_framework_services.types.selector_kind import SelectorKind
+from rest_framework_services import InputRequired, NotClientInput
 from rest_framework_services.types.selector_spec import SelectorSpec
 from rest_framework_services.types.service_spec import ServiceSpec
 from typing_extensions import TypedDict
@@ -50,6 +44,8 @@ from rest_framework_mcp.handlers.handle_tools_call import handle_tools_call
 from rest_framework_mcp.handlers.handle_tools_call_async import handle_tools_call_async
 from rest_framework_mcp.handlers.types.context import MCPCallContext
 from rest_framework_mcp.protocol.types.json_rpc_error import JsonRpcError
+from rest_framework_mcp.registry.types.tool_binding import ToolBinding
+from rest_framework_mcp.schema.utils import required_arguments
 from rest_framework_mcp.transport.in_memory_session_store import InMemorySessionStore
 from tests.conftest import post_jsonrpc
 from tests.testapp.models import Invoice
@@ -768,22 +764,22 @@ class _NumberAndTenantInput(_NumberInput):
     tenant = serializers.CharField(required=False)
 
 
-def _owned_tenant_server(input_serializer: type[serializers.Serializer]) -> MCPServer:
-    """A service tool whose lookup requires ``tenant``, which its precondition owns."""
-    server = MCPServer(name="t", auth_backend=AllowAnyBackend(), session_store=None)
-    server.register_service_tool(
-        name="rename",
-        spec=ServiceSpec(
-            service=_rename,
-            atomic=False,
-            input_serializer=input_serializer,
-            instance_selector_spec=SelectorSpec(
-                kind=SelectorKind.RETRIEVE, selector=_by_pk_in_tenant
-            ),
-            preconditions=[_same_tenant],
-            output_selector_spec=_out(),
-        ),
+def _owned_tenant_spec(input_serializer: type[serializers.Serializer]) -> ServiceSpec:
+    """A service spec whose lookup requires ``tenant``, which its precondition owns."""
+    return ServiceSpec(
+        service=_rename,
+        atomic=False,
+        input_serializer=input_serializer,
+        instance_selector_spec=SelectorSpec(kind=SelectorKind.RETRIEVE, selector=_by_pk_in_tenant),
+        preconditions=[_same_tenant],
+        output_selector_spec=_out(),
     )
+
+
+def _owned_tenant_server(input_serializer: type[serializers.Serializer]) -> MCPServer:
+    """A service tool named ``rename`` over ``_owned_tenant_spec``."""
+    server = MCPServer(name="t", auth_backend=AllowAnyBackend(), session_store=None)
+    server.register_service_tool(name="rename", spec=_owned_tenant_spec(input_serializer))
     return server
 
 
@@ -810,22 +806,57 @@ async def test_a_lookup_key_the_server_owns_is_not_asked_of_the_caller(route: st
         await _via(server, route, "rename", {"pk": invoice.pk, "number": "INV-2"})
 
 
+class _NumberAndHiddenTenantInput(_NumberInput):
+    # Takes nothing from the caller, so registration admits it beside the
+    # lookup key of the same name.
+    tenant = serializers.HiddenField(default="acme")
+
+
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.parametrize("route", _ROUTES)
-async def test_an_owned_lookup_key_a_field_declares_is_still_asked_of_the_caller(
+async def test_a_hidden_field_of_an_owned_lookup_key_is_not_asked_of_the_caller(
     route: str,
 ) -> None:
-    # A field of the owned name is the caller's input, so the schema keeps the
-    # lookup's ``tenant`` required, and the call is refused for it as the
-    # schema says. Holds the subtraction's limit to the names the
-    # ``input_serializer`` does not list.
+    # A ``HiddenField`` is in the serializer's schema but is no input of the
+    # caller's, so it does not put the owned key back into what the tool asks
+    # for. It did: ``tenant`` was advertised as required and every call was
+    # refused as "Missing required argument(s): `tenant`.", which no resend
+    # could satisfy. The field's default goes into ``data``, not to the lookup,
+    # so the call now fails as the no-field case above does.
     invoice = await Invoice.objects.acreate(number="INV-1")
-    server = _owned_tenant_server(_NumberAndTenantInput)
+    server = _owned_tenant_server(_NumberAndHiddenTenantInput)
+    schema = _rename_schema(server)
 
-    assert "tenant" in _rename_schema(server)["required"]
-    out = await _via(server, route, "rename", {"pk": invoice.pk, "number": "INV-2"})
+    assert "tenant" not in schema["properties"]
+    assert "tenant" not in schema["required"]
+    with pytest.raises(TypeError, match="tenant"):
+        await _via(server, route, "rename", {"pk": invoice.pk, "number": "INV-2"})
 
-    assert _missing(out) == {"tenant": _REQUIRED}
+
+def test_an_owned_lookup_key_a_field_declares_is_refused_at_registration() -> None:
+    # drf-services withholds a name the target lookup reads from the
+    # serializer's data, so a writable ``tenant`` field could never be filled,
+    # owned or not. Registration refuses it, as it does any lookup key a field
+    # declares (``tests/adapters/test_lookup_key_input_field.py``).
+    with pytest.raises(ImproperlyConfigured, match=r"declares field\(s\) \['tenant'\]"):
+        _owned_tenant_server(_NumberAndTenantInput)
+
+
+def test_the_check_and_the_schema_agree_on_a_hand_registered_owned_key_field() -> None:
+    # ``server.tools.register`` does not run the registrars' lookup-key-field
+    # refusal, so a writable ``tenant`` reaches both owned-key subtractions.
+    # Each keeps the field the caller sends, so the missing-argument check asks
+    # for what the schema requires, rather than the two drifting apart.
+    server = MCPServer(name="t", auth_backend=AllowAnyBackend(), session_store=None)
+    binding = ToolBinding(
+        name="rename", description=None, spec=_owned_tenant_spec(_NumberAndTenantInput)
+    )
+    server.tools.register(binding)
+
+    schema = _rename_schema(server)
+
+    assert "tenant" in schema["properties"]
+    assert set(required_arguments(binding)) == {"pk", "tenant"} <= set(schema["required"])
 
 
 @pytest.mark.django_db(transaction=True)
@@ -949,23 +980,6 @@ def _tenant_server(
 
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.parametrize("route", _ROUTES)
-async def test_under_caller_wins_a_provider_filled_name_is_not_refused(route: str) -> None:
-    # The provider's key is advertised under ``SPREAD_CALLER_WINS``, because the
-    # caller's value outranks it, but it is not required: the provider fills it
-    # when the caller sends nothing.
-    acme = await Invoice.objects.acreate(number="acme-1")
-    beta = await Invoice.objects.acreate(number="beta-1")
-    server = _tenant_server(_acme_scope, argument_binding=ArgumentBinding.SPREAD_CALLER_WINS)
-
-    filled = await _via(server, route, "get", {"pk": acme.pk})
-    sent = await _via(server, route, "get", {"pk": beta.pk, "tenant": "beta"})
-
-    assert filled["structuredContent"]["number"] == "acme-1"
-    assert sent["structuredContent"]["number"] == "beta-1"
-
-
-@pytest.mark.django_db(transaction=True)
-@pytest.mark.parametrize("route", _ROUTES)
 async def test_under_author_wins_the_providers_value_outranks_the_callers(route: str) -> None:
     # The default binding, and the reason the schema hides the provider's key
     # there: a ``tenant`` the caller sends is admitted and then overwritten, so
@@ -983,7 +997,10 @@ def _touch(*, instance: Invoice, **_: Any) -> Invoice:
 
 @pytest.mark.django_db(transaction=True)
 @pytest.mark.parametrize("route", _ROUTES)
-@pytest.mark.parametrize("binding", list(ArgumentBinding))
+# ``SPREAD_CALLER_WINS`` is left out: drf-services refuses it as a retired mode.
+@pytest.mark.parametrize(
+    "binding", [b for b in ArgumentBinding if b is not ArgumentBinding.SPREAD_CALLER_WINS]
+)
 async def test_a_target_lookups_provider_outranks_the_caller_under_every_binding(
     binding: ArgumentBinding, route: str
 ) -> None:
@@ -1042,28 +1059,6 @@ async def test_a_marked_key_the_provider_may_decline_is_not_refused(route: str) 
     assert out["structuredContent"]["number"] == "acme-1"
 
 
-@pytest.mark.django_db(transaction=True)
-@pytest.mark.parametrize("route", _ROUTES)
-async def test_under_caller_wins_a_marked_provider_key_is_neither_required_nor_refused(
-    route: str,
-) -> None:
-    # The marker says ``tenant`` is required, and the provider fills it when the
-    # caller sends none, so under ``SPREAD_CALLER_WINS`` it is offered rather
-    # than required, marker or not, and a call without it is served.
-    acme = await Invoice.objects.acreate(number="acme-1")
-    server = _tenant_server(
-        _acme_scope,
-        selector=_by_pk_for_marked_tenant,
-        argument_binding=ArgumentBinding.SPREAD_CALLER_WINS,
-    )
-    listed: Any = server.list_tools(user=None)
-
-    out = await _via(server, route, "get", {"pk": acme.pk})
-
-    assert listed["tools"][0]["inputSchema"]["required"] == ["pk"]
-    assert out["structuredContent"]["number"] == "acme-1"
-
-
 def _untyped_empty_scope(**_: Any) -> dict[str, Any]:
     return {}
 
@@ -1075,17 +1070,17 @@ async def test_a_marked_parameter_a_provider_might_fill_is_drf_services_to_refus
     route: str, provider: Any
 ) -> None:
     # Neither provider says it fills ``tenant`` for certain, so the check here
-    # skips it, and drf-services' own marker check answers once the pool is
-    # assembled, in its own shape: the one case the CHANGELOG names as keeping
-    # "Service validation error." with ``non_field_errors``.
+    # skips it, and drf-services answers once the pool is assembled: a missing
+    # argument is its ``InvalidArguments``, keyed by the name, so it reaches the
+    # caller as an invalid-arguments refusal naming ``tenant``.
     server = _tenant_server(provider, selector=_by_pk_for_marked_tenant)
 
     out = await _via(server, route, "get", {"pk": 1})
 
     error = tool_error(out)
     assert error["type"] == "validation_error"
-    assert error["message"] == "Service validation error."
-    assert error["detail"] == {"non_field_errors": ["Missing required argument(s): 'tenant'."]}
+    assert error["message"] == "Invalid arguments"
+    assert error["detail"] == {"tenant": _REQUIRED}
 
 
 @pytest.mark.django_db(transaction=True)
@@ -1110,14 +1105,14 @@ async def test_a_key_the_provider_declines_and_the_caller_leaves_out_is_refused_
     # This server does not refuse the call, because only the assembled pool can
     # say whether ``tenant`` arrived. drf-services can, once the provider has
     # declined: the caller could have sent it, so dispatch refuses the call
-    # before the selector runs, in its own shape, where the selector used to
-    # raise ``TypeError`` and the call failed as a server fault.
+    # before the selector runs, as ``InvalidArguments`` keyed by the name, where
+    # the selector used to raise ``TypeError`` and the call failed as a server fault.
     out = await _via(_tenant_server(_declining_scope), route, "get", {"pk": 1})
 
     error = tool_error(out)
     assert error["type"] == "validation_error"
-    assert error["message"] == "Service validation error."
-    assert error["detail"] == {"non_field_errors": ["Missing required argument(s): 'tenant'."]}
+    assert error["message"] == "Invalid arguments"
+    assert error["detail"] == {"tenant": _REQUIRED}
 
 
 # ---------- in the server's own words ----------

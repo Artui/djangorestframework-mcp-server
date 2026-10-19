@@ -6,16 +6,17 @@ from functools import cached_property
 from typing import Any, Generic, TypeVar
 
 from django.core.exceptions import ImproperlyConfigured
-from rest_framework_services import (
+from django_service_specs import (
     UNSET,
     AudienceProjection,
     FieldMarking,
+    SelectorKind,
+    ServerArguments,
     UnsetType,
-    build_audience_projection,
 )
-from rest_framework_services.types.selector_kind import SelectorKind
+from rest_framework_services import build_audience_projection
+from rest_framework_services.types.affordance_declarer import AffordanceDeclarer
 from rest_framework_services.types.selector_spec import SelectorSpec
-from rest_framework_services.types.service_spec import ServiceSpec
 
 from rest_framework_mcp.constants import (
     ArgumentBinding,
@@ -167,8 +168,10 @@ class SelectorToolBinding(Generic[ResultT, ExtraT]):
     """How unknown ``arguments`` keys are handled relative to the merged
     ``inputSchema`` (``input_serializer`` fields, ``filter_set`` properties,
     ordering, pagination). ``REJECT`` answers an ``isError``
-    ``validation_error`` result naming them, ``PASSTHROUGH`` merges them into
-    the validated payload, ``IGNORE`` drops them."""
+    ``validation_error`` result naming them, ``IGNORE`` drops them.
+    ``PASSTHROUGH`` is retired in drf-services 0.58.0, where an argument the
+    spec does not declare never reaches a callable, and the registrars refuse
+    it: pass ``IGNORE`` or ``REJECT``."""
 
     always_listed: bool = False
     """Keep this binding in ``tools/list`` even when ``FILTER_LISTINGS_BY_PERMISSIONS``
@@ -231,10 +234,26 @@ class SelectorToolBinding(Generic[ResultT, ExtraT]):
     one tool genuinely needs what a sibling hides: a lookup tool returning the
     identifier its neighbour drops.
 
-    Declared on the registry entry's
+    Declared as the spec's own ``field_audiences``, which a registry entry's
     [`OfflineContract`][rest_framework_services.types.offline_contract.OfflineContract]
-    and resolved here, so the field set an agent sees does not depend on which
-    agent transport served it."""
+    carries to ``register_specs``, or passed in an ``agent_contract=`` at
+    registration, and resolved here, so the field set an agent sees does not
+    depend on which agent transport served it."""
+
+    server_arguments: ServerArguments = field(default_factory=ServerArguments)
+    """Declared parameters the server answers for, so no caller does.
+
+    The kernel's
+    [`ServerArguments`][django_service_specs.types.server_arguments.ServerArguments],
+    given as ``server_arguments=`` at registration. Its ``values`` are supplied
+    on every call and outrank the caller's; its ``withheld`` names are taken
+    from no one, so the callable's own default answers. ``tools/list`` leaves
+    every one of them out of the ``inputSchema`` and its ``required``, and each
+    ``tools/call`` route drops the caller's value for them before anything reads
+    the arguments (``handlers.utils.apply_tool_server_arguments``). Static for
+    the binding's lifetime: a value computed per request is not this. Checked
+    against the spec when the binding is registered, so one that cannot mean
+    what it says fails at startup (``ToolRegistry.register``)."""
 
     @property
     def output_serializer(self) -> type | None:
@@ -242,7 +261,7 @@ class SelectorToolBinding(Generic[ResultT, ExtraT]):
         return self.spec.output_serializer
 
     @property
-    def rendered_affordances(self) -> Mapping[str, ServiceSpec[Any, Any, Any]] | None:
+    def rendered_affordances(self) -> Mapping[str, AffordanceDeclarer] | None:
         """The ``affordances`` answered on every rendered item, if any are declared.
 
         The spec's own mapping, which drf-services' renderer adds to each item

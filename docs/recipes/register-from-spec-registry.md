@@ -12,14 +12,14 @@ end up writing the list once per transport — and the lists drift. A spec gets
 added to the MCP wiring and forgotten in the agent's, or the same operation
 ends up named `create_order` here and something else there.
 
-`SpecRegistry` (`djangorestframework-services` 0.27+) is the one declaration
-site. `MCPServer.register_specs` is the MCP end of it.
+`SpecRegistry` (from `django-service-specs`, which `djangorestframework-services`
+re-exports) is the one declaration site. `MCPServer.register_specs` is the MCP end of it.
 
 ## Declare once
 
 ```python
 # orders/registry.py
-from rest_framework_services import SpecRegistry
+from django_service_specs import SpecRegistry
 
 registry = SpecRegistry()
 
@@ -59,6 +59,15 @@ Each entry becomes a tool: a `ServiceSpec` goes through
 `register_service_tool`, a `SelectorSpec` through `register_selector_tool`.
 Registration order is the registry's order, so `tools/list` stays stable.
 
+Both are the `djangorestframework-services` specs (`from rest_framework_services
+import ServiceSpec, SelectorSpec`), because this server dispatches through
+drf-services, which runs a DRF-bound spec. A `SpecRegistry` also accepts the
+kernel's own `django_service_specs.ServiceSpec` / `SelectorSpec` and any object
+with `as_kernel_spec()`; `register_specs` refuses such an entry with a
+`TypeError` naming the tool and the type it found. For a kernel spec it adds that
+`django_service_specs.dispatch` runs one with no transport; for anything else it
+names the import to declare the operation with.
+
 This is a **source for** the server's own `ToolRegistry`, not a replacement for
 it. Every tool still lands as a normal binding, and names still share the one
 MCP tool namespace — registering a name twice raises, exactly as before.
@@ -87,7 +96,7 @@ server.register_specs(
 
 Each value is the keyword arguments for that entry's registration method, so
 anything those methods accept works — `title`, `output_format`,
-`include_output_schema`, `rate_limits`, `url_kwargs`, and the rest.
+`include_output_schema`, `rate_limits`, `server_arguments`, and the rest.
 
 A fact about the **operation** is not an MCP knob, though, even when MCP has a
 hint for it. Whether repeating a refund is safe is true of the refund on every
@@ -98,6 +107,7 @@ transport, so it is declared once on the spec, where each transport reads it:
 refund_order = ServiceSpec(
     service=refund_order_service,
     input_serializer=RefundInput,
+    permission_classes=[IsAdminUser],
     # Declared, not left unsaid: a second call refunds again.
     idempotent=False,
 )
@@ -110,28 +120,109 @@ spec that declares nothing (`idempotent=None`, the default) gets no hint, and an
 
 ## What the entry already says
 
-An entry may carry an
-[`OfflineContract`][rest_framework_services.types.offline_contract.OfflineContract]:
-the `url_kwargs`, `query_params` and `field_audiences` a caller with **no HTTP
-request** has to be told, because the URLconf and query string tell an HTTP one
-for free. `register_specs` reads it as this mount's default, so the same entry
-mounted here and in an in-process Pydantic-AI toolset synthesises the same
-absent request:
+A spec declares what a caller with **no HTTP request** has to be told, because
+the URLconf and query string tell an HTTP one for free: the route captures and
+query values it reads, as its `reads`, and the output fields an agent sees, as
+its `field_audiences`. Every registrar reads both off the spec, so the same
+entry mounted here and in an in-process Pydantic-AI toolset synthesises the
+same absent request:
 
 ```python
-registry.register(
-    "list_project_orders",
-    orders_spec,
-    agent_contract=OfflineContract(url_kwargs=(UrlKwarg("project_pk", type="integer"),)),
+from django_service_specs import SelectorKind
+from rest_framework.permissions import IsAuthenticated
+from rest_framework_services import SelectorSpec, UrlKwarg
+
+orders_spec = SelectorSpec(
+    kind=SelectorKind.LIST,
+    selector=list_project_orders,
+    permission_classes=[IsAuthenticated],
+    reads=[UrlKwarg("project_pk", type="integer")],
 )
+registry.register("list_project_orders", orders_spec)
 
 server.register_specs(registry)  # the tool takes project_pk, declared once
 ```
 
-A per-tool `url_kwargs` / `query_params` override wins over it. Overriding
-`agent_contract` itself replaces the entry's outright — the only way to mount an
-entry with *fewer* channels than it declares, since an empty tuple at the mount
-reads as saying nothing rather than saying none.
+`SpecRegistry.register` takes no `agent_contract=` (drf-services 0.58.0 removed
+it). To add channels to an entry registered elsewhere, re-declare the spec it
+holds with `dataclasses.replace` and mount the result:
+
+```python
+from dataclasses import replace
+
+from django_service_specs import SpecRegistry
+from rest_framework_services import QueryParam, UrlKwarg
+
+entry = registry.get("list_project_orders")
+scoped = SpecRegistry(
+    [
+        replace(
+            entry,
+            spec=replace(
+                entry.spec,
+                reads=[UrlKwarg("project_pk", type="integer"), QueryParam("since")],
+            ),
+        )
+    ]
+)
+
+server.register_specs(scoped)  # the tool takes project_pk and since
+```
+
+`register_specs` passes nothing about an entry's channels: each registrar reads
+the spec's own `reads` and `field_audiences`, so the spec above registered with
+`register_selector_tool(spec=...)` is the same tool, advertising the same
+arguments.
+
+A `QueryParam` read naming one of the selector's own parameters is served, on
+every route: the spec says where the parameter comes from, so it is not a
+shadow. It is advertised once, as the selector's parameter, and the value
+reaches both the parameter and `request.query_params`. A query param declared at
+the mount (`query_params=`, or an `agent_contract=` carrying one) and named like
+a selector parameter is still refused, because that value would be routed away
+from the parameter.
+
+### Answering an argument for the caller: `server_arguments`
+
+A mount that already knows an argument - the project this server is scoped to,
+say - answers it with a
+[`ServerArguments`][django_service_specs.ServerArguments] from
+`django_service_specs`, as an override like any other:
+
+```python
+from django_service_specs import ServerArguments
+
+server.register_specs(
+    registry,
+    overrides={
+        "list_project_orders": {
+            "server_arguments": ServerArguments(
+                values={"project_pk": 7},  # always this project
+                withheld={"since"},  # never the caller's; the default applies
+            ),
+        },
+    },
+)
+```
+
+Both names leave the tool's `inputSchema` and its `required` list, so the model
+is never asked for them. A caller sending one anyway has its value dropped
+before anything reads it, and the server logs the tool and the argument names at
+`WARNING`, never the values. Registration checks the binding: a name the spec
+does not declare, a value its declared type refuses, and a withheld name with no
+default each raise `ImproperlyConfigured` naming the tool. See
+[server-supplied arguments](../concepts.md#server-arguments) for the full rule.
+
+The values are fixed for the life of the server. A value computed per request,
+such as a project read off the signed-in user, is not something
+`server_arguments` carries; scope it in a `kwargs=` provider or a permission.
+
+The `url_kwargs`, `query_params` and `agent_contract` overrides are deprecated
+and warn: each declares at the mount what the spec declares itself. While they
+last, an explicit `url_kwargs` / `query_params` replaces the spec's reads of
+that kind in what the tool advertises, and `agent_contract` replaces all of them
+and the audiences. None of them takes a channel away from dispatch, which still
+reads the spec's own declaration; only `withheld` does.
 
 Two things fail loudly rather than quietly:
 
@@ -160,10 +251,13 @@ names are unique *within* a registry, so two registries may reuse one.
 
 ## Permissions are not bypassed
 
-`register_specs` calls the same per-tool methods you would have called, so the
-permission-declaration guard still applies to every entry. A spec with no
-`permission_classes` and no `permissions` override is **refused** with
-`ImproperlyConfigured` — or, under
+A spec declaring no permissions at all never reaches this server:
+`SpecRegistry.register` refuses it (drf-services 0.58.0), because off HTTP there
+is no view whose policy it could inherit. `permission_classes=[]` still
+registers, as a spec with no guards, and `register_specs` calls the same
+per-tool methods you would have called, so the permission-declaration guard
+applies to it. A spec with empty `permission_classes` and no `permissions`
+override is **refused** with `ImproperlyConfigured` — or, under
 `REST_FRAMEWORK_MCP["REQUIRE_TOOL_PERMISSIONS"] = False`, downgraded to an
 `UnguardedToolWarning`.
 

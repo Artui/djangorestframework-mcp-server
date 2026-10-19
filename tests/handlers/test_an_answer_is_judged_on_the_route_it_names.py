@@ -31,8 +31,8 @@ import pytest
 from asgiref.sync import async_to_sync, sync_to_async
 from django.http import HttpRequest
 from django.test import AsyncClient, Client, override_settings
+from django_service_specs import SelectorKind
 from rest_framework.permissions import BasePermission
-from rest_framework_services.types.selector_kind import SelectorKind
 from rest_framework_services.types.selector_spec import SelectorSpec
 from rest_framework_services.types.service_spec import ServiceSpec
 

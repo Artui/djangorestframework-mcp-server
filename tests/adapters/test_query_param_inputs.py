@@ -23,10 +23,10 @@ from typing import Annotated, Any
 import django_filters
 import pytest
 from django.core.exceptions import ImproperlyConfigured
+from django_service_specs import SelectorKind, UnsetType
 from rest_framework import serializers as drf_serializers
 from rest_framework_dataclasses.serializers import DataclassSerializer
-from rest_framework_services import NotClientInput, UnsetType
-from rest_framework_services.types.selector_kind import SelectorKind
+from rest_framework_services import NotClientInput
 from rest_framework_services.types.selector_spec import SelectorSpec
 from rest_framework_services.types.service_spec import ServiceSpec
 from typing_extensions import TypedDict
@@ -39,7 +39,9 @@ from rest_framework_mcp.transport.in_memory_session_store import InMemorySession
 from tests.handlers.test_query_params import _ctx
 from tests.testapp.models import Invoice
 
-_SPREADING = [ArgumentBinding.SPREAD_AUTHOR_WINS, ArgumentBinding.SPREAD_CALLER_WINS]
+# The one spreading binding drf-services accepts: ``SPREAD_CALLER_WINS`` is retired
+# and raises ``ValueError`` at dispatch.
+_SPREADING = [ArgumentBinding.SPREAD_AUTHOR_WINS]
 
 _REMEDIES = (
     "Fill the parameter from request.query_params with a kwargs= provider whose "
@@ -283,9 +285,8 @@ async def test_a_parameter_a_typed_provider_fills_is_served(
 ) -> None:
     # The way to route a query parameter to a selector: the QueryParam takes the
     # caller's value to ``request.query_params``, and the provider hands it to
-    # the parameter. Refused as a shadow before. Under ``SPREAD_CALLER_WINS``
-    # the schema still offers the name, so only the check's own subtraction of
-    # what the provider fills exempts it.
+    # the parameter. Refused as a shadow before. The schema does not offer a
+    # name the provider fills, so the check, which reads the schema, exempts it.
     server = _server()
     _register_selector(
         server,
@@ -303,15 +304,31 @@ async def test_a_parameter_a_typed_provider_fills_is_served(
 async def test_a_spread_service_parameter_its_provider_fills_is_served(
     binding: ArgumentBinding,
 ) -> None:
-    # Under ``SPREAD_CALLER_WINS`` the service's schema offers ``status``
-    # though its provider fills it, so the check's subtraction is what exempts
-    # it there; under ``SPREAD_AUTHOR_WINS`` the schema leaves it out.
+    # The service's schema leaves out ``status``, which its provider fills, so
+    # the check, which reads the schema, exempts it.
     server = _server()
     _register_service(
         server,
         ServiceSpec(service=_set_flag, atomic=False, kwargs=_status_from_query),
         query_params=("status",),
         argument_binding=binding,
+    )
+    out = await server.acall_tool("act", {"status": "open"}, user=None)
+    assert isinstance(out, dict)
+    assert out["structuredContent"] == {"status": "open"}
+
+
+async def test_a_spread_service_parameter_spec_kwargs_provides_claims_is_served() -> None:
+    # A service tool's schema hides only what its provider's annotation says it
+    # fills, never a ``spec_kwargs_provides`` claim, so the check's own
+    # subtraction of the claimed names is what exempts ``status`` here.
+    server = _server()
+    _register_service(
+        server,
+        ServiceSpec(service=_set_flag, atomic=False, kwargs=_untyped_status_from_query),
+        query_params=("status",),
+        argument_binding=ArgumentBinding.SPREAD_AUTHOR_WINS,
+        spec_kwargs_provides=("status",),
     )
     out = await server.acall_tool("act", {"status": "open"}, user=None)
     assert isinstance(out, dict)

@@ -13,7 +13,7 @@ from typing import Any
 import pytest
 from asgiref.sync import async_to_sync
 from django.test import AsyncClient, Client, override_settings
-from rest_framework_services.types.affordance import Affordance
+from django_service_specs import Affordance
 from rest_framework_services.types.service_spec import ServiceSpec
 
 from rest_framework_mcp import MCPServer

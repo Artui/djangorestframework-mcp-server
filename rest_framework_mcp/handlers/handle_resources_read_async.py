@@ -2,12 +2,9 @@ from __future__ import annotations
 
 from typing import Any
 
+from django_service_specs import UNSET, base_pool
 from rest_framework.exceptions import PermissionDenied
-from rest_framework_services import (
-    UNSET,
-    base_pool,
-    resolve_callable_kwargs,
-)
+from rest_framework_services import resolve_callable_kwargs
 
 from rest_framework_mcp._compat.acall import acall
 from rest_framework_mcp._compat.tracing import span

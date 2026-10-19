@@ -6,9 +6,16 @@ from collections.abc import Awaitable, Iterable, Mapping, Sequence
 from typing import Any
 
 from django.http import HttpRequest
+from django_service_specs import (
+    ActionUnavailable,
+    PoolSeeds,
+    ServiceError,
+    ServiceValidationError,
+    UnsetType,
+    apply_server_arguments,
+)
 from rest_framework import serializers as drf_serializers
 from rest_framework_dataclasses.serializers import DataclassSerializer
-from rest_framework_services import UnsetType
 
 # Not a top-level export of the sister package, so this reaches past its stable
 # dispatch surface on purpose. It is the single implementation of "can this
@@ -17,13 +24,7 @@ from rest_framework_services import UnsetType
 # what would let the advertisement drift away from the enforcement again. A
 # rename upstream breaks this import loudly at start-up rather than quietly at
 # the wire, which is the failure mode to prefer here.
-from rest_framework_services.dispatch.utils import declared_input_keys
-from rest_framework_services.exceptions.action_unavailable import ActionUnavailable
-from rest_framework_services.exceptions.service_error import ServiceError
-from rest_framework_services.exceptions.service_validation_error import (
-    ServiceValidationError,
-)
-from rest_framework_services.types.pool_seeds import PoolSeeds
+from rest_framework_services.dispatch.utils import DROPPED_EDGE_SEEDS, declared_input_keys
 from rest_framework_services.types.service_spec import ServiceSpec
 
 from rest_framework_mcp._compat.reject_awaitable import reject_awaitable
@@ -43,6 +44,7 @@ from rest_framework_mcp.constants import (
     UnknownArguments,
 )
 from rest_framework_mcp.handlers.types.context import MCPCallContext
+from rest_framework_mcp.observability.get_logger import get_logger
 from rest_framework_mcp.output.enforce_result_bytes import enforce_result_bytes
 from rest_framework_mcp.output.error_tool_result import build_error_tool_result
 from rest_framework_mcp.protocol.types.json_rpc_error import JsonRpcError
@@ -56,6 +58,68 @@ from rest_framework_mcp.registry.types.tool_binding import ToolBinding
 from rest_framework_mcp.registry.types.url_kwarg import UrlKwarg
 from rest_framework_mcp.schema.types.agent_conventions import AgentConventions
 from rest_framework_mcp.schema.utils import declares_default, end_sentence, required_arguments
+
+logger = get_logger(__name__)
+
+
+def apply_tool_server_arguments(binding: Any, arguments: dict[str, Any]) -> dict[str, Any]:
+    """``arguments`` with the binding's ``server_arguments`` in place, the caller's dropped.
+
+    The first thing every ``tools/call`` route does with the arguments, once it
+    knows they are an object: ``handle_tools_call`` and its async sibling
+    before a task is created and before the permission check, ``call_spec_tool``
+    before it builds the dispatch view. So everything after reads the server's
+    value - the binding's stand-in and the spec's permission classes, the
+    strict ``split_url_kwargs`` of a ``required=True`` URL kwarg, and
+    ``refuse_missing_arguments`` - and a bound value fills a required read
+    rather than being refused as missing before it arrives
+    (``test_a_binding_fills_a_required_read_over_the_wire``, whose cases are
+    sized so each of those two checks is the one that would answer). The
+    service routes call it again on the arguments a retry's answers produce,
+    because that merge takes any key
+    (``test_an_answer_cannot_replace_a_bound_value``).
+
+    The rule is the kernel's ``apply_server_arguments``: the caller's value for
+    every bound or withheld name is dropped before anything reads it, so a
+    malformed one cannot refuse the call, and the bound values are laid over
+    what is left.
+
+    **A dropped value is logged at ``WARNING`` with the tool's name and the
+    argument names, never the values**, which are the consumer's data. A
+    withheld name is logged whenever the caller sent it; a bound one when the
+    caller's value is not the one the server applies, compared by ``repr`` as
+    ``same_arguments`` compares, so a task worker replaying the arguments this
+    already applied logs nothing a second time. One arc to coverage: without
+    the withheld condition a withheld ``"null"`` goes unlogged
+    (``test_the_bound_project_wins_and_the_withheld_sibling_is_dropped``), and
+    without the comparison a caller restating the bound value is logged
+    (``test_a_caller_restating_the_bound_value_is_not_logged``).
+
+    A binding that binds nothing - and a chain tool, which carries no
+    ``server_arguments`` - gets its arguments back untouched, the same object,
+    without the kernel's rule being run. Also one arc: without the first
+    condition every chain call fails on the missing attribute
+    (``test_a_chain_tool_degrades_instead_of_asking``), and without the second
+    the kernel's rule runs for every tool
+    (``test_a_tool_binding_nothing_never_reaches_the_kernels_rule``).
+    """
+    server = getattr(binding, "server_arguments", None)
+    if server is None or not server.names():
+        return arguments
+    applied = apply_server_arguments(binding.spec, arguments, server)
+    dropped = sorted(
+        name
+        for name in server.names() & arguments.keys()
+        if name in server.withheld or repr(arguments[name]) != repr(applied[name])
+    )
+    if dropped:
+        logger.warning(
+            "MCP tool %r: dropped the caller's value for %s, which the tool's server_arguments "
+            "supply or withhold.",
+            binding.name,
+            ", ".join(dropped),
+        )
+    return applied
 
 
 def split_url_kwargs(
@@ -225,16 +289,16 @@ def advertises_closed_schema(binding: Any) -> bool:
     its ``resolve_unknown_arguments`` refuses against. Two conjuncts, one
     branch arc, so each names the test that fails without it:
 
-    - the policy dispatch receives is ``REJECT``: ``IGNORE`` and
-      ``PASSTHROUGH`` serve an undeclared name. The ``IGNORE`` and
-      ``PASSTHROUGH`` rows of
+    - the policy dispatch receives is ``REJECT``: ``IGNORE`` drops an
+      undeclared name rather than refusing it. The ``IGNORE`` rows of
       ``test_the_advertised_properties_are_the_keys_dispatch_admits``.
     - the declared set is enumerable under the binding dispatch runs: a target
       lookup taking a bare ``**kwargs`` or carrying a ``filter_set`` opens it,
-      and so does a spread service's own bare ``**kwargs``, and an open set is
-      answered by serving every undeclared name. The ``var-keyword`` rows under
-      ``SPREAD_*`` and
-      ``test_a_bare_var_keyword_keeps_the_schema_open_and_receives_every_key``;
+      and so does a spread service's own bare ``**kwargs``, and an open set
+      refuses no undeclared name: drf-services drops it before any callable
+      runs, a bare ``**kwargs`` included. The ``var-keyword`` rows under
+      ``SPREAD_AUTHOR_WINS`` and
+      ``test_a_bare_var_keyword_keeps_the_schema_open_and_refuses_no_key``;
       passing the binding is what makes ``BUNDLE`` close the same service.
 
     An ``input_serializer`` is not a condition: without one, drf-services
@@ -471,6 +535,22 @@ def dispatch_shape(
     """
     params, url_kwarg_values = split_url_kwargs(arguments, binding.url_kwargs, refuse_missing=False)
     params, query_param_values = split_query_params(params, binding.query_params)
+    # A ``QueryParam`` the spec declares and the binding does not route (one
+    # named like a selector parameter, or one a deprecated ``query_params=``
+    # left out) stays among the arguments, and drf-services writes the sent
+    # value onto the dispatch request's query string from the declaration. The
+    # stand-in and the spec's class-level check judge this shape before that
+    # happens, so it carries the value too
+    # (``test_a_specs_own_query_param_naming_a_selector_parameter_is_served_on_every_route``).
+    # A read the binding routes was popped by the split, so it is not met here.
+    # One arc to coverage: without the first condition a ``UrlKwarg`` read a
+    # deprecated ``url_kwargs=`` left out lands in the query string
+    # (``test_a_url_kwarg_read_never_reaches_the_query_string``); without the
+    # second a null is a value, which ``split_query_params`` says it is not
+    # (``test_a_null_for_a_specs_own_query_param_is_no_query_value``).
+    for read in binding.spec.reads or ():
+        if isinstance(read, QueryParam) and params.get(read.name) is not None:
+            query_param_values = {**query_param_values, read.name: params[read.name]}
     # A copy, because both splits hand back the mapping they were given when
     # the binding declares nothing to split, and ``request.data`` is that
     # mapping uncopied: a permission writing into it wrote into the caller's
@@ -648,9 +728,13 @@ def build_validated_input_serializer(
         input_serializer: A DRF serializer class, a bare ``@dataclass`` (wrapped
             in a ``DataclassSerializer``), or ``None``.
         unknown_arguments: What to do with keys outside the declared set.
-            Reserved pool seeds and post-fetch keys are always exempt, and never
-            merged under ``PASSTHROUGH`` — the dispatch pipeline owns them, so a
-            client must not be able to poison them.
+            Reserved pool seeds and post-fetch keys are always exempt: the
+            dispatch pipeline owns them, so a client must not be able to poison
+            them. ``PASSTHROUGH`` raises ``ValueError``, as drf-services' own
+            dispatch does for it, because a chain step is dispatched here rather
+            than through ``dispatch_spec`` and would otherwise run it as
+            ``IGNORE`` without a word. ``register_chain_tool`` refuses it first;
+            this answers a binding built by hand.
         additional_known_keys: Widens the known set beyond the serializer's own
             fields; selector tools pass their filter / ordering / pagination keys.
         partial: Relaxes required-field validation. MCP has no HTTP method to
@@ -667,7 +751,18 @@ def build_validated_input_serializer(
     Raises:
         drf_serializers.ValidationError: On invalid or, under ``REJECT``,
             unknown input.
+        ValueError: For ``UnknownArguments.PASSTHROUGH``, with or without a
+            serializer
+            (``test_a_chain_under_passthrough_raises_as_drf_services_dispatch_does``).
     """
+    if unknown_arguments is UnknownArguments.PASSTHROUGH:
+        # drf-services' wording (``refuse_retired_modes``), so a project meets
+        # one message whichever path refused the policy.
+        raise ValueError(
+            "UnknownArguments.PASSTHROUGH is retired: an argument the spec does not declare "
+            "never reaches a callable. Declare it (a reads entry, a serializer field or a "
+            "parameter), then pass UnknownArguments.IGNORE or UnknownArguments.REJECT."
+        )
     if input_serializer is None:
         return None, None
     target: type = input_serializer
@@ -687,10 +782,16 @@ def build_validated_input_serializer(
         serializer = target(**serializer_kwargs)
 
     declared_fields: set[str] = set(serializer.fields.keys())
+    # ``DROPPED_EDGE_SEEDS`` (``request``, ``serializer``) beside the kernel's seeds:
+    # drf-services drops a caller's key of either name as it drops a reserved seed's,
+    # on the service path and the selector path alike, so refusing it here would make
+    # a selector tool's input serializer refuse what the service path quietly drops
+    # (``test_a_name_drf_services_drops_is_not_refused_as_unknown``).
     known: set[str] = (
         declared_fields
         | set(additional_known_keys)
         | RESERVED_POOL_SEEDS
+        | DROPPED_EDGE_SEEDS
         | RESERVED_POST_FETCH_KEYS
     )
     unknown_keys: set[str] = set(arguments.keys()) - known
@@ -702,18 +803,7 @@ def build_validated_input_serializer(
         )
 
     serializer.is_valid(raise_exception=True)
-    validated: Any = serializer.validated_data
-
-    # A ``DataclassSerializer`` returns a dataclass instance, which is not a
-    # merge target, so those bindings get IGNORE-equivalent behaviour even under
-    # PASSTHROUGH.
-    if unknown_keys and unknown_arguments is UnknownArguments.PASSTHROUGH:
-        merge_keys: set[str] = unknown_keys - RESERVED_POOL_SEEDS - RESERVED_POST_FETCH_KEYS
-        if isinstance(validated, dict):
-            for key in merge_keys:
-                validated.setdefault(key, arguments[key])
-
-    return validated, serializer
+    return serializer.validated_data, serializer
 
 
 def validate_input_against_serializer(
@@ -1142,6 +1232,7 @@ async def run_with_deadline(coro: Awaitable[Any], seconds: float | None) -> Any:
 __all__ = [
     "advertises_closed_items",
     "advertises_closed_schema",
+    "apply_tool_server_arguments",
     "binding_input_serializer",
     "build_validated_input_serializer",
     "chain_shape",

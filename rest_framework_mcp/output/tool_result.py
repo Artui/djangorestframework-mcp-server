@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from rest_framework_services import UNSET
+from django_service_specs import UNSET
 
 from rest_framework_mcp.constants import OutputFormat, ToolContentKind
 from rest_framework_mcp.output.build_content_blocks import build_content_blocks

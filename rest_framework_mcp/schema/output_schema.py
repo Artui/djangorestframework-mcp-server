@@ -3,10 +3,9 @@ from __future__ import annotations
 from collections.abc import Mapping
 from typing import Any
 
+from django_service_specs import AudienceProjection, SelectorKind
 from rest_framework_services import output_to_json_schema
-from rest_framework_services.types.audience_projection import AudienceProjection
-from rest_framework_services.types.selector_kind import SelectorKind
-from rest_framework_services.types.service_spec import ServiceSpec
+from rest_framework_services.types.affordance_declarer import AffordanceDeclarer
 
 from rest_framework_mcp.schema.agent_conventions import HANDLE_DESCRIPTION
 
@@ -17,7 +16,7 @@ def build_output_schema(
     kind: SelectorKind | None = None,
     paginate: bool = False,
     projection: AudienceProjection | None = None,
-    affordances: Mapping[str, ServiceSpec[Any, Any, Any]] | None = None,
+    affordances: Mapping[str, AffordanceDeclarer] | None = None,
     may_be_empty: bool = False,
     handle_description: str | None = HANDLE_DESCRIPTION,
 ) -> dict[str, Any] | None:

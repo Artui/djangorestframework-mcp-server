@@ -3,7 +3,7 @@ from __future__ import annotations
 from typing import Any
 
 from django.core.exceptions import ImproperlyConfigured
-from rest_framework_services import UNSET, UnsetType
+from django_service_specs import UNSET, UnsetType
 
 from rest_framework_mcp.conf import get_setting
 from rest_framework_mcp.config.types.mcp_config import MCPConfig

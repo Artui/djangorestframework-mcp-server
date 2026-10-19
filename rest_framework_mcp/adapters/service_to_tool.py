@@ -4,11 +4,12 @@ from collections.abc import Mapping
 from typing import Any
 
 from django.core.exceptions import ImproperlyConfigured
-from rest_framework_services import (
+from django_service_specs import (
     DEFAULT_POOL_SEEDS,
     UNSET,
     FieldMarking,
     PoolSeeds,
+    ServerArguments,
     UnsetType,
 )
 from rest_framework_services.types.service_spec import ServiceSpec
@@ -17,8 +18,10 @@ from rest_framework_mcp.adapters.utils import (
     merge_meta,
     merge_tool_annotations,
     validate_input_serializer_against_callable,
+    validate_lookup_key_fields,
     validate_query_param_inputs,
     validate_query_params,
+    validate_reserved_input_fields,
     validate_serializer_shapes,
     validate_url_kwarg_inputs,
     validate_url_kwargs,
@@ -68,6 +71,7 @@ def service_spec_to_tool(
     max_result_bytes: int | None | UnsetType = UNSET,
     dispatch_timeout: float | None | UnsetType = UNSET,
     pool_seeds: PoolSeeds = DEFAULT_POOL_SEEDS,
+    server_arguments: ServerArguments | None = None,
 ) -> ToolBinding:
     """Lift a ``ServiceSpec`` into a
     [`ToolBinding`][rest_framework_mcp.registry.types.tool_binding.ToolBinding].
@@ -124,6 +128,12 @@ def service_spec_to_tool(
         provides_instance=resolves and spec.collection_selector_spec is None,
         provides_collection=resolves and spec.collection_selector_spec is not None,
     )
+    validate_reserved_input_fields(
+        label=f"service tool {name!r}",
+        input_serializer=spec.input_serializer,
+        argument_binding=argument_binding,
+        pool_seeds=pool_seeds,
+    )
     validate_url_kwargs(
         label=f"service tool {name!r}", url_kwargs=url_kwargs, pool_seeds=pool_seeds
     )
@@ -164,6 +174,8 @@ def service_spec_to_tool(
         query_params=query_params,
         max_result_bytes=max_result_bytes,
         dispatch_timeout=dispatch_timeout,
+        # Checked when the binding is registered (``ToolRegistry.register``).
+        server_arguments=server_arguments or ServerArguments(),
     )
     # On the built binding, because both checks read the schema the binding
     # advertises, and before the binding is returned to be registered.
@@ -173,6 +185,9 @@ def service_spec_to_tool(
     validate_url_kwarg_inputs(
         binding, spec_kwargs_provides=frozenset(spec_kwargs_provides), pool_seeds=pool_seeds
     )
+    # After the channel checks, which name a field a ``UrlKwarg`` or ``QueryParam``
+    # shadows in their own words.
+    validate_lookup_key_fields(binding, pool_seeds=pool_seeds)
     return binding
 
 
@@ -189,15 +204,16 @@ def _validate_list_payload(
     MCP ``arguments`` is always an object, so the list travels under the one
     argument ``spec.many_argument`` names, and every dispatch passes drf-services
     ``many_as_argument=True`` to read it from there. Two declarations beside it
-    would fail every call rather than any one of them:
+    are refused at registration, because no call could honour them:
 
     - A ``UrlKwarg`` or ``QueryParam`` of the same name. Both channels pop their
       name out of the arguments before dispatch, so the list would be routed to
       ``view.kwargs`` or the query string and dispatch would answer every call as
       if the argument were missing.
-    - A ``SPREAD_*`` argument binding. The service receives the whole list as one
-      ``data``, so drf-services raises ``ValueError`` on each dispatch rather than
-      at registration.
+    - Any binding but ``BUNDLE``. The service receives the whole list as one
+      ``data``, so there is nothing to spread, and a binding saying otherwise
+      would register as a choice no call could follow
+      (``test_a_spreading_argument_binding_is_refused``).
     """
     if not spec.many:
         return

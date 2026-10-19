@@ -13,7 +13,8 @@ Pick the format per binding:
 
 ```python
 from rest_framework_mcp import OutputFormat
-from rest_framework_services import SelectorKind, SelectorSpec
+from django_service_specs import SelectorKind
+from rest_framework_services import SelectorSpec
 
 server.register_service_tool(
     name="invoices.list",

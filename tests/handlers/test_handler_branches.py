@@ -4,10 +4,10 @@ from dataclasses import dataclass
 from typing import Any
 
 import pytest
+from django.contrib.auth.models import AnonymousUser
 from django.http import HttpRequest
+from django_service_specs import SelectorKind, ServiceValidationError
 from rest_framework.permissions import BasePermission
-from rest_framework_services.exceptions.service_validation_error import ServiceValidationError
-from rest_framework_services.types.selector_kind import SelectorKind
 from rest_framework_services.types.selector_spec import SelectorSpec
 from rest_framework_services.types.service_spec import ServiceSpec
 
@@ -468,29 +468,6 @@ def test_service_tool_with_merge_binding_spreads_args_to_callable_params() -> No
     assert out["structuredContent"] == {"pid": "p1", "expand": True}
 
 
-def test_service_tool_with_replace_binding_lets_client_override_provider() -> None:
-    from rest_framework_mcp.constants import ArgumentBinding
-
-    def provider(view: Any, request: Any) -> dict[str, Any]:  # noqa: ARG001
-        return {"page_size": 50}
-
-    def svc(*, page_size: int) -> dict[str, int]:
-        return {"got": page_size}
-
-    tools = ToolRegistry()
-    tools.register(
-        ToolBinding(
-            name="t",
-            description=None,
-            spec=ServiceSpec(service=svc, atomic=False, kwargs=provider),
-            argument_binding=ArgumentBinding.SPREAD_CALLER_WINS,
-        )
-    )
-    out = handle_tools_call({"name": "t", "arguments": {"page_size": 200}}, _ctx(tools))
-    assert isinstance(out, dict)
-    assert out["structuredContent"] == {"got": 200}
-
-
 def test_service_tool_merge_pool_seeds_cannot_be_overridden_by_client() -> None:
     """Reserved pool-seed keys (``user`` / ``request`` / ``data``) are stripped from spread."""
     from rest_framework_mcp.constants import ArgumentBinding
@@ -512,8 +489,9 @@ def test_service_tool_merge_pool_seeds_cannot_be_overridden_by_client() -> None:
         )
     )
     handle_tools_call({"name": "t", "arguments": {"user": "evil", "ok": 1}}, _ctx(tools))
-    # User came from the transport (None in test), not from the client.
-    assert received["user"] is None
+    # User came from the transport, not from the client: the test token carries
+    # ``user=None``, which drf-services seeds as the anonymous user.
+    assert isinstance(received["user"], AnonymousUser)
     assert received["ok"] == 1
 
 

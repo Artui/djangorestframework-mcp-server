@@ -4,15 +4,21 @@ import dataclasses
 from collections.abc import Callable, Iterable
 from typing import Any
 
+from django_service_specs import (
+    DEFAULT_POOL_SEEDS,
+    UNSET,
+    PoolSeeds,
+    ServerArguments,
+    provider_keys,
+)
 from rest_framework import serializers as drf_serializers
 from rest_framework.fields import empty
 from rest_framework_dataclasses.serializers import DataclassSerializer
-from rest_framework_services import UNSET, provider_keys, server_owned_keys, spec_to_json_schema
-from rest_framework_services.types.pool_seeds import DEFAULT_POOL_SEEDS, PoolSeeds
+from rest_framework_services import server_owned_keys, spec_to_json_schema
+from rest_framework_services.dispatch.utils import DROPPED_EDGE_SEEDS
 from rest_framework_services.types.selector_spec import SelectorSpec
 from rest_framework_services.types.service_spec import ServiceSpec
 
-from rest_framework_mcp.constants import ArgumentBinding
 from rest_framework_mcp.registry.types.selector_tool_binding import SelectorToolBinding
 from rest_framework_mcp.registry.types.tool_binding import ToolBinding
 from rest_framework_mcp.registry.types.url_kwarg import UrlKwarg
@@ -59,7 +65,6 @@ def selector_inputs(
     url_kwargs: Iterable[UrlKwarg] = (),
     pool_seeds: PoolSeeds = DEFAULT_POOL_SEEDS,
     provides: frozenset[str] = frozenset(),
-    caller_wins: bool = False,
 ) -> tuple[dict[str, Any], tuple[str, ...]]:
     """A selector's input schema as this server calls it, and what a call needs.
 
@@ -67,7 +72,7 @@ def selector_inputs(
     transport fills, so drf-services' reflection is told: ``supplied`` names what
     this server fills in the pool ``dispatch_spec`` calls the selector with, read
     from the sources that pool is built from. A supplied name is not advertised,
-    and every other parameter without a default is required. The union has four
+    and every other parameter without a default is required. The union has five
     parts, each held by a test, because deleting one leaves every branch covered:
 
     - ``pool_seeds.reserved``: drf-services' own seeds and the registered ones.
@@ -76,6 +81,11 @@ def selector_inputs(
       to any ``supplied`` set itself, so the registered half is the part only
       this server can state. Held by ``test_a_registered_seed_is_not_advertised``
       and ``test_a_lookup_parameter_the_server_seeds_is_not_advertised``.
+    - ``DROPPED_EDGE_SEEDS``: ``request`` and ``serializer``, whose caller's
+      value the DRF edge drops, and which the kernel's reserved set no longer
+      lists. The reflection already counts ``request``; without this a
+      ``serializer`` parameter with a default was advertised and then dropped.
+      Held by ``test_a_selectors_serializer_parameter_is_not_advertised``.
     - the name of every ``UrlKwarg`` declaring a default, which reaches the pool
       through ``view.kwargs`` whenever the client leaves it out. Held by
       ``test_a_url_kwarg_with_a_default_fills_the_parameter_so_it_is_not_required``.
@@ -120,24 +130,11 @@ def selector_inputs(
     ``provides`` still drops its names beside an untyped provider: declaring a
     name is not a claim that the provider fills nothing else.
 
-    **Under ``SPREAD_CALLER_WINS`` (``caller_wins``) the provider's keys and the
-    ``provides`` names are offered rather than supplied**: advertised as the
-    reflection describes them, and neither required nor checked, marker or not,
-    because dispatch applies the caller's spread after them, so they fill a name
-    only when the caller sends none. Held by
-    ``test_under_caller_wins_a_typed_providers_keys_are_offered_but_not_required``,
-    ``test_under_caller_wins_a_spec_kwargs_provides_name_is_offered_but_not_required``
-    and, on the call side, ``test_under_caller_wins_a_provider_filled_name_is_not_refused``.
-    "Marker or not" means ``name in declared`` does not keep an offered name,
-    which ``test_under_caller_wins_a_marked_provider_key_is_neither_required_nor_refused``
-    holds on the schema and on every route's call. Only a selector tool passes
-    ``caller_wins``: drf-services lays a target lookup's provider over the
-    arguments under every binding, so a lookup is read author-wins
+    **Every binding reads the provider author-wins**: drf-services lays a
+    spec's ``kwargs=`` provider over the caller's spread under every
+    ``ArgumentBinding`` it accepts, so a name the provider fills is supplied
+    whichever binding the tool declares, a target lookup's included
     (``test_a_target_lookups_provider_outranks_the_caller_under_every_binding``).
-    A seed and a defaulted ``UrlKwarg`` stay supplied under every binding,
-    because dispatch strips a reserved name from the caller's spread and the
-    channel split pops a ``UrlKwarg`` name out of it
-    (``test_under_caller_wins_a_seed_is_still_not_advertised``).
 
     The second value is what a call is refused without: the schema's own
     ``required`` less every name a provider may fill, so the call and the
@@ -156,18 +153,13 @@ def selector_inputs(
     keys = provider_keys(spec.kwargs)
     filled, declinable = keys if keys is not None else (frozenset(), frozenset())
     defaulted = frozenset(uk.name for uk in url_kwargs if declares_default(uk.default))
-    supplied = pool_seeds.reserved | defaulted
-    offered: frozenset[str] = frozenset()
-    if caller_wins:
-        offered = filled | provides
-    else:
-        supplied |= filled | provides
+    supplied = pool_seeds.reserved | DROPPED_EDGE_SEEDS | defaulted | filled | provides
     # ``phase="input"`` always returns a dict (only the output phase is
     # nullable), so ``or {}`` here and below only narrows the type.
     schema: dict[str, Any] = spec_to_json_schema(spec, phase="input", supplied=supplied) or {}
     uninformed: dict[str, Any] = spec_to_json_schema(spec, phase="input") or {}
     declared: list[str] = uninformed.get("required", [])
-    required = [name for name in schema.get("required", []) if name not in offered]
+    required: list[str] = schema.get("required", [])
     # ``None`` is every name: a provider whose keys cannot be read may fill any.
     checked = () if keys is None else tuple(name for name in required if name not in declinable)
     kept = [name for name in required if name in checked or name in declared]
@@ -193,6 +185,27 @@ def target_lookup(spec: ServiceSpec[Any, Any, Any]) -> SelectorSpec[Any, Any] | 
     return spec.instance_selector_spec
 
 
+def caller_fields(input_serializer: type | None) -> dict[str, Any]:
+    """Each field the caller sends, by its name on the wire, with its declaration if it has one.
+
+    The names are what ``build_input_schema`` advertises, which leaves out a
+    read-only field and reads a dataclass's fields and a ``ModelSerializer``'s
+    generated ones too. A ``HiddenField`` is advertised there but takes nothing
+    from the caller, so it is left out here (the ``hidden`` cases of
+    ``test_a_field_that_takes_nothing_from_the_caller_registers`` and
+    ``test_a_hidden_field_of_an_owned_lookup_key_is_not_asked_of_the_caller``). A generated
+    field has no declaration, and binds to its own name.
+    """
+    if input_serializer is None:
+        return {}
+    declared: dict[str, Any] = getattr(input_serializer, "_declared_fields", {})
+    return {
+        name: declared.get(name)
+        for name in build_input_schema(input_serializer).get("properties", {})
+        if not isinstance(declared.get(name), drf_serializers.HiddenField)
+    }
+
+
 def required_arguments(
     binding: SelectorToolBinding | ToolBinding,
     *,
@@ -216,11 +229,20 @@ def required_arguments(
     **A service tool's lookup key the server owns is not required of the
     caller**, as the service tool's schema does not advertise it: a key the
     service or one of its preconditions marks ``NotClientInput``
-    (``server_owned_keys``), less the names the ``input_serializer``'s schema
-    lists, which stay the caller's input. drf-services drops the caller's value
-    for such a key before the lookup reads it, so refusing a call for leaving
-    it out named a key no resend could deliver; one nothing on the server
-    fills is the author's gap, which drf-services answers as the lookup's own
+    (``server_owned_keys``), less the fields the caller sends
+    (``caller_fields``), as ``service_tool_schema`` subtracts them. A
+    ``HiddenField`` of the key's name is not one of those, so it does not put
+    the key back (``test_a_hidden_field_of_an_owned_lookup_key_is_not_asked_of_the_caller``).
+    The registrars refuse a writable field of a lookup key's name
+    (``adapters.utils.validate_lookup_key_fields``), so only a binding built by
+    hand and passed to ``server.tools.register``, which skips that refusal,
+    reaches the subtraction here with a name it removes; there it keeps
+    asking for the field the schema advertises, so the two sides agree
+    (``test_the_check_and_the_schema_agree_on_a_hand_registered_owned_key_field``).
+    drf-services drops the caller's value for
+    such a key before the lookup reads it, so refusing a call for leaving it
+    out named a key no resend could deliver; one nothing on the server fills
+    is the author's gap, which drf-services answers as the lookup's own
     error. Held by ``test_a_lookup_key_the_server_owns_is_not_asked_of_the_caller``.
     """
     if isinstance(binding, SelectorToolBinding):
@@ -234,9 +256,8 @@ def required_arguments(
     # provider over the arguments in every mode.
     required = selector_inputs(lookup, url_kwargs=binding.url_kwargs, pool_seeds=pool_seeds)[1]
     # The subtraction ``service_tool_schema`` applies to what it advertises,
-    # read off the same serializer schema, so the two cannot drift apart.
-    fields: dict[str, Any] = build_input_schema(binding.spec.input_serializer).get("properties", {})
-    owned = server_owned_keys(binding.spec) - frozenset(fields)
+    # read off the same ``caller_fields``, so the two cannot drift apart.
+    owned = server_owned_keys(binding.spec) - caller_fields(binding.spec.input_serializer).keys()
     return tuple(name for name in required if name not in owned)
 
 
@@ -261,10 +282,6 @@ def selector_tool_inputs(
       leaving it out is served. Left out when ``input_serializer_runs`` is
       false, for the route that does not run the serializer
       (``required_arguments``).
-
-    The binding's ``argument_binding`` says whether the caller's spread outranks
-    the provider (``SPREAD_CALLER_WINS``), which decides whether those names
-    and the provider's keys are hidden or offered.
     """
     provides = frozenset(binding.spec_kwargs_provides)
     if input_serializer_runs:
@@ -274,7 +291,6 @@ def selector_tool_inputs(
         url_kwargs=binding.url_kwargs,
         pool_seeds=pool_seeds,
         provides=provides,
-        caller_wins=binding.argument_binding is ArgumentBinding.SPREAD_CALLER_WINS,
     )
 
 
@@ -387,7 +403,36 @@ def _dataclass_default(field: dataclasses.Field[Any]) -> Callable[[], Any] | Non
     return None
 
 
+def without_server_arguments(schema: dict[str, Any], server: ServerArguments) -> dict[str, Any]:
+    """``schema`` with every name ``server`` answers left out of ``properties`` and ``required``.
+
+    What both tool schema builders apply last, so ``tools/list`` never offers a
+    name the server supplies or withholds, and never requires one: the
+    subtraction the kernel's ``ServerArguments.names`` exists for, made beside
+    the one each builder makes for ``server_owned_keys``. A schema whose
+    ``required`` this empties carries no ``required`` key, as the builders
+    leave it out when nothing is required. A binding binding nothing gets its
+    schema back as built.
+    """
+    names = server.names()
+    if not names:
+        return schema
+    out: dict[str, Any] = {
+        **schema,
+        "properties": {
+            key: value for key, value in schema.get("properties", {}).items() if key not in names
+        },
+    }
+    required = [name for name in schema.get("required", []) if name not in names]
+    if required:
+        out["required"] = required
+    else:
+        out.pop("required", None)
+    return out
+
+
 __all__ = [
+    "caller_fields",
     "declares_default",
     "end_sentence",
     "laid_back_inputs",
@@ -395,4 +440,5 @@ __all__ = [
     "selector_inputs",
     "selector_tool_inputs",
     "target_lookup",
+    "without_server_arguments",
 ]

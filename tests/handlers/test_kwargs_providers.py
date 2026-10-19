@@ -13,8 +13,8 @@ from typing import Any
 
 import pytest
 from django.http import HttpRequest
+from django_service_specs import SelectorKind
 from rest_framework.request import Request as DRFRequest
-from rest_framework_services.types.selector_kind import SelectorKind
 from rest_framework_services.types.selector_spec import SelectorSpec
 from rest_framework_services.types.service_spec import ServiceSpec
 
@@ -467,7 +467,7 @@ def test_a_provider_returning_unset_declines_rather_than_overriding() -> None:
     sentinel" — so the URI's own value stands, as it does on the HTTP and tool
     paths. Handing the sentinel to the selector turns a well-formed read into
     an internal error, or worse silently drops a scope."""
-    from rest_framework_services import UNSET
+    from django_service_specs import UNSET
 
     resources = _declining_resource(lambda view: {"project_pk": UNSET})
 
@@ -488,7 +488,7 @@ def test_a_provider_returning_a_value_still_wins() -> None:
 
 
 async def test_async_provider_returning_unset_declines_too() -> None:
-    from rest_framework_services import UNSET
+    from django_service_specs import UNSET
 
     resources = _declining_resource(lambda view: {"project_pk": UNSET})
 

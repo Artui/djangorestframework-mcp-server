@@ -18,7 +18,8 @@ in DRF's per-field `style` bag:
 
 ```python
 from rest_framework import serializers
-from rest_framework_services import MARKING, FieldMarking
+from django_service_specs import FieldMarking
+from rest_framework_services import MARKING
 
 
 class InvoiceSerializer(serializers.ModelSerializer):
@@ -79,42 +80,71 @@ cost its keys twice over and hide nothing.
 
 The serializer stays authoritative — it is the one declaration your REST API,
 this server, and any in-process toolset all read. When a single tool genuinely
-needs what its sibling hides, that is an override, and it belongs on the
-registry entry rather than on this mount:
+needs what its sibling hides, that is an override, and it belongs on the spec
+the registry holds rather than on this mount:
 
 ```python
-registry.register(
-    "lookup_invoice",
-    invoice_spec,
+from django_service_specs import FieldMarking, SelectorKind
+from rest_framework.permissions import IsAuthenticated
+from rest_framework_services import SelectorSpec
+
+invoice_spec = SelectorSpec(
+    kind=SelectorKind.RETRIEVE,
+    selector=get_invoice,
+    output_serializer=InvoiceSerializer,
+    permission_classes=[IsAuthenticated],
     # This tool returns the etag after all.
-    agent_contract=OfflineContract(field_audiences={"etag": FieldMarking()}),
+    field_audiences={"etag": FieldMarking()},
 )
+registry.register("lookup_invoice", invoice_spec, tags=("billing",))
 
 server.register_specs(registry.by_tag("billing"))
 ```
 
-`OfflineContract` is drf-services' carrier for what a caller with **no HTTP
-request** has to be told — the URL kwargs and query params an agent must supply
-by hand, and this. Declaring it on the entry is what keeps an in-process
-Pydantic-AI toolset and this server projecting the *same* field set: an audience
-is not a transport, so a field hidden from one agent caller and visible to
-another is a bug you would find in a transcript rather than in a test.
+Every registrar reads `field_audiences` off the spec, beside its `reads`.
+Declaring it on the spec is what keeps an in-process Pydantic-AI toolset and this
+server projecting the *same* field set: an audience is not a transport, so
+a field hidden from one agent caller and visible to another is a bug you would
+find in a transcript rather than in a test.
 
-A server registering a spec directly, with no registry in front of it, passes
-the same object:
+`SpecRegistry.register` takes no `agent_contract=` (drf-services 0.58.0 removed
+it). For an entry registered elsewhere, re-declare the spec it holds with
+`dataclasses.replace`:
 
 ```python
-server.register_selector_tool(
-    name="lookup_invoice",
-    spec=invoice_spec,
+from dataclasses import replace
+
+from django_service_specs import FieldMarking, SpecRegistry
+
+entry = registry.get("lookup_invoice")
+billing = SpecRegistry(
+    [replace(entry, spec=replace(entry.spec, field_audiences={"etag": FieldMarking()}))]
+)
+
+server.register_specs(billing)
+```
+
+A server registering a spec directly, with no registry in front of it, gets the
+same projection from the same declaration: `register_selector_tool(spec=...)`
+and `register_service_tool(spec=...)` read the spec's `field_audiences` as
+`register_specs` does.
+
+A chain has no spec of its own to declare them on, so `register_chain_tool`
+takes them as an
+[`OfflineContract`][rest_framework_services.types.offline_contract.OfflineContract]:
+
+```python
+server.register_chain_tool(
+    name="lookup_and_bill",
+    steps=[...],
     agent_contract=OfflineContract(field_audiences={"etag": FieldMarking()}),
 )
 ```
 
-It works the same on `register_service_tool` and `register_chain_tool` — a chain
-has no registry entry, so this is its only route — and as an `overrides` key on
-`register_specs`, which **replaces** the entry's contract rather than merging
-into it.
+On `register_selector_tool`, `register_service_tool` and as a `register_specs`
+override, `agent_contract=` is deprecated and warns: it declares at the mount
+what the spec declares itself, and replaces the spec's declaration outright
+while it lasts.
 
 Two fields left claiming `FieldMarking.label()` raises `ImproperlyConfigured`
 naming the tool: a record has one name, and picking one silently is the kind of

@@ -9,8 +9,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from rest_framework_services.exceptions.service_error import ServiceError
-from rest_framework_services.exceptions.service_validation_error import ServiceValidationError
+from django_service_specs import ServiceError, ServiceValidationError
 
 from invoices.models import Invoice
 

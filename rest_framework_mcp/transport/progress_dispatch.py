@@ -4,7 +4,7 @@ from collections.abc import Awaitable, Callable
 from typing import Any
 
 from django.http import StreamingHttpResponse
-from rest_framework_services.types.progress_reporter import ProgressReporter
+from django_service_specs import ProgressReporter
 
 from rest_framework_mcp.constants import PROGRESS_TOKEN_META_KEY, JsonRpcErrorCode
 from rest_framework_mcp.handlers.types.context import MCPCallContext

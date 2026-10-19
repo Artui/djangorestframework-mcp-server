@@ -13,8 +13,8 @@ from typing import Any
 
 import pytest
 from django.http import HttpRequest
+from django_service_specs import SelectorKind
 from rest_framework.permissions import BasePermission
-from rest_framework_services.types.selector_kind import SelectorKind
 from rest_framework_services.types.selector_spec import SelectorSpec
 
 from rest_framework_mcp import MCPServer
@@ -270,6 +270,34 @@ def test_a_non_orm_list_result_is_bounded_by_the_same_ceiling() -> None:
     out = _call(server, {}, build_mcp_config(max_page_size=2))
     assert isinstance(out, dict)
     assert "2 row ceiling" in tool_error(out)["message"]
+
+
+@pytest.mark.django_db
+def test_a_manager_returned_by_a_list_selector_is_bounded_by_the_same_ceiling() -> None:
+    """A Manager has no ``__iter__``, so it once read as a single value and passed
+    the ceiling unbounded; drf-services hands it over as its ``.all()``, so it is
+    refused as the QuerySet it stands for."""
+
+    def _manager(*, user: Any) -> Any:  # noqa: ARG001
+        return Invoice.objects
+
+    _seed(3)
+    server = _server()
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore")
+        server.register_selector_tool(
+            name="invoices.list",
+            spec=SelectorSpec(
+                kind=SelectorKind.LIST,
+                selector=_manager,
+                output_serializer=InvoiceOutputSerializer,
+            ),
+        )
+    out = _call(server, {}, build_mcp_config(max_page_size=2))
+    assert isinstance(out, dict)
+    error = tool_error(out)
+    assert error["type"] == "result_too_large"
+    assert "2 row ceiling" in error["message"]
 
 
 @pytest.mark.django_db(transaction=True)
@@ -644,7 +672,7 @@ async def test_run_with_deadline_raises_past_the_deadline() -> None:
 
 
 def test_resolve_bound_treats_unset_as_defer_and_none_as_disabled() -> None:
-    from rest_framework_services import UNSET
+    from django_service_specs import UNSET
 
     assert resolve_bound(UNSET, 500) == 500
     assert resolve_bound(None, 500) is None

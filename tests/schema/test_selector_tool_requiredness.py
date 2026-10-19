@@ -28,16 +28,15 @@ from types import SimpleNamespace
 from typing import TYPE_CHECKING, Annotated, Any, Generic, TypeVar, Union
 
 import pytest
+from django_service_specs import DEFAULT_POOL_SEEDS, SelectorKind, UnsetType
 from rest_framework import serializers
 from rest_framework_dataclasses.serializers import DataclassSerializer
-from rest_framework_services import DEFAULT_POOL_SEEDS, InputRequired, UnsetType
-from rest_framework_services.types.selector_kind import SelectorKind
+from rest_framework_services import InputRequired
 from rest_framework_services.types.selector_spec import SelectorSpec
 from typing_extensions import NotRequired, TypedDict
 
 from rest_framework_mcp import MCPServer, UrlKwarg
 from rest_framework_mcp.auth.backends.allow_any_backend import AllowAnyBackend
-from rest_framework_mcp.constants import ArgumentBinding
 from tests.testapp.models import Invoice
 from tests.testapp.serializers import InvoiceOutputSerializer
 
@@ -428,56 +427,6 @@ def test_a_generic_typed_dicts_argument_decides_which_keys_may_be_declined() -> 
     schema = _schema(server)
 
     assert set(schema["properties"]) == {"pk", "tenant"}
-    assert schema["required"] == ["pk"]
-
-
-# ---------- SPREAD_CALLER_WINS: the caller's value outranks the provider's ----------
-
-
-def test_under_caller_wins_a_typed_providers_keys_are_offered_but_not_required() -> None:
-    # The caller's spread is applied after the provider's keys, so a client may
-    # set them; the provider fills them otherwise, so none is required.
-    server = _server()
-    _register(
-        server,
-        _by_pk_tenant_region,
-        provider=_typed_provider,
-        argument_binding=ArgumentBinding.SPREAD_CALLER_WINS,
-    )
-
-    schema = _schema(server)
-
-    assert set(schema["properties"]) == {"pk", "tenant", "region"}
-    assert schema["required"] == ["pk"]
-
-
-def test_under_caller_wins_a_spec_kwargs_provides_name_is_offered_but_not_required() -> None:
-    # A typed provider beside it, so ``pk`` is still inferred required and the
-    # declared name's requiredness is what this test reads.
-    server = _server()
-    _register(
-        server,
-        _by_pk_and_tenant,
-        provider=_region_provider,
-        spec_kwargs_provides=("tenant",),
-        argument_binding=ArgumentBinding.SPREAD_CALLER_WINS,
-    )
-
-    schema = _schema(server)
-
-    assert set(schema["properties"]) == {"pk", "tenant"}
-    assert schema["required"] == ["pk"]
-
-
-def test_under_caller_wins_a_seed_is_still_not_advertised() -> None:
-    # Dispatch strips a reserved name from the caller's spread under every
-    # binding, so a seed outranks the caller whatever the binding says.
-    server = _server(pool_seeds=DEFAULT_POOL_SEEDS.extend(tenant=lambda: "acme"))
-    _register(server, _by_pk_and_tenant, argument_binding=ArgumentBinding.SPREAD_CALLER_WINS)
-
-    schema = _schema(server)
-
-    assert set(schema["properties"]) == {"pk"}
     assert schema["required"] == ["pk"]
 
 

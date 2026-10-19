@@ -7,13 +7,11 @@ their names from the arguments, so the value travels only through
 ``view.kwargs``. A selector tool then lays its ``input_serializer``'s validated
 values back over the arguments, and a field bound with ``source=`` puts its
 value under the source's name: ``project = IntegerField(source="project_pk")``
-put a ``project_pk`` back. Under ``SPREAD_CALLER_WINS`` drf-services ranks the
-arguments above ``view.kwargs``, so the selector read the caller's project
-where the permission had judged another, and under either spreading binding a
-call leaving the kwarg out had the caller's value read in its place, on a
-route the permission judged as naming no project. Names a ``UrlKwarg`` declares
-are dropped from the selector's arguments after the overlay, so the route the
-permission judged is the one the selector reads, under every binding.
+put a ``project_pk`` back. A call leaving the kwarg out had the caller's value
+read in its place, on a route the permission judged as naming no project.
+Names a ``UrlKwarg`` declares are dropped from the selector's arguments after
+the overlay, so the route the permission judged is the one the selector reads,
+under every binding.
 
 A kwarg the call sent therefore reaches the selector as sent, uncoerced,
 whatever the serializer validated under its name. For a kwarg the call left
@@ -24,7 +22,7 @@ serializer validated under the name reaches the selector.
 **Service tools**, as ``docs/concepts.md`` states beside the bindings. A URL
 kwarg does not reach a service's pool at all, only ``view.kwargs``, so a
 ``spec.kwargs`` provider copying it into the pool is a provider like any other,
-which the caller's value outranks under ``SPREAD_CALLER_WINS``. The target
+whose value outranks the caller's under every binding. The target
 lookup reads ``view.kwargs`` under every binding, so it is where a service that
 must act on the judged route takes it from.
 """
@@ -37,10 +35,10 @@ from typing import Any
 import pytest
 from asgiref.sync import sync_to_async
 from django.http import HttpRequest
+from django_service_specs import SelectorKind
 from rest_framework import serializers
 from rest_framework.permissions import BasePermission
 from rest_framework_dataclasses.serializers import DataclassSerializer
-from rest_framework_services.types.selector_kind import SelectorKind
 from rest_framework_services.types.selector_spec import SelectorSpec
 from rest_framework_services.types.service_spec import ServiceSpec
 
@@ -51,10 +49,10 @@ from rest_framework_mcp.handlers.handle_tools_call import handle_tools_call
 from rest_framework_mcp.handlers.handle_tools_call_async import handle_tools_call_async
 from rest_framework_mcp.handlers.types.context import MCPCallContext
 
+# The one spreading binding drf-services accepts: ``SPREAD_CALLER_WINS`` is
+# retired and raises ``ValueError`` at dispatch.
 _SPREADING = pytest.mark.parametrize(
-    "binding",
-    [ArgumentBinding.SPREAD_AUTHOR_WINS, ArgumentBinding.SPREAD_CALLER_WINS],
-    ids=["author-wins", "caller-wins"],
+    "binding", [ArgumentBinding.SPREAD_AUTHOR_WINS], ids=["author-wins"]
 )
 
 
@@ -132,9 +130,8 @@ async def _call(
 async def test_a_serializer_field_sourcing_a_url_kwarg_does_not_move_the_route(
     is_async: bool, binding: ArgumentBinding
 ) -> None:
-    # Judged on project 7, read on project 8 under ``SPREAD_CALLER_WINS``.
-    # ``SPREAD_AUTHOR_WINS`` already ranked ``view.kwargs`` above the
-    # arguments; the case pins that the drop leaves it reading the route.
+    # ``SPREAD_AUTHOR_WINS`` ranks ``view.kwargs`` above the arguments; the
+    # case pins that the drop leaves it reading the route the permission judged.
     seen: list[dict[str, Any]] = []
     read: list[Any] = []
     server = _server(
@@ -160,7 +157,7 @@ async def test_a_serializer_field_sourcing_a_url_kwarg_left_out_does_not_fill_th
 ) -> None:
     # The call names no project, which the permission admits, and the alias
     # named project 8: with no ``view.kwargs`` value to outrank it, the
-    # selector read 8 under both bindings. A caller choosing the project does
+    # selector read 8. A caller choosing the project does
     # so through the URL kwarg, which the permission then judges.
     seen: list[dict[str, Any]] = []
     read: list[Any] = []
@@ -274,8 +271,7 @@ async def test_a_url_kwarg_the_call_sent_reaches_the_selector_as_sent(
     # Each serializer validates ``project_pk`` to something other than what
     # was sent: a coercion, a trim, or 8 from another argument. Whatever wrote
     # it, the overlay's value is dropped, so the selector reads the value the
-    # permission judged, uncoerced, rather than the overlay's under
-    # ``SPREAD_CALLER_WINS``. A trimmed ``" acme "`` is another row to a
+    # permission judged, uncoerced. A trimmed ``" acme "`` is another row to a
     # string lookup, and the namesake's own coercion is no exception to the
     # rule: the route reaches the selector as sent.
     seen: list[dict[str, Any]] = []
@@ -516,14 +512,9 @@ def _archive_target(*, instance: Any = None, **extras: Any) -> dict[str, Any]:
 
 
 @pytest.mark.django_db(transaction=True)
-@pytest.mark.parametrize(
-    ("binding", "ran_on"),
-    [(ArgumentBinding.SPREAD_AUTHOR_WINS, 7), (ArgumentBinding.SPREAD_CALLER_WINS, 8)],
-    ids=["author-wins", "caller-wins"],
-)
-async def test_a_provider_copying_a_route_kwarg_is_overridable_under_caller_wins(
-    binding: ArgumentBinding, ran_on: int
-) -> None:
+async def test_a_provider_copying_a_route_kwarg_outranks_the_callers_alias() -> None:
+    # The provider's ``project_pk`` is the judged route's, and it is applied over
+    # the caller's spread, so the alias's 8 never reaches the service.
     ran: list[Any] = []
 
     def _archive(*, project_pk: Any = None, **extras: Any) -> dict[str, Any]:
@@ -540,7 +531,7 @@ async def test_a_provider_copying_a_route_kwarg_is_overridable_under_caller_wins
             kwargs=lambda view, request: {"project_pk": view.kwargs.get("project_pk")},
         ),
         url_kwargs=(UrlKwarg("project_pk", type="integer", required=True),),
-        argument_binding=binding,
+        argument_binding=ArgumentBinding.SPREAD_AUTHOR_WINS,
     )
 
     out = await _call(
@@ -548,7 +539,7 @@ async def test_a_provider_copying_a_route_kwarg_is_overridable_under_caller_wins
     )
 
     assert out.get("isError") is not True, f"answered {out!r}"
-    assert ran == [ran_on]
+    assert ran == [7]
 
 
 @pytest.mark.django_db(transaction=True)
@@ -557,9 +548,8 @@ async def test_a_provider_copying_a_route_kwarg_is_overridable_under_caller_wins
     [
         ArgumentBinding.BUNDLE,
         ArgumentBinding.SPREAD_AUTHOR_WINS,
-        ArgumentBinding.SPREAD_CALLER_WINS,
     ],
-    ids=["bundle", "author-wins", "caller-wins"],
+    ids=["bundle", "author-wins"],
 )
 async def test_a_service_target_lookup_reads_the_judged_route_under_every_binding(
     binding: ArgumentBinding,

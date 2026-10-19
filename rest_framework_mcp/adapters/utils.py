@@ -15,16 +15,22 @@ from collections.abc import Iterable, Mapping
 from typing import Any
 
 from django.core.exceptions import ImproperlyConfigured
+from django_service_specs import (
+    DEFAULT_POOL_SEEDS,
+    PoolSeeds,
+    SelectorKind,
+    ServerArguments,
+    provider_keys,
+)
 from rest_framework import serializers as drf_serializers
 from rest_framework_dataclasses.serializers import DataclassSerializer
-from rest_framework_services import provider_keys
-from rest_framework_services.types.pool_seeds import DEFAULT_POOL_SEEDS, PoolSeeds
-from rest_framework_services.types.selector_kind import SelectorKind
+from rest_framework_services.dispatch.utils import DROPPED_EDGE_SEEDS
 from rest_framework_services.types.validate_channel_names import validate_channel_names
 
 from rest_framework_mcp.constants import (
     RESERVED_POOL_SEEDS,
     RESERVED_POST_FETCH_KEYS,
+    TOOL_EDGE_SEEDS,
     ArgumentBinding,
 )
 from rest_framework_mcp.registry.types.query_param import QueryParam
@@ -37,6 +43,7 @@ from rest_framework_mcp.schema.service_tool_schema import (
     declared_service_input,
 )
 from rest_framework_mcp.schema.utils import (
+    caller_fields,
     declares_default,
     laid_back_inputs,
     selector_inputs,
@@ -142,8 +149,10 @@ def validate_url_kwargs(
     which ``validate_url_kwarg_inputs`` refuses.
 
     The checks live in drf-services' ``validate_channel_names``, which folds in
-    the pool seeds it owns; the pagination names and the server's own
-    ``pool_seeds`` are ours to contribute. A registered seed is reserved at
+    the kernel's pool seeds; the pagination names, the names the DRF edge fills
+    itself (``TOOL_EDGE_SEEDS``: ``request``, ``view``, ``serializer``, which the
+    kernel's set no longer lists) and the server's own ``pool_seeds`` are ours
+    to contribute. A registered seed is reserved at
     dispatch, which strips it from the URL kwargs, so a declaration named after
     one would be accepted here and then silently dropped on every call.
     Sharing the check is what keeps this package's notion of a valid declaration
@@ -153,7 +162,7 @@ def validate_url_kwargs(
         label=label,
         kind="url_kwargs",
         declarations=url_kwargs,
-        reserved=RESERVED_POST_FETCH_KEYS | pool_seeds.names,
+        reserved=RESERVED_POST_FETCH_KEYS | TOOL_EDGE_SEEDS | pool_seeds.names,
     )
 
 
@@ -185,7 +194,7 @@ def validate_query_params(
         label=label,
         kind="query_params",
         declarations=query_params,
-        reserved=RESERVED_POST_FETCH_KEYS | pool_seeds.names,
+        reserved=RESERVED_POST_FETCH_KEYS | TOOL_EDGE_SEEDS | pool_seeds.names,
     )
     overlap = sorted({qp.name for qp in query_params} & {uk.name for uk in url_kwargs})
     if overlap:
@@ -306,20 +315,22 @@ def validate_query_param_inputs(
     the server keeps from the call (``server_owned_keys``), which a service
     tool's schema leaves out of its target lookup's names
     (``test_a_server_owned_lookup_key_is_not_refused_but_a_plain_one_is``),
-    and, under ``SPREAD_AUTHOR_WINS``, a name the selector's or a spread
-    service's ``kwargs=`` provider fills. Three exemptions are made here,
-    because the schema still offers the name while the caller's value reaches
-    the reader by another way:
+    and a name the selector's or a spread service's ``kwargs=`` provider says
+    it fills, which drf-services applies over the caller's spread under every
+    binding, so neither schema offers it. The provider owns the parameter, and
+    one reading ``request.query_params`` is the ordinary way to route a query
+    parameter to a callable, so the caller's value is served, for a selector
+    (``test_a_parameter_a_typed_provider_fills_is_served``) and for a spread
+    service (``test_a_spread_service_parameter_its_provider_fills_is_served``).
+    A selector tool's schema hides a ``spec_kwargs_provides=`` name too. Three
+    exemptions are made here, because the schema still offers the name while
+    the caller's value reaches the reader by another way:
 
-    - **a name the ``kwargs=`` provider declares it fills**, its
-      ``provider_keys`` ``filled`` set, or that ``spec_kwargs_provides=``
-      claims. The provider owns the parameter, and one reading
-      ``request.query_params`` is the ordinary way to route a query parameter
-      to a callable, so the caller's value is served. The schema still offers
-      such a name under ``SPREAD_CALLER_WINS``, for a selector
-      (``test_a_parameter_a_typed_provider_fills_is_served``) and for a spread
-      service (``test_a_spread_service_parameter_its_provider_fills_is_served``),
-      so a call is what each asserts. **Only for the callable that provider feeds**: a
+    - **for a service tool, a name ``spec_kwargs_provides=`` claims**, which
+      its schema still offers, because the service schema hides only what the
+      provider's annotation says it fills
+      (``test_a_spread_service_parameter_spec_kwargs_provides_claims_is_served``).
+      **Only for the callable that provider feeds**: a
       selector's own, and a spread service's own parameters, never a
       service's serializer fields or its target lookup's parameters, which
       read the arguments rather than the service's pool
@@ -341,20 +352,21 @@ def validate_query_param_inputs(
       (``test_call_tool_leaves_a_query_params_value_to_request_query_params``).
 
     ``spec_kwargs_provides`` is passed by both adapters from the argument they
-    were given, since a ``ToolBinding`` does not keep it.
+    were given, since a ``ToolBinding`` does not keep it; a selector tool's
+    schema reads the ``SelectorToolBinding``'s own, so only the service branch
+    consults the argument.
     """
     declared: frozenset[str] = frozenset(query_param.name for query_param in binding.query_params)
     # Not a condition of the rule, which intersects with ``declared`` anyway: it
     # spares reading the schema at registration for the tools declaring none.
     if not declared:
         return
-    filled = _provider_filled(binding, spec_kwargs_provides)
     groups: tuple[tuple[str, frozenset[str]], ...]
     if isinstance(binding, SelectorToolBinding):
         offered = frozenset(
             selector_tool_inputs(binding, pool_seeds=pool_seeds)[0].get("properties", {})
         )
-        taken = (offered - filled - _overlaid_field_names(binding.input_serializer)) & declared
+        taken = (offered - _overlaid_field_names(binding.input_serializer)) & declared
         # The reflection lists a ``filter_set``'s fields beside the parameters,
         # and the FilterSet reads the stripped arguments as the selector does.
         filtering = taken & frozenset(getattr(binding.spec.filter_set, "base_filters", ()))
@@ -364,6 +376,7 @@ def validate_query_param_inputs(
             ("the selector's filter_set declares field(s)", filtering),
         )
     else:
+        filled = _provider_filled(binding, spec_kwargs_provides)
         fields, own, looked_up = _service_tool_inputs(binding, filled=filled, pool_seeds=pool_seeds)
         kind, target = "service tool", "the spec"
         reader = (
@@ -423,8 +436,10 @@ def validate_url_kwarg_inputs(
     ``own`` set's subtraction of ``filled``, because a provider is handed
     ``view`` and fills the parameter from the route
     (``test_a_parameter_the_services_provider_fills_from_the_route_is_served``,
-    whose ``SPREAD_CALLER_WINS`` row holds the subtraction: under
-    ``SPREAD_AUTHOR_WINS`` the schema does not offer such a name at all). A
+    where the schema does not offer such a name at all, and
+    ``test_a_shared_name_spec_kwargs_provides_claims_is_served``, which holds
+    the subtraction for a ``spec_kwargs_provides=`` claim the schema does not
+    see). A
     selector tool's parameter is served too, through the selector's pool, so a
     selector tool is not checked here. A ``UrlKwarg`` no input of the service
     takes registers, since the sets are read with the declarations left out
@@ -479,6 +494,189 @@ def validate_url_kwarg_inputs(
         )
 
 
+def validate_reserved_input_fields(
+    *,
+    label: str,
+    input_serializer: type | None,
+    argument_binding: ArgumentBinding,
+    pool_seeds: PoolSeeds = DEFAULT_POOL_SEEDS,
+    is_selector: bool = False,
+) -> None:
+    """Refuse an ``input_serializer`` field named after a value dispatch fills itself.
+
+    A spreading call lays the validated fields over the callable's arguments,
+    and a seed of the same name keeps its own value there: the kernel's
+    ``RESERVED_POOL_SEEDS``, the DRF edge's ``TOOL_EDGE_SEEDS`` and every seed
+    the server's ``pool_seeds`` registers. drf-services validates such a field
+    into ``data`` alone, so the tool advertised it and a parameter of its name
+    never received the caller's value: it ran on its default, or on the seed
+    for ``request``, ``user`` or ``view``, and no call was refused. A selector
+    is never handed ``data``, so the value reached nothing at all.
+
+    Checked for **a selector tool under any binding**, since every binding a
+    selector registers with spreads (``BUNDLE`` beside an ``input_serializer``
+    is refused before this runs), and **a service tool under
+    ``SPREAD_AUTHOR_WINS``**. Under ``BUNDLE`` and ``AUTO`` a service receives
+    the fields inside ``data``, where no seed meets them. Only a field taking a
+    value from the caller under its own name counts: a read-only field and a
+    ``HiddenField`` take nothing, and one bound with ``source=`` to another
+    name lays its value under that name.
+
+    One branch arc to coverage, so each condition names its holder:
+
+    - ``is_selector``: the ``AUTO`` case of
+      ``test_a_selector_field_named_after_a_seed_is_refused_under_every_binding``;
+    - the spreading service binding: ``test_a_bundled_service_receives_the_field_inside_data``
+      (both its ``BUNDLE`` and ``AUTO`` cases);
+    - the reserved name: ``test_a_field_that_takes_nothing_from_the_caller_registers``
+      and every other registration with an ``input_serializer``;
+    - an undeclared field (a dataclass's, a ``ModelSerializer``'s generated
+      one): ``test_a_dataclass_input_field_named_after_a_seed_is_refused``;
+    - no ``source=``: ``test_a_field_bound_to_another_name_reaches_that_name``.
+      DRF refuses ``source=`` equal to the field's own name, so a declared
+      ``source`` always names another.
+
+    Read-only fields are left out by ``build_input_schema``, which advertises
+    only what a caller sends, and ``HiddenField`` by ``schema.utils.caller_fields``, both
+    held by ``test_a_field_that_takes_nothing_from_the_caller_registers``.
+    """
+    if not (is_selector or argument_binding is ArgumentBinding.SPREAD_AUTHOR_WINS):
+        return
+    reserved = RESERVED_POOL_SEEDS | TOOL_EDGE_SEEDS | pool_seeds.names
+    taken = sorted(
+        name
+        for name, field in caller_fields(input_serializer).items()
+        if name in reserved and (field is None or field.source is None)
+    )
+    if taken:
+        raise ImproperlyConfigured(
+            f"{label}: input_serializer declares field(s) {taken!r} named after a value "
+            "dispatch fills itself (the kernel's RESERVED_POOL_SEEDS, the DRF edge's "
+            "TOOL_EDGE_SEEDS or a seed this server's pool_seeds registers). The validated "
+            "fields are spread into the callable's arguments, where the seed of each name "
+            "keeps its own value, so the field would be advertised and a parameter of its "
+            "name would never receive the caller's value. Rename the field, or keep its "
+            "name on the wire and bind it with source= to a parameter no seed takes."
+            f"{'' if is_selector else _BUNDLE_REMEDY}"
+        )
+
+
+# A service, unlike a selector, is handed ``data``, where the field is the payload's.
+_BUNDLE_REMEDY = " A service can also take the field inside `data` under argument_binding=BUNDLE."
+
+
+def validate_lookup_key_fields(
+    binding: ToolBinding, *, pool_seeds: PoolSeeds = DEFAULT_POOL_SEEDS
+) -> None:
+    """Refuse a service tool's ``input_serializer`` field named like a key its target lookup reads.
+
+    drf-services withholds a name the target lookup reads from the input
+    serializer's data, so the row is the lookup's to choose, never the body's.
+    A writable field of that name is then missing from what the serializer
+    validates, and every call was refused as ``{"pk": ["This field is
+    required."]}``, with nothing written, under every binding and whether the
+    field was required or not. That per-call refusal is drf-services' and
+    stays, for a spec dispatched some other way; registration says it first,
+    naming the tool.
+
+    The lookup's keys are its selector's own parameters as this server
+    reflects them, a typed ``**extras`` key included. drf-services withholds a
+    read only where the selector declares it as a parameter, which the
+    reflection lists already; a read reaching a catch-all is no key here, and
+    its clash with the field is the kernel's, refused in its words as the spec
+    compiles
+    (``test_a_lookup_read_its_selector_does_not_declare_is_left_to_the_kernel``).
+    The lookup's ``filter_set`` is left out of the reflection: a filter of a
+    field's name is the kernel's clash of two sources, which fails each call
+    and is not refused here
+    (``test_a_lookup_filter_named_like_a_field_is_left_to_the_kernel``). A
+    read-only field and a ``HiddenField``
+    take nothing from the body and are not refused
+    (``test_a_field_of_the_lookup_s_key_taking_nothing_from_the_body_registers_and_serves``).
+    """
+    lookup = target_lookup(binding.spec)
+    if lookup is None:
+        return
+    reflected, _ = selector_inputs(
+        dataclasses.replace(lookup, filter_set=None), pool_seeds=pool_seeds
+    )
+    keys = frozenset(reflected.get("properties", {}))
+    taken = sorted(caller_fields(binding.spec.input_serializer).keys() & keys)
+    if taken:
+        raise ImproperlyConfigured(
+            f"service tool {binding.name!r}: the service's input_serializer declares "
+            f"field(s) {taken!r} that the spec's target lookup reads. drf-services "
+            "withholds a name the target lookup reads from the input serializer's data, "
+            "so the row is the lookup's to choose and never the body's, and every call "
+            "would be refused for the field as missing. Leave the lookup key out of the "
+            "input_serializer, or declare it read_only=True."
+        )
+
+
+def validate_selector_url_kwargs_reach(
+    binding: SelectorToolBinding,
+    *,
+    spec_kwargs_provides: frozenset[str] = frozenset(),
+    pool_seeds: PoolSeeds = DEFAULT_POOL_SEEDS,
+) -> None:
+    """Refuse a selector tool's ``UrlKwarg`` that only the selector's ``**kwargs`` could take.
+
+    drf-services hands a ``**kwargs`` catch-all the arguments its callable
+    declares and the seeds, and nothing else, so a route capture the selector
+    names nowhere stays in ``view.kwargs``: the tool advertised it and the
+    selector never saw it. A selector with no catch-all is not refused, because
+    it takes nothing by that name and the capture is there for what reads
+    ``view.kwargs`` (a permission class, the ``kwargs=`` provider).
+
+    A capture reaches the selector when it names a parameter or a key of a
+    typed ``**extras: Unpack[TypedDict]``, read off this server's reflection of
+    the selector with the spec's ``filter_set`` left out (a filter reads the
+    arguments, from which a capture is removed:
+    ``test_a_capture_named_like_a_filter_is_refused_too``), or when
+    the spec's ``kwargs=`` provider fills the name or ``spec_kwargs_provides=``
+    claims it. A provider whose keys cannot be read may fill any name, so
+    nothing is refused beside one.
+
+    One branch arc each, so each condition names its holder (an unreadable
+    signature is the defensive one, as in ``_resolve_signature``):
+
+    - the catch-all: ``test_a_selector_with_no_catch_all_registers``;
+    - a readable provider: ``test_a_provider_whose_keys_cannot_be_read_is_not_second_guessed``;
+    - a parameter or typed key, from the reflection:
+      ``test_a_capture_the_selector_names_reaches_it``;
+    - a declared parameter the reflection leaves out, as it does one marked
+      ``NotClientInput``: ``test_a_capture_a_server_owned_parameter_takes_reaches_it``;
+    - the provider's keys: ``test_a_capture_the_provider_fills_reaches_the_catch_all``;
+    - the claim: ``test_a_capture_spec_kwargs_provides_claims_registers``.
+    """
+    sig = _resolve_signature(binding.selector)
+    keys = provider_keys(binding.spec.kwargs)
+    if sig is None or not _accepts_var_keyword(sig) or keys is None:
+        return
+    reflected, _ = selector_inputs(
+        dataclasses.replace(binding.spec, filter_set=None), pool_seeds=pool_seeds
+    )
+    reached = (
+        frozenset(reflected.get("properties", {}))
+        | frozenset(parameter.name for parameter in _keyword_parameters(binding.selector))
+        | keys.filled
+        | spec_kwargs_provides
+    )
+    unreached = sorted(
+        url_kwarg.name for url_kwarg in binding.url_kwargs if url_kwarg.name not in reached
+    )
+    if unreached:
+        raise ImproperlyConfigured(
+            f"selector tool {binding.name!r}: UrlKwarg(s) {unreached!r} name nothing the "
+            "selector declares, and its **kwargs catch-all receives only the arguments the "
+            "selector declares and the seeds. The value is routed to view.kwargs and would "
+            "never reach the selector. Declare the parameter on the selector (or as a key of "
+            "a typed **extras: Unpack[TypedDict]), or take `view` and read view.kwargs. "
+            "If the capture is only for something else that reads view.kwargs, such as a "
+            "permission class, drop the selector's **kwargs."
+        )
+
+
 def _provider_filled(
     binding: ToolBinding | SelectorToolBinding, spec_kwargs_provides: frozenset[str]
 ) -> frozenset[str]:
@@ -517,7 +715,13 @@ def _service_tool_inputs(
     """
     advertised = frozenset(
         build_service_tool_input_schema(
-            dataclasses.replace(binding, query_params=(), url_kwargs=()), pool_seeds=pool_seeds
+            # Without the binding's ``server_arguments`` too: the schema leaves a
+            # bound name out, but a channel of that name still takes its value
+            # from the input it shadows, so the input still counts here.
+            dataclasses.replace(
+                binding, query_params=(), url_kwargs=(), server_arguments=ServerArguments()
+            ),
+            pool_seeds=pool_seeds,
         ).get("properties", {})
     )
     # The two reads the schema builder merges, made as it makes them. Each is
@@ -775,7 +979,10 @@ def _validate_required_params_have_sources(
 
     Sources, in priority order:
 
-    - **Pool seeds.** ``request`` / ``user`` / ``progress`` always;
+    - **Pool seeds.** ``request`` / ``user`` / ``progress`` / ``view`` always,
+      ``view`` being the DRF edge's, handed to a selector and a service alike
+      under every binding
+      (``test_a_required_view_parameter_registers_and_receives_the_view``);
       ``instance`` and ``collection`` only when the spec resolves one, and
       ``serializer`` and ``data`` only for a service, when an
       ``input_serializer`` is declared. Never for a selector, which drf-services
@@ -816,11 +1023,9 @@ def _validate_required_params_have_sources(
       ``spec.kwargs(view, request)`` supplies these names at dispatch.
 
     ``data`` is no source without an ``input_serializer`` under any binding.
-    drf-services seeds it from a validated serializer, or from the extras an
-    ``UnknownArguments.PASSTHROUGH`` policy forwards: none at all under
-    ``BUNDLE``, where this transport forwards no extras, and under a spreading
-    binding only the arguments the call happened to carry, so a call carrying
-    none leaves it unfilled. Held by
+    drf-services hands such a service ``data={}`` under every binding, which
+    carries none of the caller's arguments, so a service requiring it would run
+    on an empty payload on every call. Held by
     ``test_a_bundled_service_requiring_data_without_an_input_serializer_is_refused``
     and ``test_a_trust_mode_service_requiring_data_is_refused``.
 
@@ -837,11 +1042,14 @@ def _validate_required_params_have_sources(
     structurally satisfiable. With ``input_serializer=None`` a spreading binding is in trust
     mode — the client's raw ``arguments`` are spread verbatim, so there is no
     static contract and every required parameter counts as one the caller
-    supplies, **except a reserved pool seed**: drf-services strips every
-    ``pool_seeds.reserved`` name from the spread, so a caller cannot supply
+    supplies, **except a name dispatch owns**: drf-services drops every
+    ``pool_seeds.reserved`` name from the spread, and its ``DROPPED_EDGE_SEEDS``
+    (``request``, ``serializer``) with them, so a caller cannot supply
     ``instance`` or ``serializer`` and only the sources above can. Held by
-    ``test_trust_mode_does_not_count_a_reserved_seed_as_the_callers`` and the
-    spreading cases of ``test_an_instance_lookup_seeds_no_collection``.
+    ``test_trust_mode_does_not_count_a_reserved_seed_as_the_callers``, the
+    spreading cases of ``test_an_instance_lookup_seeds_no_collection`` and, for
+    the drf-services set, the ``serializer`` case of
+    ``test_a_trust_mode_selector_requiring_a_seed_nothing_fills_is_refused``.
     """
     positional_only: list[str] = sorted(
         name
@@ -875,7 +1083,7 @@ def _validate_required_params_have_sources(
     # nowhere to send it: drf-services substitutes its no-op reporter, so the
     # parameter is always satisfiable and refusing to register a service that
     # declares one would refuse a service that runs perfectly well.
-    sources: set[str] = {"request", "user", "progress"}
+    sources: set[str] = {"request", "user", "progress", "view"}
     if provides_instance:
         sources.add("instance")
     if provides_collection:
@@ -906,9 +1114,22 @@ def _validate_required_params_have_sources(
         else:
             # Trust mode: raw ``arguments`` are spread verbatim, so the client
             # can in principle supply any name the callable declares, other than
-            # the reserved seeds dispatch strips from that spread.
-            sources.update(required_params - pool_seeds.reserved)
+            # the names dispatch drops from that spread.
+            sources.update(required_params - pool_seeds.reserved - DROPPED_EDGE_SEEDS)
     missing: set[str] = set(required_params) - sources
+    # Where every missing name is one only dispatch fills, the generic remedies
+    # cannot work: a field of the name is refused, and neither a catch-all nor a
+    # provider is handed it. So the refusal names the reservation alone
+    # (``test_a_trust_mode_parameter_named_after_a_seed_is_refused_naming_the_reservation``);
+    # beside a plain name it keeps them (``test_a_reserved_name_beside_a_plain_one_keeps_every_remedy``),
+    # and a name a tool fills on a condition keeps them too
+    # (``test_a_name_seeded_on_a_condition_keeps_its_own_remedy``).
+    if missing and missing <= pool_seeds.reserved - _SEEDED_ON_A_CONDITION:
+        raise ImproperlyConfigured(
+            f"{label}: callable declares required parameter(s) {sorted(missing)!r} "
+            "with no source on the MCP transport."
+            f"{_reserved_seed_hint(missing, pool_seeds=pool_seeds)}"
+        )
     if missing:
         sources_human = ", ".join(sorted(sources)) or "(none)"
         raise ImproperlyConfigured(
@@ -921,7 +1142,41 @@ def _validate_required_params_have_sources(
             "contract. (``spec.kwargs`` output is not assumed because its "
             "behaviour can differ between DRF API-view and MCP transports.)"
             f"{_missing_seed_hint(missing, is_selector=is_selector, input_serializer=input_serializer)}"
+            f"{_reserved_seed_hint(missing, pool_seeds=pool_seeds)}"
         )
+
+
+# Reserved names a tool's dispatch fills on a condition, each with its own
+# remedy: ``instance`` and ``collection`` from a target lookup, ``data`` and
+# ``serializer`` beside an ``input_serializer`` (``_missing_seed_hint``).
+_SEEDED_ON_A_CONDITION: frozenset[str] = frozenset({"instance", "collection", "data", "serializer"})
+
+
+def _reserved_seed_hint(missing: set[str], *, pool_seeds: PoolSeeds) -> str:
+    """Name the reservation when a missing parameter is a seed no tool call ever fills.
+
+    ``result`` and ``queryset`` are the kernel's reserved seeds for a service's
+    output selector, so a tool's callable is never handed either, and the
+    caller's value of the name is dropped from the spread like every reserved
+    name's. The generic remedy (add it to the ``input_serializer``) cannot work
+    for such a name, so the refusal says why. Held by
+    ``test_a_trust_mode_parameter_named_after_a_seed_is_refused_naming_the_reservation``
+    and, for a name that is not reserved,
+    ``test_the_reservation_hint_accompanies_only_a_reserved_name``; for a
+    reserved name a tool fills on a condition,
+    ``test_a_name_seeded_on_a_condition_keeps_its_own_remedy``.
+    """
+    reserved = sorted((missing & pool_seeds.reserved) - _SEEDED_ON_A_CONDITION)
+    if not reserved:
+        return ""
+    names = " and ".join(f"`{name}`" for name in reserved)
+    verb = "is" if len(reserved) == 1 else "are"
+    return (
+        f" {names} {verb} reserved: dispatch fills the name itself (the kernel's "
+        "RESERVED_POOL_SEEDS) and drops a caller's value of it, and a tool's callable "
+        "is never handed it, so no argument can reach the parameter. Rename the "
+        "parameter, or give it a default."
+    )
 
 
 def _missing_seed_hint(
@@ -1071,9 +1326,12 @@ __all__ = [
     "merge_meta",
     "merge_tool_annotations",
     "validate_input_serializer_against_callable",
+    "validate_lookup_key_fields",
     "validate_query_param_inputs",
     "validate_query_params",
+    "validate_reserved_input_fields",
     "validate_selector_parameter_names",
+    "validate_selector_url_kwargs_reach",
     "validate_serializer_shapes",
     "validate_url_kwarg_inputs",
     "validate_url_kwargs",

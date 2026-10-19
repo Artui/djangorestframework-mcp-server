@@ -11,7 +11,13 @@ parameter is the other ordering route, and likewise needs no knob);
 `ToolRegistry` accepts either kind and is what `tools/list` and
 `tools/call` iterate.
 
-`paginate` also decides what `query_params=` shapes. On a paged binding the
+Both bindings carry `server_arguments`, a
+[`ServerArguments`][django_service_specs.ServerArguments] naming the declared
+parameters the server answers for, so no caller does. `ToolRegistry.register`
+checks it, whichever registrar built the binding. See
+[Server-supplied arguments](../concepts.md#server-arguments).
+
+`paginate` also decides what a `QueryParam` shapes. On a paged binding the
 serializer renders each row and the page envelope (`items`, `page`,
 `totalPages`, `hasNext`) is built around the result, so a query param applies
 to each item in `items`, never to the envelope — and its description in the
@@ -22,9 +28,19 @@ to each item in `items`, never to the envelope — and its description in the
 ::: rest_framework_mcp.registry.types.selector_tool_binding.SelectorToolBinding
 ::: rest_framework_services.types.url_kwarg.UrlKwarg
 ::: rest_framework_services.types.query_param.QueryParam
+
+A `UrlKwarg` or `QueryParam` may not take a name the DRF edge fills on every
+call; registration refuses one that does.
+
+::: rest_framework_mcp.constants.TOOL_EDGE_SEEDS
 ::: rest_framework_mcp.registry.tool_registry.ToolRegistry
 ::: rest_framework_mcp.registry.types.resource_binding.ResourceBinding
 ::: rest_framework_mcp.registry.resource_registry.ResourceRegistry
+
+A URI-template variable may not take a name `resources/read` seeds itself;
+registration refuses one that does.
+
+::: rest_framework_mcp.constants.RESOURCE_EDGE_SEEDS
 ::: rest_framework_mcp.constants.ResourceEncoding
 ::: rest_framework_mcp.registry.types.prompt_binding.PromptBinding
 ::: rest_framework_mcp.registry.prompt_registry.PromptRegistry
@@ -72,11 +88,15 @@ bindings in input order.
 ::: rest_framework_mcp.registry.types.selector_defaults.SelectorDefaults
 ::: rest_framework_mcp.constants.ToolKind
 
-`ArgumentBinding` and `UnknownArguments` are re-exported from
-`djangorestframework-services` (the transport-neutral `dispatch_spec` owns
-these dispatch policies); import them from `rest_framework_mcp.constants`.
+`ArgumentBinding` is re-exported from `djangorestframework-services`, whose
+`dispatch_spec` owns it, and `UnknownArguments` from `django-service-specs`,
+the kernel that drf-services dispatches through and that owns it; import both
+from `rest_framework_mcp.constants`. `ArgumentBinding.SPREAD_CALLER_WINS` and
+`UnknownArguments.PASSTHROUGH` are retired: registering a tool with either,
+directly, through a `ToolDefinition` or through `ServiceDefaults` /
+`SelectorDefaults`, raises `ImproperlyConfigured` naming the tool.
 
-::: rest_framework_services.types.unknown_arguments.UnknownArguments
+::: django_service_specs.types.unknown_arguments.UnknownArguments
 ::: rest_framework_services.types.argument_binding.ArgumentBinding
 
 ## Chain tools

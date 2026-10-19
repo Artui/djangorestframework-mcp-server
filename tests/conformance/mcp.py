@@ -10,9 +10,10 @@ from __future__ import annotations
 
 from typing import Any
 
+from django_service_specs import SelectorKind
 from rest_framework import serializers as drf_serializers
 from rest_framework.permissions import IsAuthenticated
-from rest_framework_services import SelectorKind
+from rest_framework_services.dispatch.utils import EDGE_SEEDS
 from rest_framework_services.types.selector_spec import SelectorSpec
 from rest_framework_services.types.service_spec import ServiceSpec
 
@@ -52,17 +53,23 @@ def _merge_service(*, number: str, amount_cents: int) -> dict[str, Any]:
 
 
 def _project_scoped_selector(*, project_id: str, **rest: Any) -> Any:
-    """Echoes the validated + (under PASSTHROUGH) unknown keys it received.
+    """Echoes the validated argument and whatever else its ``**rest`` received.
 
     ``**rest`` absorbs every pool kwarg the explicit ``project_id`` doesn't
-    take — which includes the transport-controlled pool seeds. Filter those
+    take: the transport-controlled pool seeds, and never a key the spec does
+    not declare, since drf-services 0.58.0 hands a catch-all none. Filter those
     out before returning so the response is JSON-serialisable (the seeds are
     not: ``progress`` is a callable, ``request`` an object).
 
-    Filtered by :data:`RESERVED_POOL_SEEDS` rather than a hand-written set, so
-    a seed added upstream doesn't break this fixture the way ``progress`` did.
+    Filtered by the producer's own sets rather than a hand-written one, so a
+    seed added upstream doesn't break this fixture the way ``progress`` did:
+    :data:`RESERVED_POOL_SEEDS` is the kernel's, and since drf-services 0.58.0
+    it no longer lists ``request``, which the DRF edge seeds itself beside
+    ``view`` (``EDGE_SEEDS``). Reading the kernel's set alone handed the
+    ``Request`` back as a result and failed to encode.
     """
-    serialisable_rest = {k: v for k, v in rest.items() if k not in RESERVED_POOL_SEEDS}
+    seeds = RESERVED_POOL_SEEDS | frozenset(EDGE_SEEDS)
+    serialisable_rest = {k: v for k, v in rest.items() if k not in seeds}
     return [{"project_id": project_id, "rest": serialisable_rest}]
 
 
@@ -98,13 +105,6 @@ def build_conformance_server() -> MCPServer:
         spec=SelectorSpec(kind=SelectorKind.LIST, selector=_project_scoped_selector),
         input_serializer=_ProjectScopedArgs,
         unknown_arguments=UnknownArguments.REJECT,
-    )
-    # unknown-args PASSTHROUGH sibling.
-    server.register_selector_tool(
-        name="conformance.passthrough_unknown",
-        spec=SelectorSpec(kind=SelectorKind.LIST, selector=_project_scoped_selector),
-        input_serializer=_ProjectScopedArgs,
-        unknown_arguments=UnknownArguments.PASSTHROUGH,
     )
 
     # declarative bulk registration with mixed kinds + defaults.

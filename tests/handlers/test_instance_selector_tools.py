@@ -6,10 +6,11 @@ from __future__ import annotations
 from typing import Any
 
 import pytest
+from django.core.exceptions import ImproperlyConfigured
 from django.db.models import IntegerField, QuerySet, Value
 from django.http import HttpRequest
+from django_service_specs import SelectorKind
 from rest_framework import serializers as drf_serializers
-from rest_framework_services.types.selector_kind import SelectorKind
 from rest_framework_services.types.selector_spec import SelectorSpec
 from rest_framework_services.types.service_spec import ServiceSpec
 
@@ -52,16 +53,33 @@ class _RenameInput(drf_serializers.Serializer):
     number = drf_serializers.CharField()
 
 
+class _NumberInput(drf_serializers.Serializer):
+    """The body of a rename whose row comes from the target lookup.
+
+    The lookup reads ``pk`` itself, so the serializer does not declare it: drf-services
+    refuses a call whose input serializer writes a name the target lookup reads, rather
+    than letting the body choose the row, and registration refuses a serializer that does
+    (``test_a_lookup_key_declared_as_a_serializer_field_is_refused``).
+    """
+
+    number = drf_serializers.CharField()
+
+
 def _rename_invoice(*, instance: Invoice, data: dict[str, Any]) -> dict[str, Any]:
     instance.number = data["number"]
     instance.save(update_fields=["number"])
     return {"number": instance.number}
 
 
-def _register_rename(server: MCPServer, **spec_overrides: Any) -> None:
+def _register_rename(
+    server: MCPServer,
+    *,
+    input_serializer: type[drf_serializers.Serializer] = _NumberInput,
+    **spec_overrides: Any,
+) -> None:
     spec = ServiceSpec(
         service=_rename_invoice,
-        input_serializer=_RenameInput,
+        input_serializer=input_serializer,
         instance_selector_spec=_INSTANCE_SPEC,
         atomic=False,
         **spec_overrides,
@@ -86,6 +104,20 @@ def test_service_tool_receives_spec_resolved_instance() -> None:
     assert isinstance(out, dict) and "isError" not in out
     invoice.refresh_from_db()
     assert invoice.number == "new"
+
+
+def test_a_lookup_key_declared_as_a_serializer_field_is_refused() -> None:
+    """A body field cannot name the row the target lookup resolves.
+
+    drf-services withholds a name the target lookup reads from the input serializer's
+    data, so a serializer declaring it as a writable field would see it missing on every
+    call. Registration refuses it, naming the field and the lookup; every registrar and
+    binding is a case of ``tests/adapters/test_lookup_key_input_field.py``.
+    """
+    server = _server()
+    with pytest.raises(ImproperlyConfigured, match=r"declares field\(s\) \['pk'\]"):
+        _register_rename(server, input_serializer=_RenameInput)
+    assert server.tools.get("invoices.rename") is None
 
 
 @pytest.mark.django_db(transaction=True)
@@ -133,7 +165,7 @@ def test_does_not_exist_from_instance_selector_is_not_found() -> None:
     server = _server()
     spec = ServiceSpec(
         service=_rename_invoice,
-        input_serializer=_RenameInput,
+        input_serializer=_NumberInput,
         instance_selector_spec=SelectorSpec(kind=SelectorKind.RETRIEVE, selector=strict_lookup),
         atomic=False,
     )
@@ -159,7 +191,7 @@ def test_non_queryset_instance_selector_return_is_used_directly() -> None:
     server = _server()
     spec = ServiceSpec(
         service=_rename_invoice,
-        input_serializer=_RenameInput,
+        input_serializer=_NumberInput,
         instance_selector_spec=SelectorSpec(kind=SelectorKind.RETRIEVE, selector=direct_lookup),
         atomic=False,
     )
@@ -219,7 +251,7 @@ def test_nested_spec_kwargs_provider_feeds_lookup_pool() -> None:
     server = _server()
     spec = ServiceSpec(
         service=_rename_invoice,
-        input_serializer=_RenameInput,
+        input_serializer=_NumberInput,
         instance_selector_spec=SelectorSpec(
             kind=SelectorKind.RETRIEVE,
             selector=scoped_lookup,
@@ -246,7 +278,6 @@ def test_input_serializer_sees_resolved_instance() -> None:
     seen: dict[str, Any] = {}
 
     class _Recording(drf_serializers.Serializer):
-        pk = drf_serializers.IntegerField()
         number = drf_serializers.CharField()
 
         def validate(self, attrs: dict[str, Any]) -> dict[str, Any]:
@@ -316,7 +347,7 @@ def test_reserved_seeds_cannot_be_poisoned_from_arguments() -> None:
     server = _server()
     spec = ServiceSpec(
         service=service,
-        input_serializer=_RenameInput,
+        input_serializer=_NumberInput,
         instance_selector_spec=_INSTANCE_SPEC,
         atomic=False,
     )
@@ -342,7 +373,7 @@ def test_reserved_seeds_cannot_be_poisoned_from_arguments() -> None:
     )
     assert "isError" not in out
     assert captured["instance"] == invoice
-    assert isinstance(captured["serializer"], _RenameInput)
+    assert isinstance(captured["serializer"], _NumberInput)
 
 
 @pytest.mark.django_db

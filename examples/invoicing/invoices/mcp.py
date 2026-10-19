@@ -7,9 +7,8 @@ modules (one per app) and combine them into a single ``MCPServer``.
 
 from __future__ import annotations
 
+from django_service_specs import DEFAULT_POOL_SEEDS, SelectorKind, ServerArguments
 from rest_framework.permissions import AllowAny
-from rest_framework_services import DEFAULT_POOL_SEEDS
-from rest_framework_services.types.selector_kind import SelectorKind
 from rest_framework_services.types.selector_spec import SelectorSpec
 from rest_framework_services.types.service_spec import ServiceSpec
 
@@ -19,6 +18,7 @@ from invoices.selectors import (
     find_invoice,
     get_invoice,
     invoice_by_number,
+    invoices_by_sent,
     list_invoices,
     outstanding_total,
 )
@@ -180,22 +180,40 @@ def build_server() -> MCPServer:
             selector=list_invoices,
             output_serializer=SelectableInvoiceSerializer,
             filter_set=InvoiceFilterSet,
+            # Field selection, read by the serializer off
+            # ``request.query_params``. Declared on the spec, so every
+            # transport mounting it reads the same declaration. Because the
+            # tool pages, the advertised description gains a sentence saying
+            # the selection applies to each item, never to the envelope; a
+            # selection that names the envelope anyway comes back as a
+            # ``validation_error`` rather than as a page of empty rows.
+            reads=[
+                QueryParam(
+                    "fields",
+                    description="Comma-separated invoice fields to return, e.g. id,number",
+                ),
+            ],
         ),
         description="List invoices, optionally filtered / ordered / paginated.",
         # Ordering is not a registration knob: ``InvoiceFilterSet`` declares an
         # ``OrderingFilter``, and that declaration is what the tool advertises.
         paginate=True,
-        # Field selection, read by the serializer off ``request.query_params``.
-        # Because the tool pages, the advertised description gains a sentence
-        # saying the selection applies to each item, never to the envelope;
-        # a selection that names the envelope anyway comes back as a
-        # ``validation_error`` rather than as a page of empty rows.
-        query_params=(
-            QueryParam(
-                "fields",
-                description="Comma-separated invoice fields to return, e.g. id,number",
-            ),
+    )
+
+    # An argument the mount answers itself. ``sent`` is the selector's own
+    # parameter; binding it here takes it out of the tool's ``inputSchema``
+    # and drops a client's value for it before anything reads it.
+    server.register_selector_tool(
+        name="invoices.unsent",
+        spec=SelectorSpec(
+            permission_classes=[AllowAny],
+            kind=SelectorKind.LIST,
+            selector=invoices_by_sent,
+            output_serializer=InvoiceOutputSerializer,
         ),
+        description="Invoices not sent yet.",
+        paginate=True,
+        server_arguments=ServerArguments(values={"sent": False}),
     )
 
     server.register_selector_tool(

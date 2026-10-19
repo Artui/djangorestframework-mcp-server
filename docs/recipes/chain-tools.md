@@ -29,7 +29,8 @@ validated arguments (`ctx.args`) and any prior output (`ctx[alias]`):
 
 ```python
 from rest_framework_mcp import ChainStep, MCPServer
-from rest_framework_services import SelectorKind, SelectorSpec, ServiceSpec
+from django_service_specs import SelectorKind
+from rest_framework_services import SelectorSpec, ServiceSpec
 
 server.register_chain_tool(
     name="onboard_account",

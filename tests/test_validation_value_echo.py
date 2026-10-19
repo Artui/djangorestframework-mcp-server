@@ -14,7 +14,7 @@ from typing import Any
 
 import pytest
 from django.http import HttpRequest
-from rest_framework_services.exceptions.service_validation_error import ServiceValidationError
+from django_service_specs import ServiceValidationError
 from rest_framework_services.types.service_spec import ServiceSpec
 
 from rest_framework_mcp import MCPServer, PromptArgument

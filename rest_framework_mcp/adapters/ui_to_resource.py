@@ -5,8 +5,7 @@ from collections.abc import Callable
 from typing import Any
 
 from django.template.loader import render_to_string
-from rest_framework_services import UNSET, UnsetType
-from rest_framework_services.types.selector_kind import SelectorKind
+from django_service_specs import UNSET, SelectorKind, UnsetType
 
 from rest_framework_mcp.adapters.utils import merge_meta
 from rest_framework_mcp.constants import (

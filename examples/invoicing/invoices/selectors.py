@@ -10,7 +10,7 @@ from __future__ import annotations
 from typing import Any
 
 from django.db.models import QuerySet, Sum
-from rest_framework_services.exceptions.service_error import ServiceError
+from django_service_specs import ServiceError
 
 from invoices.models import Invoice
 
@@ -65,3 +65,15 @@ def outstanding_total(*, currency: str) -> dict[str, Any]:
     """
     total = Invoice.objects.filter(sent=False).aggregate(total=Sum("amount_cents"))["total"]
     return {"amount_cents": total or 0, "currency": currency}
+
+
+def invoices_by_sent(*, sent: bool) -> QuerySet[Invoice]:
+    """Backs ``invoices.unsent``: the invoices in one ``sent`` state.
+
+    ``sent`` is a parameter with no default, so on its own it would be a
+    required tool argument. The tool binds it with ``server_arguments=``
+    instead, so this mount always answers ``False``: the tool's
+    ``inputSchema`` does not advertise it, and a client sending ``sent`` has
+    its value dropped (and logged by name) rather than reading sent invoices.
+    """
+    return Invoice.objects.filter(sent=sent).order_by("number")

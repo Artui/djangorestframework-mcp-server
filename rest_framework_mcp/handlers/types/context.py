@@ -4,8 +4,7 @@ from dataclasses import dataclass, field
 from typing import Any
 
 from django.http import HttpRequest
-from rest_framework_services.types.pool_seeds import DEFAULT_POOL_SEEDS, PoolSeeds
-from rest_framework_services.types.progress_reporter import ProgressReporter
+from django_service_specs import DEFAULT_POOL_SEEDS, PoolSeeds, ProgressReporter
 
 from rest_framework_mcp.auth.types.token_info import TokenInfo
 from rest_framework_mcp.config.build_mcp_config import build_mcp_config

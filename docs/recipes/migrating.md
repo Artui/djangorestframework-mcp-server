@@ -85,7 +85,7 @@ are now plain Python (no `request` parsing, no JSON shaping) and a
 
 ```python
 # After — a plain service callable
-from rest_framework_services.exceptions.service_error import ServiceError
+from django_service_specs import ServiceError
 
 
 def create_invoice(*, data: dict) -> Invoice:
@@ -122,7 +122,7 @@ Replace the custom view with a single `MCPServer` instance:
 
 ```python
 # After — wired through MCPServer
-from rest_framework_services.types.selector_kind import SelectorKind
+from django_service_specs import SelectorKind
 from rest_framework_services.types.selector_spec import SelectorSpec
 from rest_framework_services.types.service_spec import ServiceSpec
 from rest_framework_mcp import MCPServer

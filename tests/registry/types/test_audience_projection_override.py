@@ -4,8 +4,8 @@ from __future__ import annotations
 
 import pytest
 from django.core.exceptions import ImproperlyConfigured
-from rest_framework_services import FieldMarking, SelectorKind, SelectorSpec
-from rest_framework_services.types.field_audience import FieldAudience
+from django_service_specs import FieldAudience, FieldMarking, SelectorKind
+from rest_framework_services import SelectorSpec
 
 from rest_framework_mcp.registry.types.selector_tool_binding import SelectorToolBinding
 from tests.testapp.serializers import AgentInvoiceSerializer

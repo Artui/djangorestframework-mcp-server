@@ -3,7 +3,7 @@ from __future__ import annotations
 from collections.abc import Mapping
 from typing import Any
 
-from rest_framework_services import UNSET, FieldMarking, UnsetType
+from django_service_specs import UNSET, FieldMarking, UnsetType
 from rest_framework_services.types.selector_spec import SelectorSpec
 
 from rest_framework_mcp.adapters.utils import (

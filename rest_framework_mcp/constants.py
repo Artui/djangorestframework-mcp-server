@@ -11,8 +11,8 @@ from enum import Enum, IntEnum
 
 # ``dispatch_spec`` is the single dispatch core and owns these neutral-core
 # policies, so MCP consumes them rather than keeping a parallel copy.
-from rest_framework_services import ArgumentBinding, UnknownArguments
-from rest_framework_services.types.reserved_pool_seeds import RESERVED_POOL_SEEDS
+from django_service_specs import RESERVED_POOL_SEEDS, UnknownArguments
+from rest_framework_services import ArgumentBinding
 
 """Keys carrying transport-controlled pool seeds, owned by the sister repo.
 
@@ -151,6 +151,42 @@ class ToolKind(Enum):
 
 
 # ---------- Reserved kwarg-pool keys (shared across handlers) ----------
+
+RESOURCE_EDGE_SEEDS: frozenset[str] = frozenset({"request"})
+"""Pool keys ``resources/read`` seeds itself, beyond the kernel's reserved set.
+
+``RESERVED_POOL_SEEDS`` is the kernel's, and since drf-services 0.58.0 it no
+longer lists ``request``: off HTTP there is none, so the kernel leaves it to an
+HTTP adapter to seed. ``resources/read`` does, laying the synthesised request
+over the URI-template variables, so a variable named ``request`` would never
+reach the selector. ``register_resource`` reserves these beside the kernel's
+set and the server's ``pool_seeds`` so such a template is refused rather than
+silently shadowed
+(``test_a_template_variable_named_after_a_pool_seed_is_refused[request]``).
+"""
+
+TOOL_EDGE_SEEDS: frozenset[str] = frozenset({"request", "view", "serializer"})
+"""Names a tool call fills itself, beyond the kernel's reserved set, that no channel may take.
+
+drf-services' DRF edge seeds ``request`` and ``view`` on every ``dispatch_spec``
+call (its ``EDGE_SEEDS``), and its validator binds ``serializer``; a caller's
+key of the first or third name is dropped (its ``DROPPED_EDGE_SEEDS``). None of
+the three is in the kernel's ``RESERVED_POOL_SEEDS``, which
+``validate_channel_names`` always reserves, so a ``UrlKwarg`` or ``QueryParam``
+of one of these names registered, was listed, and never reached what read it.
+``validate_url_kwargs`` and ``validate_query_params`` reserve these beside the
+post-fetch keys and the server's ``pool_seeds``
+(``test_a_url_kwarg_named_after_an_edge_seed_is_refused``,
+``test_a_query_param_named_after_an_edge_seed_is_refused``), which is the rule
+drf-services applies to a spec's own ``reads`` when it compiles one.
+
+Written out rather than composed from drf-services' internal module, and pinned
+equal to ``DROPPED_EDGE_SEEDS | EDGE_SEEDS`` by
+``test_the_tool_edge_seeds_are_what_the_drf_edge_fills``, so an upstream change
+fails a test here instead of moving a public constant without a word. A
+resource read seeds only ``request`` (``RESOURCE_EDGE_SEEDS``), because it runs
+its selector directly, with no view and no validator.
+"""
 
 RESERVED_POST_FETCH_KEYS: frozenset[str] = frozenset({"page", "limit"})
 """Keys the post-fetch pipeline of a ``LIST`` selector tool consumes.
@@ -675,6 +711,7 @@ __all__ = [
     "SESSION_MISSING_HINT",
     "SESSION_UNKNOWN_HINT",
     "NotificationKind",
+    "RESOURCE_EDGE_SEEDS",
     "RESOURCE_UPDATED_METHOD",
     "SUBSCRIPTIONS_ACKNOWLEDGED_METHOD",
     "SUBSCRIPTIONS_LISTEN_METHOD",
@@ -684,6 +721,7 @@ __all__ = [
     "TASK_METHODS",
     "TaskPolicy",
     "TaskStatus",
+    "TOOL_EDGE_SEEDS",
     "ToolContentKind",
     "ToolKind",
     "UIPermission",
