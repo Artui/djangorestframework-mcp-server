@@ -657,6 +657,17 @@
 </li>
         
           <li class="md-nav__item">
+  <a href="#argumentbindingspread_caller_wins-is-retired" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        "ArgumentBinding.SPREAD_CALLER_WINS is retired"
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
   <a href="#servicespec-declares-collection_selector_spec-with-manytrue" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -1845,6 +1856,17 @@
 </li>
         
           <li class="md-nav__item">
+  <a href="#argumentbindingspread_caller_wins-is-retired" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        "ArgumentBinding.SPREAD_CALLER_WINS is retired"
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
   <a href="#servicespec-declares-collection_selector_spec-with-manytrue" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -2131,9 +2153,19 @@ list another name on the spec:</p>
 </span></code></pre></div>
 <h3 id="cannot-apply-to-a-spec-declaring-manytrue">"cannot apply to a spec declaring many=True"<a class="headerlink" href="#cannot-apply-to-a-spec-declaring-manytrue" title="Permanent link">&para;</a></h3>
 <p>A <code>many=True</code> service receives the whole list as one <code>data</code> argument, so a
-<code>SPREAD_AUTHOR_WINS</code> or <code>SPREAD_CALLER_WINS</code> argument binding has nothing to
-spread, and drf-services raises <code>ValueError</code> for it on every call. Leave
-<code>argument_binding</code> at its <code>BUNDLE</code> default.</p>
+<code>SPREAD_AUTHOR_WINS</code> argument binding has nothing to spread, and registration
+refuses it with <code>ImproperlyConfigured</code>. Leave <code>argument_binding</code> at its
+<code>BUNDLE</code> default.</p>
+<h3 id="argumentbindingspread_caller_wins-is-retired">"ArgumentBinding.SPREAD_CALLER_WINS is retired"<a class="headerlink" href="#argumentbindingspread_caller_wins-is-retired" title="Permanent link">&para;</a></h3>
+<p>drf-services 0.58.0 retired the member: a call has one pool, and an author's
+value for an argument (the spec's <code>kwargs</code> provider, a declared read) always
+outranks the caller's, so a caller cannot override what the server's spec
+declares. The member stays importable, and registering a tool with it raises
+<code>ImproperlyConfigured</code> naming the tool, rather than shipping one that fails
+every call. Pass <code>ArgumentBinding.SPREAD_AUTHOR_WINS</code> for a service whose own
+parameters are the caller's input, or <code>ArgumentBinding.BUNDLE</code> for one
+validated <code>data</code> payload. Where the caller's value should win for a key, leave
+that key out of the <code>kwargs</code> provider.</p>
 <h3 id="servicespec-declares-collection_selector_spec-with-manytrue">"ServiceSpec declares collection_selector_spec with many=True"<a class="headerlink" href="#servicespec-declares-collection_selector_spec-with-manytrue" title="Permanent link">&para;</a></h3>
 <p>drf-services raises this when the spec is built, before any registration, and
 the same for an <code>instance_selector_spec</code> beside <code>many=True</code> or beside a

@@ -1577,18 +1577,19 @@ both the payload and the advertised <code>outputSchema</code>.</p>
 <a href="https://artui.github.io/djangorestframework-services/">djangorestframework-services</a>,
 in DRF's per-field <code>style</code> bag:</p>
 <div class="language-python highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="kn">from</span><span class="w"> </span><span class="nn">rest_framework</span><span class="w"> </span><span class="kn">import</span> <span class="n">serializers</span>
-</span><span id="__span-0-2"><a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a><span class="kn">from</span><span class="w"> </span><span class="nn">rest_framework_services</span><span class="w"> </span><span class="kn">import</span> <span class="n">MARKING</span><span class="p">,</span> <span class="n">FieldMarking</span>
-</span><span id="__span-0-3"><a id="__codelineno-0-3" name="__codelineno-0-3" href="#__codelineno-0-3"></a>
+</span><span id="__span-0-2"><a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a><span class="kn">from</span><span class="w"> </span><span class="nn">django_service_specs</span><span class="w"> </span><span class="kn">import</span> <span class="n">FieldMarking</span>
+</span><span id="__span-0-3"><a id="__codelineno-0-3" name="__codelineno-0-3" href="#__codelineno-0-3"></a><span class="kn">from</span><span class="w"> </span><span class="nn">rest_framework_services</span><span class="w"> </span><span class="kn">import</span> <span class="n">MARKING</span>
 </span><span id="__span-0-4"><a id="__codelineno-0-4" name="__codelineno-0-4" href="#__codelineno-0-4"></a>
-</span><span id="__span-0-5"><a id="__codelineno-0-5" name="__codelineno-0-5" href="#__codelineno-0-5"></a><span class="k">class</span><span class="w"> </span><span class="nc">InvoiceSerializer</span><span class="p">(</span><span class="n">serializers</span><span class="o">.</span><span class="n">ModelSerializer</span><span class="p">):</span>
-</span><span id="__span-0-6"><a id="__codelineno-0-6" name="__codelineno-0-6" href="#__codelineno-0-6"></a>    <span class="k">class</span><span class="w"> </span><span class="nc">Meta</span><span class="p">:</span>
-</span><span id="__span-0-7"><a id="__codelineno-0-7" name="__codelineno-0-7" href="#__codelineno-0-7"></a>        <span class="n">model</span> <span class="o">=</span> <span class="n">Invoice</span>
-</span><span id="__span-0-8"><a id="__codelineno-0-8" name="__codelineno-0-8" href="#__codelineno-0-8"></a>        <span class="n">fields</span> <span class="o">=</span> <span class="p">[</span><span class="s2">&quot;id&quot;</span><span class="p">,</span> <span class="s2">&quot;number&quot;</span><span class="p">,</span> <span class="s2">&quot;status&quot;</span><span class="p">,</span> <span class="s2">&quot;etag&quot;</span><span class="p">,</span> <span class="s2">&quot;amount_cents&quot;</span><span class="p">]</span>
-</span><span id="__span-0-9"><a id="__codelineno-0-9" name="__codelineno-0-9" href="#__codelineno-0-9"></a>        <span class="n">extra_kwargs</span> <span class="o">=</span> <span class="p">{</span>
-</span><span id="__span-0-10"><a id="__codelineno-0-10" name="__codelineno-0-10" href="#__codelineno-0-10"></a>            <span class="s2">&quot;id&quot;</span><span class="p">:</span> <span class="p">{</span><span class="s2">&quot;style&quot;</span><span class="p">:</span> <span class="p">{</span><span class="n">MARKING</span><span class="p">:</span> <span class="n">FieldMarking</span><span class="o">.</span><span class="n">handle</span><span class="p">(</span><span class="s2">&quot;Invoice handle.&quot;</span><span class="p">)}},</span>
-</span><span id="__span-0-11"><a id="__codelineno-0-11" name="__codelineno-0-11" href="#__codelineno-0-11"></a>            <span class="s2">&quot;etag&quot;</span><span class="p">:</span> <span class="p">{</span><span class="s2">&quot;style&quot;</span><span class="p">:</span> <span class="p">{</span><span class="n">MARKING</span><span class="p">:</span> <span class="n">FieldMarking</span><span class="o">.</span><span class="n">hidden</span><span class="p">()}},</span>
-</span><span id="__span-0-12"><a id="__codelineno-0-12" name="__codelineno-0-12" href="#__codelineno-0-12"></a>            <span class="s2">&quot;number&quot;</span><span class="p">:</span> <span class="p">{</span><span class="s2">&quot;style&quot;</span><span class="p">:</span> <span class="p">{</span><span class="n">MARKING</span><span class="p">:</span> <span class="n">FieldMarking</span><span class="o">.</span><span class="n">label</span><span class="p">()}},</span>
-</span><span id="__span-0-13"><a id="__codelineno-0-13" name="__codelineno-0-13" href="#__codelineno-0-13"></a>        <span class="p">}</span>
+</span><span id="__span-0-5"><a id="__codelineno-0-5" name="__codelineno-0-5" href="#__codelineno-0-5"></a>
+</span><span id="__span-0-6"><a id="__codelineno-0-6" name="__codelineno-0-6" href="#__codelineno-0-6"></a><span class="k">class</span><span class="w"> </span><span class="nc">InvoiceSerializer</span><span class="p">(</span><span class="n">serializers</span><span class="o">.</span><span class="n">ModelSerializer</span><span class="p">):</span>
+</span><span id="__span-0-7"><a id="__codelineno-0-7" name="__codelineno-0-7" href="#__codelineno-0-7"></a>    <span class="k">class</span><span class="w"> </span><span class="nc">Meta</span><span class="p">:</span>
+</span><span id="__span-0-8"><a id="__codelineno-0-8" name="__codelineno-0-8" href="#__codelineno-0-8"></a>        <span class="n">model</span> <span class="o">=</span> <span class="n">Invoice</span>
+</span><span id="__span-0-9"><a id="__codelineno-0-9" name="__codelineno-0-9" href="#__codelineno-0-9"></a>        <span class="n">fields</span> <span class="o">=</span> <span class="p">[</span><span class="s2">&quot;id&quot;</span><span class="p">,</span> <span class="s2">&quot;number&quot;</span><span class="p">,</span> <span class="s2">&quot;status&quot;</span><span class="p">,</span> <span class="s2">&quot;etag&quot;</span><span class="p">,</span> <span class="s2">&quot;amount_cents&quot;</span><span class="p">]</span>
+</span><span id="__span-0-10"><a id="__codelineno-0-10" name="__codelineno-0-10" href="#__codelineno-0-10"></a>        <span class="n">extra_kwargs</span> <span class="o">=</span> <span class="p">{</span>
+</span><span id="__span-0-11"><a id="__codelineno-0-11" name="__codelineno-0-11" href="#__codelineno-0-11"></a>            <span class="s2">&quot;id&quot;</span><span class="p">:</span> <span class="p">{</span><span class="s2">&quot;style&quot;</span><span class="p">:</span> <span class="p">{</span><span class="n">MARKING</span><span class="p">:</span> <span class="n">FieldMarking</span><span class="o">.</span><span class="n">handle</span><span class="p">(</span><span class="s2">&quot;Invoice handle.&quot;</span><span class="p">)}},</span>
+</span><span id="__span-0-12"><a id="__codelineno-0-12" name="__codelineno-0-12" href="#__codelineno-0-12"></a>            <span class="s2">&quot;etag&quot;</span><span class="p">:</span> <span class="p">{</span><span class="s2">&quot;style&quot;</span><span class="p">:</span> <span class="p">{</span><span class="n">MARKING</span><span class="p">:</span> <span class="n">FieldMarking</span><span class="o">.</span><span class="n">hidden</span><span class="p">()}},</span>
+</span><span id="__span-0-13"><a id="__codelineno-0-13" name="__codelineno-0-13" href="#__codelineno-0-13"></a>            <span class="s2">&quot;number&quot;</span><span class="p">:</span> <span class="p">{</span><span class="s2">&quot;style&quot;</span><span class="p">:</span> <span class="p">{</span><span class="n">MARKING</span><span class="p">:</span> <span class="n">FieldMarking</span><span class="o">.</span><span class="n">label</span><span class="p">()}},</span>
+</span><span id="__span-0-14"><a id="__codelineno-0-14" name="__codelineno-0-14" href="#__codelineno-0-14"></a>        <span class="p">}</span>
 </span></code></pre></div>
 <p>Nothing else changes at registration. A tool whose spec renders through that
 serializer now returns:</p>
@@ -1627,35 +1628,60 @@ cost its keys twice over and hide nothing.</p>
 <h2 id="override-it-for-one-tool">Override it for one tool<a class="headerlink" href="#override-it-for-one-tool" title="Permanent link">&para;</a></h2>
 <p>The serializer stays authoritative — it is the one declaration your REST API,
 this server, and any in-process toolset all read. When a single tool genuinely
-needs what its sibling hides, that is an override, and it belongs on the
-registry entry rather than on this mount:</p>
-<div class="language-python highlight"><pre><span></span><code><span id="__span-3-1"><a id="__codelineno-3-1" name="__codelineno-3-1" href="#__codelineno-3-1"></a><span class="n">registry</span><span class="o">.</span><span class="n">register</span><span class="p">(</span>
-</span><span id="__span-3-2"><a id="__codelineno-3-2" name="__codelineno-3-2" href="#__codelineno-3-2"></a>    <span class="s2">&quot;lookup_invoice&quot;</span><span class="p">,</span>
-</span><span id="__span-3-3"><a id="__codelineno-3-3" name="__codelineno-3-3" href="#__codelineno-3-3"></a>    <span class="n">invoice_spec</span><span class="p">,</span>
-</span><span id="__span-3-4"><a id="__codelineno-3-4" name="__codelineno-3-4" href="#__codelineno-3-4"></a>    <span class="c1"># This tool returns the etag after all.</span>
-</span><span id="__span-3-5"><a id="__codelineno-3-5" name="__codelineno-3-5" href="#__codelineno-3-5"></a>    <span class="n">agent_contract</span><span class="o">=</span><span class="n">OfflineContract</span><span class="p">(</span><span class="n">field_audiences</span><span class="o">=</span><span class="p">{</span><span class="s2">&quot;etag&quot;</span><span class="p">:</span> <span class="n">FieldMarking</span><span class="p">()}),</span>
-</span><span id="__span-3-6"><a id="__codelineno-3-6" name="__codelineno-3-6" href="#__codelineno-3-6"></a><span class="p">)</span>
-</span><span id="__span-3-7"><a id="__codelineno-3-7" name="__codelineno-3-7" href="#__codelineno-3-7"></a>
-</span><span id="__span-3-8"><a id="__codelineno-3-8" name="__codelineno-3-8" href="#__codelineno-3-8"></a><span class="n">server</span><span class="o">.</span><span class="n">register_specs</span><span class="p">(</span><span class="n">registry</span><span class="o">.</span><span class="n">by_tag</span><span class="p">(</span><span class="s2">&quot;billing&quot;</span><span class="p">))</span>
+needs what its sibling hides, that is an override, and it belongs on the spec
+the registry holds rather than on this mount:</p>
+<div class="language-python highlight"><pre><span></span><code><span id="__span-3-1"><a id="__codelineno-3-1" name="__codelineno-3-1" href="#__codelineno-3-1"></a><span class="kn">from</span><span class="w"> </span><span class="nn">django_service_specs</span><span class="w"> </span><span class="kn">import</span> <span class="n">FieldMarking</span><span class="p">,</span> <span class="n">SelectorKind</span>
+</span><span id="__span-3-2"><a id="__codelineno-3-2" name="__codelineno-3-2" href="#__codelineno-3-2"></a><span class="kn">from</span><span class="w"> </span><span class="nn">rest_framework.permissions</span><span class="w"> </span><span class="kn">import</span> <span class="n">IsAuthenticated</span>
+</span><span id="__span-3-3"><a id="__codelineno-3-3" name="__codelineno-3-3" href="#__codelineno-3-3"></a><span class="kn">from</span><span class="w"> </span><span class="nn">rest_framework_services</span><span class="w"> </span><span class="kn">import</span> <span class="n">SelectorSpec</span>
+</span><span id="__span-3-4"><a id="__codelineno-3-4" name="__codelineno-3-4" href="#__codelineno-3-4"></a>
+</span><span id="__span-3-5"><a id="__codelineno-3-5" name="__codelineno-3-5" href="#__codelineno-3-5"></a><span class="n">invoice_spec</span> <span class="o">=</span> <span class="n">SelectorSpec</span><span class="p">(</span>
+</span><span id="__span-3-6"><a id="__codelineno-3-6" name="__codelineno-3-6" href="#__codelineno-3-6"></a>    <span class="n">kind</span><span class="o">=</span><span class="n">SelectorKind</span><span class="o">.</span><span class="n">RETRIEVE</span><span class="p">,</span>
+</span><span id="__span-3-7"><a id="__codelineno-3-7" name="__codelineno-3-7" href="#__codelineno-3-7"></a>    <span class="n">selector</span><span class="o">=</span><span class="n">get_invoice</span><span class="p">,</span>
+</span><span id="__span-3-8"><a id="__codelineno-3-8" name="__codelineno-3-8" href="#__codelineno-3-8"></a>    <span class="n">output_serializer</span><span class="o">=</span><span class="n">InvoiceSerializer</span><span class="p">,</span>
+</span><span id="__span-3-9"><a id="__codelineno-3-9" name="__codelineno-3-9" href="#__codelineno-3-9"></a>    <span class="n">permission_classes</span><span class="o">=</span><span class="p">[</span><span class="n">IsAuthenticated</span><span class="p">],</span>
+</span><span id="__span-3-10"><a id="__codelineno-3-10" name="__codelineno-3-10" href="#__codelineno-3-10"></a>    <span class="c1"># This tool returns the etag after all.</span>
+</span><span id="__span-3-11"><a id="__codelineno-3-11" name="__codelineno-3-11" href="#__codelineno-3-11"></a>    <span class="n">field_audiences</span><span class="o">=</span><span class="p">{</span><span class="s2">&quot;etag&quot;</span><span class="p">:</span> <span class="n">FieldMarking</span><span class="p">()},</span>
+</span><span id="__span-3-12"><a id="__codelineno-3-12" name="__codelineno-3-12" href="#__codelineno-3-12"></a><span class="p">)</span>
+</span><span id="__span-3-13"><a id="__codelineno-3-13" name="__codelineno-3-13" href="#__codelineno-3-13"></a><span class="n">registry</span><span class="o">.</span><span class="n">register</span><span class="p">(</span><span class="s2">&quot;lookup_invoice&quot;</span><span class="p">,</span> <span class="n">invoice_spec</span><span class="p">,</span> <span class="n">tags</span><span class="o">=</span><span class="p">(</span><span class="s2">&quot;billing&quot;</span><span class="p">,))</span>
+</span><span id="__span-3-14"><a id="__codelineno-3-14" name="__codelineno-3-14" href="#__codelineno-3-14"></a>
+</span><span id="__span-3-15"><a id="__codelineno-3-15" name="__codelineno-3-15" href="#__codelineno-3-15"></a><span class="n">server</span><span class="o">.</span><span class="n">register_specs</span><span class="p">(</span><span class="n">registry</span><span class="o">.</span><span class="n">by_tag</span><span class="p">(</span><span class="s2">&quot;billing&quot;</span><span class="p">))</span>
 </span></code></pre></div>
-<p><code>OfflineContract</code> is drf-services' carrier for what a caller with <strong>no HTTP
-request</strong> has to be told — the URL kwargs and query params an agent must supply
-by hand, and this. Declaring it on the entry is what keeps an in-process
-Pydantic-AI toolset and this server projecting the <em>same</em> field set: an audience
-is not a transport, so a field hidden from one agent caller and visible to
-another is a bug you would find in a transcript rather than in a test.</p>
-<p>A server registering a spec directly, with no registry in front of it, passes
-the same object:</p>
-<div class="language-python highlight"><pre><span></span><code><span id="__span-4-1"><a id="__codelineno-4-1" name="__codelineno-4-1" href="#__codelineno-4-1"></a><span class="n">server</span><span class="o">.</span><span class="n">register_selector_tool</span><span class="p">(</span>
-</span><span id="__span-4-2"><a id="__codelineno-4-2" name="__codelineno-4-2" href="#__codelineno-4-2"></a>    <span class="n">name</span><span class="o">=</span><span class="s2">&quot;lookup_invoice&quot;</span><span class="p">,</span>
-</span><span id="__span-4-3"><a id="__codelineno-4-3" name="__codelineno-4-3" href="#__codelineno-4-3"></a>    <span class="n">spec</span><span class="o">=</span><span class="n">invoice_spec</span><span class="p">,</span>
-</span><span id="__span-4-4"><a id="__codelineno-4-4" name="__codelineno-4-4" href="#__codelineno-4-4"></a>    <span class="n">agent_contract</span><span class="o">=</span><span class="n">OfflineContract</span><span class="p">(</span><span class="n">field_audiences</span><span class="o">=</span><span class="p">{</span><span class="s2">&quot;etag&quot;</span><span class="p">:</span> <span class="n">FieldMarking</span><span class="p">()}),</span>
-</span><span id="__span-4-5"><a id="__codelineno-4-5" name="__codelineno-4-5" href="#__codelineno-4-5"></a><span class="p">)</span>
+<p>Every registrar reads <code>field_audiences</code> off the spec, beside its <code>reads</code>.
+Declaring it on the spec is what keeps an in-process Pydantic-AI toolset and this
+server projecting the <em>same</em> field set: an audience is not a transport, so
+a field hidden from one agent caller and visible to another is a bug you would
+find in a transcript rather than in a test.</p>
+<p><code>SpecRegistry.register</code> takes no <code>agent_contract=</code> (drf-services 0.58.0 removed
+it). For an entry registered elsewhere, re-declare the spec it holds with
+<code>dataclasses.replace</code>:</p>
+<div class="language-python highlight"><pre><span></span><code><span id="__span-4-1"><a id="__codelineno-4-1" name="__codelineno-4-1" href="#__codelineno-4-1"></a><span class="kn">from</span><span class="w"> </span><span class="nn">dataclasses</span><span class="w"> </span><span class="kn">import</span> <span class="n">replace</span>
+</span><span id="__span-4-2"><a id="__codelineno-4-2" name="__codelineno-4-2" href="#__codelineno-4-2"></a>
+</span><span id="__span-4-3"><a id="__codelineno-4-3" name="__codelineno-4-3" href="#__codelineno-4-3"></a><span class="kn">from</span><span class="w"> </span><span class="nn">django_service_specs</span><span class="w"> </span><span class="kn">import</span> <span class="n">FieldMarking</span><span class="p">,</span> <span class="n">SpecRegistry</span>
+</span><span id="__span-4-4"><a id="__codelineno-4-4" name="__codelineno-4-4" href="#__codelineno-4-4"></a>
+</span><span id="__span-4-5"><a id="__codelineno-4-5" name="__codelineno-4-5" href="#__codelineno-4-5"></a><span class="n">entry</span> <span class="o">=</span> <span class="n">registry</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;lookup_invoice&quot;</span><span class="p">)</span>
+</span><span id="__span-4-6"><a id="__codelineno-4-6" name="__codelineno-4-6" href="#__codelineno-4-6"></a><span class="n">billing</span> <span class="o">=</span> <span class="n">SpecRegistry</span><span class="p">(</span>
+</span><span id="__span-4-7"><a id="__codelineno-4-7" name="__codelineno-4-7" href="#__codelineno-4-7"></a>    <span class="p">[</span><span class="n">replace</span><span class="p">(</span><span class="n">entry</span><span class="p">,</span> <span class="n">spec</span><span class="o">=</span><span class="n">replace</span><span class="p">(</span><span class="n">entry</span><span class="o">.</span><span class="n">spec</span><span class="p">,</span> <span class="n">field_audiences</span><span class="o">=</span><span class="p">{</span><span class="s2">&quot;etag&quot;</span><span class="p">:</span> <span class="n">FieldMarking</span><span class="p">()}))]</span>
+</span><span id="__span-4-8"><a id="__codelineno-4-8" name="__codelineno-4-8" href="#__codelineno-4-8"></a><span class="p">)</span>
+</span><span id="__span-4-9"><a id="__codelineno-4-9" name="__codelineno-4-9" href="#__codelineno-4-9"></a>
+</span><span id="__span-4-10"><a id="__codelineno-4-10" name="__codelineno-4-10" href="#__codelineno-4-10"></a><span class="n">server</span><span class="o">.</span><span class="n">register_specs</span><span class="p">(</span><span class="n">billing</span><span class="p">)</span>
 </span></code></pre></div>
-<p>It works the same on <code>register_service_tool</code> and <code>register_chain_tool</code> — a chain
-has no registry entry, so this is its only route — and as an <code>overrides</code> key on
-<code>register_specs</code>, which <strong>replaces</strong> the entry's contract rather than merging
-into it.</p>
+<p>A server registering a spec directly, with no registry in front of it, gets the
+same projection from the same declaration: <code>register_selector_tool(spec=...)</code>
+and <code>register_service_tool(spec=...)</code> read the spec's <code>field_audiences</code> as
+<code>register_specs</code> does.</p>
+<p>A chain has no spec of its own to declare them on, so <code>register_chain_tool</code>
+takes them as an
+<a class="autorefs autorefs-external" href="https://artui.github.io/djangorestframework-services/reference/registry/#rest_framework_services.types.offline_contract.OfflineContract"><code>OfflineContract</code></a>:</p>
+<div class="language-python highlight"><pre><span></span><code><span id="__span-5-1"><a id="__codelineno-5-1" name="__codelineno-5-1" href="#__codelineno-5-1"></a><span class="n">server</span><span class="o">.</span><span class="n">register_chain_tool</span><span class="p">(</span>
+</span><span id="__span-5-2"><a id="__codelineno-5-2" name="__codelineno-5-2" href="#__codelineno-5-2"></a>    <span class="n">name</span><span class="o">=</span><span class="s2">&quot;lookup_and_bill&quot;</span><span class="p">,</span>
+</span><span id="__span-5-3"><a id="__codelineno-5-3" name="__codelineno-5-3" href="#__codelineno-5-3"></a>    <span class="n">steps</span><span class="o">=</span><span class="p">[</span><span class="o">...</span><span class="p">],</span>
+</span><span id="__span-5-4"><a id="__codelineno-5-4" name="__codelineno-5-4" href="#__codelineno-5-4"></a>    <span class="n">agent_contract</span><span class="o">=</span><span class="n">OfflineContract</span><span class="p">(</span><span class="n">field_audiences</span><span class="o">=</span><span class="p">{</span><span class="s2">&quot;etag&quot;</span><span class="p">:</span> <span class="n">FieldMarking</span><span class="p">()}),</span>
+</span><span id="__span-5-5"><a id="__codelineno-5-5" name="__codelineno-5-5" href="#__codelineno-5-5"></a><span class="p">)</span>
+</span></code></pre></div>
+<p>On <code>register_selector_tool</code>, <code>register_service_tool</code> and as a <code>register_specs</code>
+override, <code>agent_contract=</code> is deprecated and warns: it declares at the mount
+what the spec declares itself, and replaces the spec's declaration outright
+while it lasts.</p>
 <p>Two fields left claiming <code>FieldMarking.label()</code> raises <code>ImproperlyConfigured</code>
 naming the tool: a record has one name, and picking one silently is the kind of
 thing you find in a transcript weeks later.</p>

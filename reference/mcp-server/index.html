@@ -2471,7 +2471,8 @@ signature and called directly.</p>
 </span><span id="__span-0-28"><a id="__codelineno-0-28" name="__codelineno-0-28" href="#__codelineno-0-28"></a>    <span class="n">query_params</span><span class="p">:</span> <span class="nb">tuple</span><span class="p">[</span><span class="n">QueryParam</span><span class="p">,</span> <span class="o">...</span><span class="p">]</span> <span class="o">=</span> <span class="p">(),</span>
 </span><span id="__span-0-29"><a id="__codelineno-0-29" name="__codelineno-0-29" href="#__codelineno-0-29"></a>    <span class="n">max_result_bytes</span><span class="p">:</span> <span class="nb">int</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">|</span> <span class="n">UnsetType</span> <span class="o">=</span> <span class="n">UNSET</span><span class="p">,</span>
 </span><span id="__span-0-30"><a id="__codelineno-0-30" name="__codelineno-0-30" href="#__codelineno-0-30"></a>    <span class="n">dispatch_timeout</span><span class="p">:</span> <span class="nb">float</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">|</span> <span class="n">UnsetType</span> <span class="o">=</span> <span class="n">UNSET</span><span class="p">,</span>
-</span><span id="__span-0-31"><a id="__codelineno-0-31" name="__codelineno-0-31" href="#__codelineno-0-31"></a><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">ToolBinding</span>
+</span><span id="__span-0-31"><a id="__codelineno-0-31" name="__codelineno-0-31" href="#__codelineno-0-31"></a>    <span class="n">server_arguments</span><span class="p">:</span> <span class="n">ServerArguments</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+</span><span id="__span-0-32"><a id="__codelineno-0-32" name="__codelineno-0-32" href="#__codelineno-0-32"></a><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">ToolBinding</span>
 </span></code></pre></div>
 
     <div class="doc doc-contents ">
@@ -2494,12 +2495,30 @@ instead of raw JSON. The view must already be registered on this
 server, and the tool must emit <code>structuredContent</code> — what the view
 renders from — or the link is refused at registration rather than
 shipping a view that comes up blank.</p>
-<p><code>agent_contract</code> carries what a caller with <strong>no HTTP request</strong> has to
-be told -- the URL kwargs, query params and field-audience overrides the
-URLconf and query string give an HTTP caller for free. <code>register_specs</code>
-passes each entry's own, so the declaration is made once and every agent
-transport reads it; an explicit <code>url_kwargs</code> / <code>query_params</code> here
-wins over it.</p>
+<p>The route captures and query values a caller with <strong>no HTTP request</strong>
+has to send come from the spec's own <code>reads</code>, and the output fields an
+agent sees from its <code>field_audiences</code>: the declaration is made once, on
+the spec, and this registrar, the decorator and <code>register_specs</code> all
+read it, so one spec is the same tool however it is mounted.</p>
+<p><code>server_arguments</code> names declared parameters the server answers for,
+so no caller does: a
+<code>ServerArguments</code>
+from <code>django_service_specs</code>, whose <code>values</code> are fixed for the life of
+the binding and whose <code>withheld</code> names leave the callable to its own
+default. Both are dropped from the advertised schema and from
+<code>required</code>; a caller's value for one is dropped before dispatch and
+logged by name. It is checked at registration, so an undeclared name, a
+value the declared type refuses or a withheld name with no default
+raises <code>ImproperlyConfigured</code> naming the tool. A value computed per
+request is not something this argument carries.</p>
+<p><code>url_kwargs</code>, <code>query_params</code> and <code>agent_contract</code> are
+<strong>deprecated</strong>: each declares beside the spec what the spec declares
+itself, and each warns, naming its replacement. An explicit
+<code>url_kwargs</code> / <code>query_params</code> replaces the spec's reads of that kind
+in what the tool advertises and routes; <code>agent_contract</code> replaces all
+of them and the field audiences. Neither takes a channel away from the
+dispatch, which still reads the spec's declaration; only
+<code>server_arguments</code>' <code>withheld</code> does.</p>
 
 
     </div>
@@ -2546,7 +2565,8 @@ wins over it.</p>
 </span><span id="__span-0-30"><a id="__codelineno-0-30" name="__codelineno-0-30" href="#__codelineno-0-30"></a>    <span class="n">max_result_bytes</span><span class="p">:</span> <span class="nb">int</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">|</span> <span class="n">UnsetType</span> <span class="o">=</span> <span class="n">UNSET</span><span class="p">,</span>
 </span><span id="__span-0-31"><a id="__codelineno-0-31" name="__codelineno-0-31" href="#__codelineno-0-31"></a>    <span class="n">dispatch_timeout</span><span class="p">:</span> <span class="nb">float</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">|</span> <span class="n">UnsetType</span> <span class="o">=</span> <span class="n">UNSET</span><span class="p">,</span>
 </span><span id="__span-0-32"><a id="__codelineno-0-32" name="__codelineno-0-32" href="#__codelineno-0-32"></a>    <span class="n">max_page_size</span><span class="p">:</span> <span class="nb">int</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">|</span> <span class="n">UnsetType</span> <span class="o">=</span> <span class="n">UNSET</span><span class="p">,</span>
-</span><span id="__span-0-33"><a id="__codelineno-0-33" name="__codelineno-0-33" href="#__codelineno-0-33"></a><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">SelectorToolBinding</span>
+</span><span id="__span-0-33"><a id="__codelineno-0-33" name="__codelineno-0-33" href="#__codelineno-0-33"></a>    <span class="n">server_arguments</span><span class="p">:</span> <span class="n">ServerArguments</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+</span><span id="__span-0-34"><a id="__codelineno-0-34" name="__codelineno-0-34" href="#__codelineno-0-34"></a><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">SelectorToolBinding</span>
 </span></code></pre></div>
 
     <div class="doc doc-contents ">
@@ -2578,12 +2598,30 @@ pipeline and renders with <code>many=True</code>; <code>RETRIEVE</code> rejects
 <p><code>meta</code> is the generic <code>_meta</code> bundle for this tool's
 <code>tools/list</code> entry, and <code>ui</code> links it to an interactive view —
 both as on <code>register_service_tool</code>.</p>
-<p><code>agent_contract</code> carries what a caller with <strong>no HTTP request</strong> has to
-be told -- the URL kwargs, query params and field-audience overrides the
-URLconf and query string give an HTTP caller for free. <code>register_specs</code>
-passes each entry's own, so the declaration is made once and every agent
-transport reads it; an explicit <code>url_kwargs</code> / <code>query_params</code> here
-wins over it.</p>
+<p>The route captures and query values a caller with <strong>no HTTP request</strong>
+has to send come from the spec's own <code>reads</code>, and the output fields an
+agent sees from its <code>field_audiences</code>: the declaration is made once, on
+the spec, and this registrar, the decorator and <code>register_specs</code> all
+read it, so one spec is the same tool however it is mounted.</p>
+<p><code>server_arguments</code> names declared parameters the server answers for,
+so no caller does: a
+<code>ServerArguments</code>
+from <code>django_service_specs</code>, whose <code>values</code> are fixed for the life of
+the binding and whose <code>withheld</code> names leave the callable to its own
+default. Both are dropped from the advertised schema and from
+<code>required</code>; a caller's value for one is dropped before dispatch and
+logged by name. It is checked at registration, so an undeclared name, a
+value the declared type refuses or a withheld name with no default
+raises <code>ImproperlyConfigured</code> naming the tool. A value computed per
+request is not something this argument carries.</p>
+<p><code>url_kwargs</code>, <code>query_params</code> and <code>agent_contract</code> are
+<strong>deprecated</strong>: each declares beside the spec what the spec declares
+itself, and each warns, naming its replacement. An explicit
+<code>url_kwargs</code> / <code>query_params</code> replaces the spec's reads of that kind
+in what the tool advertises and routes; <code>agent_contract</code> replaces all
+of them and the field audiences. Neither takes a channel away from the
+dispatch, which still reads the spec's declaration; only
+<code>server_arguments</code>' <code>withheld</code> does.</p>
 
 
     </div>
@@ -2625,14 +2663,21 @@ per tool, via <code>overrides</code>:</p>
     },
 )
 </code></pre></div>
-<p>Each entry's
-<a class="autorefs autorefs-external" href="https://artui.github.io/djangorestframework-services/reference/registry/#rest_framework_services.types.offline_contract.OfflineContract"><code>OfflineContract</code></a>
-comes across as the mount's default — the <code>url_kwargs</code>,
-<code>query_params</code> and <code>field_audiences</code> an off-HTTP caller needs and an
-HTTP one gets from the URLconf and query string for free. A per-tool
-<code>url_kwargs</code> / <code>query_params</code> override wins over it; overriding
-<code>agent_contract</code> itself replaces it outright, which is the only way to
-register an entry with <em>fewer</em> channels than it declares.</p>
+<p>Each spec's own <code>reads</code> and <code>field_audiences</code> are read by the
+registrar, as on a direct registration. <code>server_arguments</code> is an
+override like any other, and the one to reach for when this mount
+answers an argument itself:</p>
+<div class="language-text highlight"><pre><span></span><code>server.register_specs(
+    registry,
+    overrides={
+        &quot;list_documents&quot;: {
+            &quot;server_arguments&quot;: ServerArguments(values={&quot;project_pk&quot;: 7}),
+        },
+    },
+)
+</code></pre></div>
+<p>A <code>url_kwargs</code>, <code>query_params</code> or <code>agent_contract</code> override is
+deprecated and warns, as the registrar arguments do.</p>
 <p>Keys are checked against the target method's own signature, so a knob
 used on the wrong spec kind (<code>paginate</code> on a <code>ServiceSpec</code>) raises
 <code>TypeError</code> from there. An <code>overrides</code> key naming a spec the
@@ -3354,7 +3399,8 @@ construction.</p>
 </span><span id="__span-0-29"><a id="__codelineno-0-29" name="__codelineno-0-29" href="#__codelineno-0-29"></a>    <span class="n">spec_kwargs_provides</span><span class="p">:</span> <span class="nb">tuple</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="o">...</span><span class="p">]</span> <span class="o">=</span> <span class="p">(),</span>
 </span><span id="__span-0-30"><a id="__codelineno-0-30" name="__codelineno-0-30" href="#__codelineno-0-30"></a>    <span class="n">url_kwargs</span><span class="p">:</span> <span class="nb">tuple</span><span class="p">[</span><span class="n">UrlKwarg</span><span class="p">,</span> <span class="o">...</span><span class="p">]</span> <span class="o">=</span> <span class="p">(),</span>
 </span><span id="__span-0-31"><a id="__codelineno-0-31" name="__codelineno-0-31" href="#__codelineno-0-31"></a>    <span class="n">query_params</span><span class="p">:</span> <span class="nb">tuple</span><span class="p">[</span><span class="n">QueryParam</span><span class="p">,</span> <span class="o">...</span><span class="p">]</span> <span class="o">=</span> <span class="p">(),</span>
-</span><span id="__span-0-32"><a id="__codelineno-0-32" name="__codelineno-0-32" href="#__codelineno-0-32"></a><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Callable</span><span class="p">[[</span><span class="n">Callable</span><span class="p">[</span><span class="o">...</span><span class="p">,</span> <span class="n">Any</span><span class="p">]],</span> <span class="n">Callable</span><span class="p">[</span><span class="o">...</span><span class="p">,</span> <span class="n">Any</span><span class="p">]]</span>
+</span><span id="__span-0-32"><a id="__codelineno-0-32" name="__codelineno-0-32" href="#__codelineno-0-32"></a>    <span class="n">server_arguments</span><span class="p">:</span> <span class="n">ServerArguments</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+</span><span id="__span-0-33"><a id="__codelineno-0-33" name="__codelineno-0-33" href="#__codelineno-0-33"></a><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Callable</span><span class="p">[[</span><span class="n">Callable</span><span class="p">[</span><span class="o">...</span><span class="p">,</span> <span class="n">Any</span><span class="p">]],</span> <span class="n">Callable</span><span class="p">[</span><span class="o">...</span><span class="p">,</span> <span class="n">Any</span><span class="p">]]</span>
 </span></code></pre></div>
 
     <div class="doc doc-contents ">
@@ -3363,7 +3409,9 @@ construction.</p>
 <p>If <code>spec</code> is supplied it is used verbatim; otherwise a
 <code>ServiceSpec</code> is constructed from the keyword arguments. The
 original function is returned unchanged, so it stays callable from
-Python without going through the MCP transport.</p>
+Python without going through the MCP transport. Every keyword means
+what it does on <code>register_service_tool</code>, <code>server_arguments</code> included,
+and is checked by the same registration.</p>
 
 
     </div>
@@ -3407,7 +3455,8 @@ Python without going through the MCP transport.</p>
 </span><span id="__span-0-27"><a id="__codelineno-0-27" name="__codelineno-0-27" href="#__codelineno-0-27"></a>    <span class="n">spec_kwargs_provides</span><span class="p">:</span> <span class="nb">tuple</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="o">...</span><span class="p">]</span> <span class="o">=</span> <span class="p">(),</span>
 </span><span id="__span-0-28"><a id="__codelineno-0-28" name="__codelineno-0-28" href="#__codelineno-0-28"></a>    <span class="n">url_kwargs</span><span class="p">:</span> <span class="nb">tuple</span><span class="p">[</span><span class="n">UrlKwarg</span><span class="p">,</span> <span class="o">...</span><span class="p">]</span> <span class="o">=</span> <span class="p">(),</span>
 </span><span id="__span-0-29"><a id="__codelineno-0-29" name="__codelineno-0-29" href="#__codelineno-0-29"></a>    <span class="n">query_params</span><span class="p">:</span> <span class="nb">tuple</span><span class="p">[</span><span class="n">QueryParam</span><span class="p">,</span> <span class="o">...</span><span class="p">]</span> <span class="o">=</span> <span class="p">(),</span>
-</span><span id="__span-0-30"><a id="__codelineno-0-30" name="__codelineno-0-30" href="#__codelineno-0-30"></a><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Callable</span><span class="p">[[</span><span class="n">Callable</span><span class="p">[</span><span class="o">...</span><span class="p">,</span> <span class="n">Any</span><span class="p">]],</span> <span class="n">Callable</span><span class="p">[</span><span class="o">...</span><span class="p">,</span> <span class="n">Any</span><span class="p">]]</span>
+</span><span id="__span-0-30"><a id="__codelineno-0-30" name="__codelineno-0-30" href="#__codelineno-0-30"></a>    <span class="n">server_arguments</span><span class="p">:</span> <span class="n">ServerArguments</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+</span><span id="__span-0-31"><a id="__codelineno-0-31" name="__codelineno-0-31" href="#__codelineno-0-31"></a><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Callable</span><span class="p">[[</span><span class="n">Callable</span><span class="p">[</span><span class="o">...</span><span class="p">,</span> <span class="n">Any</span><span class="p">]],</span> <span class="n">Callable</span><span class="p">[</span><span class="o">...</span><span class="p">,</span> <span class="n">Any</span><span class="p">]]</span>
 </span></code></pre></div>
 
     <div class="doc doc-contents ">
@@ -3418,7 +3467,9 @@ Python without going through the MCP transport.</p>
 keyword arguments. The original function is returned unchanged, so it
 stays callable from Python without going through the MCP transport.</p>
 <p><code>kind</code> is required when <code>spec</code> is omitted; otherwise it comes from
-<code>spec.kind</code> and any value passed here is ignored.</p>
+<code>spec.kind</code> and any value passed here is ignored. Every other keyword
+means what it does on <code>register_selector_tool</code>, <code>server_arguments</code>
+included, and is checked by the same registration.</p>
 
 
     </div>
