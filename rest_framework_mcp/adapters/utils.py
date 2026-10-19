@@ -43,6 +43,7 @@ from rest_framework_mcp.schema.service_tool_schema import (
     declared_service_input,
 )
 from rest_framework_mcp.schema.utils import (
+    caller_fields,
     declares_default,
     laid_back_inputs,
     selector_inputs,
@@ -536,7 +537,7 @@ def validate_reserved_input_fields(
       ``source`` always names another.
 
     Read-only fields are left out by ``build_input_schema``, which advertises
-    only what a caller sends, and ``HiddenField`` by ``_caller_fields``, both
+    only what a caller sends, and ``HiddenField`` by ``schema.utils.caller_fields``, both
     held by ``test_a_field_that_takes_nothing_from_the_caller_registers``.
     """
     if not (is_selector or argument_binding is ArgumentBinding.SPREAD_AUTHOR_WINS):
@@ -544,7 +545,7 @@ def validate_reserved_input_fields(
     reserved = RESERVED_POOL_SEEDS | TOOL_EDGE_SEEDS | pool_seeds.names
     taken = sorted(
         name
-        for name, field in _caller_fields(input_serializer).items()
+        for name, field in caller_fields(input_serializer).items()
         if name in reserved and (field is None or field.source is None)
     )
     if taken:
@@ -562,26 +563,6 @@ def validate_reserved_input_fields(
 
 # A service, unlike a selector, is handed ``data``, where the field is the payload's.
 _BUNDLE_REMEDY = " A service can also take the field inside `data` under argument_binding=BUNDLE."
-
-
-def _caller_fields(input_serializer: type | None) -> dict[str, Any]:
-    """Each field the caller sends, by its name on the wire, with its declaration if it has one.
-
-    The names are what ``build_input_schema`` advertises, which leaves out a
-    read-only field and reads a dataclass's fields and a ``ModelSerializer``'s
-    generated ones too. A ``HiddenField`` is advertised there but takes nothing
-    from the caller, so it is left out here (the ``hidden`` case of
-    ``test_a_field_that_takes_nothing_from_the_caller_registers``). A generated
-    field has no declaration, and binds to its own name.
-    """
-    if input_serializer is None:
-        return {}
-    declared: dict[str, Any] = getattr(input_serializer, "_declared_fields", {})
-    return {
-        name: declared.get(name)
-        for name in build_input_schema(input_serializer).get("properties", {})
-        if not isinstance(declared.get(name), drf_serializers.HiddenField)
-    }
 
 
 def validate_lookup_key_fields(
@@ -620,7 +601,7 @@ def validate_lookup_key_fields(
         dataclasses.replace(lookup, filter_set=None), pool_seeds=pool_seeds
     )
     keys = frozenset(reflected.get("properties", {}))
-    taken = sorted(_caller_fields(binding.spec.input_serializer).keys() & keys)
+    taken = sorted(caller_fields(binding.spec.input_serializer).keys() & keys)
     if taken:
         raise ImproperlyConfigured(
             f"service tool {binding.name!r}: the service's input_serializer declares "
@@ -998,7 +979,10 @@ def _validate_required_params_have_sources(
 
     Sources, in priority order:
 
-    - **Pool seeds.** ``request`` / ``user`` / ``progress`` always;
+    - **Pool seeds.** ``request`` / ``user`` / ``progress`` / ``view`` always,
+      ``view`` being the DRF edge's, handed to a selector and a service alike
+      under every binding
+      (``test_a_required_view_parameter_registers_and_receives_the_view``);
       ``instance`` and ``collection`` only when the spec resolves one, and
       ``serializer`` and ``data`` only for a service, when an
       ``input_serializer`` is declared. Never for a selector, which drf-services
@@ -1099,7 +1083,7 @@ def _validate_required_params_have_sources(
     # nowhere to send it: drf-services substitutes its no-op reporter, so the
     # parameter is always satisfiable and refusing to register a service that
     # declares one would refuse a service that runs perfectly well.
-    sources: set[str] = {"request", "user", "progress"}
+    sources: set[str] = {"request", "user", "progress", "view"}
     if provides_instance:
         sources.add("instance")
     if provides_collection:
@@ -1133,6 +1117,19 @@ def _validate_required_params_have_sources(
             # the names dispatch drops from that spread.
             sources.update(required_params - pool_seeds.reserved - DROPPED_EDGE_SEEDS)
     missing: set[str] = set(required_params) - sources
+    # Where every missing name is one only dispatch fills, the generic remedies
+    # cannot work: a field of the name is refused, and neither a catch-all nor a
+    # provider is handed it. So the refusal names the reservation alone
+    # (``test_a_trust_mode_parameter_named_after_a_seed_is_refused_naming_the_reservation``);
+    # beside a plain name it keeps them (``test_a_reserved_name_beside_a_plain_one_keeps_every_remedy``),
+    # and a name a tool fills on a condition keeps them too
+    # (``test_a_name_seeded_on_a_condition_keeps_its_own_remedy``).
+    if missing and missing <= pool_seeds.reserved - _SEEDED_ON_A_CONDITION:
+        raise ImproperlyConfigured(
+            f"{label}: callable declares required parameter(s) {sorted(missing)!r} "
+            "with no source on the MCP transport."
+            f"{_reserved_seed_hint(missing, pool_seeds=pool_seeds)}"
+        )
     if missing:
         sources_human = ", ".join(sorted(sources)) or "(none)"
         raise ImproperlyConfigured(

@@ -386,7 +386,8 @@ names are refused for a `QueryParam`.
 Sharing a name with an input is how a route capture reaches a callable that
 takes it as a parameter, **where that callable is handed `view.kwargs`**: a
 selector tool's selector, and a service tool's target lookup and `kwargs=`
-provider. A service itself is handed neither `view` nor the route, so on a
+provider. A service's own parameters are never handed the route (a service
+naming `view` is handed the view, and can read `view.kwargs`), so on a
 service tool registration refuses a `UrlKwarg` named like one of its inputs
 that would never receive the value: a spread service's own parameter, which
 was answered "Missing required argument(s)" on every call, or ran on its
@@ -660,8 +661,10 @@ asking is both wasted tokens and a door left open: the model can send another
 project's id. `server_arguments=` answers the argument for the caller instead.
 It takes a
 [`ServerArguments`][django_service_specs.ServerArguments] from
-`django_service_specs`, on `register_service_tool`, `register_selector_tool`
-and as a `register_specs` override:
+`django_service_specs`, on `register_service_tool`, `register_selector_tool`,
+the `service_tool` and `selector_tool` decorators, as a `register_specs`
+override and on a `ToolDefinition` handed to `register_tools`. Each route
+checks it the same way:
 
 ```python
 from django_service_specs import ServerArguments
@@ -919,8 +922,8 @@ forms) accept three behavior knobs:
 
   Reserved transport-pool seeds (the kernel's `user` / `data` / `instance` /
   `collection` / `result` / `queryset` / `progress`, and any seed the server
-  registers), the `request` and `serializer` drf-services' DRF edge fills
-  itself, and, on a `LIST` selector tool, the pipeline keys (`page` / `limit`)
+  registers), the `request`, `view` and `serializer` drf-services' DRF edge
+  fills itself, and, on a `LIST` selector tool, the pipeline keys (`page` / `limit`)
   are stripped from the spread regardless of mode so clients can't poison
   transport-controlled state. So trust mode (no
   `input_serializer` under a spreading binding) does not count a reserved seed
@@ -952,7 +955,11 @@ forms) accept three behavior knobs:
   `HiddenField` take nothing from the caller and register. In trust mode a
   required parameter named `result` or `queryset` is refused with the
   reservation named, since no argument can reach it: rename it, or give it a
-  default, and a defaulted one is not advertised and runs on its default.
+  default, and a defaulted one is not advertised and runs on its default. A
+  callable that takes `request`, `user`, `progress` or `view` is handed it on
+  every call, so a required parameter of one of those names registers under
+  any binding; the refusal for a parameter with no source lists them among
+  the sources.
 
 - **`unknown_arguments=`** — how `arguments` keys outside the binding's
   declared field set are handled.

@@ -4,6 +4,7 @@ from collections.abc import Sequence
 from dataclasses import dataclass
 from typing import Any
 
+from django_service_specs import ServerArguments
 from rest_framework_services.types.selector_spec import SelectorSpec
 from rest_framework_services.types.service_spec import ServiceSpec
 
@@ -98,6 +99,12 @@ class ToolDefinition:
     [`QueryParam`][rest_framework_services.types.query_param.QueryParam]. Deprecated, and
     warns at registration: declare it in the spec's ``reads`` instead."""
 
+    server_arguments: ServerArguments | None = None
+    """Declared arguments the server answers for, as on
+    [`register_service_tool`][rest_framework_mcp.server.mcp_server.MCPServer.register_service_tool]:
+    a bound value the caller cannot replace, and names withheld from the caller.
+    Per tool, so neither ``SelectorDefaults`` nor ``ServiceDefaults`` carries it."""
+
     @classmethod
     def service(
         cls,
@@ -121,6 +128,7 @@ class ToolDefinition:
         spec_kwargs_provides: Sequence[str] | None = None,
         url_kwargs: Sequence[UrlKwarg] | None = None,
         query_params: Sequence[QueryParam] | None = None,
+        server_arguments: ServerArguments | None = None,
     ) -> ToolDefinition:
         """Typed entry point for service-tool definitions."""
         return cls(
@@ -144,6 +152,7 @@ class ToolDefinition:
             spec_kwargs_provides=spec_kwargs_provides,
             url_kwargs=url_kwargs,
             query_params=query_params,
+            server_arguments=server_arguments,
         )
 
     @classmethod
@@ -171,6 +180,7 @@ class ToolDefinition:
         spec_kwargs_provides: Sequence[str] | None = None,
         url_kwargs: Sequence[UrlKwarg] | None = None,
         query_params: Sequence[QueryParam] | None = None,
+        server_arguments: ServerArguments | None = None,
     ) -> ToolDefinition:
         """Typed entry point for selector-tool definitions.
 
@@ -201,6 +211,7 @@ class ToolDefinition:
             spec_kwargs_provides=spec_kwargs_provides,
             url_kwargs=url_kwargs,
             query_params=query_params,
+            server_arguments=server_arguments,
         )
 
 

@@ -130,8 +130,82 @@ def test_a_trust_mode_parameter_named_after_a_seed_is_refused_naming_the_reserva
                 spec=ServiceSpec(service=callable_, atomic=False),
                 argument_binding=ArgumentBinding.SPREAD_AUTHOR_WINS,
             )
-    assert f"`{seed}` is {_RESERVATION}" in str(caught.value)
-    assert "Rename the parameter" in str(caught.value)
+    message = str(caught.value)
+    assert f"`{seed}` is {_RESERVATION}" in message
+    assert "Rename the parameter" in message
+    # No remedy that cannot work: a field of the name is refused, and neither a
+    # catch-all nor a provider is handed a reserved name.
+    for misdirection in ("input_serializer", "**kwargs", "spec_kwargs_provides"):
+        assert misdirection not in message
+
+
+def _needs_result_and_title(*, result: Any, title: str) -> None: ...  # noqa: ARG001
+
+
+def test_a_reserved_name_beside_a_plain_one_keeps_every_remedy() -> None:
+    # Bundled, ``title`` has no source either, and the generic remedies are its;
+    # the reservation is named for ``result`` beside them.
+    with pytest.raises(ImproperlyConfigured, match=r"\['result', 'title'\]") as caught:
+        service_spec_to_tool(
+            name="write", spec=ServiceSpec(service=_needs_result_and_title, atomic=False)
+        )
+    message = str(caught.value)
+    assert f"`result` is {_RESERVATION}" in message
+    assert "Add the parameter(s) to ``input_serializer``" in message
+
+
+class _TitleInput(drf_serializers.Serializer):
+    title = drf_serializers.CharField(required=False)
+
+
+@pytest.mark.django_db
+@pytest.mark.parametrize("kind", ["selector", "service-spread", "service-bundle"])
+def test_a_required_view_parameter_registers_and_receives_the_view(kind: str) -> None:
+    # The DRF edge hands every tool's callable the ``view`` it runs in, under
+    # every binding, so it is a source like ``request``.
+    seen: dict[str, Any] = {}
+
+    def by_title(*, view: Any, title: str = "") -> list[Any]:
+        seen["view"] = view
+        return []
+
+    def by_data(*, view: Any, data: Any) -> list[Any]:
+        seen["view"] = view
+        return []
+
+    server = _server()
+    if kind == "selector":
+        server.register_selector_tool(
+            name="op",
+            spec=SelectorSpec(kind=SelectorKind.LIST, selector=by_title),
+            input_serializer=_TitleInput,
+        )
+    else:
+        bundled = kind == "service-bundle"
+        server.register_service_tool(
+            name="op",
+            spec=ServiceSpec(
+                service=by_data if bundled else by_title,
+                input_serializer=_TitleInput,
+                atomic=False,
+            ),
+            argument_binding=ArgumentBinding.BUNDLE
+            if bundled
+            else ArgumentBinding.SPREAD_AUTHOR_WINS,
+        )
+
+    result = server.call_tool("op", {"title": "t"}, user=None).to_dict()
+
+    assert result.get("isError") is not True, result
+    assert hasattr(seen["view"], "kwargs")
+
+
+def test_the_sources_a_refusal_lists_include_view() -> None:
+    with pytest.raises(ImproperlyConfigured, match=r"parameter\(s\) \['title'\]") as caught:
+        service_spec_to_tool(
+            name="write", spec=ServiceSpec(service=_rename_task_titled, atomic=False)
+        )
+    assert "user, view" in str(caught.value)
 
 
 def test_the_reservation_hint_accompanies_only_a_reserved_name() -> None:
@@ -147,9 +221,6 @@ def test_the_reservation_hint_accompanies_only_a_reserved_name() -> None:
 def _rename_task_titled(*, title: str) -> None: ...  # noqa: ARG001
 
 
-def _needs_instance(*, instance: Any) -> None: ...  # noqa: ARG001
-
-
 def test_a_name_seeded_on_a_condition_keeps_its_own_remedy() -> None:
     # ``instance`` is reserved too, but a target lookup fills it, so a rename is
     # not the only remedy and the reservation's wording would misdirect.
@@ -158,6 +229,7 @@ def test_a_name_seeded_on_a_condition_keeps_its_own_remedy() -> None:
             name="read", spec=SelectorSpec(kind=SelectorKind.LIST, selector=_needs_instance)
         )
     assert _RESERVATION not in str(caught.value)
+    assert "Available sources are:" in str(caught.value)
 
 
 @pytest.mark.django_db

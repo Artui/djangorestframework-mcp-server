@@ -17,8 +17,10 @@ against 0.52.1 on `djangorestframework-services` 0.56.
 ### Added
 
 - **`server_arguments=` answers a declared argument for the caller.**
-  `register_service_tool`, `register_selector_tool` and a `register_specs`
-  override take a `ServerArguments` from `django_service_specs`: its `values`
+  `register_service_tool`, `register_selector_tool`, the `service_tool` and
+  `selector_tool` decorators, a `register_specs` override and a
+  `ToolDefinition` handed to `register_tools` take a `ServerArguments` from
+  `django_service_specs`, checked the same way on each: its `values`
   are fixed for the life of the tool, and its `withheld` names leave the
   callable to its own default. Both leave the tool's `inputSchema` and its
   `required` list on every listing. On every `tools/call` route, wire and
@@ -31,8 +33,10 @@ against 0.52.1 on `djangorestframework-services` 0.56.
   built by hand and passed to `server.tools.register`: a name the spec does not
   declare, a value its declared type refuses, a pool seed, and a withheld name
   with no default raise `ImproperlyConfigured` naming the tool. A value
-  computed per request is out of scope; `ToolBinding` and
-  `SelectorToolBinding` gain the `server_arguments` field.
+  computed per request is out of scope; `ToolBinding`,
+  `SelectorToolBinding` and `ToolDefinition` gain the `server_arguments`
+  field. `ServiceDefaults` and `SelectorDefaults` do not carry it, because a
+  binding names one tool's arguments.
 
 ### Changed (breaking)
 
@@ -55,10 +59,16 @@ against 0.52.1 on `djangorestframework-services` 0.56.
   instead.
 - **A bare `**kwargs` no longer receives an argument its callable does not
   declare.** drf-services 0.58.0 hands a catch-all the declared arguments and
-  the seeds only, where 0.56 handed it every key the caller sent. That holds for
-  a service under a spreading binding and for a selector, and it covers a
-  `UrlKwarg` value too, which still reaches a typed `**extras:
-  Unpack[TypedDict]` that names the key. Declare the name instead: a parameter,
+  the seeds only. On 0.52.1 a selector's catch-all and a serializer-less
+  service's under a spreading binding received every key the caller sent,
+  under `REJECT` as well as `IGNORE`; a service with an `input_serializer`
+  received an undeclared key only under `PASSTHROUGH`, which is now refused at
+  registration. It covers a `UrlKwarg` value too, which still reaches a typed
+  `**extras: Unpack[TypedDict]` that names the key. Those two kinds of tool
+  still advertise `additionalProperties: true` under `REJECT`, as they did,
+  because a bare `**kwargs` leaves the declared set open and nothing refuses
+  the undeclared key: it is now dropped silently before the callable runs.
+  Declare the name instead: a parameter,
   an `input_serializer` field, a `reads` entry or a `TypedDict` key. On a
   selector tool, a `UrlKwarg` beside such a catch-all that the selector names
   nowhere, and that its `kwargs=` provider does not fill, is refused at
@@ -134,9 +144,11 @@ against 0.52.1 on `djangorestframework-services` 0.56.
 
 - **The `djangorestframework-services` floor is `>=0.58.0`, the `<0.58` ceiling
   is dropped, and `django-service-specs>=0.9.0` is now declared.** 0.58.0 is
-  the release that makes `djangorestframework-services` the DRF adapter over
-  the kernel, and it retires names this package no longer passes, so the range
-  that capped it below that release is gone. The kernel is a direct dependency
+  the first release with `AffordanceDeclarer` and `DROPPED_EDGE_SEEDS`, which
+  this package imports at module level, so against 0.57.0 it does not import.
+  It is also the release that makes `djangorestframework-services` the DRF
+  adapter over the kernel and retires `SPREAD_CALLER_WINS` and `PASSTHROUGH`,
+  so the range that capped it below that release is gone. The kernel is a direct dependency
   because the package now imports its own names from it, and 0.9.0 is the first
   release with `ServerArguments`, `check_server_arguments` and
   `apply_server_arguments`, which `server_arguments=` is built on.
@@ -204,6 +216,23 @@ against 0.52.1 on `djangorestframework-services` 0.56.
 
 ### Fixed
 
+- **A `HiddenField` named like a lookup key the server owns no longer asks
+  the caller for it.** Where a service or one of its preconditions marks a
+  target lookup's key `NotClientInput`, the tool's `inputSchema` leaves the key
+  out, but a `HiddenField` of that name on the `input_serializer` put it back:
+  0.52.1 advertised it as required and refused every call as
+  "Missing required argument(s): `tenant`.", which no resend could satisfy.
+  A `HiddenField` takes nothing from the caller, so the key is now neither
+  advertised nor required. Its default goes into `data`, not to the lookup, so
+  a lookup that needs the key and has nothing on the server to fill it fails
+  as its own `TypeError`, as it does with no field of that name.
+- **A callable that takes `view` registers and is handed the view.** `view` is
+  one of the names the DRF edge fills on every call, but registration did not
+  count it as a source: in 0.52.1 a service tool with an `input_serializer`
+  whose service required `view` was refused at registration, and a selector
+  tool's selector requiring it registered and
+  raised `TypeError` on every call. Both now receive the view, and the refusal
+  for a parameter with no source lists `view` among the sources.
 - **The row ceiling holds for a `Manager` a `LIST` selector returns.** It
   passed unbounded, because a `Manager` has no `__iter__`; drf-services 0.58.0
   hands it over as its `.all()`, so it is bounded like the `QuerySet` it stands

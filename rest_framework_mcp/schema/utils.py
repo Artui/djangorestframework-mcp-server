@@ -185,6 +185,27 @@ def target_lookup(spec: ServiceSpec[Any, Any, Any]) -> SelectorSpec[Any, Any] | 
     return spec.instance_selector_spec
 
 
+def caller_fields(input_serializer: type | None) -> dict[str, Any]:
+    """Each field the caller sends, by its name on the wire, with its declaration if it has one.
+
+    The names are what ``build_input_schema`` advertises, which leaves out a
+    read-only field and reads a dataclass's fields and a ``ModelSerializer``'s
+    generated ones too. A ``HiddenField`` is advertised there but takes nothing
+    from the caller, so it is left out here (the ``hidden`` cases of
+    ``test_a_field_that_takes_nothing_from_the_caller_registers`` and
+    ``test_a_hidden_field_of_an_owned_lookup_key_is_not_asked_of_the_caller``). A generated
+    field has no declaration, and binds to its own name.
+    """
+    if input_serializer is None:
+        return {}
+    declared: dict[str, Any] = getattr(input_serializer, "_declared_fields", {})
+    return {
+        name: declared.get(name)
+        for name in build_input_schema(input_serializer).get("properties", {})
+        if not isinstance(declared.get(name), drf_serializers.HiddenField)
+    }
+
+
 def required_arguments(
     binding: SelectorToolBinding | ToolBinding,
     *,
@@ -208,14 +229,18 @@ def required_arguments(
     **A service tool's lookup key the server owns is not required of the
     caller**, as the service tool's schema does not advertise it: a key the
     service or one of its preconditions marks ``NotClientInput``
-    (``server_owned_keys``), less the names the ``input_serializer``'s schema
-    lists, as ``service_tool_schema`` subtracts them. A writable field of a
-    lookup key's name is refused at registration
-    (``adapters.utils.validate_lookup_key_fields``), so the only such name that
-    reaches here is a ``HiddenField``'s. drf-services drops the caller's value
-    for such a key before the lookup reads it, so refusing a call for leaving
-    it out named a key no resend could deliver; one nothing on the server
-    fills is the author's gap, which drf-services answers as the lookup's own
+    (``server_owned_keys``), less the fields the caller sends
+    (``caller_fields``), as ``service_tool_schema`` subtracts them. A
+    ``HiddenField`` of the key's name is not one of those, so it does not put
+    the key back (``test_a_hidden_field_of_an_owned_lookup_key_is_not_asked_of_the_caller``).
+    A writable field of a lookup key's name is refused at registration
+    (``adapters.utils.validate_lookup_key_fields``), so no registered tool
+    reaches the subtraction here with a name it removes, and no test can hold
+    it; it is kept so the two sides read one set and cannot drift apart if
+    that refusal is ever relaxed. drf-services drops the caller's value for
+    such a key before the lookup reads it, so refusing a call for leaving it
+    out named a key no resend could deliver; one nothing on the server fills
+    is the author's gap, which drf-services answers as the lookup's own
     error. Held by ``test_a_lookup_key_the_server_owns_is_not_asked_of_the_caller``.
     """
     if isinstance(binding, SelectorToolBinding):
@@ -229,9 +254,8 @@ def required_arguments(
     # provider over the arguments in every mode.
     required = selector_inputs(lookup, url_kwargs=binding.url_kwargs, pool_seeds=pool_seeds)[1]
     # The subtraction ``service_tool_schema`` applies to what it advertises,
-    # read off the same serializer schema, so the two cannot drift apart.
-    fields: dict[str, Any] = build_input_schema(binding.spec.input_serializer).get("properties", {})
-    owned = server_owned_keys(binding.spec) - frozenset(fields)
+    # read off the same ``caller_fields``, so the two cannot drift apart.
+    owned = server_owned_keys(binding.spec) - caller_fields(binding.spec.input_serializer).keys()
     return tuple(name for name in required if name not in owned)
 
 
@@ -406,6 +430,7 @@ def without_server_arguments(schema: dict[str, Any], server: ServerArguments) ->
 
 
 __all__ = [
+    "caller_fields",
     "declares_default",
     "end_sentence",
     "laid_back_inputs",

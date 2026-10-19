@@ -11,6 +11,7 @@ from rest_framework_mcp.registry.types.tool_binding import ToolBinding
 from rest_framework_mcp.registry.types.url_kwarg import UrlKwarg
 from rest_framework_mcp.schema.input_schema import build_input_schema
 from rest_framework_mcp.schema.utils import (
+    caller_fields,
     selector_inputs,
     target_lookup,
     without_server_arguments,
@@ -229,13 +230,15 @@ def _with_target_lookups(
     value before the lookup reads it and ``REJECT`` refuses it, and asking for
     it would invite a value nobody receives. The reflection of the lookup alone
     cannot see a marker on another callable, so the set is asked of the spec
-    dispatch runs. A property ``schema`` brought, which for a serializer is one
-    of its fields, is not subtracted: drf-services keeps a field of an owned
-    name as the caller's input and validates it into ``data``. Each half is
-    held by one of
-    ``test_a_lookup_key_a_precondition_hides_is_not_advertised_but_a_field_of_that_name_is``'s
-    two schemas: the subtraction, from the properties and from what the
-    lookup requires, and the field names left out of it.
+    dispatch runs. A field the caller sends (``caller_fields``) is not
+    subtracted: drf-services keeps a field of an owned name as the caller's
+    input and validates it into ``data``
+    (``test_a_field_named_like_an_owned_key_the_lookup_does_not_read_stays_the_callers``
+    registers one, and
+    ``test_a_lookup_key_a_precondition_hides_is_not_advertised_but_a_field_of_that_name_is``
+    holds both halves on bindings built directly). A ``HiddenField`` takes
+    nothing from the caller, so it does not keep an owned name advertised
+    (``test_a_hidden_field_of_an_owned_lookup_key_is_not_asked_of_the_caller``).
     """
     lookup = target_lookup(spec)
     if lookup is None:
@@ -246,7 +249,7 @@ def _with_target_lookups(
         return schema
     own: dict[str, Any] = schema.get("properties", {})
     properties.update(own)
-    hidden = server_owned_keys(spec) - own.keys()
+    hidden = server_owned_keys(spec) - caller_fields(spec.input_serializer).keys()
     properties = {key: value for key, value in properties.items() if key not in hidden}
     required: list[str] = [
         key

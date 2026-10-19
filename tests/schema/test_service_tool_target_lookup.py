@@ -216,6 +216,44 @@ def test_a_lookup_key_a_precondition_hides_is_not_advertised_but_a_field_of_that
     )
 
 
+def _same_region(*, region: Annotated[str, NotClientInput] = "eu") -> None:
+    # Owns ``region`` for the whole call, a name the lookup does not read.
+    return None
+
+
+class _WithRegion(_RenameInput):
+    region = serializers.CharField(help_text="The region the invoice moves to.")
+
+
+@pytest.mark.django_db
+def test_a_field_named_like_an_owned_key_the_lookup_does_not_read_stays_the_callers() -> None:
+    # The registrable half of the case above: ``region`` is owned, but no lookup
+    # reads it, so a field of that name registers. It stays advertised and
+    # required, and the caller's value reaches ``data``, so the subtraction from
+    # the owned set is what keeps the tool asking for the field it validates.
+    seen: list[dict[str, Any]] = []
+
+    def move(*, instance: Invoice, data: dict[str, Any]) -> Invoice:
+        seen.append(dict(data))
+        return instance
+
+    spec = _rename_spec(service=move, preconditions=[_same_region], input_serializer=_WithRegion)
+    invoice = Invoice.objects.create(number="INV-1")
+    server = MCPServer(name="t", auth_backend=AllowAnyBackend(), session_store=None)
+    server.register_service_tool(name="move", spec=spec)
+    listed: Any = server.list_tools(user=None)
+    schema = next(tool for tool in listed["tools"] if tool["name"] == "move")["inputSchema"]
+
+    result = server.call_tool(
+        "move", {"pk": invoice.pk, "number": "INV-2", "region": "us"}, user=None
+    ).to_dict()
+
+    assert schema["properties"]["region"]["description"] == "The region the invoice moves to."
+    assert "region" in schema["required"]
+    assert result.get("isError") is not True, result
+    assert seen == [{"number": "INV-2", "region": "us"}]
+
+
 def test_an_input_field_of_the_same_name_wins_over_the_reflected_lookup() -> None:
     class _WithPk(_RenameInput):
         pk = serializers.IntegerField(help_text="The invoice to rename.")

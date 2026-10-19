@@ -418,6 +418,34 @@ def test_selector_tool_schema_additional_properties_true_when_serializerless_rej
     assert out["tools"][0]["inputSchema"]["additionalProperties"] is True
 
 
+def test_a_bare_var_keyword_selector_stays_open_and_drops_an_undeclared_key_under_reject() -> None:
+    # The open schema is the truth about refusal, not about delivery: nothing
+    # refuses the undeclared key, and drf-services drops it before the
+    # selector runs, so its bare ``**kwargs`` receives the seeds and nothing the
+    # caller named. 0.52.1 handed it ``colour``.
+    seen: list[set[str]] = []
+
+    def rows(**kwargs: Any) -> list[Any]:
+        seen.append(set(kwargs))
+        return []
+
+    server = _server()
+    server.register_selector_tool(
+        name="x",
+        spec=SelectorSpec(kind=SelectorKind.LIST, selector=rows),
+        unknown_arguments=UnknownArguments.REJECT,
+    )
+    listed = handle_tools_list(None, _ctx(server))
+    assert isinstance(listed, dict)
+
+    result = server.call_tool("x", {"colour": "red"}, user=None).to_dict()
+
+    assert listed["tools"][0]["inputSchema"]["additionalProperties"] is True
+    assert result.get("isError") is not True, result
+    assert len(seen) == 1
+    assert "colour" not in seen[0]
+
+
 # ---------- Validator-level unit edge cases ----------
 
 

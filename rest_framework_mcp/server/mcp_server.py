@@ -1562,13 +1562,16 @@ class MCPServer:
         spec_kwargs_provides: tuple[str, ...] = (),
         url_kwargs: tuple[UrlKwarg, ...] = (),
         query_params: tuple[QueryParam, ...] = (),
+        server_arguments: ServerArguments | None = None,
     ) -> Callable[[Callable[..., Any]], Callable[..., Any]]:
         """Decorator form of ``register_service_tool``.
 
         If ``spec`` is supplied it is used verbatim; otherwise a
         ``ServiceSpec`` is constructed from the keyword arguments. The
         original function is returned unchanged, so it stays callable from
-        Python without going through the MCP transport.
+        Python without going through the MCP transport. Every keyword means
+        what it does on ``register_service_tool``, ``server_arguments`` included,
+        and is checked by the same registration.
         """
 
         def wrap(fn: Callable[..., Any]) -> Callable[..., Any]:
@@ -1613,6 +1616,7 @@ class MCPServer:
                 spec_kwargs_provides=spec_kwargs_provides,
                 url_kwargs=url_kwargs,
                 query_params=query_params,
+                server_arguments=server_arguments,
             )
             return fn
 
@@ -1648,6 +1652,7 @@ class MCPServer:
         spec_kwargs_provides: tuple[str, ...] = (),
         url_kwargs: tuple[UrlKwarg, ...] = (),
         query_params: tuple[QueryParam, ...] = (),
+        server_arguments: ServerArguments | None = None,
     ) -> Callable[[Callable[..., Any]], Callable[..., Any]]:
         """Decorator form of ``register_selector_tool``.
 
@@ -1657,7 +1662,9 @@ class MCPServer:
         stays callable from Python without going through the MCP transport.
 
         ``kind`` is required when ``spec`` is omitted; otherwise it comes from
-        ``spec.kind`` and any value passed here is ignored.
+        ``spec.kind`` and any value passed here is ignored. Every other keyword
+        means what it does on ``register_selector_tool``, ``server_arguments``
+        included, and is checked by the same registration.
         """
 
         def wrap(fn: Callable[..., Any]) -> Callable[..., Any]:
@@ -1702,6 +1709,7 @@ class MCPServer:
                 spec_kwargs_provides=spec_kwargs_provides,
                 url_kwargs=url_kwargs,
                 query_params=query_params,
+                server_arguments=server_arguments,
             )
             return fn
 

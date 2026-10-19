@@ -804,6 +804,33 @@ async def test_a_lookup_key_the_server_owns_is_not_asked_of_the_caller(route: st
         await _via(server, route, "rename", {"pk": invoice.pk, "number": "INV-2"})
 
 
+class _NumberAndHiddenTenantInput(_NumberInput):
+    # Takes nothing from the caller, so registration admits it beside the
+    # lookup key of the same name.
+    tenant = serializers.HiddenField(default="acme")
+
+
+@pytest.mark.django_db(transaction=True)
+@pytest.mark.parametrize("route", _ROUTES)
+async def test_a_hidden_field_of_an_owned_lookup_key_is_not_asked_of_the_caller(
+    route: str,
+) -> None:
+    # A ``HiddenField`` is in the serializer's schema but is no input of the
+    # caller's, so it does not put the owned key back into what the tool asks
+    # for. It did: ``tenant`` was advertised as required and every call was
+    # refused as "Missing required argument(s): `tenant`.", which no resend
+    # could satisfy. The field's default goes into ``data``, not to the lookup,
+    # so the call now fails as the no-field case above does.
+    invoice = await Invoice.objects.acreate(number="INV-1")
+    server = _owned_tenant_server(_NumberAndHiddenTenantInput)
+    schema = _rename_schema(server)
+
+    assert "tenant" not in schema["properties"]
+    assert "tenant" not in schema["required"]
+    with pytest.raises(TypeError, match="tenant"):
+        await _via(server, route, "rename", {"pk": invoice.pk, "number": "INV-2"})
+
+
 def test_an_owned_lookup_key_a_field_declares_is_refused_at_registration() -> None:
     # drf-services withholds a name the target lookup reads from the
     # serializer's data, so a writable ``tenant`` field could never be filled,
