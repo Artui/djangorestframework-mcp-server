@@ -12,6 +12,7 @@ from django_service_specs import (
     ServiceError,
     ServiceValidationError,
     UnsetType,
+    apply_server_arguments,
 )
 from rest_framework import serializers as drf_serializers
 from rest_framework_dataclasses.serializers import DataclassSerializer
@@ -43,6 +44,7 @@ from rest_framework_mcp.constants import (
     UnknownArguments,
 )
 from rest_framework_mcp.handlers.types.context import MCPCallContext
+from rest_framework_mcp.observability.get_logger import get_logger
 from rest_framework_mcp.output.enforce_result_bytes import enforce_result_bytes
 from rest_framework_mcp.output.error_tool_result import build_error_tool_result
 from rest_framework_mcp.protocol.types.json_rpc_error import JsonRpcError
@@ -56,6 +58,68 @@ from rest_framework_mcp.registry.types.tool_binding import ToolBinding
 from rest_framework_mcp.registry.types.url_kwarg import UrlKwarg
 from rest_framework_mcp.schema.types.agent_conventions import AgentConventions
 from rest_framework_mcp.schema.utils import declares_default, end_sentence, required_arguments
+
+logger = get_logger(__name__)
+
+
+def apply_tool_server_arguments(binding: Any, arguments: dict[str, Any]) -> dict[str, Any]:
+    """``arguments`` with the binding's ``server_arguments`` in place, the caller's dropped.
+
+    The first thing every ``tools/call`` route does with the arguments, once it
+    knows they are an object: ``handle_tools_call`` and its async sibling
+    before a task is created and before the permission check, ``call_spec_tool``
+    before it builds the dispatch view. So everything after reads the server's
+    value - the binding's stand-in and the spec's permission classes, the
+    strict ``split_url_kwargs`` of a ``required=True`` URL kwarg, and
+    ``refuse_missing_arguments`` - and a bound value fills a required read
+    rather than being refused as missing before it arrives
+    (``test_a_binding_fills_a_required_read_over_the_wire``, whose cases are
+    sized so each of those two checks is the one that would answer). The
+    service routes call it again on the arguments a retry's answers produce,
+    because that merge takes any key
+    (``test_an_answer_cannot_replace_a_bound_value``).
+
+    The rule is the kernel's ``apply_server_arguments``: the caller's value for
+    every bound or withheld name is dropped before anything reads it, so a
+    malformed one cannot refuse the call, and the bound values are laid over
+    what is left.
+
+    **A dropped value is logged at ``WARNING`` with the tool's name and the
+    argument names, never the values**, which are the consumer's data. A
+    withheld name is logged whenever the caller sent it; a bound one when the
+    caller's value is not the one the server applies, compared by ``repr`` as
+    ``same_arguments`` compares, so a task worker replaying the arguments this
+    already applied logs nothing a second time. One arc to coverage: without
+    the withheld condition a withheld ``"null"`` goes unlogged
+    (``test_the_bound_project_wins_and_the_withheld_sibling_is_dropped``), and
+    without the comparison a caller restating the bound value is logged
+    (``test_a_caller_restating_the_bound_value_is_not_logged``).
+
+    A binding that binds nothing - and a chain tool, which carries no
+    ``server_arguments`` - gets its arguments back untouched, the same object,
+    without the kernel's rule being run. Also one arc: without the first
+    condition every chain call fails on the missing attribute
+    (``test_a_chain_tool_degrades_instead_of_asking``), and without the second
+    the kernel's rule runs for every tool
+    (``test_a_tool_binding_nothing_never_reaches_the_kernels_rule``).
+    """
+    server = getattr(binding, "server_arguments", None)
+    if server is None or not server.names():
+        return arguments
+    applied = apply_server_arguments(binding.spec, arguments, server)
+    dropped = sorted(
+        name
+        for name in server.names() & arguments.keys()
+        if name in server.withheld or repr(arguments[name]) != repr(applied[name])
+    )
+    if dropped:
+        logger.warning(
+            "MCP tool %r: dropped the caller's value for %s, which the tool's server_arguments "
+            "supply or withhold.",
+            binding.name,
+            ", ".join(dropped),
+        )
+    return applied
 
 
 def split_url_kwargs(
@@ -471,6 +535,22 @@ def dispatch_shape(
     """
     params, url_kwarg_values = split_url_kwargs(arguments, binding.url_kwargs, refuse_missing=False)
     params, query_param_values = split_query_params(params, binding.query_params)
+    # A ``QueryParam`` the spec declares and the binding does not route (one
+    # named like a selector parameter, or one a deprecated ``query_params=``
+    # left out) stays among the arguments, and drf-services writes the sent
+    # value onto the dispatch request's query string from the declaration. The
+    # stand-in and the spec's class-level check judge this shape before that
+    # happens, so it carries the value too
+    # (``test_a_specs_own_query_param_naming_a_selector_parameter_is_served_on_every_route``).
+    # A read the binding routes was popped by the split, so it is not met here.
+    # One arc to coverage: without the first condition a ``UrlKwarg`` read a
+    # deprecated ``url_kwargs=`` left out lands in the query string
+    # (``test_a_url_kwarg_read_never_reaches_the_query_string``); without the
+    # second a null is a value, which ``split_query_params`` says it is not
+    # (``test_a_null_for_a_specs_own_query_param_is_no_query_value``).
+    for read in binding.spec.reads or ():
+        if isinstance(read, QueryParam) and params.get(read.name) is not None:
+            query_param_values = {**query_param_values, read.name: params[read.name]}
     # A copy, because both splits hand back the mapping they were given when
     # the binding declares nothing to split, and ``request.data`` is that
     # mapping uncopied: a permission writing into it wrote into the caller's
@@ -1152,6 +1232,7 @@ async def run_with_deadline(coro: Awaitable[Any], seconds: float | None) -> Any:
 __all__ = [
     "advertises_closed_items",
     "advertises_closed_schema",
+    "apply_tool_server_arguments",
     "binding_input_serializer",
     "build_validated_input_serializer",
     "chain_shape",

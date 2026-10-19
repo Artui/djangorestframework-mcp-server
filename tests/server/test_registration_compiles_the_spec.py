@@ -18,7 +18,7 @@ from typing import Any
 
 import pytest
 from django.core.exceptions import ImproperlyConfigured
-from django_service_specs import SelectorKind
+from django_service_specs import FieldMarking, SelectorKind
 from rest_framework.permissions import AllowAny
 from rest_framework_services import QueryParam, SelectorSpec, ServiceSpec
 
@@ -80,8 +80,28 @@ def test_the_listing_of_the_rest_of_the_server_survives_the_refusal() -> None:
 
 
 def test_a_selector_tool_drf_services_cannot_compile_is_refused_at_registration() -> None:
-    # ``user`` is a seed: drf-services refuses a read of that name when it
-    # compiles, because an argument of that name would never be the caller's.
+    # drf-services refuses ``field_audiences`` with no output serializer to
+    # mark when it compiles. A read named after a seed is no longer the case
+    # to hold this with: the registrar routes the spec's reads, so this
+    # package's own channel check refuses that name first, in its own words.
+    server = _server()
+    spec = SelectorSpec(
+        kind=SelectorKind.LIST,
+        selector=_rows,
+        permission_classes=[AllowAny],
+        field_audiences={"label": FieldMarking()},
+    )
+
+    with pytest.raises(ImproperlyConfigured, match=r"field_audiences and no output serializer"):
+        server.register_selector_tool(name="sel", spec=spec)
+
+    assert server.tools.get("sel") is None
+
+
+def test_a_specs_read_named_after_a_seed_is_refused_in_this_packages_words() -> None:
+    # The spec's own reads are channels this server routes, so they are held to
+    # the reserved names a mount's ``query_params`` is, before drf-services
+    # compiles the spec.
     server = _server()
     spec = SelectorSpec(
         kind=SelectorKind.LIST,
@@ -90,7 +110,7 @@ def test_a_selector_tool_drf_services_cannot_compile_is_refused_at_registration(
         reads=[QueryParam("user")],
     )
 
-    with pytest.raises(ImproperlyConfigured, match=r"reads declares 'user'"):
+    with pytest.raises(ImproperlyConfigured, match=r"collide with reserved transport keys"):
         server.register_selector_tool(name="sel", spec=spec)
 
     assert server.tools.get("sel") is None

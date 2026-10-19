@@ -199,6 +199,7 @@ _INVOICING_LOOKUP_EMPTY_IDEMPOTENT_SEEDS = _INVOICING_CLIENT + textwrap.dedent(
         "no_number": call("invoices.set_amount", {"amount_cents": 250}),
         "find_miss": call("invoices.find", {"number": "INV-404"}),
         "outstanding": call("invoices.outstanding", {"currency": "USD"}),
+        "unsent": call("invoices.unsent", {"sent": True}),
         "refused": call("invoices.create", {"number": "INV-C", "amount_cents": -5}),
     }))
     """
@@ -206,7 +207,7 @@ _INVOICING_LOOKUP_EMPTY_IDEMPOTENT_SEEDS = _INVOICING_CLIENT + textwrap.dedent(
 
 
 def test_invoicing_demonstrates_lookup_empty_result_idempotency_and_seeds() -> None:
-    """Five behaviours the example registers, asserted as a client sees them.
+    """Six behaviours the example registers, asserted as a client sees them.
 
     ``invoices.set_amount`` advertises its target lookup, requires it because
     the lookup has no default, refuses a call without it, lists
@@ -214,7 +215,9 @@ def test_invoicing_demonstrates_lookup_empty_result_idempotency_and_seeds() -> N
     output re-read, its refusal worded by the server's ``conventions=``; ``invoices.find`` answers a miss with ``{}`` under a
     schema that admits it; ``invoices.outstanding`` reads the mount's
     ``currency`` seed, does not advertise it, and a client ``currency`` does
-    not replace it; and ``invoices.create`` answers refused arguments with a
+    not replace it; ``invoices.unsent`` binds ``sent`` with
+    ``server_arguments=``, so it is not advertised and a client's ``sent`` is
+    dropped; and ``invoices.create`` answers refused arguments with a
     ``validation_error`` result, not a JSON-RPC ``-32602``.
     """
     result = subprocess.run(
@@ -271,6 +274,15 @@ def test_invoicing_demonstrates_lookup_empty_result_idempotency_and_seeds() -> N
     }
     # Filled by the server, so not asked of the client.
     assert "currency" not in tools["invoices.outstanding"]["inputSchema"]["properties"]
+
+    # Bound by the mount's ``server_arguments``: not advertised, not required,
+    # and a client's ``sent: true`` is dropped, so only the unsent invoice
+    # comes back.
+    unsent_schema = tools["invoices.unsent"]["inputSchema"]
+    assert "sent" not in unsent_schema["properties"]
+    assert "sent" not in unsent_schema.get("required", [])
+    assert not replies["unsent"].get("isError"), replies["unsent"]
+    assert [row["number"] for row in replies["unsent"]["structuredContent"]["items"]] == ["INV-A"]
 
     # Refused input is a tool execution error the model reads, with the
     # serializer's errors keyed by field under ``detail``.

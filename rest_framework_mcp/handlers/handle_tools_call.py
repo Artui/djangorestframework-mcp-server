@@ -28,6 +28,7 @@ from rest_framework_mcp.handlers.selector_tool_dispatch import (
 from rest_framework_mcp.handlers.task_dispatch import maybe_create_task
 from rest_framework_mcp.handlers.types.context import MCPCallContext
 from rest_framework_mcp.handlers.utils import (
+    apply_tool_server_arguments,
     consume_rate_limits,
     dispatch_shape,
     effective_rate_limits,
@@ -97,6 +98,13 @@ def handle_tools_call(
     bad_format: JsonRpcError | None = validate_output_format(params)
     if bad_format is not None:
         return bad_format
+
+    # The binding's ``server_arguments`` in place before anything reads the
+    # arguments: a task records what the tool will run with, and the permission
+    # check at its creation, the stand-in below and the strict split and
+    # missing-argument checks all see the server's value, so a binding can fill
+    # a required read (``apply_tool_server_arguments``).
+    arguments_raw = apply_tool_server_arguments(binding, arguments_raw)
 
     # Ordering: after argument-shape validation so a malformed call is rejected
     # outright rather than queued, and before dispatch because a task exists
@@ -188,6 +196,10 @@ def _dispatch_tool_call(
         # limit below, as any call the service does not run is. Merged with no
         # ``requestState`` too, so a first call can carry one.
         prior: ResolvedInput = resolve_prior_input(params, binding.name, arguments_raw, context)
+        # Applied again over what the answers produced, since the merge takes
+        # any key: an answer naming a bound argument would otherwise replace the
+        # server's value (``test_an_answer_cannot_replace_a_bound_value``).
+        answered = apply_tool_server_arguments(binding, prior.arguments)
 
         # An answer is merged over the arguments with no limit on its keys, so
         # it can change any value the stand-in above was built from: the route
@@ -221,11 +233,11 @@ def _dispatch_tool_call(
         # Not refusing a missing kwarg, as the stand-in above does not, since
         # the strict split in ``_run_service_tool`` is where that is answered
         # (``test_an_answer_leaving_a_required_route_kwarg_missing_is_told_which``).
-        if not same_arguments(prior.arguments, arguments_raw):
-            allowed, required_scopes = judge_tool_permissions(binding, prior.arguments, context)
+        if not same_arguments(answered, arguments_raw):
+            allowed, required_scopes = judge_tool_permissions(binding, answered, context)
             if not allowed:
-                return _forbidden(required_scopes), prior.arguments
-        arguments_raw = prior.arguments
+                return _forbidden(required_scopes), answered
+        arguments_raw = answered
 
         # After both checks, so a caller either one denies is never charged:
         # charged between them, a caller refused on the route its answer names

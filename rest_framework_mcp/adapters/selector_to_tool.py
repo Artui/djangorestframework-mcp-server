@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import dataclasses
 from collections.abc import Mapping
 from typing import Any
 
@@ -8,6 +9,7 @@ from django_service_specs import (
     UNSET,
     FieldMarking,
     PoolSeeds,
+    ServerArguments,
     UnsetType,
 )
 from rest_framework_services.types.selector_spec import SelectorSpec
@@ -33,6 +35,7 @@ from rest_framework_mcp.protocol.types.icon import Icon
 from rest_framework_mcp.registry.types.query_param import QueryParam
 from rest_framework_mcp.registry.types.selector_tool_binding import SelectorToolBinding
 from rest_framework_mcp.registry.types.url_kwarg import UrlKwarg
+from rest_framework_mcp.schema.utils import selector_tool_inputs
 
 
 def selector_spec_to_tool(
@@ -67,6 +70,8 @@ def selector_spec_to_tool(
     dispatch_timeout: float | None | UnsetType = UNSET,
     max_page_size: int | None | UnsetType = UNSET,
     pool_seeds: PoolSeeds = DEFAULT_POOL_SEEDS,
+    server_arguments: ServerArguments | None = None,
+    read_query_params: tuple[QueryParam, ...] = (),
 ) -> SelectorToolBinding:
     """Lift a ``SelectorSpec`` into a
     [`SelectorToolBinding`][rest_framework_mcp.registry.types.selector_tool_binding.SelectorToolBinding].
@@ -117,7 +122,8 @@ def selector_spec_to_tool(
     )
     validate_query_params(
         label=f"selector tool {name!r}",
-        query_params=query_params,
+        # The spec's own reads are names too, held to the same reserved set.
+        query_params=(*query_params, *read_query_params),
         url_kwargs=url_kwargs,
         pool_seeds=pool_seeds,
     )
@@ -152,14 +158,49 @@ def selector_spec_to_tool(
         query_params=query_params,
         max_result_bytes=max_result_bytes,
         dispatch_timeout=dispatch_timeout,
+        # Checked when the binding is registered (``ToolRegistry.register``).
+        server_arguments=server_arguments or ServerArguments(),
         max_page_size=max_page_size,
     )
+    binding = _with_read_query_params(binding, read_query_params, pool_seeds=pool_seeds)
     # On the built binding, because the check reads the schema the binding
     # advertises, and before the binding is returned to be registered.
     validate_query_param_inputs(
         binding, spec_kwargs_provides=frozenset(spec_kwargs_provides), pool_seeds=pool_seeds
     )
     return binding
+
+
+def _with_read_query_params(
+    binding: SelectorToolBinding,
+    read_query_params: tuple[QueryParam, ...],
+    *,
+    pool_seeds: PoolSeeds,
+) -> SelectorToolBinding:
+    """``binding`` routing the spec's own ``QueryParam`` reads, less any naming the tool's own input.
+
+    A ``QueryParam`` the spec itself declares says where that argument comes
+    from, so one named like a parameter of the selector (or a ``filter_set``
+    field) is not a shadow: it is left out of the binding's ``query_params``,
+    so the value stays among the arguments, the reflected parameter advertises
+    it once, the selector receives it, and drf-services puts it on
+    ``request.query_params`` from the declaration
+    (``test_a_specs_own_query_param_naming_a_selector_parameter_is_served_on_every_route``).
+    One declared at the mount (``query_params=``, ``agent_contract=``) is still
+    a channel, and ``validate_query_param_inputs`` still refuses it there
+    (``test_a_mount_level_query_param_naming_a_selector_parameter_is_still_refused``).
+    A read naming no input stays a channel, advertised and routed as declared
+    (``test_a_specs_own_query_param_naming_no_parameter_stays_a_channel``).
+
+    The names are the ones the refusal reads, ``selector_tool_inputs``, so the
+    exemption and the refusal cannot disagree about which names are the
+    caller's own.
+    """
+    offered = frozenset(
+        selector_tool_inputs(binding, pool_seeds=pool_seeds)[0].get("properties", {})
+    )
+    routed = tuple(read for read in read_query_params if read.name not in offered)
+    return dataclasses.replace(binding, query_params=(*binding.query_params, *routed))
 
 
 __all__ = ["selector_spec_to_tool"]

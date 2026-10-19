@@ -9,6 +9,7 @@ from django_service_specs import (
     UNSET,
     FieldMarking,
     PoolSeeds,
+    ServerArguments,
     UnsetType,
 )
 from rest_framework_services.types.service_spec import ServiceSpec
@@ -68,6 +69,7 @@ def service_spec_to_tool(
     max_result_bytes: int | None | UnsetType = UNSET,
     dispatch_timeout: float | None | UnsetType = UNSET,
     pool_seeds: PoolSeeds = DEFAULT_POOL_SEEDS,
+    server_arguments: ServerArguments | None = None,
 ) -> ToolBinding:
     """Lift a ``ServiceSpec`` into a
     [`ToolBinding`][rest_framework_mcp.registry.types.tool_binding.ToolBinding].
@@ -164,6 +166,8 @@ def service_spec_to_tool(
         query_params=query_params,
         max_result_bytes=max_result_bytes,
         dispatch_timeout=dispatch_timeout,
+        # Checked when the binding is registered (``ToolRegistry.register``).
+        server_arguments=server_arguments or ServerArguments(),
     )
     # On the built binding, because both checks read the schema the binding
     # advertises, and before the binding is returned to be registered.

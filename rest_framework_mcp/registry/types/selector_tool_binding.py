@@ -6,7 +6,14 @@ from functools import cached_property
 from typing import Any, Generic, TypeVar
 
 from django.core.exceptions import ImproperlyConfigured
-from django_service_specs import UNSET, AudienceProjection, FieldMarking, SelectorKind, UnsetType
+from django_service_specs import (
+    UNSET,
+    AudienceProjection,
+    FieldMarking,
+    SelectorKind,
+    ServerArguments,
+    UnsetType,
+)
 from rest_framework_services import build_audience_projection
 from rest_framework_services.types.affordance_declarer import AffordanceDeclarer
 from rest_framework_services.types.selector_spec import SelectorSpec
@@ -232,6 +239,21 @@ class SelectorToolBinding(Generic[ResultT, ExtraT]):
     carries to ``register_specs``, or passed in an ``agent_contract=`` at
     registration, and resolved here, so the field set an agent sees does not
     depend on which agent transport served it."""
+
+    server_arguments: ServerArguments = field(default_factory=ServerArguments)
+    """Declared parameters the server answers for, so no caller does.
+
+    The kernel's
+    [`ServerArguments`][django_service_specs.types.server_arguments.ServerArguments],
+    given as ``server_arguments=`` at registration. Its ``values`` are supplied
+    on every call and outrank the caller's; its ``withheld`` names are taken
+    from no one, so the callable's own default answers. ``tools/list`` leaves
+    every one of them out of the ``inputSchema`` and its ``required``, and each
+    ``tools/call`` route drops the caller's value for them before anything reads
+    the arguments (``handlers.utils.apply_tool_server_arguments``). Static for
+    the binding's lifetime: a value computed per request is not this. Checked
+    against the spec when the binding is registered, so one that cannot mean
+    what it says fails at startup (``ToolRegistry.register``)."""
 
     @property
     def output_serializer(self) -> type | None:

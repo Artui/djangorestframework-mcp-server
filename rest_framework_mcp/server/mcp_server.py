@@ -1,6 +1,9 @@
 from __future__ import annotations
 
+import os
 import re
+import sys
+import warnings
 from collections.abc import Callable, Mapping, Sequence
 from typing import Any, cast
 
@@ -12,8 +15,10 @@ from django_service_specs import (
     DEFAULT_POOL_SEEDS,
     UNSET,
     Affordance,
+    FieldMarking,
     PoolSeeds,
     SelectorKind,
+    ServerArguments,
     SpecRegistry,
     UnsetType,
     kernel_spec,
@@ -224,7 +229,7 @@ class MCPServer:
         # two servers here can genuinely differ.
         self._config: MCPConfig = config if config is not None else build_mcp_config()
         self._url_namespace: str = url_namespace
-        self._tools: ToolRegistry = ToolRegistry()
+        self._tools: ToolRegistry = ToolRegistry(pool_seeds=pool_seeds)
         self._resources: ResourceRegistry = ResourceRegistry()
         self._prompts: PromptRegistry = PromptRegistry()
         # ``resource_url`` configures the *default* backend; a custom backend
@@ -329,6 +334,7 @@ class MCPServer:
         query_params: tuple[QueryParam, ...] = (),
         max_result_bytes: int | None | UnsetType = UNSET,
         dispatch_timeout: float | None | UnsetType = UNSET,
+        server_arguments: ServerArguments | None = None,
     ) -> ToolBinding:
         """Register a ``ServiceSpec`` as an MCP **mutation** tool.
 
@@ -352,12 +358,32 @@ class MCPServer:
         renders from — or the link is refused at registration rather than
         shipping a view that comes up blank.
 
-        ``agent_contract`` carries what a caller with **no HTTP request** has to
-        be told -- the URL kwargs, query params and field-audience overrides the
-        URLconf and query string give an HTTP caller for free. ``register_specs``
-        passes each entry's own, so the declaration is made once and every agent
-        transport reads it; an explicit ``url_kwargs`` / ``query_params`` here
-        wins over it.
+        The route captures and query values a caller with **no HTTP request**
+        has to send come from the spec's own ``reads``, and the output fields an
+        agent sees from its ``field_audiences``: the declaration is made once, on
+        the spec, and this registrar, the decorator and ``register_specs`` all
+        read it, so one spec is the same tool however it is mounted.
+
+        ``server_arguments`` names declared parameters the server answers for,
+        so no caller does: a
+        ``ServerArguments``
+        from ``django_service_specs``, whose ``values`` are fixed for the life of
+        the binding and whose ``withheld`` names leave the callable to its own
+        default. Both are dropped from the advertised schema and from
+        ``required``; a caller's value for one is dropped before dispatch and
+        logged by name. It is checked at registration, so an undeclared name, a
+        value the declared type refuses or a withheld name with no default
+        raises ``ImproperlyConfigured`` naming the tool. A value computed per
+        request is not something this argument carries.
+
+        ``url_kwargs``, ``query_params`` and ``agent_contract`` are
+        **deprecated**: each declares beside the spec what the spec declares
+        itself, and each warns, naming its replacement. An explicit
+        ``url_kwargs`` / ``query_params`` replaces the spec's reads of that kind
+        in what the tool advertises and routes; ``agent_contract`` replaces all
+        of them and the field audiences. Neither takes a channel away from the
+        dispatch, which still reads the spec's declaration; only
+        ``server_arguments``' ``withheld`` does.
         """
         _refuse_retired_argument_binding(name, argument_binding)
         _refuse_retired_unknown_arguments(name, unknown_arguments)
@@ -369,10 +395,18 @@ class MCPServer:
             include_structured_content=include_structured_content,
             default_structured_content=self._config.include_structured_content,
         )
-        contract = agent_contract or OfflineContract()
+        channel_url_kwargs, channel_query_params, read_query_params, field_audiences = (
+            _tool_channels(
+                name,
+                spec,
+                agent_contract=agent_contract,
+                url_kwargs=url_kwargs,
+                query_params=query_params,
+            )
+        )
         binding = service_spec_to_tool(
             name=name,
-            field_audiences=contract.field_audiences,
+            field_audiences=field_audiences,
             spec=spec,
             description=description,
             title=title,
@@ -394,15 +428,15 @@ class MCPServer:
             unknown_arguments=unknown_arguments,
             always_listed=always_listed,
             spec_kwargs_provides=spec_kwargs_provides,
-            # The mount's own declaration wins wherever it makes one; the
-            # contract is what the registry entry says when it does not. An
-            # empty tuple is how a caller says nothing here, not how it says
-            # "none" -- to drop an entry's channels, override the contract.
-            url_kwargs=tuple(url_kwargs) or contract.url_kwargs,
-            query_params=tuple(query_params) or contract.query_params,
+            url_kwargs=channel_url_kwargs,
+            # A service has no reflected parameters to answer a read's name, so
+            # the spec's own query values are channels like the mount's: one
+            # named like a service input is refused as a shadow.
+            query_params=(*channel_query_params, *read_query_params),
             max_result_bytes=max_result_bytes,
             dispatch_timeout=dispatch_timeout,
             pool_seeds=self._pool_seeds,
+            server_arguments=server_arguments,
         )
         check_tool_permissions_declared(
             binding.name, binding.permissions, require=self._config.require_tool_permissions
@@ -458,6 +492,7 @@ class MCPServer:
         max_result_bytes: int | None | UnsetType = UNSET,
         dispatch_timeout: float | None | UnsetType = UNSET,
         max_page_size: int | None | UnsetType = UNSET,
+        server_arguments: ServerArguments | None = None,
     ) -> SelectorToolBinding:
         """Register a ``SelectorSpec`` as an MCP **read** tool.
 
@@ -494,12 +529,32 @@ class MCPServer:
         ``tools/list`` entry, and ``ui`` links it to an interactive view —
         both as on ``register_service_tool``.
 
-        ``agent_contract`` carries what a caller with **no HTTP request** has to
-        be told -- the URL kwargs, query params and field-audience overrides the
-        URLconf and query string give an HTTP caller for free. ``register_specs``
-        passes each entry's own, so the declaration is made once and every agent
-        transport reads it; an explicit ``url_kwargs`` / ``query_params`` here
-        wins over it.
+        The route captures and query values a caller with **no HTTP request**
+        has to send come from the spec's own ``reads``, and the output fields an
+        agent sees from its ``field_audiences``: the declaration is made once, on
+        the spec, and this registrar, the decorator and ``register_specs`` all
+        read it, so one spec is the same tool however it is mounted.
+
+        ``server_arguments`` names declared parameters the server answers for,
+        so no caller does: a
+        ``ServerArguments``
+        from ``django_service_specs``, whose ``values`` are fixed for the life of
+        the binding and whose ``withheld`` names leave the callable to its own
+        default. Both are dropped from the advertised schema and from
+        ``required``; a caller's value for one is dropped before dispatch and
+        logged by name. It is checked at registration, so an undeclared name, a
+        value the declared type refuses or a withheld name with no default
+        raises ``ImproperlyConfigured`` naming the tool. A value computed per
+        request is not something this argument carries.
+
+        ``url_kwargs``, ``query_params`` and ``agent_contract`` are
+        **deprecated**: each declares beside the spec what the spec declares
+        itself, and each warns, naming its replacement. An explicit
+        ``url_kwargs`` / ``query_params`` replaces the spec's reads of that kind
+        in what the tool advertises and routes; ``agent_contract`` replaces all
+        of them and the field audiences. Neither takes a channel away from the
+        dispatch, which still reads the spec's declaration; only
+        ``server_arguments``' ``withheld`` does.
         """
         _refuse_retired_argument_binding(name, argument_binding)
         _refuse_retired_unknown_arguments(name, unknown_arguments)
@@ -511,10 +566,18 @@ class MCPServer:
             include_structured_content=include_structured_content,
             default_structured_content=self._config.include_structured_content,
         )
-        contract = agent_contract or OfflineContract()
+        channel_url_kwargs, channel_query_params, read_query_params, field_audiences = (
+            _tool_channels(
+                name,
+                spec,
+                agent_contract=agent_contract,
+                url_kwargs=url_kwargs,
+                query_params=query_params,
+            )
+        )
         binding = selector_spec_to_tool(
             name=name,
-            field_audiences=contract.field_audiences,
+            field_audiences=field_audiences,
             spec=spec,
             description=description,
             title=title,
@@ -537,16 +600,16 @@ class MCPServer:
             unknown_arguments=unknown_arguments,
             always_listed=always_listed,
             spec_kwargs_provides=spec_kwargs_provides,
-            # The mount's own declaration wins wherever it makes one; the
-            # contract is what the registry entry says when it does not. An
-            # empty tuple is how a caller says nothing here, not how it says
-            # "none" -- to drop an entry's channels, override the contract.
-            url_kwargs=tuple(url_kwargs) or contract.url_kwargs,
-            query_params=tuple(query_params) or contract.query_params,
+            url_kwargs=channel_url_kwargs,
+            query_params=channel_query_params,
+            # Apart from the mount's, so the adapter can tell the spec's own
+            # reads, which may name a selector parameter, from a shadow.
+            read_query_params=read_query_params,
             max_result_bytes=max_result_bytes,
             dispatch_timeout=dispatch_timeout,
             max_page_size=max_page_size,
             pool_seeds=self._pool_seeds,
+            server_arguments=server_arguments,
         )
         # A ``QueryParam`` named like an input the tool offers is refused by
         # the adapter that builds the binding, for both tool kinds
@@ -616,16 +679,22 @@ class MCPServer:
             )
 
 
-        Each entry's ``agent_contract``, the
-        [`OfflineContract`][rest_framework_services.types.offline_contract.OfflineContract]
-        drf-services answers from the spec's own ``reads`` and
-        ``field_audiences``, comes across as the mount's default — the
-        ``url_kwargs``, ``query_params`` and ``field_audiences`` an off-HTTP
-        caller needs and an HTTP one gets from the URLconf and query string for
-        free. A per-tool ``url_kwargs`` / ``query_params`` override wins over it;
-        overriding ``agent_contract`` itself replaces it outright, which is the
-        only way for this mount to advertise *fewer* channels than the spec
-        declares.
+        Each spec's own ``reads`` and ``field_audiences`` are read by the
+        registrar, as on a direct registration. ``server_arguments`` is an
+        override like any other, and the one to reach for when this mount
+        answers an argument itself:
+
+            server.register_specs(
+                registry,
+                overrides={
+                    "list_documents": {
+                        "server_arguments": ServerArguments(values={"project_pk": 7}),
+                    },
+                },
+            )
+
+        A ``url_kwargs``, ``query_params`` or ``agent_contract`` override is
+        deprecated and warns, as the registrar arguments do.
 
         Keys are checked against the target method's own signature, so a knob
         used on the wrong spec kind (``paginate`` on a ``ServiceSpec``) raises
@@ -656,11 +725,11 @@ class MCPServer:
             # or another library's declaration is refused by name rather than
             # failing inside a registrar on an attribute it does not have.
             _refuse_spec_this_server_cannot_dispatch(entry.name, entry.spec)
+            # The registrars read each spec's own ``reads`` and
+            # ``field_audiences``, so nothing about the entry's channels is
+            # passed here: a registry entry and a direct registration of the
+            # same spec are the same tool.
             knobs = dict(override_map.get(entry.name, {}))
-            # An entry's own agent contract, unless this mount replaced it.
-            # ``setdefault`` rather than a merge on purpose: the contract is one
-            # object, and a mount substituting a different one has said so.
-            knobs.setdefault("agent_contract", entry.agent_contract)
             if isinstance(entry.spec, ServiceSpec):
                 bindings.append(
                     self.register_service_tool(name=entry.name, spec=entry.spec, **knobs)
@@ -1987,6 +2056,119 @@ def _refuse_spec_this_server_cannot_dispatch(name: str, spec: object) -> None:
         "under this name, which is not a rest_framework_services.ServiceSpec or "
         f"SelectorSpec, the two types register_specs makes a tool from. {remedy}"
     )
+
+
+def _tool_channels(
+    name: str,
+    spec: ServiceSpec | SelectorSpec,
+    *,
+    agent_contract: OfflineContract | None,
+    url_kwargs: Sequence[UrlKwarg],
+    query_params: Sequence[QueryParam],
+) -> tuple[
+    tuple[UrlKwarg, ...],
+    tuple[QueryParam, ...],
+    tuple[QueryParam, ...],
+    Mapping[str, FieldMarking] | None,
+]:
+    """The channels and field audiences a tool registered from ``spec`` carries.
+
+    Answers ``(url_kwargs, query_params, read_query_params, field_audiences)``:
+    the mount's query params apart from the spec's own, because a selector
+    tool exempts a read naming one of its own parameters from the shadow
+    refusal and a mount declaration it does not.
+
+    With no deprecated knob, all of it is the spec's own declaration (its
+    ``reads`` and ``field_audiences``, as ``spec.agent_contract()`` answers
+    them), which is what makes a direct registration and a ``register_specs``
+    entry of one spec the same tool
+    (``test_every_registrar_advertises_the_specs_reads``). An
+    ``agent_contract`` replaces the spec's declaration outright, as it did
+    when ``register_specs`` passed the entry's own, and its query params are
+    the mount's. An explicit ``url_kwargs`` / ``query_params`` replaces
+    whichever declaration is in force for its kind, and an empty tuple says
+    nothing rather than "none".
+    """
+    _warn_mount_channels(
+        name, agent_contract=agent_contract, url_kwargs=url_kwargs, query_params=query_params
+    )
+    if agent_contract is not None:
+        return (
+            tuple(url_kwargs) or agent_contract.url_kwargs,
+            tuple(query_params) or agent_contract.query_params,
+            (),
+            agent_contract.field_audiences,
+        )
+    declared = spec.agent_contract() or OfflineContract()
+    return (
+        tuple(url_kwargs) or declared.url_kwargs,
+        tuple(query_params),
+        # A mount's ``query_params`` replaces the spec's reads of that kind.
+        () if query_params else declared.query_params,
+        declared.field_audiences,
+    )
+
+
+def _warn_mount_channels(
+    name: str,
+    *,
+    agent_contract: OfflineContract | None,
+    url_kwargs: Sequence[UrlKwarg],
+    query_params: Sequence[QueryParam],
+) -> None:
+    """Warn once per deprecated channel knob ``name`` was registered with, naming its replacement.
+
+    Only a knob actually passed warns, so the decorators and
+    ``register_specs``, which forward the defaults, are silent for a spec
+    declaring its own reads (``test_no_registrar_warns_for_a_spec_declaring_its_own_reads``).
+    """
+    replacements = (
+        (
+            "url_kwargs",
+            bool(url_kwargs),
+            "declare the route capture on the spec as reads=[UrlKwarg(...)]",
+        ),
+        (
+            "query_params",
+            bool(query_params),
+            "declare the query value on the spec as reads=[QueryParam(...)]",
+        ),
+        (
+            "agent_contract",
+            agent_contract is not None,
+            "declare the channels on the spec as reads=[...] and the audiences as "
+            "field_audiences=, and keep an argument from callers with "
+            "server_arguments=ServerArguments(withheld={...})",
+        ),
+    )
+    for knob, passed, replacement in replacements:
+        if passed:
+            warnings.warn(
+                f"MCP tool {name!r}: {knob}= is deprecated and will be removed in a "
+                f"future release; {replacement}. Every registrar and transport reads "
+                "the spec's own declaration.",
+                DeprecationWarning,
+                stacklevel=_caller_stacklevel(),
+            )
+
+
+def _caller_stacklevel() -> int:
+    """The ``stacklevel`` that points a warning at the first frame outside this package.
+
+    A knob reaches ``_warn_mount_channels`` through a registrar, a decorator,
+    ``register_specs`` or ``register_tools``, each a different depth, so a fixed
+    level would blame this package for some of them. Counted from the frame
+    that calls ``warnings.warn``, which is level 1
+    (``test_each_mount_level_knob_warns_naming_its_replacement`` asserts the
+    caller's file).
+    """
+    package = os.path.dirname(os.path.dirname(os.path.abspath(__file__))) + os.sep
+    frame = sys._getframe(1)
+    level = 1
+    while frame.f_back is not None and frame.f_code.co_filename.startswith(package):
+        frame = frame.f_back
+        level += 1
+    return level
 
 
 def _refuse_retired_argument_binding(name: str, argument_binding: ArgumentBinding) -> None:

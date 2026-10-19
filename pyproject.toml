@@ -103,8 +103,8 @@ dependencies = [
     # kernel, and it retires names this server no longer passes.
     "djangorestframework-services>=0.58.0",
     # The kernel this package imports its own names from. 0.9.0 is the first
-    # release with ``ServerArguments`` and ``format: uuid``, which the schema
-    # and dispatch seams build on.
+    # release with ``ServerArguments``, ``check_server_arguments`` and
+    # ``apply_server_arguments``, which ``server_arguments=`` is built on.
     "django-service-specs>=0.9.0",
     "djangorestframework-dataclasses>=1.3.1",
     # ``typing_extensions.Unpack`` is used at runtime by the strict service /

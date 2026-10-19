@@ -10,7 +10,11 @@ from rest_framework_services.types.service_spec import ServiceSpec
 from rest_framework_mcp.registry.types.tool_binding import ToolBinding
 from rest_framework_mcp.registry.types.url_kwarg import UrlKwarg
 from rest_framework_mcp.schema.input_schema import build_input_schema
-from rest_framework_mcp.schema.utils import selector_inputs, target_lookup
+from rest_framework_mcp.schema.utils import (
+    selector_inputs,
+    target_lookup,
+    without_server_arguments,
+)
 
 
 def build_service_tool_input_schema(
@@ -83,11 +87,23 @@ def build_service_tool_input_schema(
     list alone and an item offers only the serializer's fields
     (``test_a_list_payload_item_advertises_only_the_keys_the_bind_admits``).
 
+    **The binding's ``server_arguments`` names are left out last**, from
+    ``properties`` and from ``required``, beside the keys the server owns
+    above: the server answers each of them, so the caller is never asked
+    (``schema.utils.without_server_arguments``).
+
     Args:
         binding: The service tool binding to describe.
         pool_seeds: The server's registered seeds, which fill a lookup or service
             parameter of the same name, so it is not asked of the client.
     """
+    return without_server_arguments(
+        _advertised(binding, pool_seeds=pool_seeds), binding.server_arguments
+    )
+
+
+def _advertised(binding: ToolBinding, *, pool_seeds: PoolSeeds) -> dict[str, Any]:
+    """Everything ``build_service_tool_input_schema`` describes, before the server's names leave."""
     spec = binding.spec
     if spec.many:
         # ``phase="input"`` never answers ``None`` (only the output phase is

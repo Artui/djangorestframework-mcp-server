@@ -11,7 +11,13 @@ parameter is the other ordering route, and likewise needs no knob);
 `ToolRegistry` accepts either kind and is what `tools/list` and
 `tools/call` iterate.
 
-`paginate` also decides what `query_params=` shapes. On a paged binding the
+Both bindings carry `server_arguments`, a
+[`ServerArguments`][django_service_specs.ServerArguments] naming the declared
+parameters the server answers for, so no caller does. `ToolRegistry.register`
+checks it, whichever registrar built the binding. See
+[Server-supplied arguments](../concepts.md#server-arguments).
+
+`paginate` also decides what a `QueryParam` shapes. On a paged binding the
 serializer renders each row and the page envelope (`items`, `page`,
 `totalPages`, `hasNext`) is built around the result, so a query param applies
 to each item in `items`, never to the envelope — and its description in the

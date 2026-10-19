@@ -15,7 +15,13 @@ from collections.abc import Iterable, Mapping
 from typing import Any
 
 from django.core.exceptions import ImproperlyConfigured
-from django_service_specs import DEFAULT_POOL_SEEDS, PoolSeeds, SelectorKind, provider_keys
+from django_service_specs import (
+    DEFAULT_POOL_SEEDS,
+    PoolSeeds,
+    SelectorKind,
+    ServerArguments,
+    provider_keys,
+)
 from rest_framework import serializers as drf_serializers
 from rest_framework_dataclasses.serializers import DataclassSerializer
 from rest_framework_services.dispatch.utils import DROPPED_EDGE_SEEDS
@@ -525,7 +531,13 @@ def _service_tool_inputs(
     """
     advertised = frozenset(
         build_service_tool_input_schema(
-            dataclasses.replace(binding, query_params=(), url_kwargs=()), pool_seeds=pool_seeds
+            # Without the binding's ``server_arguments`` too: the schema leaves a
+            # bound name out, but a channel of that name still takes its value
+            # from the input it shadows, so the input still counts here.
+            dataclasses.replace(
+                binding, query_params=(), url_kwargs=(), server_arguments=ServerArguments()
+            ),
+            pool_seeds=pool_seeds,
         ).get("properties", {})
     )
     # The two reads the schema builder merges, made as it makes them. Each is
