@@ -7,6 +7,43 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.53.1] — 2026-10-20
+
+### Fixed
+
+- **A selector's `Http404` is a missing row, not a server fault.** A selector
+  that raises Django's `Http404`, typically through `get_object_or_404`, used to
+  escape `dispatch` and reach the transport's backstop: an HTTP `500` carrying
+  JSON-RPC `-32603`, and an `ERROR` log line, on both viewsets in both protocol
+  eras (drf-mcp#188). It now answers as a selector raising `DoesNotExist` does,
+  a `not_found` `isError` result under a `200` with nothing logged, and a
+  RETRIEVE tool with `allow_none=True` returns the empty result. A LIST tool
+  answers `not_found` too, worded `<tool>: not found` because a LIST has no
+  instance to miss (usually a parent); `allow_none` does not make it `[]`.
+  `DoesNotExist` escaping a LIST selector is unchanged: still a server fault.
+  A chain step follows the same rules and names itself in `failedStep`: a
+  RETRIEVE step raising `Http404` fails as `not_found` as one raising
+  `DoesNotExist` does, a LIST step raising `Http404` fails as `<step>: not
+  found`, and an atomic chain rolls back. `MCPServer.call_tool` words a LIST
+  tool's `not_found` the same way, where it used the RETRIEVE wording, `<tool>:
+  no matching instance found`.
+- **A chain service step's re-read follows the kernel's rule after a write.**
+  An `output_selector_spec` selector that raised `DoesNotExist` or `Http404`
+  escaped the chain, which rolled back and was served as a server fault, while
+  the same spec as a service tool presented `None`. A RETRIEVE re-read that
+  finds nothing now passes `None` on, as the service tool does, and the chain
+  commits. A LIST re-read raising `Http404` is a `RuntimeError` chained from
+  it, a fault on every route, because a not-found would say the write had not
+  happened; a LIST re-read's `DoesNotExist` is unchanged.
+
+### Changed
+
+- **`django-service-specs` is raised to `>=0.10.0`**, the release that reads a
+  selector's `Http404` as a missing row in `dispatch` and `adispatch`. The
+  pydantic-ai package's floor moves with it: the two routes reach one spec, and
+  with only one raised the same selector is a not-found on one route and an
+  error on the other.
+
 ## [0.53.0] — 2026-10-19
 
 Adapted to `djangorestframework-services` 0.58.0, the DRF adapter over
@@ -6178,7 +6215,8 @@ Pinned to `djangorestframework-services==0.6.0`.
 - 100% line + branch coverage enforced by pytest (**451 tests** at
   release).
 
-[Unreleased]: https://github.com/Artui/djangorestframework-mcp-server/compare/v0.53.0...HEAD
+[Unreleased]: https://github.com/Artui/djangorestframework-mcp-server/compare/v0.53.1...HEAD
+[0.53.1]: https://github.com/Artui/djangorestframework-mcp-server/compare/v0.53.0...v0.53.1
 [0.53.0]: https://github.com/Artui/djangorestframework-mcp-server/compare/v0.52.1...v0.53.0
 [0.52.1]: https://github.com/Artui/djangorestframework-mcp-server/compare/v0.52.0...v0.52.1
 [0.52.0]: https://github.com/Artui/djangorestframework-mcp-server/compare/v0.51.0...v0.52.0

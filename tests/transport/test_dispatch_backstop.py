@@ -27,7 +27,7 @@ from typing import Any
 import pytest
 from asgiref.sync import sync_to_async
 from django.core.exceptions import PermissionDenied as DjangoPermissionDenied
-from django.http import HttpRequest
+from django.http import Http404, HttpRequest
 from django.test import AsyncClient, Client, override_settings
 from django_service_specs import SelectorKind
 from rest_framework import serializers
@@ -44,7 +44,9 @@ from rest_framework_mcp.subscriptions.in_memory_subscription_broker import (
 from rest_framework_mcp.transport.async_streamable_http_viewset import AsyncStreamableHttpViewSet
 from rest_framework_mcp.transport.in_memory_session_store import InMemorySessionStore
 from rest_framework_mcp.transport.streamable_http_viewset import StreamableHttpViewSet
+from tests.testapp.models import Invoice
 from tests.testapp.urlconf_for import urlconf_for
+from tests.utils import tool_error
 
 LEGACY = "2025-11-25"
 MODERN = "2026-07-28"
@@ -77,6 +79,15 @@ class _RestqlRejectingSerializer(serializers.Serializer):
 
 def _rows() -> list[dict[str, Any]]:
     return [{"id": 1}, {"id": 2}]
+
+
+def _missing_row() -> Any:
+    """``get_object_or_404``'s idiom, which a view reads as a 404 and a tool as a missing row."""
+    raise Http404(SECRET)
+
+
+def _list_does_not_exist() -> Any:
+    raise Invoice.DoesNotExist(SECRET)
 
 
 def _explode() -> list[dict[str, Any]]:
@@ -135,6 +146,21 @@ def _server() -> MCPServer:
         name="boom.runtime",
         description="Raises from the selector.",
         spec=SelectorSpec(kind=SelectorKind.LIST, selector=_explode),
+    )
+    server.register_selector_tool(
+        name="missing.retrieve",
+        description="A RETRIEVE selector raising Http404.",
+        spec=SelectorSpec(kind=SelectorKind.RETRIEVE, selector=_missing_row),
+    )
+    server.register_selector_tool(
+        name="missing.list",
+        description="A LIST selector raising Http404.",
+        spec=SelectorSpec(kind=SelectorKind.LIST, selector=_missing_row),
+    )
+    server.register_selector_tool(
+        name="boom.list_does_not_exist",
+        description="A LIST selector raising DoesNotExist, a fault inside the selector.",
+        spec=SelectorSpec(kind=SelectorKind.LIST, selector=_list_does_not_exist),
     )
     server.register_selector_tool(
         name="boom.permission",
@@ -302,6 +328,35 @@ _PATHS = pytest.mark.parametrize(
 
 
 @_PATHS
+@pytest.mark.parametrize("tool", ["missing.retrieve", "missing.list"])
+async def test_a_selectors_http404_is_a_not_found_result_not_a_server_fault(
+    is_async: bool, modern: bool, tool: str, caplog: pytest.LogCaptureFixture
+) -> None:
+    """``get_object_or_404`` in a selector is a missing row, as ``DoesNotExist`` is.
+
+    ``Http404`` is not an ``ObjectDoesNotExist``, so before the kernel mapped it
+    it reached the backstop: a ``500`` with ``-32603`` and an ERROR line. It is
+    now a ``200`` whose tool result is the kernel's ``not_found``, and nothing is
+    logged, because nothing went wrong.
+    """
+    caplog.set_level(logging.ERROR, logger="rest_framework_mcp")
+    response = await _post(
+        is_async, _server(), "tools/call", {"name": tool, "arguments": {}}, modern=modern
+    )
+    assert response.status_code == 200, response.content
+    body = response.json()
+    assert body["id"] == REQUEST_ID
+    assert "error" not in body
+    error = tool_error(body["result"])
+    assert error["type"] == "not_found"
+    # A LIST has no instance to miss, usually a parent, so it does not say one.
+    assert ("instance" in error["message"]) == (tool == "missing.retrieve")
+    # The exception text is the selector's own and is not the client's to read.
+    assert "db-primary" not in response.content.decode()
+    assert [r for r in caplog.records if r.levelno >= logging.ERROR] == []
+
+
+@_PATHS
 async def test_an_escaping_api_exception_is_a_json_rpc_internal_error(
     is_async: bool, modern: bool, caplog: pytest.LogCaptureFixture
 ) -> None:
@@ -317,6 +372,24 @@ async def test_an_escaping_api_exception_is_a_json_rpc_internal_error(
     _assert_internal_error(response)
     _assert_logged(caplog, _VIEWSET_LOGGERS[is_async], ValidationError)
     assert RESTQL_TEXT in caplog.text
+
+
+@_PATHS
+async def test_a_list_selectors_does_not_exist_stays_a_server_fault(
+    is_async: bool, modern: bool, caplog: pytest.LogCaptureFixture
+) -> None:
+    """Only ``Http404`` is a LIST's "not found"; ``DoesNotExist`` escaping a LIST
+    selector is a bug in the selector, so it is still a ``-32603`` and logged."""
+    caplog.set_level(logging.ERROR, logger="rest_framework_mcp")
+    response = await _post(
+        is_async,
+        _server(),
+        "tools/call",
+        {"name": "boom.list_does_not_exist", "arguments": {}},
+        modern=modern,
+    )
+    _assert_internal_error(response)
+    _assert_logged(caplog, _VIEWSET_LOGGERS[is_async], Invoice.DoesNotExist)
 
 
 @_PATHS

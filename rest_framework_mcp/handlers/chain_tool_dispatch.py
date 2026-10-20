@@ -46,6 +46,7 @@ from typing import Any
 
 from django.core.exceptions import ImproperlyConfigured, ObjectDoesNotExist
 from django.db import transaction
+from django.http import Http404
 from django_service_specs import (
     PoolSeeds,
     SelectorKind,
@@ -96,11 +97,19 @@ from rest_framework_mcp.registry.types.utils import rendered_kind
 
 
 class _MissingInstance(Exception):
-    """A ``RETRIEVE`` step resolved no row and its spec does not allow ``None``.
+    """A step's selector found nothing: a ``RETRIEVE`` that resolved no row and
+    whose spec does not allow ``None``, or a ``LIST`` whose selector raised
+    ``Http404``.
 
     Raised from the step runner and mapped to a ``not_found`` result in
-    ``_run_step``, which is where the step's alias is in hand.
+    ``_run_step``, which is where the step's alias is in hand. ``reason`` is the
+    wording after the alias: a ``LIST`` has no instance to miss, usually a
+    parent, so it does not say one.
     """
+
+    def __init__(self, reason: str = "no matching instance found") -> None:
+        super().__init__(reason)
+        self.reason = reason
 
 
 class _ChainAbort(Exception):
@@ -348,11 +357,11 @@ def _run_step(
                 ),
             },
         ).to_dict()
-    except _MissingInstance:
+    except _MissingInstance as missing:
         # The selector tool's wording and error type, with the step as the name:
         # the same missing row answers the same way whichever tool fetched it.
         return build_error_tool_result(
-            f"{step.alias}: no matching instance found",
+            f"{step.alias}: {missing.reason}",
             error_type="not_found",
             detail={"failedStep": step.alias},
         ).to_dict()
@@ -409,7 +418,30 @@ def _run_service_step(
             return _service_return_as_list(spec, result)
         return result
     sel_pool: dict[str, Any] = {**pool, "instance": result, "result": result}
-    result = run_selector(out_spec.selector, resolve_callable_kwargs(out_spec.selector, sel_pool))
+    try:
+        result = run_selector(
+            out_spec.selector, resolve_callable_kwargs(out_spec.selector, sel_pool)
+        )
+    except (ObjectDoesNotExist, Http404) as error:
+        # The kernel's rule for a re-read after the write, so a step and a
+        # service tool answer alike: the service has run, so the step is never
+        # reported not found. A ``RETRIEVE`` that finds nothing is ``None``; a
+        # ``LIST`` re-read's ``Http404`` is a plain fault, since a bare one is
+        # answered 404 by Django and DRF and would tell the caller the write did
+        # not happen; a ``LIST``'s ``DoesNotExist`` is a fault inside the
+        # selector and passes through. The members and the kind are held by
+        # ``test_a_retrieve_output_selector_that_finds_no_row_presents_none``
+        # (``does-not-exist`` and ``http404``),
+        # ``test_a_list_output_selector_raising_http404_is_a_fault`` and
+        # ``test_a_list_output_selector_raising_does_not_exist_passes_through``.
+        if out_spec.kind is SelectorKind.LIST:
+            if isinstance(error, Http404):
+                raise RuntimeError(
+                    "The output selector raised Http404 after the service ran: a list "
+                    "re-read has no missing row to report, and the write has happened."
+                ) from error
+            raise
+        return None
     # A ``RETRIEVE`` re-fetch renders one row, so a queryset collapses here as
     # ``dispatch_spec`` collapses it; handed to the renderer whole, every
     # serializer field was looked up on the queryset and the call failed.
@@ -453,7 +485,16 @@ def _run_selector_step(
     selector = spec.selector
     assert selector is not None  # guaranteed by ChainToolBinding validation  # noqa: S101
     if spec.kind is SelectorKind.LIST:
-        result: Any = run_selector(selector, resolve_callable_kwargs(selector, pool))
+        try:
+            result: Any = run_selector(selector, resolve_callable_kwargs(selector, pool))
+        except Http404:
+            # The kernel's rule for a ``LIST``: ``Http404`` is the selector saying
+            # "not found", usually from a parent lookup, so the step fails as not
+            # found. ``DoesNotExist`` is not caught: escaping a ``LIST`` selector
+            # it is a fault inside the selector, as in ``dispatch``
+            # (``test_a_list_step_that_raises_http404_fails_as_not_found`` and
+            # ``test_a_list_step_that_raises_does_not_exist_is_a_fault``).
+            raise _MissingInstance("not found") from None
         # A set is authorized per-set, never per-row, and ``_run_step`` judged
         # the classes before the selector ran, so nothing is left to judge.
         pool["collection"] = result
@@ -470,9 +511,14 @@ def _run_selector_step(
         instance: Any = materialize_retrieve(
             run_selector(selector, resolve_callable_kwargs(selector, pool))
         )
-    except ObjectDoesNotExist:
+    except (ObjectDoesNotExist, Http404):
         # ``Model.objects.get(...)`` reports a missing row by raising; the
-        # queryset form reports it as ``None``. Both mean the same thing.
+        # queryset form reports it as ``None``. Both mean the same thing, and
+        # so does ``get_object_or_404``'s ``Http404``, the kernel's own
+        # ``dispatch`` reading it as a missing row. One branch arc covers both
+        # exceptions, so ``test_a_retrieve_step_that_finds_no_row_fails_as_not_found``
+        # and ``test_an_allow_none_retrieve_step_that_finds_no_row_renders_empty``
+        # (their ``http404`` cases) are what fail without ``Http404`` here.
         instance = None
     if instance is None:
         if spec.allow_none:

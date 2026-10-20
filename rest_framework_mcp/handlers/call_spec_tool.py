@@ -181,6 +181,14 @@ def call_spec_tool(
         return service_error_result(exc)
 
     if result.kind == "not_found":
+        # A ``LIST`` has no instance to miss: its ``not_found`` is a selector
+        # raising ``Http404``, usually from a parent lookup, and is worded as the
+        # wire's selector tool words it
+        # (``test_a_list_selectors_http404_is_not_found_in_process``). A service
+        # tool's is its instance selector's, which the first condition keeps on
+        # the instance wording, since a ``ToolBinding`` has no ``kind`` to ask.
+        if isinstance(binding, SelectorToolBinding) and binding.kind is SelectorKind.LIST:
+            return build_error_tool_result(f"{binding.name}: not found", error_type="not_found")
         return build_error_tool_result(
             f"{binding.name}: no matching instance found", error_type="not_found"
         )

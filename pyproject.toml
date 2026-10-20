@@ -110,13 +110,18 @@ dependencies = [
     # which is why registration refuses both rather than handing them on to a
     # call that raises ``ValueError``.
     "djangorestframework-services>=0.58.0",
-    # The kernel this package imports its own names from. 0.9.0 is the floor,
-    # and it is a hard one: ``ServerArguments``, ``check_server_arguments`` and
+    # The kernel this package imports its own names from. 0.10.0 is the floor.
+    # 0.9.0 is the hard half: ``ServerArguments``, ``check_server_arguments`` and
     # ``apply_server_arguments``, which ``server_arguments=`` is built on, first
     # exist there and are imported at module level, so against 0.8.0 the server
     # does not import. drf-services 0.58.0 itself accepts 0.8.0, so this pin,
-    # not the transitive one, is what holds the kernel up.
-    "django-service-specs>=0.9.0",
+    # not the transitive one, is what holds the kernel up. 0.10.0 buys the
+    # mapping of a selector's ``Http404`` to a missing row in ``dispatch`` and
+    # ``adispatch``; below it ``get_object_or_404`` in a selector escapes to the
+    # backstop as a server fault. The pydantic-ai package's floor moves with this
+    # one: the two routes reach one spec, and with only one raised the same
+    # selector is a not-found on one route and an error on the other.
+    "django-service-specs>=0.10.0",
     "djangorestframework-dataclasses>=1.3.1",
     # ``typing_extensions.Unpack`` is used at runtime by the strict service /
     # selector Protocols (PEP 692) we re-export from the sister package.
@@ -335,7 +340,7 @@ root = ["./rest_framework_mcp"]
 # block under a new dated heading. Run via `uvx bump-my-version` (no
 # permanent dependency added to the project).
 [tool.bumpversion]
-current_version = "0.53.0"
+current_version = "0.53.1"
 allow_dirty = false
 commit = false
 tag = false

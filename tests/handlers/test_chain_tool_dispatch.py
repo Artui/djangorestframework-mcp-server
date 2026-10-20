@@ -11,7 +11,7 @@ from __future__ import annotations
 from typing import Any
 
 import pytest
-from django.http import HttpRequest
+from django.http import Http404, HttpRequest
 from django_service_specs import SelectorKind, ServiceError, ServiceValidationError
 from rest_framework import serializers as drf_serializers
 from rest_framework.permissions import BasePermission
@@ -334,6 +334,127 @@ def _invoice_get(*, pk: str) -> Invoice:
     return Invoice.objects.get(pk=int(pk))
 
 
+def _invoice_404(*, pk: str) -> Invoice:
+    """``get_object_or_404``'s idiom: a view's way of reporting a missing row."""
+    raise Http404(f"no invoice {pk}")
+
+
+def _list_chain(server: MCPServer, selector: Any) -> None:
+    server.register_chain_tool(
+        name="chain",
+        steps=[
+            ChainStep(
+                "first",
+                ServiceSpec(service=_create, atomic=False),
+                inputs=lambda ctx: {"number": "ROLLED", "amount_cents": 1},
+            ),
+            ChainStep(
+                "rows",
+                SelectorSpec(kind=SelectorKind.LIST, selector=selector),
+                inputs=lambda ctx: {},
+            ),
+        ],
+    )
+
+
+def _list_http404() -> Any:
+    raise Http404("no parent")
+
+
+def _list_does_not_exist() -> Any:
+    raise Invoice.DoesNotExist
+
+
+@pytest.mark.django_db
+def test_a_list_step_that_raises_http404_fails_as_not_found() -> None:
+    """The kernel's rule for a LIST: ``Http404`` is not found, and the chain rolls back."""
+    server = _server()
+    _list_chain(server, _list_http404)
+
+    error = tool_error(_call(server, {}))
+
+    assert error == {"type": "not_found", "message": "rows: not found", "failedStep": "rows"}
+    assert not Invoice.objects.filter(number="ROLLED").exists()
+
+
+@pytest.mark.django_db
+def test_a_list_step_that_raises_does_not_exist_is_a_fault() -> None:
+    """``DoesNotExist`` escaping a LIST selector is a bug in it, as in ``dispatch``."""
+    server = _server()
+    _list_chain(server, _list_does_not_exist)
+
+    with pytest.raises(Invoice.DoesNotExist):
+        _call(server, {})
+    assert not Invoice.objects.filter(number="ROLLED").exists()
+
+
+def _reread_chain(server: MCPServer, kind: SelectorKind, selector: Any) -> None:
+    server.register_chain_tool(
+        name="chain",
+        steps=[
+            ChainStep(
+                "made",
+                ServiceSpec(
+                    service=_create,
+                    atomic=False,
+                    output_selector_spec=SelectorSpec(
+                        kind=kind, selector=selector, output_serializer=InvoiceOutputSerializer
+                    ),
+                ),
+                inputs=lambda ctx: {"number": "WRITTEN", "amount_cents": 1},
+            )
+        ],
+    )
+
+
+def _reread_http404(*, result: Invoice) -> Any:
+    raise Http404("gone")
+
+
+def _reread_does_not_exist(*, result: Invoice) -> Any:
+    raise Invoice.DoesNotExist
+
+
+@pytest.mark.django_db
+@pytest.mark.parametrize(
+    "selector", [_reread_does_not_exist, _reread_http404], ids=["does-not-exist", "http404"]
+)
+def test_a_retrieve_output_selector_that_finds_no_row_presents_none(selector: Any) -> None:
+    """The kernel's rule after the write, as a service tool answers it: the
+    service has run, so the step is ``None`` rather than not found, and the
+    write stands."""
+    server = _server()
+    _reread_chain(server, SelectorKind.RETRIEVE, selector)
+
+    out = _call(server, {})
+
+    assert "isError" not in out
+    assert out["structuredContent"] == {}
+    assert Invoice.objects.filter(number="WRITTEN").exists()
+
+
+@pytest.mark.django_db
+def test_a_list_output_selector_raising_http404_is_a_fault() -> None:
+    """A bare ``Http404`` would be answered 404 and say the write did not happen."""
+    server = _server()
+    _reread_chain(server, SelectorKind.LIST, _reread_http404)
+
+    with pytest.raises(RuntimeError, match="after the service ran") as raised:
+        _call(server, {})
+    assert isinstance(raised.value.__cause__, Http404)
+    assert not Invoice.objects.filter(number="WRITTEN").exists()
+
+
+@pytest.mark.django_db
+def test_a_list_output_selector_raising_does_not_exist_passes_through() -> None:
+    server = _server()
+    _reread_chain(server, SelectorKind.LIST, _reread_does_not_exist)
+
+    with pytest.raises(Invoice.DoesNotExist):
+        _call(server, {})
+    assert not Invoice.objects.filter(number="WRITTEN").exists()
+
+
 def _read_chain(server: MCPServer, selector: Any, *, allow_none: bool = False) -> None:
     server.register_chain_tool(
         name="chain",
@@ -364,10 +485,14 @@ def test_a_retrieve_step_renders_the_row_its_queryset_selector_resolves() -> Non
 
 
 @pytest.mark.django_db
-@pytest.mark.parametrize("selector", [_invoice_qs, _invoice_get], ids=["queryset", "get"])
+@pytest.mark.parametrize(
+    "selector", [_invoice_qs, _invoice_get, _invoice_404], ids=["queryset", "get", "http404"]
+)
 def test_a_retrieve_step_that_finds_no_row_fails_as_not_found(selector: Any) -> None:
-    """Both ways a selector reports a missing row -- an empty queryset and
-    ``DoesNotExist`` -- answer as the selector tool answers, naming the step."""
+    """Every way a selector reports a missing row -- an empty queryset,
+    ``DoesNotExist`` and ``Http404`` -- answers as the selector tool answers,
+    naming the step. ``Http404`` is not an ``ObjectDoesNotExist``, so the
+    ``http404`` case fails without its own arm in ``_run_selector_step``."""
     server = _server()
     _read_chain(server, selector)
 
@@ -381,13 +506,14 @@ def test_a_retrieve_step_that_finds_no_row_fails_as_not_found(selector: Any) -> 
 
 
 @pytest.mark.django_db
-def test_an_allow_none_retrieve_step_that_finds_no_row_renders_empty() -> None:
+@pytest.mark.parametrize("selector", [_invoice_qs, _invoice_404], ids=["queryset", "http404"])
+def test_an_allow_none_retrieve_step_that_finds_no_row_renders_empty(selector: Any) -> None:
     """Not the serializer's blank object, which read as a row with empty fields.
 
     ``{}`` has no keys at all, so it cannot be read as a row; it is not ``null``
     because MCP requires structured content to be an object."""
     server = _server()
-    _read_chain(server, _invoice_qs, allow_none=True)
+    _read_chain(server, selector, allow_none=True)
 
     out = _call(server, {"pk": "9999"})
 

@@ -449,12 +449,20 @@ def _post_fetch_and_render(
         default_structured_content=config.include_structured_content,
     )
 
+    # A missing row arrives as ``not_found``, or — under the spec's
+    # ``allow_none`` contract — as a ``None`` value rendered as a successful
+    # ``null``, the MCP analogue of HTTP's 200-with-null body. A ``LIST`` gets
+    # ``not_found`` too, from a selector raising ``Http404`` (usually a parent
+    # lookup): checked before the split, or it falls through to ``result.value``
+    # (``None``) and renders as a successful empty result.
+    if result.kind == "not_found":
+        if binding.kind is SelectorKind.LIST:
+            return build_error_tool_result(
+                f"{binding.name}: not found", error_type="not_found"
+            ).to_dict()
+        return _render_missing_instance(binding)
+
     if binding.kind is SelectorKind.RETRIEVE:
-        # A missing row arrives as ``not_found``, or — under the spec's
-        # ``allow_none`` contract — as a ``None`` value rendered as a successful
-        # ``null``, the MCP analogue of HTTP's 200-with-null body.
-        if result.kind == "not_found":
-            return _render_missing_instance(binding)
         instance = result.value
         if instance is None:
             return build_tool_result(
