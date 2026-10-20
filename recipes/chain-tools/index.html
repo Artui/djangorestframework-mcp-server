@@ -1751,16 +1751,26 @@ a failed step, and under <code>atomic=True</code> every earlier write rolls back
 step's result is used as-is (rendered <code>many=True</code> for <code>kind=LIST</code>).</p>
 <p>A <code>RETRIEVE</code> step resolves to its one row the way the selector tool does, so a
 selector may return a queryset (<code>Invoice.objects.filter(pk=pk)</code>) or the instance
-(<code>Invoice.objects.get(pk=pk)</code>) and the next step receives the row either way. A
-service step whose <code>output_selector_spec</code> re-fetches a <code>RETRIEVE</code> resolves it the
-same way. When there is no row, the step fails as the selector tool does, naming
-the step, and an atomic chain rolls back:</p>
+(<code>Invoice.objects.get(pk=pk)</code>) and the next step receives the row either way. It
+may also report a missing row by raising: <code>DoesNotExist</code>, or <code>Http404</code> from
+<code>get_object_or_404</code>, which is a missing row here as it is in the kernel's
+dispatch. A <code>LIST</code> step whose selector raises <code>Http404</code> fails the chain as
+<code>not_found</code> too (<code>rows: not found</code>, with <code>failedStep</code>), while <code>DoesNotExist</code>
+escaping a <code>LIST</code> selector is a fault in it, as in the kernel. When a <code>RETRIEVE</code>
+step finds no row, it fails as the selector tool does, naming the step, and an
+atomic chain rolls back:</p>
 <div class="language-json highlight"><pre><span></span><code><span id="__span-5-1"><a id="__codelineno-5-1" name="__codelineno-5-1" href="#__codelineno-5-1"></a><span class="p">{</span><span class="nt">&quot;error&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">{</span><span class="nt">&quot;type&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;not_found&quot;</span><span class="p">,</span><span class="w"> </span><span class="nt">&quot;message&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;target: no matching instance found&quot;</span><span class="p">,</span>
 </span><span id="__span-5-2"><a id="__codelineno-5-2" name="__codelineno-5-2" href="#__codelineno-5-2"></a><span class="w">           </span><span class="nt">&quot;failedStep&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;target&quot;</span><span class="p">}}</span>
 </span></code></pre></div>
 <p>A spec with <code>allow_none=True</code> passes <code>None</code> on instead. As the output step it is
 a result with nothing to present, served as <code>{}</code> under a schema that admits it
 (<a href="../../concepts/#dispatch-flow">Concepts</a>).</p>
+<p>A service step's <code>output_selector_spec</code> re-read runs after its write, so it is
+never reported as not found, as a service tool's is not: a <code>RETRIEVE</code> re-read
+that finds nothing, by returning nothing or by raising <code>DoesNotExist</code> or
+<code>Http404</code>, passes <code>None</code> on. A <code>LIST</code> re-read raising <code>Http404</code> is a fault, a
+<code>RuntimeError</code> chained from it, because the write has happened and a not-found
+would say it had not.</p>
 
 
 

@@ -5396,9 +5396,16 @@ stream has already committed its <code>200</code>, so there the same error arriv
 stream's last frame.</p>
 <p>RETRIEVE selector tools mirror the sister repo's read semantics: a
 QuerySet return is materialized via <code>.first()</code>, and a missing row is a
-<code>not_found</code> <code>isError</code> result — unless the spec sets <code>allow_none=True</code>
-(the nullable-resource contract), which makes the miss a successful result
-with nothing to present (see below). LIST tools advertise a kind-aware <code>outputSchema</code>: a bare
+<code>not_found</code> <code>isError</code> result. A selector reports a missing row by returning
+<code>None</code> or an empty queryset, or by raising <code>DoesNotExist</code> or Django's
+<code>Http404</code> (what <code>get_object_or_404</code> raises); all four answer the same way,
+with no <code>ERROR</code> log line, because none is a fault. A spec that sets
+<code>allow_none=True</code> (the nullable-resource contract) makes the miss a successful
+result with nothing to present instead (see below). A LIST tool's selector
+raising <code>Http404</code>, usually a parent lookup, is a <code>not_found</code> result too
+(<code>&lt;tool&gt;: not found</code>), and <code>allow_none</code> does not turn it into an empty list;
+<code>DoesNotExist</code> escaping a LIST selector is a fault in the selector, and stays
+one. LIST tools advertise a kind-aware <code>outputSchema</code>: a bare
 array schema unpaginated, the <code>{items, page, totalPages, hasNext}</code>
 envelope with <code>paginate=True</code> (enable pagination for a fully
 spec-compliant <em>object</em>-shaped <code>structuredContent</code>). The array schema is not
