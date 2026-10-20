@@ -339,6 +339,55 @@ def _invoice_404(*, pk: str) -> Invoice:
     raise Http404(f"no invoice {pk}")
 
 
+def _list_chain(server: MCPServer, selector: Any) -> None:
+    server.register_chain_tool(
+        name="chain",
+        steps=[
+            ChainStep(
+                "first",
+                ServiceSpec(service=_create, atomic=False),
+                inputs=lambda ctx: {"number": "ROLLED", "amount_cents": 1},
+            ),
+            ChainStep(
+                "rows",
+                SelectorSpec(kind=SelectorKind.LIST, selector=selector),
+                inputs=lambda ctx: {},
+            ),
+        ],
+    )
+
+
+def _list_http404() -> Any:
+    raise Http404("no parent")
+
+
+def _list_does_not_exist() -> Any:
+    raise Invoice.DoesNotExist
+
+
+@pytest.mark.django_db
+def test_a_list_step_that_raises_http404_fails_as_not_found() -> None:
+    """The kernel's rule for a LIST: ``Http404`` is not found, and the chain rolls back."""
+    server = _server()
+    _list_chain(server, _list_http404)
+
+    error = tool_error(_call(server, {}))
+
+    assert error == {"type": "not_found", "message": "rows: not found", "failedStep": "rows"}
+    assert not Invoice.objects.filter(number="ROLLED").exists()
+
+
+@pytest.mark.django_db
+def test_a_list_step_that_raises_does_not_exist_is_a_fault() -> None:
+    """``DoesNotExist`` escaping a LIST selector is a bug in it, as in ``dispatch``."""
+    server = _server()
+    _list_chain(server, _list_does_not_exist)
+
+    with pytest.raises(Invoice.DoesNotExist):
+        _call(server, {})
+    assert not Invoice.objects.filter(number="ROLLED").exists()
+
+
 def _read_chain(server: MCPServer, selector: Any, *, allow_none: bool = False) -> None:
     server.register_chain_tool(
         name="chain",

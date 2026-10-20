@@ -9,15 +9,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
-- **A RETRIEVE selector's `Http404` is a missing row, not a server fault.** A
-  selector that raises Django's `Http404`, typically through `get_object_or_404`, used to
+- **A selector's `Http404` is a missing row, not a server fault.** A selector
+  that raises Django's `Http404`, typically through `get_object_or_404`, used to
   escape `dispatch` and reach the transport's backstop: an HTTP `500` carrying
   JSON-RPC `-32603`, and an `ERROR` log line, on both viewsets in both protocol
   eras (drf-mcp#188). It now answers as a selector raising `DoesNotExist` does,
-  a `not_found` `isError` result under a `200` with nothing logged, and
-  `allow_none=True` turns it into the empty result. A chain step's RETRIEVE
-  selector raising `Http404` fails the step as `not_found` naming it, as one
-  raising `DoesNotExist` does, and an atomic chain rolls back.
+  a `not_found` `isError` result under a `200` with nothing logged, and a
+  RETRIEVE tool with `allow_none=True` returns the empty result. A LIST tool
+  answers `not_found` too, worded `<tool>: not found` because a LIST has no
+  instance to miss (usually a parent); `allow_none` does not make it `[]`.
+  `DoesNotExist` escaping a LIST selector is unchanged: still a server fault.
+  A chain step follows the same rules and names itself in `failedStep`: a
+  RETRIEVE step raising `Http404` fails as `not_found` as one raising
+  `DoesNotExist` does, a LIST step raising `Http404` fails as `<step>: not
+  found`, and an atomic chain rolls back.
 
 ### Changed
 

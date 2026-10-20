@@ -97,11 +97,19 @@ from rest_framework_mcp.registry.types.utils import rendered_kind
 
 
 class _MissingInstance(Exception):
-    """A ``RETRIEVE`` step resolved no row and its spec does not allow ``None``.
+    """A step's selector found nothing: a ``RETRIEVE`` that resolved no row and
+    whose spec does not allow ``None``, or a ``LIST`` whose selector raised
+    ``Http404``.
 
     Raised from the step runner and mapped to a ``not_found`` result in
-    ``_run_step``, which is where the step's alias is in hand.
+    ``_run_step``, which is where the step's alias is in hand. ``reason`` is the
+    wording after the alias: a ``LIST`` has no instance to miss, usually a
+    parent, so it does not say one.
     """
+
+    def __init__(self, reason: str = "no matching instance found") -> None:
+        super().__init__(reason)
+        self.reason = reason
 
 
 class _ChainAbort(Exception):
@@ -349,11 +357,11 @@ def _run_step(
                 ),
             },
         ).to_dict()
-    except _MissingInstance:
+    except _MissingInstance as missing:
         # The selector tool's wording and error type, with the step as the name:
         # the same missing row answers the same way whichever tool fetched it.
         return build_error_tool_result(
-            f"{step.alias}: no matching instance found",
+            f"{step.alias}: {missing.reason}",
             error_type="not_found",
             detail={"failedStep": step.alias},
         ).to_dict()
@@ -454,7 +462,16 @@ def _run_selector_step(
     selector = spec.selector
     assert selector is not None  # guaranteed by ChainToolBinding validation  # noqa: S101
     if spec.kind is SelectorKind.LIST:
-        result: Any = run_selector(selector, resolve_callable_kwargs(selector, pool))
+        try:
+            result: Any = run_selector(selector, resolve_callable_kwargs(selector, pool))
+        except Http404:
+            # The kernel's rule for a ``LIST``: ``Http404`` is the selector saying
+            # "not found", usually from a parent lookup, so the step fails as not
+            # found. ``DoesNotExist`` is not caught: escaping a ``LIST`` selector
+            # it is a fault inside the selector, as in ``dispatch``
+            # (``test_a_list_step_that_raises_http404_fails_as_not_found`` and
+            # ``test_a_list_step_that_raises_does_not_exist_is_a_fault``).
+            raise _MissingInstance("not found") from None
         # A set is authorized per-set, never per-row, and ``_run_step`` judged
         # the classes before the selector ran, so nothing is left to judge.
         pool["collection"] = result

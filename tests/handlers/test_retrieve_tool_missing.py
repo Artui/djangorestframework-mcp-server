@@ -143,6 +143,29 @@ async def test_async_http404_answers_as_a_missing_row(allow_none: bool) -> None:
 
 
 @pytest.mark.django_db
+def test_a_list_selectors_http404_is_not_found_even_with_allow_none() -> None:
+    """``allow_none`` speaks for a missing row, and a LIST has none to miss."""
+
+    def missing_parent() -> QuerySet[Invoice]:
+        raise Http404("no parent")
+
+    server = _server()
+    server.register_selector_tool(
+        name="invoices.list",
+        spec=SelectorSpec(
+            kind=SelectorKind.LIST,
+            selector=missing_parent,
+            output_serializer=_InvoiceOut,
+            allow_none=True,
+        ),
+    )
+    out = handle_tools_call({"name": "invoices.list", "arguments": {}}, _ctx(server))
+    error = tool_error(out)
+    assert error["type"] == "not_found"
+    assert error["message"] == "invoices.list: not found"
+
+
+@pytest.mark.django_db
 def test_does_not_exist_is_not_found() -> None:
     server = _server()
     _register(server, _strict_get)
