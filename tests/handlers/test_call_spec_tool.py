@@ -12,6 +12,7 @@ import json
 from typing import Any
 
 import pytest
+from django.http import Http404
 from django_service_specs import UNSET, SelectorKind, ServiceError, ServiceValidationError
 from rest_framework.exceptions import PermissionDenied
 from rest_framework.permissions import BasePermission
@@ -29,6 +30,10 @@ def _server() -> MCPServer:
 
 def _error_type(result: ToolResult) -> str:
     return json.loads(result.content[0].text)["error"]["type"]
+
+
+def _error_message(result: ToolResult) -> str:
+    return json.loads(result.content[0].text)["error"]["message"]
 
 
 # ---------- success paths ----------
@@ -106,6 +111,49 @@ def test_missing_required_instance_is_a_not_found_error() -> None:
     result = server.call_tool("things.get", {"pk": 404}, user=None)
     assert result.is_error is True
     assert _error_type(result) == "not_found"
+    assert _error_message(result) == "things.get: no matching instance found"
+
+
+@pytest.mark.parametrize("allow_none", [False, True], ids=["plain", "allow-none"])
+def test_a_list_selectors_http404_is_not_found_in_process(allow_none: bool) -> None:
+    """The wire's wording for a ``LIST``, on the route django-ag-ui calls."""
+
+    def missing_parent(**_: Any) -> Any:
+        raise Http404("no parent")
+
+    server = _server()
+    server.register_selector_tool(
+        name="things.list",
+        spec=SelectorSpec(kind=SelectorKind.LIST, selector=missing_parent, allow_none=allow_none),
+    )
+    result = server.call_tool("things.list", {}, user=None)
+    assert result.is_error is True
+    assert _error_type(result) == "not_found"
+    assert _error_message(result) == "things.list: not found"
+
+
+def test_a_write_whose_instance_selector_raises_http404_is_not_found_unrun() -> None:
+    """A service tool's ``not_found`` keeps the instance wording: it is a
+    ``ToolBinding``, with no ``kind`` for the ``LIST`` branch to ask."""
+    ran: list[Any] = []
+
+    def missing(**_: Any) -> Any:
+        raise Http404("gone")
+
+    server = _server()
+    server.register_service_tool(
+        name="things.update",
+        spec=ServiceSpec(
+            service=lambda **kwargs: ran.append(kwargs),
+            atomic=False,
+            instance_selector_spec=SelectorSpec(kind=SelectorKind.RETRIEVE, selector=missing),
+        ),
+    )
+    result = server.call_tool("things.update", {"pk": 1}, user=None)
+    assert result.is_error is True
+    assert _error_type(result) == "not_found"
+    assert _error_message(result) == "things.update: no matching instance found"
+    assert ran == []
 
 
 def test_service_validation_error_becomes_a_tool_error() -> None:

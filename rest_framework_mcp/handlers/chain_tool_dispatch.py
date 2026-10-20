@@ -418,7 +418,30 @@ def _run_service_step(
             return _service_return_as_list(spec, result)
         return result
     sel_pool: dict[str, Any] = {**pool, "instance": result, "result": result}
-    result = run_selector(out_spec.selector, resolve_callable_kwargs(out_spec.selector, sel_pool))
+    try:
+        result = run_selector(
+            out_spec.selector, resolve_callable_kwargs(out_spec.selector, sel_pool)
+        )
+    except (ObjectDoesNotExist, Http404) as error:
+        # The kernel's rule for a re-read after the write, so a step and a
+        # service tool answer alike: the service has run, so the step is never
+        # reported not found. A ``RETRIEVE`` that finds nothing is ``None``; a
+        # ``LIST`` re-read's ``Http404`` is a plain fault, since a bare one is
+        # answered 404 by Django and DRF and would tell the caller the write did
+        # not happen; a ``LIST``'s ``DoesNotExist`` is a fault inside the
+        # selector and passes through. The members and the kind are held by
+        # ``test_a_retrieve_output_selector_that_finds_no_row_presents_none``
+        # (``does-not-exist`` and ``http404``),
+        # ``test_a_list_output_selector_raising_http404_is_a_fault`` and
+        # ``test_a_list_output_selector_raising_does_not_exist_passes_through``.
+        if out_spec.kind is SelectorKind.LIST:
+            if isinstance(error, Http404):
+                raise RuntimeError(
+                    "The output selector raised Http404 after the service ran: a list "
+                    "re-read has no missing row to report, and the write has happened."
+                ) from error
+            raise
+        return None
     # A ``RETRIEVE`` re-fetch renders one row, so a queryset collapses here as
     # ``dispatch_spec`` collapses it; handed to the renderer whole, every
     # serializer field was looked up on the queryset and the call failed.

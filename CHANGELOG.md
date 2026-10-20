@@ -22,7 +22,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   A chain step follows the same rules and names itself in `failedStep`: a
   RETRIEVE step raising `Http404` fails as `not_found` as one raising
   `DoesNotExist` does, a LIST step raising `Http404` fails as `<step>: not
-  found`, and an atomic chain rolls back.
+  found`, and an atomic chain rolls back. `MCPServer.call_tool` words a LIST
+  tool's `not_found` the same way, where it used the RETRIEVE wording, `<tool>:
+  no matching instance found`.
+- **A chain service step's re-read follows the kernel's rule after a write.**
+  An `output_selector_spec` selector that raised `DoesNotExist` or `Http404`
+  escaped the chain, which rolled back and was served as a server fault, while
+  the same spec as a service tool presented `None`. A RETRIEVE re-read that
+  finds nothing now passes `None` on, as the service tool does, and the chain
+  commits. A LIST re-read raising `Http404` is a `RuntimeError` chained from
+  it, a fault on every route, because a not-found would say the write had not
+  happened; a LIST re-read's `DoesNotExist` is unchanged.
 
 ### Changed
 

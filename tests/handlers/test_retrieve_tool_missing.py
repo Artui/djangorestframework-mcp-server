@@ -115,7 +115,10 @@ def test_http404_is_not_found() -> None:
     server = _server()
     _register(server, _get_or_404)
     out = handle_tools_call({"name": "invoices.get", "arguments": {"pk": 99999}}, _ctx(server))
-    assert tool_error(out)["type"] == "not_found"
+    assert tool_error(out) == {
+        "type": "not_found",
+        "message": "invoices.get: no matching instance found",
+    }
 
 
 @pytest.mark.django_db

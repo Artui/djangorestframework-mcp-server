@@ -388,6 +388,73 @@ def test_a_list_step_that_raises_does_not_exist_is_a_fault() -> None:
     assert not Invoice.objects.filter(number="ROLLED").exists()
 
 
+def _reread_chain(server: MCPServer, kind: SelectorKind, selector: Any) -> None:
+    server.register_chain_tool(
+        name="chain",
+        steps=[
+            ChainStep(
+                "made",
+                ServiceSpec(
+                    service=_create,
+                    atomic=False,
+                    output_selector_spec=SelectorSpec(
+                        kind=kind, selector=selector, output_serializer=InvoiceOutputSerializer
+                    ),
+                ),
+                inputs=lambda ctx: {"number": "WRITTEN", "amount_cents": 1},
+            )
+        ],
+    )
+
+
+def _reread_http404(*, result: Invoice) -> Any:
+    raise Http404("gone")
+
+
+def _reread_does_not_exist(*, result: Invoice) -> Any:
+    raise Invoice.DoesNotExist
+
+
+@pytest.mark.django_db
+@pytest.mark.parametrize(
+    "selector", [_reread_does_not_exist, _reread_http404], ids=["does-not-exist", "http404"]
+)
+def test_a_retrieve_output_selector_that_finds_no_row_presents_none(selector: Any) -> None:
+    """The kernel's rule after the write, as a service tool answers it: the
+    service has run, so the step is ``None`` rather than not found, and the
+    write stands."""
+    server = _server()
+    _reread_chain(server, SelectorKind.RETRIEVE, selector)
+
+    out = _call(server, {})
+
+    assert "isError" not in out
+    assert out["structuredContent"] == {}
+    assert Invoice.objects.filter(number="WRITTEN").exists()
+
+
+@pytest.mark.django_db
+def test_a_list_output_selector_raising_http404_is_a_fault() -> None:
+    """A bare ``Http404`` would be answered 404 and say the write did not happen."""
+    server = _server()
+    _reread_chain(server, SelectorKind.LIST, _reread_http404)
+
+    with pytest.raises(RuntimeError, match="after the service ran") as raised:
+        _call(server, {})
+    assert isinstance(raised.value.__cause__, Http404)
+    assert not Invoice.objects.filter(number="WRITTEN").exists()
+
+
+@pytest.mark.django_db
+def test_a_list_output_selector_raising_does_not_exist_passes_through() -> None:
+    server = _server()
+    _reread_chain(server, SelectorKind.LIST, _reread_does_not_exist)
+
+    with pytest.raises(Invoice.DoesNotExist):
+        _call(server, {})
+    assert not Invoice.objects.filter(number="WRITTEN").exists()
+
+
 def _read_chain(server: MCPServer, selector: Any, *, allow_none: bool = False) -> None:
     server.register_chain_tool(
         name="chain",

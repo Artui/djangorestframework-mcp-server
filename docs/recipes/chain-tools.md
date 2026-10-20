@@ -163,13 +163,12 @@ A `RETRIEVE` step resolves to its one row the way the selector tool does, so a
 selector may return a queryset (`Invoice.objects.filter(pk=pk)`) or the instance
 (`Invoice.objects.get(pk=pk)`) and the next step receives the row either way. It
 may also report a missing row by raising: `DoesNotExist`, or `Http404` from
-`get_object_or_404`, which is a missing row here as it is in the kernel's dispatch. A `LIST` step
-whose selector raises `Http404` fails the chain as `not_found` too
-(`rows: not found`, with `failedStep`), while `DoesNotExist` escaping a `LIST`
-selector is a fault in it, as in the kernel. A
-service step whose `output_selector_spec` re-fetches a `RETRIEVE` resolves it the
-same way. When there is no row, the step fails as the selector tool does, naming
-the step, and an atomic chain rolls back:
+`get_object_or_404`, which is a missing row here as it is in the kernel's
+dispatch. A `LIST` step whose selector raises `Http404` fails the chain as
+`not_found` too (`rows: not found`, with `failedStep`), while `DoesNotExist`
+escaping a `LIST` selector is a fault in it, as in the kernel. When a `RETRIEVE`
+step finds no row, it fails as the selector tool does, naming the step, and an
+atomic chain rolls back:
 
 ```json
 {"error": {"type": "not_found", "message": "target: no matching instance found",
@@ -179,3 +178,10 @@ the step, and an atomic chain rolls back:
 A spec with `allow_none=True` passes `None` on instead. As the output step it is
 a result with nothing to present, served as `{}` under a schema that admits it
 ([Concepts](../concepts.md#dispatch-flow)).
+
+A service step's `output_selector_spec` re-read runs after its write, so it is
+never reported as not found, as a service tool's is not: a `RETRIEVE` re-read
+that finds nothing, by returning nothing or by raising `DoesNotExist` or
+`Http404`, passes `None` on. A `LIST` re-read raising `Http404` is a fault, a
+`RuntimeError` chained from it, because the write has happened and a not-found
+would say it had not.
