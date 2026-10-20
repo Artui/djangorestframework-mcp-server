@@ -7,6 +7,26 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- **A RETRIEVE selector's `Http404` is a missing row, not a server fault.** A
+  selector that raises Django's `Http404`, typically through `get_object_or_404`, used to
+  escape `dispatch` and reach the transport's backstop: an HTTP `500` carrying
+  JSON-RPC `-32603`, and an `ERROR` log line, on both viewsets in both protocol
+  eras (drf-mcp#188). It now answers as a selector raising `DoesNotExist` does,
+  a `not_found` `isError` result under a `200` with nothing logged, and
+  `allow_none=True` turns it into the empty result. A chain step's RETRIEVE
+  selector raising `Http404` fails the step as `not_found` naming it, as one
+  raising `DoesNotExist` does, and an atomic chain rolls back.
+
+### Changed
+
+- **`django-service-specs` is raised to `>=0.10.0`**, the release that reads a
+  selector's `Http404` as a missing row in `dispatch` and `adispatch`. The
+  pydantic-ai package's floor moves with it: the two routes reach one spec, and
+  with only one raised the same selector is a not-found on one route and an
+  error on the other.
+
 ## [0.53.0] — 2026-10-19
 
 Adapted to `djangorestframework-services` 0.58.0, the DRF adapter over

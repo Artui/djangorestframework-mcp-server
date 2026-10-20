@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import pytest
 from django.db.models import QuerySet
-from django.http import HttpRequest
+from django.http import Http404, HttpRequest
 from django_service_specs import SelectorKind
 from rest_framework import serializers as drf_serializers
 from rest_framework_services.types.selector_spec import SelectorSpec
@@ -103,6 +103,43 @@ def test_empty_queryset_is_not_found() -> None:
 
 def _strict_get(*, pk: int) -> Invoice:
     return Invoice.objects.get(pk=pk)
+
+
+def _get_or_404(*, pk: int) -> Invoice:
+    """``get_object_or_404``'s idiom; ``Http404`` is not an ``ObjectDoesNotExist``."""
+    raise Http404(f"no invoice {pk}")
+
+
+@pytest.mark.django_db
+def test_http404_is_not_found() -> None:
+    server = _server()
+    _register(server, _get_or_404)
+    out = handle_tools_call({"name": "invoices.get", "arguments": {"pk": 99999}}, _ctx(server))
+    assert tool_error(out)["type"] == "not_found"
+
+
+@pytest.mark.django_db
+def test_http404_with_allow_none_returns_an_empty_result() -> None:
+    server = _server()
+    _register(server, _get_or_404, allow_none=True)
+    out = handle_tools_call({"name": "invoices.get", "arguments": {"pk": 99999}}, _ctx(server))
+    assert "isError" not in out
+    assert out["content"][0]["text"] == "{}"
+
+
+@pytest.mark.django_db(transaction=True)
+@pytest.mark.parametrize("allow_none", [False, True], ids=["default", "allow_none"])
+async def test_async_http404_answers_as_a_missing_row(allow_none: bool) -> None:
+    server = _server()
+    _register(server, _get_or_404, allow_none=allow_none)
+    out = await handle_tools_call_async(
+        {"name": "invoices.get", "arguments": {"pk": 99999}}, _ctx(server)
+    )
+    if allow_none:
+        assert "isError" not in out
+        assert out["content"][0]["text"] == "{}"
+    else:
+        assert tool_error(out)["type"] == "not_found"
 
 
 @pytest.mark.django_db

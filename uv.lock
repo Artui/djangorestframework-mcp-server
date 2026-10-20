@@ -551,15 +551,15 @@ wheels = [
 
 [[package]]
 name = "django-service-specs"
-version = "0.9.0"
+version = "0.10.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "django" },
     { name = "typing-extensions" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/f2/bf/f4f8915e40f3dcde7816e596a10d5fb37470530057b3e91743b8538a51fe/django_service_specs-0.9.0.tar.gz", hash = "sha256:56be5110dd0cb290becd334601754df499dcd599da7b6fa24e0282eb19d027b1", size = 968252, upload-time = "2026-10-17T07:09:24.283Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/b5/b3/d56cbc38f2cef7cb81e6561e5c31d18a19e2be79b57e87a66287976bf4c0/django_service_specs-0.10.0.tar.gz", hash = "sha256:12cbb3dc75320a6d1d7673512eda94df6bc0beef0212a726e3dba722b6cbab69", size = 1005273, upload-time = "2026-10-20T13:21:24.558Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/cb/5a/99e52789a05cda31701c51d262a15584568ade11bbaf8b2cc182f8e4b94d/django_service_specs-0.9.0-py3-none-any.whl", hash = "sha256:784de3ebb51af0695cf35dc41fc6b03c2b59aef168440fce9a7b9cff74ec2be2", size = 448491, upload-time = "2026-10-17T07:09:22.525Z" },
+    { url = "https://files.pythonhosted.org/packages/5a/dd/47306f1c33108b881c9bf74266383f71d5a2e97eea87c09870c58890fbd1/django_service_specs-0.10.0-py3-none-any.whl", hash = "sha256:0a4e1f5824ddff85345628f3fd289a55425e2463721a437d1c10b79e45ecb4e4", size = 463139, upload-time = "2026-10-20T13:21:22.442Z" },
 ]
 
 [[package]]
@@ -689,7 +689,7 @@ requires-dist = [
     { name = "django", specifier = ">=4.2" },
     { name = "django-filter", marker = "extra == 'filter'", specifier = ">=23" },
     { name = "django-oauth-toolkit", marker = "extra == 'oauth'", specifier = ">=3.4" },
-    { name = "django-service-specs", specifier = ">=0.9.0" },
+    { name = "django-service-specs", specifier = ">=0.10.0" },
     { name = "djangorestframework", specifier = ">=3.14" },
     { name = "djangorestframework-dataclasses", specifier = ">=1.3.1" },
     { name = "djangorestframework-services", specifier = ">=0.58.0" },

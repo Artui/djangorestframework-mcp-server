@@ -11,7 +11,7 @@ from __future__ import annotations
 from typing import Any
 
 import pytest
-from django.http import HttpRequest
+from django.http import Http404, HttpRequest
 from django_service_specs import SelectorKind, ServiceError, ServiceValidationError
 from rest_framework import serializers as drf_serializers
 from rest_framework.permissions import BasePermission
@@ -334,6 +334,11 @@ def _invoice_get(*, pk: str) -> Invoice:
     return Invoice.objects.get(pk=int(pk))
 
 
+def _invoice_404(*, pk: str) -> Invoice:
+    """``get_object_or_404``'s idiom: a view's way of reporting a missing row."""
+    raise Http404(f"no invoice {pk}")
+
+
 def _read_chain(server: MCPServer, selector: Any, *, allow_none: bool = False) -> None:
     server.register_chain_tool(
         name="chain",
@@ -364,10 +369,14 @@ def test_a_retrieve_step_renders_the_row_its_queryset_selector_resolves() -> Non
 
 
 @pytest.mark.django_db
-@pytest.mark.parametrize("selector", [_invoice_qs, _invoice_get], ids=["queryset", "get"])
+@pytest.mark.parametrize(
+    "selector", [_invoice_qs, _invoice_get, _invoice_404], ids=["queryset", "get", "http404"]
+)
 def test_a_retrieve_step_that_finds_no_row_fails_as_not_found(selector: Any) -> None:
-    """Both ways a selector reports a missing row -- an empty queryset and
-    ``DoesNotExist`` -- answer as the selector tool answers, naming the step."""
+    """Every way a selector reports a missing row -- an empty queryset,
+    ``DoesNotExist`` and ``Http404`` -- answers as the selector tool answers,
+    naming the step. ``Http404`` is not an ``ObjectDoesNotExist``, so the
+    ``http404`` case fails without its own arm in ``_run_selector_step``."""
     server = _server()
     _read_chain(server, selector)
 
@@ -381,13 +390,14 @@ def test_a_retrieve_step_that_finds_no_row_fails_as_not_found(selector: Any) -> 
 
 
 @pytest.mark.django_db
-def test_an_allow_none_retrieve_step_that_finds_no_row_renders_empty() -> None:
+@pytest.mark.parametrize("selector", [_invoice_qs, _invoice_404], ids=["queryset", "http404"])
+def test_an_allow_none_retrieve_step_that_finds_no_row_renders_empty(selector: Any) -> None:
     """Not the serializer's blank object, which read as a row with empty fields.
 
     ``{}`` has no keys at all, so it cannot be read as a row; it is not ``null``
     because MCP requires structured content to be an object."""
     server = _server()
-    _read_chain(server, _invoice_qs, allow_none=True)
+    _read_chain(server, selector, allow_none=True)
 
     out = _call(server, {"pk": "9999"})
 

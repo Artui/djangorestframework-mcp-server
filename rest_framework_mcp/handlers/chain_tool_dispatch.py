@@ -46,6 +46,7 @@ from typing import Any
 
 from django.core.exceptions import ImproperlyConfigured, ObjectDoesNotExist
 from django.db import transaction
+from django.http import Http404
 from django_service_specs import (
     PoolSeeds,
     SelectorKind,
@@ -470,9 +471,14 @@ def _run_selector_step(
         instance: Any = materialize_retrieve(
             run_selector(selector, resolve_callable_kwargs(selector, pool))
         )
-    except ObjectDoesNotExist:
+    except (ObjectDoesNotExist, Http404):
         # ``Model.objects.get(...)`` reports a missing row by raising; the
-        # queryset form reports it as ``None``. Both mean the same thing.
+        # queryset form reports it as ``None``. Both mean the same thing, and
+        # so does ``get_object_or_404``'s ``Http404``, the kernel's own
+        # ``dispatch`` reading it as a missing row. One branch arc covers both
+        # exceptions, so ``test_a_retrieve_step_that_finds_no_row_fails_as_not_found``
+        # and ``test_an_allow_none_retrieve_step_that_finds_no_row_renders_empty``
+        # (their ``http404`` cases) are what fail without ``Http404`` here.
         instance = None
     if instance is None:
         if spec.allow_none:
