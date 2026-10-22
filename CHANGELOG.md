@@ -7,6 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- **Requires `djangorestframework-services>=0.59.0` and
+  `django-service-specs>=0.14.0`.** The kernel now reserves `call_context` as a
+  pool name: building the `PoolSeeds` handed to `pool_seeds=` with an entry
+  under that name raises `ValueError`, so rename it. On drf-services 0.59.0 a
+  tool's `kwargs` provider, `input_data` and serializer-context providers that
+  name `call_context` are handed the call's dict, holding its `request`, `view`,
+  `format` and `action` (the tool's name), and a typed provider beside a filter
+  key the server shadows keeps the caller's value on the kernel's route.
+
 ## [0.53.1] — 2026-10-20
 
 ### Fixed
