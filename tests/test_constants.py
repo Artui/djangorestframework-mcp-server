@@ -98,9 +98,21 @@ def test_reserved_pool_seeds_shape() -> None:
     # rather than deferring to the import. drf-services 0.58.0 ("Breaking: pool
     # seeds") swapped ``request`` and ``serializer`` for ``result`` and
     # ``queryset``: the DRF edge seeds ``request`` itself, which is why
-    # ``RESOURCE_EDGE_SEEDS`` exists.
+    # ``RESOURCE_EDGE_SEEDS`` exists. The kernel's 0.14.0 reserves
+    # ``call_context``, the one dict a call hands to every stage naming it.
     assert (
-        frozenset({"user", "data", "instance", "collection", "result", "queryset", "progress"})
+        frozenset(
+            {
+                "user",
+                "data",
+                "instance",
+                "collection",
+                "result",
+                "queryset",
+                "progress",
+                "call_context",
+            }
+        )
         == RESERVED_POOL_SEEDS
     )
 
