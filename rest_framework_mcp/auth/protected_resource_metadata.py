@@ -28,7 +28,7 @@ class ProtectedResourceMetadataViewSet(ViewSet):
     [`MCPAuthBackend`][rest_framework_mcp.auth.types.auth_backend.MCPAuthBackend]. The
     renderer is pinned to JSON because the payload shape is RFC-defined."""
 
-    authentication_classes: tuple = ()  # noqa: RUF012 — DRF class-level config
+    authentication_classes = ()
     permission_classes = (AllowAny,)
     renderer_classes = (JSONRenderer,)
 

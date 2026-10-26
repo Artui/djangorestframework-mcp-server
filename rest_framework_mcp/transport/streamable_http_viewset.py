@@ -195,7 +195,7 @@ class StreamableHttpViewSet(ViewSet):
     ``as_view``, never looked up at module level, so independent servers in one process
     cannot interfere."""
 
-    authentication_classes: tuple = ()
+    authentication_classes = ()
     permission_classes = (AllowAny,)
     renderer_classes = (JSONRenderer,)
 

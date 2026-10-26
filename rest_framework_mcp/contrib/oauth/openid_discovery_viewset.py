@@ -38,7 +38,7 @@ class OpenIDDiscoveryViewSet(ViewSet):
     [`AuthorizationServerMetadataViewSet`][rest_framework_mcp.contrib.oauth.authorization_server_metadata_viewset.AuthorizationServerMetadataViewSet].
     """
 
-    authentication_classes: tuple = ()  # noqa: RUF012 — DRF class-level config
+    authentication_classes = ()
     permission_classes = (AllowAny,)
     renderer_classes = (JSONRenderer,)
 
