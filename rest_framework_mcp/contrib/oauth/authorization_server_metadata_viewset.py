@@ -31,7 +31,7 @@ class AuthorizationServerMetadataViewSet(ViewSet):
     to JSON, the payload shape being RFC-defined.
     """
 
-    authentication_classes: tuple = ()  # noqa: RUF012 — DRF class-level config
+    authentication_classes = ()
     permission_classes = (AllowAny,)
     renderer_classes = (JSONRenderer,)
 
