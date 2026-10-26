@@ -70,7 +70,7 @@ class DynamicClientRegistrationViewSet(ViewSet):
     ``SessionAuthentication`` is configured.
     """
 
-    authentication_classes: tuple = ()  # noqa: RUF012 — DRF class-level config
+    authentication_classes = ()
     permission_classes = (AllowAny,)
     renderer_classes = (JSONRenderer,)
 

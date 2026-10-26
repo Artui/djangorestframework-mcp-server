@@ -134,7 +134,7 @@ class AsyncStreamableHttpViewSet(ViewSet):
     works under ASGI.
     """
 
-    authentication_classes: tuple = ()
+    authentication_classes = ()
     permission_classes = (AllowAny,)
     renderer_classes = (JSONRenderer,)
     view_is_async: bool = True
