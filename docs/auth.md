@@ -351,8 +351,10 @@ points clients at. Setting it does **not**, on its own, reject anything.
     requests, because a token that carries none is rejected.
 
 To enforce, tell the backend where the audience actually lives — either a
-swapped `OAUTH2_PROVIDER["ACCESS_TOKEN_MODEL"]` carrying a `resource` field, or
-an explicit `audience_getter`:
+swapped `OAUTH2_PROVIDER["ACCESS_TOKEN_MODEL"]` whose `resource` field holds a
+string, or an explicit `audience_getter`. A swapped model inheriting DOT 3.4's
+`resource` holds a list, so it needs the
+[stock-DOT getter](#enforcing-on-stock-django-oauth-toolkit) too:
 
 ```python
 MCPServer(
@@ -366,39 +368,6 @@ MCPServer(
     ),
 )
 ```
-
-### Enforcing on stock django-oauth-toolkit
-
-DOT 3.4 and later record a token's RFC 8707 resources as a list, empty when the
-client sent none. Read the entry naming this server, and refuse a token whose
-list does not include it:
-
-```python
-from rest_framework_mcp import MCPServer
-from rest_framework_mcp.auth.backends.django_oauth_toolkit_backend import (
-    DjangoOAuthToolkitBackend,
-)
-
-RESOURCE_URL = "https://example.com/mcp/"
-
-
-def bound_to_this_server(token):
-    # An empty list, a token whose client sent no `resource`, is refused.
-    return RESOURCE_URL if RESOURCE_URL in (token.resource or []) else None
-
-
-server = MCPServer(
-    name="invoices",
-    auth_backend=DjangoOAuthToolkitBackend(
-        resource_url=RESOURCE_URL,
-        enforce_audience=True,
-        audience_getter=bound_to_this_server,
-    ),
-)
-```
-
-Without that getter the backend compares the whole list to the URL, which never
-matches, so enforcement refuses every token.
 
 Turning enforcement on without one of those raises `ImproperlyConfigured` at
 startup, naming both ways out — a server that rejects everything is a
@@ -460,6 +429,39 @@ RFC 9728 marks REQUIRED, so the metadata carries a `_warning` saying why.
     Token audiences are URLs, not patterns. Substring matches and prefix
     matches are unsafe (a token bound to `…/mcp` would otherwise satisfy a
     server expecting `…/mcp-admin`). The implementation enforces equality only.
+
+### Enforcing on stock django-oauth-toolkit
+
+DOT 3.4 and later record a token's RFC 8707 resources as a list, empty when the
+client sent none. Read the entry naming this server, and refuse a token whose
+list does not include it:
+
+```python
+from rest_framework_mcp import MCPServer
+from rest_framework_mcp.auth.backends.django_oauth_toolkit_backend import (
+    DjangoOAuthToolkitBackend,
+)
+
+RESOURCE_URL = "https://example.com/mcp/"
+
+
+def bound_to_this_server(token):
+    # An empty list, a token whose client sent no `resource`, is refused.
+    return RESOURCE_URL if RESOURCE_URL in (token.resource or []) else None
+
+
+server = MCPServer(
+    name="invoices",
+    auth_backend=DjangoOAuthToolkitBackend(
+        resource_url=RESOURCE_URL,
+        enforce_audience=True,
+        audience_getter=bound_to_this_server,
+    ),
+)
+```
+
+Without that getter the backend compares the whole list to the URL, which never
+matches, so enforcement refuses every token.
 
 ### If you are writing a resource server against the official `mcp` SDK
 

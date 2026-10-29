@@ -37,8 +37,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
     with the backend's default `audience_getter` refuses every token, one bound
     to this server included: DOT stores a token's `resource` as a list, and the
     default getter compares that list with the `RESOURCE_URL` string. The
-    backend's docstring and its `UnenforcedAudienceWarning` still say turning
-    enforcement on needs nothing else. Pass
+    backend's docstring still says turning enforcement on needs nothing else,
+    and its `UnenforcedAudienceWarning` asks for it with no getter. Pass
     `audience_getter=lambda token: RESOURCE_URL if RESOURCE_URL in (token.resource or []) else None`
     to `DjangoOAuthToolkitBackend`. `django-spec-mcp` ships no token-verifying
     backend, so the defect has no counterpart there.
