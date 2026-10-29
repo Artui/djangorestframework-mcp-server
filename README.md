@@ -1,3 +1,17 @@
+> **This package has had its final release, 0.54.1. Development continues as
+> [`django-spec-mcp`](https://pypi.org/project/django-spec-mcp/)**
+> ([documentation](https://artui.github.io/django-spec-mcp/)), which serves
+> `django-service-specs` specs over MCP with no Django REST framework or
+> `djangorestframework-services` in its dependencies. Its import package is
+> `django_spec_mcp`. See
+> [Moving from drf-mcp](https://artui.github.io/django-spec-mcp/moving-from-drf-mcp/).
+>
+> This release changes no behaviour from 0.54.0. A known defect stays in it and
+> is fixed only in `django-spec-mcp`: a tool registered with
+> `task_policy=TaskPolicy.REQUIRED` hands back a task that then fails `-32021`
+> in the worker. If you stay on 0.54.x, register such a tool with
+> `TaskPolicy.OPTIONAL`.
+
 # djangorestframework-mcp-server
 
 [![CI](https://github.com/Artui/djangorestframework-mcp-server/workflows/tests/badge.svg)](https://github.com/Artui/djangorestframework-mcp-server/actions/workflows/tests.yml)

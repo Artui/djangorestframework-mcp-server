@@ -14,7 +14,7 @@ authors = [
 ]
 keywords = ["django", "drf", "rest-framework", "mcp", "model-context-protocol", "ai", "llm"]
 classifiers = [
-    "Development Status :: 3 - Alpha",
+    "Development Status :: 7 - Inactive",
     "Environment :: Web Environment",
     "Framework :: Django",
     "Framework :: Django :: 4.2",

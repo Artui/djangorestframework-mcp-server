@@ -7,6 +7,31 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- **This is the final release of `djangorestframework-mcp-server`; development
+  continues as `django-spec-mcp`.** The new package (import package
+  `django_spec_mcp`, documentation at <https://artui.github.io/django-spec-mcp/>)
+  serves `django-service-specs` specs over MCP behind plain Django views, with
+  no Django REST framework or `djangorestframework-services` in its
+  dependencies. Moving is a migration rather than a rename: registration takes
+  kernel specs, the settings key is `SPEC_MCP`, chain tools and TOON output are
+  gone, and the stored cache and Redis prefixes are new, so the first deploy
+  drops every live session, in-flight task and pending elicitation. The
+  [moving page](https://artui.github.io/django-spec-mcp/moving-from-drf-mcp/)
+  has the import map and the steps. This release changes no behaviour from
+  0.54.0: the only code change leaves `authentication_classes` unannotated on
+  six viewsets. A known defect stays in it and is fixed only in
+  `django-spec-mcp`: a tool registered with `task_policy=TaskPolicy.REQUIRED`
+  hands back a task and the task then fails, because the worker's replay of the
+  call meets the same policy check with no tasks extension declared and is
+  refused `-32021`. If you stay on 0.54.x, register such a tool with
+  `TaskPolicy.OPTIONAL`.
+- The authentication guide's troubleshooting row for a token accepted and still
+  refused no longer says stock django-oauth-toolkit records no resource: from
+  3.4.0 it records the one the client sent as RFC 8707's `resource` parameter.
+- The package is classified `Development Status :: 7 - Inactive`.
+
 ## [0.54.0] — 2026-10-22
 
 ### Changed
