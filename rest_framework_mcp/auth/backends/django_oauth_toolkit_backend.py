@@ -23,10 +23,13 @@ _RESOURCE_FIELD = "resource"
 
 
 def _default_audience_getter(token: Any) -> str | None:
-    """Read the bound resource off a DOT access token.
+    """Read the bound resource off a DOT access token, as the token stores it.
 
-    Always ``None`` for DOT's stock model, which is why enforcement is
-    opt-in and validated at construction.
+    On DOT 3.4 and later the stock model stores its RFC 8707 resources as a
+    **list**, which ``audience_matches`` compares whole with the resource URL
+    string, so enforcing through this getter refuses every token there. Pass
+    ``audience_getter=`` reading the list instead; the authentication guide's
+    "Enforcing on stock django-oauth-toolkit" section has one.
     """
     return getattr(token, _RESOURCE_FIELD, None)
 
@@ -47,10 +50,16 @@ class DjangoOAuthToolkitBackend:
     token that doesn't carry that identity is rejected. ``resource_url`` is
     effectively required by RFC 9728; enforcement is a separate decision.
 
-    **The ``[oauth]`` extra floors django-oauth-toolkit at ``>=3.4``, so this
-    works out of the box.** That release added RFC 8707 resource indicators:
-    stock ``AccessToken`` carries a ``resource`` field and an
-    ``allows_audience`` check, so turning enforcement on needs nothing else.
+    **On stock django-oauth-toolkit, enforcement needs an ``audience_getter=``.**
+    The ``[oauth]`` extra floors DOT at ``>=3.4``, the release that added RFC
+    8707 resource indicators: stock ``AccessToken`` carries a ``resource``
+    field. DOT stores it as a list, though, and the default getter hands that
+    list to an exact comparison with the resource URL string, so turning
+    enforcement on with the default getter refuses every token, one bound to
+    this server included. Pass a getter returning the resource URL when the
+    token's list includes it; the authentication guide's
+    [Enforcing on stock django-oauth-toolkit](https://artui.github.io/djangorestframework-mcp-server/auth/#enforcing-on-stock-django-oauth-toolkit)
+    section has one.
 
     The default nonetheless stays off, and the reason is no longer the floor.
     ``audience_matches`` rejects a token carrying *no* resource, and a token
@@ -68,7 +77,8 @@ class DjangoOAuthToolkitBackend:
     somewhere else:
 
     - a swapped ``OAUTH2_PROVIDER["ACCESS_TOKEN_MODEL"]`` carrying a
-      ``resource`` field (DOT supports substituting the model), or
+      ``resource`` field that holds a string (DOT supports substituting the
+      model; one inheriting DOT 3.4's list field needs a getter too), or
     - an explicit ``audience_getter=`` reading it from wherever it lives — a
       JWT claim, an upstream gateway header, a related row.
 
@@ -294,10 +304,11 @@ class DjangoOAuthToolkitBackend:
             "django-oauth-toolkit added RFC 8707 resource indicators in 3.4.0 and the "
             "[oauth] extra floors it there, so this means either a swapped "
             "ACCESS_TOKEN_MODEL without the field or a DOT installed outside that extra "
-            "and pinned below 3.4. Upgrade DOT, or supply "
-            "audience_getter= to read the audience from wherever it actually lives (a JWT "
-            "claim, a gateway header), swap OAUTH2_PROVIDER['ACCESS_TOKEN_MODEL'] for one "
-            f"carrying a {_RESOURCE_FIELD!r} field, or turn off "
+            "and pinned below 3.4. Upgrade DOT and pass audience_getter= reading its "
+            "resource list, or supply audience_getter= to read the audience from wherever "
+            "it actually lives (a JWT claim, a gateway header), swap "
+            "OAUTH2_PROVIDER['ACCESS_TOKEN_MODEL'] for one whose "
+            f"{_RESOURCE_FIELD!r} field holds a string, or turn off "
             "REST_FRAMEWORK_MCP['ENFORCE_AUDIENCE'] and keep resource_url= for metadata only."
         )
 
@@ -345,7 +356,11 @@ class DjangoOAuthToolkitBackend:
             "deployment could enforce it. The MCP 2026-07-28 spec makes that validation a "
             "MUST for a resource server, and without it a token minted for another resource "
             "on the same authorization server is accepted here. Set "
-            "REST_FRAMEWORK_MCP['ENFORCE_AUDIENCE'] = True, or silence "
+            "REST_FRAMEWORK_MCP['ENFORCE_AUDIENCE'] = True and, on stock "
+            "django-oauth-toolkit, which stores a token's resource as a list, pass "
+            "audience_getter= reading that list, or every token is refused: see "
+            "https://artui.github.io/djangorestframework-mcp-server/auth/"
+            "#enforcing-on-stock-django-oauth-toolkit. Or silence "
             "UnenforcedAudienceWarning if this server is deliberately unenforced.",
             UnenforcedAudienceWarning,
             stacklevel=3,

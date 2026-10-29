@@ -311,8 +311,12 @@ points clients at. Setting it does **not**, on its own, reject anything.
     **django-oauth-toolkit 3.4.0 (2026-07-23) added RFC 8707 resource
     indicators**: stock `AccessToken` carries a `resource` field and an
     `allows_audience()` check, and `resource` is accepted at both the authorize
-    and token endpoints. On 3.4.0 or later, `ENFORCE_AUDIENCE = True` needs
-    nothing else.
+    and token endpoints. It stores `resource` as a JSON **list**, though, and
+    this backend's default getter hands that list to an exact comparison
+    against the `RESOURCE_URL` string. So on stock DOT, `ENFORCE_AUDIENCE =
+    True` on its own refuses **every** token, one bound to this server
+    included. Pass the `audience_getter=` shown
+    [below](#enforcing-on-stock-django-oauth-toolkit) as well.
 
     It is nonetheless **off by default**, and since the `[oauth]` extra floors
     DOT at `>=3.4` that is no longer about the floor. A token that records *no*
@@ -338,7 +342,8 @@ points clients at. Setting it does **not**, on its own, reject anything.
     minted for a different resource on the same authorization server is accepted
     here.
 
-    Turn it on. The `[oauth]` extra floors DOT at `>=3.4`, so the only
+    Turn it on, with the stock-DOT `audience_getter=` below. The `[oauth]`
+    extra floors DOT at `>=3.4`, so the only
     deployments that cannot are those running a swapped `ACCESS_TOKEN_MODEL`
     without the field, or a DOT installed outside this extra and pinned older —
     and both of those have an `audience_getter=` available. Before flipping it,
@@ -346,8 +351,10 @@ points clients at. Setting it does **not**, on its own, reject anything.
     requests, because a token that carries none is rejected.
 
 To enforce, tell the backend where the audience actually lives — either a
-swapped `OAUTH2_PROVIDER["ACCESS_TOKEN_MODEL"]` carrying a `resource` field, or
-an explicit `audience_getter`:
+swapped `OAUTH2_PROVIDER["ACCESS_TOKEN_MODEL"]` whose `resource` field holds a
+string, or an explicit `audience_getter`. A swapped model inheriting DOT 3.4's
+`resource` holds a list, so it needs the
+[stock-DOT getter](#enforcing-on-stock-django-oauth-toolkit) too:
 
 ```python
 MCPServer(
@@ -422,6 +429,39 @@ RFC 9728 marks REQUIRED, so the metadata carries a `_warning` saying why.
     Token audiences are URLs, not patterns. Substring matches and prefix
     matches are unsafe (a token bound to `…/mcp` would otherwise satisfy a
     server expecting `…/mcp-admin`). The implementation enforces equality only.
+
+### Enforcing on stock django-oauth-toolkit
+
+DOT 3.4 and later record a token's RFC 8707 resources as a list, empty when the
+client sent none. Read the entry naming this server, and refuse a token whose
+list does not include it:
+
+```python
+from rest_framework_mcp import MCPServer
+from rest_framework_mcp.auth.backends.django_oauth_toolkit_backend import (
+    DjangoOAuthToolkitBackend,
+)
+
+RESOURCE_URL = "https://example.com/mcp/"
+
+
+def bound_to_this_server(token):
+    # An empty list, a token whose client sent no `resource`, is refused.
+    return RESOURCE_URL if RESOURCE_URL in (token.resource or []) else None
+
+
+server = MCPServer(
+    name="invoices",
+    auth_backend=DjangoOAuthToolkitBackend(
+        resource_url=RESOURCE_URL,
+        enforce_audience=True,
+        audience_getter=bound_to_this_server,
+    ),
+)
+```
+
+Without that getter the backend compares the whole list to the URL, which never
+matches, so enforcement refuses every token.
 
 ### If you are writing a resource server against the official `mcp` SDK
 
@@ -689,7 +729,9 @@ is the recommended one rather than one option among several:
 
 - `ENFORCE_AUDIENCE` makes the RFC 8707 audience check mandatory, which the MCP
   specification requires of a resource server. DOT 3.4.0 and later record the
-  `resource` on the token, so this works with the stock model.
+  `resource` on the token, as a list, so the stock model works once the backend
+  is given the [stock-DOT getter](#enforcing-on-stock-django-oauth-toolkit):
+  the setting on its own refuses every token.
 - `CIMD_ENABLED` turns on Client ID Metadata Documents, which is how recent MCP
   clients register. It replaces Dynamic Client Registration, which the
   specification deprecates. See [Client ID Metadata
@@ -712,7 +754,8 @@ INSTALLED_APPS = [
 OAUTH2_PROVIDER = {
     # DOT 3.4.0+ accepts an RFC 8707 `resource` at the authorize and token
     # endpoints and records it on the token, so audience binding needs nothing
-    # here — turn on ENFORCE_AUDIENCE instead. See "Audience binding" above.
+    # here. Turn on ENFORCE_AUDIENCE and give the backend the stock-DOT
+    # audience_getter instead; see "Audience binding" above.
     "SCOPES": {
         "invoices:read": "Read invoices",
         "invoices:write": "Mutate invoices",
@@ -742,7 +785,9 @@ REST_FRAMEWORK_MCP = {
     # issued for it. Off by default because a token recording no resource is
     # rejected, and only a client that sends RFC 8707's `resource` parameter
     # records one -- which MCP clients must and other OAuth clients need not.
-    # For a server whose clients are MCP clients, this is the correct setting.
+    # For a server whose clients are MCP clients, this is the correct setting,
+    # with the stock-DOT audience_getter passed to the backend: on its own it
+    # refuses every token. See "Enforcing on stock django-oauth-toolkit".
     "ENFORCE_AUDIENCE": True,
     "SERVER_INFO": {
         "authorization_servers": ["https://example.com/oauth/"],
@@ -904,7 +949,7 @@ Inspector reads PRM, hits your AS metadata, walks the auth flow, and exercises
 | --- | --- |
 | 401 with no `WWW-Authenticate` | Custom auth backend forgot to return a challenge. Check `www_authenticate_challenge`. |
 | 401 with `WWW-Authenticate` but no `resource_metadata` | `SERVER_INFO["resource_metadata_url"]` not set. |
-| Token accepted but every call still 401 | `ENFORCE_AUDIENCE` is on and the `audience_getter` returns something other than `RESOURCE_URL` (with stock DOT it returns `None`, since DOT records no resource). |
+| Token accepted but every call still 401 | `ENFORCE_AUDIENCE` is on and the `audience_getter` returns something other than `RESOURCE_URL` (on stock DOT 3.4+ the default getter returns the token's `resource` **list**, which never equals the `RESOURCE_URL` string, so every token is refused: pass the [stock-DOT getter](#enforcing-on-stock-django-oauth-toolkit)). |
 | 403 with `error="insufficient_scope"` and `scope=` in the challenge | Token authenticated, missing one of the per-binding scopes. The body also carries JSON-RPC `-32006` with `data.requiredScopes`. |
 | 403 with no `scope=` | A non-scope permission denied (e.g. `DjangoPermRequired`). RFC 6750 defines no error code for that case, so the challenge advertises nothing rather than a scope the client cannot obtain. |
 | 403 with `INVALID_REQUEST` (`-32600`) in the body | Not a permission failure — `Origin` rejection. |
