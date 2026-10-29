@@ -23,8 +23,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   rate-limit window and pending elicitation. The
   [moving page](https://artui.github.io/django-spec-mcp/moving-from-drf-mcp/)
   has the import map and the steps. This release changes no behaviour from
-  0.54.0: besides leaving `authentication_classes` unannotated on six viewsets,
-  its only code change is the text of a docstring and a warning, below.
+  0.54.0. Its code changes are the annotations on six viewsets and the text of
+  two docstrings, a warning and an error message, below.
 - **Two known defects stay in this release.**
   - A tool registered with `task_policy=TaskPolicy.REQUIRED` hands back a task
     and the task then fails: the worker's replay of the call meets the same
@@ -43,8 +43,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `DjangoOAuthToolkitBackend`'s docstring, its default getter's docstring
   and the `UnenforcedAudienceWarning` message no longer say audience
   enforcement on stock django-oauth-toolkit needs nothing else; each points at
-  the guide's "Enforcing on stock django-oauth-toolkit" section. Text only: no
-  behaviour changes.
+  the guide's "Enforcing on stock django-oauth-toolkit" section. The
+  `ImproperlyConfigured` raised when enforcement has no route to a resource
+  says that upgrading DOT also needs the getter, and that a swapped token model
+  needs a string `resource`. Text only: no behaviour changes.
 - The authentication guide and the settings reference say the same about
   audience enforcement on stock django-oauth-toolkit, show the getter, and
   correct the troubleshooting row for a token accepted and still refused,

@@ -304,10 +304,11 @@ class DjangoOAuthToolkitBackend:
             "django-oauth-toolkit added RFC 8707 resource indicators in 3.4.0 and the "
             "[oauth] extra floors it there, so this means either a swapped "
             "ACCESS_TOKEN_MODEL without the field or a DOT installed outside that extra "
-            "and pinned below 3.4. Upgrade DOT, or supply "
-            "audience_getter= to read the audience from wherever it actually lives (a JWT "
-            "claim, a gateway header), swap OAUTH2_PROVIDER['ACCESS_TOKEN_MODEL'] for one "
-            f"carrying a {_RESOURCE_FIELD!r} field, or turn off "
+            "and pinned below 3.4. Upgrade DOT and pass audience_getter= reading its "
+            "resource list, or supply audience_getter= to read the audience from wherever "
+            "it actually lives (a JWT claim, a gateway header), swap "
+            "OAUTH2_PROVIDER['ACCESS_TOKEN_MODEL'] for one whose "
+            f"{_RESOURCE_FIELD!r} field holds a string, or turn off "
             "REST_FRAMEWORK_MCP['ENFORCE_AUDIENCE'] and keep resource_url= for metadata only."
         )
 
