@@ -6,11 +6,19 @@
 > `django_spec_mcp`. See
 > [Moving from drf-mcp](https://artui.github.io/django-spec-mcp/moving-from-drf-mcp/).
 >
-> This release changes no behaviour from 0.54.0. A known defect stays in it and
-> is fixed only in `django-spec-mcp`: a tool registered with
-> `task_policy=TaskPolicy.REQUIRED` hands back a task that then fails `-32021`
-> in the worker. If you stay on 0.54.x, register such a tool with
-> `TaskPolicy.OPTIONAL`.
+> This release changes no behaviour from 0.54.0, and two known defects stay in
+> it:
+>
+> - A tool registered with `task_policy=TaskPolicy.REQUIRED` hands back a task
+>   that then fails `-32021` in the worker. `django-spec-mcp` fixes it. On
+>   0.54.x, register such a tool with `TaskPolicy.OPTIONAL`, which runs it
+>   inline for a client that does not declare the tasks extension.
+> - On stock django-oauth-toolkit 3.4 and later, `ENFORCE_AUDIENCE = True`
+>   refuses every token unless `DjangoOAuthToolkitBackend` is given an
+>   `audience_getter=` reading DOT's `resource` list, as the
+>   [authentication guide](https://artui.github.io/djangorestframework-mcp-server/auth/#enforcing-on-stock-django-oauth-toolkit)
+>   shows. The backend's warning that asks you to turn enforcement on does not
+>   say so.
 
 # djangorestframework-mcp-server
 
@@ -21,7 +29,7 @@
 [![Docs](https://img.shields.io/badge/docs-artui.github.io-blue.svg)](https://artui.github.io/djangorestframework-mcp-server/)
 [![Coverage](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/Artui/djangorestframework-mcp-server/gh-pages/coverage.json)](https://github.com/Artui/djangorestframework-mcp-server/actions/workflows/tests.yml)
 [![Ruff](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/astral-sh/ruff/main/assets/badge/v2.json)](https://github.com/astral-sh/ruff)
-[![License](https://img.shields.io/pypi/l/djangorestframework-mcp-server.svg)](LICENSE)
+[![License](https://img.shields.io/pypi/l/djangorestframework-mcp-server.svg)](https://github.com/Artui/djangorestframework-mcp-server/blob/main/LICENSE)
 
 Expose [`djangorestframework-services`](https://github.com/Artui/djangorestframework-services)
 services and selectors as a [Model Context Protocol](https://modelcontextprotocol.io)
@@ -68,7 +76,7 @@ urlpatterns = [path("mcp/", server.urls)]
 ```
 
 A decorator form is also supported (`@server.service_tool(...)` / `@server.resource(...)`).
-See the [quickstart](docs/quickstart.md) for the full end-to-end recipe.
+See the [quickstart](https://github.com/Artui/djangorestframework-mcp-server/blob/main/docs/quickstart.md) for the full end-to-end recipe.
 
 - **Services** (mutations) → MCP **tools**.
 - **Selectors** (reads) → MCP **resources**.
@@ -183,12 +191,12 @@ walks the OAuth auth flow against your configured Authorization Server.
 
 ## Documentation
 
-- [Quickstart](docs/quickstart.md) — copy-pasteable end-to-end.
-- [Concepts](docs/concepts.md) — tools vs resources, sessions, output formats.
-- [Authentication](docs/auth.md) — backends, permissions, audience binding,
+- [Quickstart](https://github.com/Artui/djangorestframework-mcp-server/blob/main/docs/quickstart.md) — copy-pasteable end-to-end.
+- [Concepts](https://github.com/Artui/djangorestframework-mcp-server/blob/main/docs/concepts.md) — tools vs resources, sessions, output formats.
+- [Authentication](https://github.com/Artui/djangorestframework-mcp-server/blob/main/docs/auth.md) — backends, permissions, audience binding,
   bring-your-own AS recipe.
-- [Recipes](docs/recipes/index.md) — focused cookbook entries.
-- [Reference](docs/reference/index.md) — autodocs for every public symbol.
+- [Recipes](https://github.com/Artui/djangorestframework-mcp-server/blob/main/docs/recipes/index.md) — focused cookbook entries.
+- [Reference](https://github.com/Artui/djangorestframework-mcp-server/blob/main/docs/reference/index.md) — autodocs for every public symbol.
 
 ## License
 
