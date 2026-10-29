@@ -23,8 +23,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   rate-limit window and pending elicitation. The
   [moving page](https://artui.github.io/django-spec-mcp/moving-from-drf-mcp/)
   has the import map and the steps. This release changes no behaviour from
-  0.54.0: the only code change leaves `authentication_classes` unannotated on
-  six viewsets.
+  0.54.0: besides leaving `authentication_classes` unannotated on six viewsets,
+  its only code change is the text of a docstring and a warning, below.
 - **Two known defects stay in this release.**
   - A tool registered with `task_policy=TaskPolicy.REQUIRED` hands back a task
     and the task then fails: the worker's replay of the call meets the same
@@ -36,12 +36,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - On stock django-oauth-toolkit 3.4 and later, `ENFORCE_AUDIENCE = True`
     with the backend's default `audience_getter` refuses every token, one bound
     to this server included: DOT stores a token's `resource` as a list, and the
-    default getter compares that list with the `RESOURCE_URL` string. The
-    backend's docstring still says turning enforcement on needs nothing else,
-    and its `UnenforcedAudienceWarning` asks for it with no getter. Pass
+    default getter compares that list with the `RESOURCE_URL` string. Pass
     `audience_getter=lambda token: RESOURCE_URL if RESOURCE_URL in (token.resource or []) else None`
     to `DjangoOAuthToolkitBackend`. `django-spec-mcp` ships no token-verifying
     backend, so the defect has no counterpart there.
+- `DjangoOAuthToolkitBackend`'s docstring, its default getter's docstring
+  and the `UnenforcedAudienceWarning` message no longer say audience
+  enforcement on stock django-oauth-toolkit needs nothing else; each points at
+  the guide's "Enforcing on stock django-oauth-toolkit" section. Text only: no
+  behaviour changes.
 - The authentication guide and the settings reference say the same about
   audience enforcement on stock django-oauth-toolkit, show the getter, and
   correct the troubleshooting row for a token accepted and still refused,

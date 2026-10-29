@@ -12,13 +12,6 @@ Backends, permissions, response builders, rate limits, and OAuth-related views
 ## Backends
 
 ::: rest_framework_mcp.auth.backends.allow_any_backend.AllowAnyBackend
-!!! warning "Audience enforcement on stock django-oauth-toolkit needs a getter"
-    The docstring below says enforcement works on DOT 3.4.0+ with nothing else.
-    It does not: DOT stores a token's `resource` as a list, the default getter
-    compares that list with the `RESOURCE_URL` string, and every token is
-    refused. Pass the getter from
-    [Enforcing on stock django-oauth-toolkit](../auth.md#enforcing-on-stock-django-oauth-toolkit).
-
 ::: rest_framework_mcp.auth.backends.django_oauth_toolkit_backend.DjangoOAuthToolkitBackend
 
 ## Permissions

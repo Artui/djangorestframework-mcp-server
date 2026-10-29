@@ -17,8 +17,8 @@
 >   refuses every token unless `DjangoOAuthToolkitBackend` is given an
 >   `audience_getter=` reading DOT's `resource` list, as the
 >   [authentication guide](https://artui.github.io/djangorestframework-mcp-server/auth/#enforcing-on-stock-django-oauth-toolkit)
->   shows. The backend's warning that asks you to turn enforcement on does not
->   say so.
+>   shows. From this release the backend's docstring and its
+>   `UnenforcedAudienceWarning` say so.
 
 # djangorestframework-mcp-server
 
