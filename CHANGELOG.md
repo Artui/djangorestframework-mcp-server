@@ -7,6 +7,52 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.54.1] — 2026-10-29
+
+### Changed
+
+- **This is the final release of `djangorestframework-mcp-server`; development
+  continues as `django-spec-mcp`.** The new package (import package
+  `django_spec_mcp`, documentation at <https://artui.github.io/django-spec-mcp/>)
+  serves `django-service-specs` specs over MCP behind plain Django views, with
+  no Django REST framework or `djangorestframework-services` in its
+  dependencies. Moving is a migration rather than a rename: registration takes
+  kernel specs, the settings key is `SPEC_MCP`, chain tools and TOON output are
+  gone, and the stored cache and Redis prefixes and the elicitation signing
+  salt are new, so the first deploy drops every live session, in-flight task,
+  rate-limit window and pending elicitation. The
+  [moving page](https://artui.github.io/django-spec-mcp/moving-from-drf-mcp/)
+  has the import map and the steps. This release changes no behaviour from
+  0.54.0. Its code changes are the annotations on six viewsets and the text of
+  two docstrings, a warning and an error message, below.
+- **Two known defects stay in this release.**
+  - A tool registered with `task_policy=TaskPolicy.REQUIRED` hands back a task
+    and the task then fails: the worker's replay of the call meets the same
+    policy check with no tasks extension declared and is refused `-32021`.
+    `django-spec-mcp` fixes it. On 0.54.x, register such a tool with
+    `TaskPolicy.OPTIONAL`, which runs it inline for a client that does not
+    declare the tasks extension, and on a server with no task store and
+    executor, where `REQUIRED` refused both.
+  - On stock django-oauth-toolkit 3.4 and later, `ENFORCE_AUDIENCE = True`
+    with the backend's default `audience_getter` refuses every token, one bound
+    to this server included: DOT stores a token's `resource` as a list, and the
+    default getter compares that list with the `RESOURCE_URL` string. Pass
+    `audience_getter=lambda token: RESOURCE_URL if RESOURCE_URL in (token.resource or []) else None`
+    to `DjangoOAuthToolkitBackend`. `django-spec-mcp` ships no token-verifying
+    backend, so the defect has no counterpart there.
+- `DjangoOAuthToolkitBackend`'s docstring, its default getter's docstring
+  and the `UnenforcedAudienceWarning` message no longer say audience
+  enforcement on stock django-oauth-toolkit needs nothing else; each points at
+  the guide's "Enforcing on stock django-oauth-toolkit" section. The
+  `ImproperlyConfigured` raised when enforcement has no route to a resource
+  says that upgrading DOT also needs the getter, and that a swapped token model
+  needs a string `resource`. Text only: no behaviour changes.
+- The authentication guide and the settings reference say the same about
+  audience enforcement on stock django-oauth-toolkit, show the getter, and
+  correct the troubleshooting row for a token accepted and still refused,
+  which said stock DOT records no resource.
+- The package is classified `Development Status :: 7 - Inactive`.
+
 ## [0.54.0] — 2026-10-22
 
 ### Changed
@@ -6228,7 +6274,8 @@ Pinned to `djangorestframework-services==0.6.0`.
 - 100% line + branch coverage enforced by pytest (**451 tests** at
   release).
 
-[Unreleased]: https://github.com/Artui/djangorestframework-mcp-server/compare/v0.54.0...HEAD
+[Unreleased]: https://github.com/Artui/djangorestframework-mcp-server/compare/v0.54.1...HEAD
+[0.54.1]: https://github.com/Artui/djangorestframework-mcp-server/compare/v0.54.0...v0.54.1
 [0.54.0]: https://github.com/Artui/djangorestframework-mcp-server/compare/v0.53.1...v0.54.0
 [0.53.1]: https://github.com/Artui/djangorestframework-mcp-server/compare/v0.53.0...v0.53.1
 [0.53.0]: https://github.com/Artui/djangorestframework-mcp-server/compare/v0.52.1...v0.53.0
