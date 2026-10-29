@@ -87,6 +87,18 @@
     </div>
     <div data-md-component="announce">
       
+        <aside class="md-banner">
+          <div class="md-banner__inner md-grid md-typeset">
+            
+            
+  This package has had its final release. Development continues as
+  <a href="https://artui.github.io/django-spec-mcp/">django-spec-mcp</a>;
+  see <a href="https://artui.github.io/django-spec-mcp/moving-from-drf-mcp/">Moving from drf-mcp</a>.
+
+          </div>
+          
+        </aside>
+      
     </div>
     
     
@@ -2767,10 +2779,16 @@ actually reaches authentication.</p>
 publishes in its protected-resource metadata; enforcement is whether a
 token that doesn't carry that identity is rejected. <code>resource_url</code> is
 effectively required by RFC 9728; enforcement is a separate decision.</p>
-<p><strong>The <code>[oauth]</code> extra floors django-oauth-toolkit at <code>&gt;=3.4</code>, so this
-works out of the box.</strong> That release added RFC 8707 resource indicators:
-stock <code>AccessToken</code> carries a <code>resource</code> field and an
-<code>allows_audience</code> check, so turning enforcement on needs nothing else.</p>
+<p><strong>On stock django-oauth-toolkit, enforcement needs an <code>audience_getter=</code>.</strong>
+The <code>[oauth]</code> extra floors DOT at <code>&gt;=3.4</code>, the release that added RFC
+8707 resource indicators: stock <code>AccessToken</code> carries a <code>resource</code>
+field. DOT stores it as a list, though, and the default getter hands that
+list to an exact comparison with the resource URL string, so turning
+enforcement on with the default getter refuses every token, one bound to
+this server included. Pass a getter returning the resource URL when the
+token's list includes it; the authentication guide's
+<a href="https://artui.github.io/djangorestframework-mcp-server/auth/#enforcing-on-stock-django-oauth-toolkit">Enforcing on stock django-oauth-toolkit</a>
+section has one.</p>
 <p>The default nonetheless stays off, and the reason is no longer the floor.
 <code>audience_matches</code> rejects a token carrying <em>no</em> resource, and a token
 only carries one if the client sent the RFC 8707 <code>resource</code> parameter at
@@ -2786,7 +2804,8 @@ extra and pinned below 3.4, enforcement still works if the resource is
 somewhere else:</p>
 <ul>
 <li>a swapped <code>OAUTH2_PROVIDER["ACCESS_TOKEN_MODEL"]</code> carrying a
-  <code>resource</code> field (DOT supports substituting the model), or</li>
+  <code>resource</code> field that holds a string (DOT supports substituting the
+  model; one inheriting DOT 3.4's list field needs a getter too), or</li>
 <li>an explicit <code>audience_getter=</code> reading it from wherever it lives — a
   JWT claim, an upstream gateway header, a related row.</li>
 </ul>

@@ -87,6 +87,18 @@
     </div>
     <div data-md-component="announce">
       
+        <aside class="md-banner">
+          <div class="md-banner__inner md-grid md-typeset">
+            
+            
+  This package has had its final release. Development continues as
+  <a href="https://artui.github.io/django-spec-mcp/">django-spec-mcp</a>;
+  see <a href="https://artui.github.io/django-spec-mcp/moving-from-drf-mcp/">Moving from drf-mcp</a>.
+
+          </div>
+          
+        </aside>
+      
     </div>
     
     
@@ -1811,7 +1823,7 @@ derivation follows it to <code>private</code>.</p>
 <tr>
 <td><code>ENFORCE_AUDIENCE</code></td>
 <td><code>False</code></td>
-<td>Whether a token whose bound resource doesn't equal <code>RESOURCE_URL</code> is <strong>rejected</strong>. The MCP <code>2026-07-28</code> spec makes this validation a <strong>MUST</strong>, so treat the default as a floor rather than a recommendation: <strong>django-oauth-toolkit 3.4.0+ records the resource on stock <code>AccessToken</code></strong>, and turning this on needs nothing else. It stays off by default despite the <code>[oauth]</code> extra flooring DOT at <code>&gt;=3.4</code>, because a token that records <em>no</em> resource is rejected and only a client sending RFC 8707's <code>resource</code> parameter records one — an obligation MCP clients have and the other clients of your authorization server do not, so defaulting <code>True</code> would 401 them on upgrade. The check is capability-based, not version-based. With a swapped model without the field, or a DOT installed outside this extra and pinned older, use <code>OAUTH2_PROVIDER["ACCESS_TOKEN_MODEL"]</code> carrying a <code>resource</code> field or <code>DjangoOAuthToolkitBackend(audience_getter=…)</code>; without a route to the resource the backend raises <code>ImproperlyConfigured</code> at startup rather than 401-ing every request. Leaving it off on a deployment that <em>could</em> enforce raises <code>UnenforcedAudienceWarning</code> at construction. See <a href="../../auth/#audience-binding-rfc-8707">Authentication</a>.</td>
+<td>Whether a token whose bound resource doesn't equal <code>RESOURCE_URL</code> is <strong>rejected</strong>. The MCP <code>2026-07-28</code> spec makes this validation a <strong>MUST</strong>, so treat the default as a floor rather than a recommendation: <strong>django-oauth-toolkit 3.4.0+ records the resource on stock <code>AccessToken</code></strong>, as a list the backend's default getter compares whole against <code>RESOURCE_URL</code>, so turning this on also needs <code>DjangoOAuthToolkitBackend(audience_getter=…)</code> reading the list, or every token is refused. It stays off by default despite the <code>[oauth]</code> extra flooring DOT at <code>&gt;=3.4</code>, because a token that records <em>no</em> resource is rejected and only a client sending RFC 8707's <code>resource</code> parameter records one — an obligation MCP clients have and the other clients of your authorization server do not, so defaulting <code>True</code> would 401 them on upgrade. The check is capability-based, not version-based. With a swapped model without the field, or a DOT installed outside this extra and pinned older, use <code>OAUTH2_PROVIDER["ACCESS_TOKEN_MODEL"]</code> carrying a <code>resource</code> field that holds a string (one inheriting DOT 3.4's list needs the getter too) or <code>DjangoOAuthToolkitBackend(audience_getter=…)</code>; without a route to the resource the backend raises <code>ImproperlyConfigured</code> at startup rather than 401-ing every request. Leaving it off on a deployment that <em>could</em> enforce raises <code>UnenforcedAudienceWarning</code> at construction. See <a href="../../auth/#audience-binding-rfc-8707">Authentication</a>.</td>
 </tr>
 </tbody>
 </table>
